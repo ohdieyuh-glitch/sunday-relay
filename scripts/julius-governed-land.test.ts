@@ -54,13 +54,21 @@ const realGoverned = (await import(pathToFileURL(join(LANDING, 'governed-land.mj
   ) => { stopped: boolean; results: { pr: number; ok: boolean; problems: string[] }[] };
   formatLandingRecord: (record: Record<string, unknown>) => string;
   parseAuditRecord: (message: string) => { status: string; pr: number; method: string; main: string } | null;
-  landedPullsFromAudits: (audits: { sha: string; message: string }[], mainSha: string, contains: (ancestor: string, descendant: string) => boolean) => Set<number>;
+  landedPullsFromAudits: (
+    audits: { sha: string; message: string; committerId?: number; verificationVerified?: boolean; verificationReason?: string }[],
+    mainSha: string,
+    contains: (ancestor: string, descendant: string) => boolean,
+    botId?: string,
+  ) => Set<number>;
   evaluateGovernedLanding: (input: Record<string, unknown>) => { ok: boolean; problems: string[] };
+  governedCommitBody: (input: { message: string; tree: string; parents: string[] }) => { message: string; tree: string; parents: string[] };
   GOVERNED_READ_PERMISSIONS: Record<string, string>;
   GOVERNED_WORKFLOW_REF: string;
   governedWritePermissions: (paths: string[]) => Record<string, string>;
   checkWorkflowOrigin: (input: { ref?: string; sha?: string; workflowRef?: string; workflowSha?: string }) => string[];
-  mainRulesetProblems: (rulesets: unknown, appId: string) => string[];
+  branchRulesProblems: (liveRules: unknown, snapshot: unknown, appId: string) => string[];
+  refPatternMatches: (pattern: string, ref: string) => boolean | null;
+  rulesetCoversRef: (conditions: unknown, ref?: string) => { ok: boolean; problem?: string };
   commitStatusPage: (body: unknown, httpStatus: number) => { ok: boolean; problem?: string; statuses?: unknown[] };
   githubAppJwt: (appId: string, privateKeyPem: unknown, now?: number) => string;
 };
@@ -92,11 +100,34 @@ const fixture = (await import(pathToFileURL(join(fixtureLanding, 'governed-land.
   chooseClearanceDelivery: (
     comments: { body?: string; created_at?: string; id?: number }[],
     publicKeyPem: string,
-  ) => { problem?: string; delivery?: { id: number; fields: { head: string } } };
+    expected?: { head?: string; tree?: string; base?: string },
+  ) => { problem?: string; delivery?: { id: number; fields: { head: string; issued?: string } } };
 };
 const fixtureTrust = (await import(pathToFileURL(fixtureTrustPath).href)) as {
+  TRUSTED_COMPUTING_BASE: readonly string[];
+  canonicalCheckpointAttestation: (fields?: Record<string, unknown>) => string;
   judgeCommitLanding: (commit: Record<string, unknown>, options: Record<string, unknown>) => Promise<{ ok: boolean; absent: boolean; reason: string; nonce?: string }>;
 };
+
+function attestationMaterial(signature: (text: string) => string = signWith) {
+  const checkpoint = 'e'.repeat(40);
+  const tcb = fixtureTrust.TRUSTED_COMPUTING_BASE.map((path) => ({
+    path,
+    sha256: createHash('sha256').update(path).digest('hex'),
+  }));
+  const text = fixtureTrust.canonicalCheckpointAttestation({
+    checkpoint,
+    commits: [{ sha: checkpoint, tree: T, basis: 'governed landing test' }],
+    tcb,
+    issued: '2026-10-23T18:00:00Z',
+    expires: '2027-04-23T18:30:00Z',
+  });
+  return {
+    attestationText: text,
+    attestationSignatureB64: signature(text),
+    treeHashes: Object.fromEntries(tcb.map((row) => [row.path, row.sha256])),
+  };
+}
 
 const previousAnchor = process.env.JULIUS_REVIEWER_KEY_SHA256;
 process.env.JULIUS_REVIEWER_KEY_SHA256 = spki;
@@ -146,7 +177,8 @@ const landingInput = (over: Record<string, unknown> = {}, optional = ['landing-m
     pr: openPr(),
     commit: { commit: { tree: { sha: T } }, parents: [{ sha: B }] },
     files: ['src/relay/ordinary.ts'],
-    fileRows: 1,
+    treeDiffComplete: true,
+    compare: { behind_by: 0, status: 'ahead', ahead_by: 1 },
     mainSha: B,
     digest: DIGEST,
     commitMessages: [] as string[],
@@ -275,9 +307,15 @@ describe('queue, record, and workflow', () => {
     ].join('\n'));
     const parsed = realGoverned.parseAuditRecord(record);
     expect(parsed).toEqual({ status: 'pending', pr: 7, method: 'squash', main: OTHER });
-    const proved = realGoverned.landedPullsFromAudits([{ sha: OTHER, message: record }], OTHER, (ancestor) => ancestor === OTHER);
-    expect([...proved]).toEqual([7]);
-    expect([...realGoverned.landedPullsFromAudits([{ sha: OTHER, message: record }], H, () => false)]).toEqual([]);
+    const bot = '347502603';
+    const audit = {
+      sha: OTHER, message: record, committerId: 347502603, verificationVerified: true, verificationReason: 'valid',
+    };
+    expect([...realGoverned.landedPullsFromAudits([audit], OTHER, (ancestor) => ancestor === OTHER, bot)]).toEqual([7]);
+    expect([...realGoverned.landedPullsFromAudits([audit], H, () => false, bot)]).toEqual([]);
+    const forged = { sha: OTHER, message: record, committerId: 1, verificationVerified: false, verificationReason: 'unsigned' };
+    expect([...realGoverned.landedPullsFromAudits([forged], OTHER, () => true, bot)]).toEqual([]);
+    expect([...realGoverned.landedPullsFromAudits([audit], OTHER, () => true)]).toEqual([]);
   });
 
   it('the workflow mints an app token and never force-pushes', () => {
@@ -293,10 +331,30 @@ describe('queue, record, and workflow', () => {
     expect(workflow).toContain('vars.JULIUS_GOVERNED_LANDER_BOT_ID');
     expect(workflow).toContain('secrets.JULIUS_GOVERNED_LANDER_PRIVATE_KEY');
     expect(workflow).toContain('github.workflow_ref');
-    expect(workflow).toContain('github.job_workflow_sha');
+    expect(workflow).toContain('github.workflow_sha');
+    expect(workflow).not.toContain('job_workflow_sha');
+    expect(workflow).not.toContain('GITHUB_WORKFLOW_SHA:');
+    expect(workflow).not.toContain('GITHUB_WORKFLOW_REF:');
     expect(workflow).toContain('permission-statuses: read');
-    expect(workflow).toContain('permission-administration: read');
+    expect(workflow).not.toContain('permission-administration');
     expect(workflow).toContain('statuses: read');
+    const jobIf = workflow.match(/^\s+if:\s+"([^"]+)"/m)?.[1] ?? '';
+    const fields = [...jobIf.matchAll(/github\.([A-Za-z0-9_]+)/g)].map((match) => match[1]);
+    expect(fields.length).toBeGreaterThan(0);
+    for (const field of fields) expect(['ref', 'workflow_ref', 'workflow_sha', 'sha']).toContain(field);
+    const envAbove = (file: string, needle: string) => {
+      const text = readFileSync(join(ROOT, file), 'utf8');
+      const at = text.indexOf(needle);
+      return text.slice(text.lastIndexOf('env:', at), at);
+    };
+    for (const file of [
+      '.github/workflows/julius-governed-land.yml',
+      '.github/workflows/julius-accept-main.yml',
+      '.github/workflows/julius-land.yml',
+    ]) {
+      expect(envAbove(file, 'node scripts/julius-main-provenance-trust.mjs --require-trusted-verifier')).toContain('vars.JULIUS_GOVERNED_LANDER_BOT_ID');
+    }
+    expect(envAbove('.github/workflows/julius-accept-main.yml', 'node scripts/julius-main-provenance.mjs')).toContain('vars.JULIUS_GOVERNED_LANDER_BOT_ID');
     for (const line of ['permission-contents: read', 'permission-pull-requests: read', 'permission-checks: read', 'permission-actions: read', 'permission-metadata: read']) {
       expect(workflow).toContain(line);
     }
@@ -310,10 +368,18 @@ describe('queue, record, and workflow', () => {
     expect(source).not.toContain('5444986');
     expect(source).toContain('force: false');
     expect(source).not.toContain('force: true');
+    expect(source).not.toContain('author: identity');
+    expect(source).not.toContain('committer: identity');
+    expect(source).not.toContain('matching-refs/julius-governed-audit');
+    expect(source.match(/JSON\.stringify\(governedCommitBody\(/g)?.length).toBe(2);
+    const commitBody = realGoverned.governedCommitBody({ message: 'land', tree: T, parents: [B] });
+    expect(commitBody).toEqual({ message: 'land', tree: T, parents: [B] });
+    expect(commitBody).not.toHaveProperty('author');
+    expect(commitBody).not.toHaveProperty('committer');
     expect(source).toContain('landed, audit finalize failed');
     expect(source).toContain('is not in the governed queue');
     expect(realGoverned.GOVERNED_READ_PERMISSIONS.statuses).toBe('read');
-    expect(realGoverned.GOVERNED_READ_PERMISSIONS.administration).toBe('read');
+    expect(realGoverned.GOVERNED_READ_PERMISSIONS).not.toHaveProperty('administration');
     expect(realGoverned.GOVERNED_READ_PERMISSIONS.contents).toBe('read');
     expect(realGoverned.GOVERNED_READ_PERMISSIONS).not.toHaveProperty('workflows');
     expect(realGoverned.governedWritePermissions(['src/relay/ordinary.ts'])).not.toHaveProperty('workflows');
@@ -329,24 +395,45 @@ describe('queue, record, and workflow', () => {
     expect(realGoverned.commitStatusPage({ statuses: [{ state: 'success' }], total_count: 1 }, 200).ok).toBe(true);
     expect(realGoverned.commitStatusPage(null, 403).problem).toMatch(/statuses:read is required/u);
     expect(realGoverned.commitStatusPage({ statuses: [], total_count: 2 }, 200).problem).toMatch(/incomplete/u);
-    const app = '424242';
+    const app = '5457712';
     const gate = {
-      target: 'branch',
+      id: 99,
       enforcement: 'active',
-      conditions: { ref_name: { include: ['~DEFAULT_BRANCH'], exclude: [] } },
-      bypass_actors: [{ actor_type: 'Integration', actor_id: 424242, bypass_mode: 'always' }],
+      conditions: { ref_name: { include: ['refs/heads/m*', 'refs/julius-governed-audit/**'], exclude: [] } },
+      bypass_actors: [{ actor_type: 'Integration', actor_id: 5457712, bypass_mode: 'always' }],
       rules: [{ type: 'deletion' }, { type: 'non_fast_forward' }, { type: 'update' }],
     };
-    expect(realGoverned.mainRulesetProblems([gate], app)).toEqual([]);
-    expect(realGoverned.mainRulesetProblems([{ ...gate, rules: [{ type: 'update' }] }], app).join('\n')).toMatch(/no active ruleset/u);
-    expect(realGoverned.mainRulesetProblems([
-      gate,
-      { ...gate, bypass_actors: [{ actor_type: 'OrganizationAdmin', actor_id: 1, bypass_mode: 'always' }] },
-    ], app).join('\n')).toMatch(/someone other than the governed lander app/u);
-    expect(realGoverned.mainRulesetProblems([gate], '').join('\n')).toMatch(/JULIUS_GOVERNED_LANDER_APP_ID is unset/u);
-    expect(realGoverned.mainRulesetProblems([{ ...gate, enforcement: 'evaluate' }], app).join('\n')).toMatch(/no active ruleset/u);
-    expect(realGoverned.mainRulesetProblems([{ ...gate, conditions: { ref_name: { include: ['refs/heads/other'], exclude: [] } } }], app).join('\n')).toMatch(/no active ruleset/u);
-    expect(realGoverned.mainRulesetProblems(null, app).join('\n')).toMatch(/could not be read/u);
+    const live = [
+      { type: 'deletion', ruleset_id: 99 },
+      { type: 'non_fast_forward', ruleset_id: 99 },
+      { type: 'update', ruleset_id: 99 },
+      { type: 'deletion', ruleset_id: 100 },
+    ];
+    expect(realGoverned.refPatternMatches('refs/heads/m*', 'refs/heads/main')).toBe(true);
+    expect(realGoverned.refPatternMatches('refs/heads/m?', 'refs/heads/main')).toBe(false);
+    expect(realGoverned.refPatternMatches('refs/heads/[m]*', 'refs/heads/main')).toBeNull();
+    expect(realGoverned.refPatternMatches('~DEFAULT_BRANCH', 'refs/heads/main')).toBe(true);
+    expect(realGoverned.rulesetCoversRef({ ref_name: { include: ['refs/heads/main'], exclude: ['refs/heads/main'] } }).ok).toBe(false);
+    expect(realGoverned.rulesetCoversRef({ ref_name: { include: [], exclude: [] } }).ok).toBe(false);
+    expect(realGoverned.rulesetCoversRef({ ref_name: { include: ['refs/heads/[m]*'], exclude: [] } }).problem).toMatch(/cannot be evaluated/u);
+    expect(realGoverned.branchRulesProblems(live, gate, app)).toEqual([]);
+    expect(realGoverned.branchRulesProblems(live, { ...gate, rules: [{ type: 'update' }] }, app).join('\n')).toMatch(/does not block deletion/u);
+    expect(realGoverned.branchRulesProblems(live, { ...gate, id: null }, app).join('\n')).toMatch(/no pinned ruleset id/u);
+    expect(realGoverned.branchRulesProblems(live, gate, '').join('\n')).toMatch(/JULIUS_GOVERNED_LANDER_APP_ID is unset/u);
+    expect(realGoverned.branchRulesProblems(live, { ...gate, enforcement: 'evaluate' }, app).join('\n')).toMatch(/not active/u);
+    expect(realGoverned.branchRulesProblems(live, {
+      ...gate,
+      conditions: { ref_name: { include: ['refs/heads/other', 'refs/julius-governed-audit/**'], exclude: [] } },
+    }, app).join('\n')).toMatch(/does not cover refs\/heads\/main/u);
+    expect(realGoverned.branchRulesProblems(null, gate, app).join('\n')).toMatch(/could not be read/u);
+    expect(realGoverned.branchRulesProblems(live, {
+      ...gate,
+      bypass_actors: [{ actor_type: 'OrganizationAdmin', actor_id: 1, bypass_mode: 'always' }],
+    }, app).join('\n')).toMatch(/only the governed lander app/u);
+    const shipped = JSON.parse(readFileSync(join(LANDING, 'main-ruleset.json'), 'utf8')) as { id: unknown; bypass_actors: { actor_id: number; actor_type: string; bypass_mode: string }[] };
+    expect(shipped.id).toBeNull();
+    expect(shipped.bypass_actors).toEqual([{ actor_id: 5457712, actor_type: 'Integration', bypass_mode: 'always' }]);
+    expect(realGoverned.branchRulesProblems([], shipped, app).join('\n')).toMatch(/no pinned ruleset id/u);
     const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
     const jwt = realGoverned.githubAppJwt(app, privateKey, Date.parse('2026-10-24T00:00:00Z'));
     const payload = JSON.parse(Buffer.from(jwt.split('.')[1] ?? '', 'base64url').toString('utf8')) as { iss: string; iat: number; exp: number };
@@ -429,14 +516,32 @@ describe('squash and fast-forward pass only when every binding holds', () => {
     const decision = fixture.evaluateGovernedLanding(landingInput({
       fastForward: true,
       files,
-      fileRows: files.length,
       pr: openPr({ changed_files: files.length }),
+      ...attestationMaterial(),
     }, [`protected-paths: ${files.join(',')}`, 'landing-method: fast-forward']));
     expect(decision.ok, decision.problems.join('\n')).toBe(true);
     expect(decision.method).toBe('fast-forward');
     expect(decision.refUpdate).toEqual({ sha: H, force: false });
     expect(decision.message).toBeNull();
     expect(decision.record?.resultingMainSha).toBe(H);
+    const bogus = fixture.evaluateGovernedLanding(landingInput({
+      fastForward: true,
+      files,
+      pr: openPr({ changed_files: files.length }),
+      ...attestationMaterial((text) => signWith(text, other.privateKey)),
+    }, [`protected-paths: ${files.join(',')}`, 'landing-method: fast-forward']));
+    expect(bogus.ok).toBe(false);
+    expect(bogus.problems.join('\n')).toMatch(/the checkpoint attestation was not verified/u);
+    const staleHashes = attestationMaterial();
+    staleHashes.treeHashes[WORKFLOW] = '0'.repeat(64);
+    const mismatched = fixture.evaluateGovernedLanding(landingInput({
+      fastForward: true,
+      files,
+      pr: openPr({ changed_files: files.length }),
+      ...staleHashes,
+    }, [`protected-paths: ${files.join(',')}`, 'landing-method: fast-forward']));
+    expect(mismatched.ok).toBe(false);
+    expect(mismatched.problems.join('\n')).toMatch(/the checkpoint attestation was not verified/u);
   });
 
   it('a draft passes only when the clearance binds it', () => {
@@ -461,21 +566,41 @@ describe('squash and fast-forward pass only when every binding holds', () => {
     expect(decision.record?.resultingMainSha).toBe('pending');
   });
 
-  it('keeps the newest agreeing clearance and refuses a disagreement on head, tree, or base', () => {
-    const text = clearance(['landing-method: squash']);
+  it('refuses a squash whose head does not descend from the signed base', () => {
+    const ci = '.github/workflows/ci.yml';
+    const decision = fixture.evaluateGovernedLanding(landingInput({
+      files: ['src/ok.ts', ci],
+      compare: { behind_by: 2, status: 'diverged', ahead_by: 1 },
+      pr: openPr({ changed_files: 1 }),
+    }, [`protected-paths: ${ci}`, 'landing-method: squash']));
+    expect(decision.ok).toBe(false);
+    expect(decision.problems.join('\n')).toMatch(/does not descend from the signed base/u);
+    expect(decision.problems.join('\n')).not.toMatch(/founder-governed/u);
+  });
+
+  it('orders clearances for this head by the signed issued field and ignores other heads', () => {
+    const newer = clearance(['landing-method: squash']);
+    const older = newer.replace('issued: 2026-10-23T18:00:00Z', 'issued: 2026-10-23T12:00:00Z');
+    const otherHead = newer.replace(`head: ${H}`, `head: ${OTHER}`);
     const wrapped = (body: string) => `-----BEGIN JULIUS CLEARANCE-----\n${body}-----END JULIUS CLEARANCE-----\n-----BEGIN JULIUS CLEARANCE SIGNATURE-----\n${signWith(body)}\n-----END JULIUS CLEARANCE SIGNATURE-----`;
+    const expected = { head: H, tree: T, base: B };
     const chosen = fixture.chooseClearanceDelivery([
-      { body: wrapped(text), created_at: '2026-10-23T18:00:00Z', id: 1 },
-      { body: wrapped(text), created_at: '2026-10-23T19:00:00Z', id: 2 },
-    ], publicPem);
+      { body: wrapped(older), created_at: '2026-10-23T21:00:00Z', id: 9 },
+      { body: wrapped(newer), created_at: '2026-10-23T18:00:00Z', id: 1 },
+      { body: wrapped(otherHead), created_at: '2026-10-23T22:00:00Z', id: 3 },
+    ], publicPem, expected);
     expect(chosen.problem).toBeUndefined();
-    expect(chosen.delivery?.id).toBe(2);
-    const otherHead = text.replace(`head: ${H}`, `head: ${OTHER}`);
+    expect(chosen.delivery?.id).toBe(1);
+    const alt = newer.replace(`nonce: ${NONCE}`, `nonce: ${'cd'.repeat(16)}`);
     const conflict = fixture.chooseClearanceDelivery([
-      { body: wrapped(text), created_at: '2026-10-23T18:00:00Z', id: 1 },
-      { body: wrapped(otherHead), created_at: '2026-10-23T19:00:00Z', id: 3 },
-    ], publicPem);
-    expect(conflict.problem).toMatch(/do not agree on head, tree, and base/u);
+      { body: wrapped(newer), created_at: '2026-10-23T18:00:00Z', id: 1 },
+      { body: wrapped(alt), created_at: '2026-10-23T19:00:00Z', id: 2 },
+    ], publicPem, expected);
+    expect(conflict.problem).toMatch(/do not agree/u);
+    const ignored = fixture.chooseClearanceDelivery([
+      { body: wrapped(otherHead), created_at: '2026-10-23T22:00:00Z', id: 3 },
+    ], publicPem, expected);
+    expect(ignored.problem).toMatch(/no signed clearance is on the pull request/u);
   });
 });
 

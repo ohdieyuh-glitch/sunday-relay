@@ -400,6 +400,7 @@ describe('the checkpoint workflow and the working tree', () => {
     const added = [
       '.github/julius-landing/governed-land.mjs',
       '.github/julius-landing/governed-queue.txt',
+      '.github/julius-landing/main-ruleset.json',
       '.github/workflows/julius-governed-land.yml',
     ];
     expect(TRUSTED_COMPUTING_BASE.length).toBe(attested.length + added.length);

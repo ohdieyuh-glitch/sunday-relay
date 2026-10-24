@@ -1,0 +1,18 @@
+{
+  "id": null,
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": {
+      "include": ["~DEFAULT_BRANCH", "refs/julius-governed-audit/**"],
+      "exclude": []
+    }
+  },
+  "rules": [
+    { "type": "deletion" },
+    { "type": "non_fast_forward" },
+    { "type": "update" }
+  ],
+  "bypass_actors": [
+    { "actor_id": 5457712, "actor_type": "Integration", "bypass_mode": "always" }
+  ]
+}

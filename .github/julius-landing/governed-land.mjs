@@ -22,7 +22,14 @@ import {
   unusedProtectedPaths,
   verifyClearanceSignature,
 } from './land-lib.mjs';
-import { governedLandingShapeProblem, judgeClearanceWindow, landingIdentityProblem } from '../../scripts/julius-main-provenance-trust.mjs';
+import {
+  TRUSTED_COMPUTING_BASE,
+  checkpointAttestationProblems,
+  checkpointPairingRequired,
+  governedLandingShapeProblem,
+  judgeClearanceWindow,
+  landingIdentityProblem,
+} from '../../scripts/julius-main-provenance-trust.mjs';
 
 export const GOVERNED_SELF_CHECK = 'Land a governed pull request';
 const BEGIN = '-----BEGIN JULIUS CLEARANCE-----\n';
@@ -52,11 +59,12 @@ export function extractClearanceDeliveries(bodies) {
 }
 
 /**
- * Signed clearances from the pinned key. Several that agree on head, tree, and
- * base resolve to the newest (created_at, then issued, then comment id).
- * Disagreement on those three is a refusal. The signature, not the commenter, is the authority.
+ * Signed clearances for this exact head, tree, and base. The newest signed
+ * `issued` wins. Comment time is not the order. A clearance for any other
+ * head, tree, or base is ignored. Two texts that share that `issued` and
+ * disagree are a refusal. The signature, not the commenter, is the authority.
  */
-export function chooseClearanceDelivery(comments, publicKeyPem) {
+export function chooseClearanceDelivery(comments, publicKeyPem, expected = {}) {
   const rows = (Array.isArray(comments) ? comments : []).map((comment) => (
     typeof comment === 'string' ? { body: comment, created_at: '', id: 0 } : (comment ?? {})
   ));
@@ -66,25 +74,29 @@ export function chooseClearanceDelivery(comments, publicKeyPem) {
       const parsed = parseClearance(delivery.clearanceText);
       if (parsed.problems.length > 0) continue;
       if (verifyClearanceSignature(delivery.clearanceText, delivery.signatureB64, publicKeyPem).length > 0) continue;
+      const fields = parsed.fields;
+      if (typeof expected.head === 'string' && fields.head !== expected.head) continue;
+      if (typeof expected.tree === 'string' && fields.tree !== expected.tree) continue;
+      if (typeof expected.base === 'string' && fields.base !== expected.base) continue;
       verified.push({
         ...delivery,
-        fields: parsed.fields,
+        fields,
         created_at: String(comment.created_at ?? ''),
         id: Number(comment.id ?? 0),
       });
     }
   }
   if (verified.length === 0) return { problem: 'no signed clearance is on the pull request' };
-  const keys = new Set(verified.map((row) => `${row.fields.head}:${row.fields.tree}:${row.fields.base}`));
-  if (keys.size !== 1) return { problem: 'signed clearances for this pull request do not agree on head, tree, and base' };
   verified.sort((left, right) => {
-    const created = left.created_at.localeCompare(right.created_at);
-    if (created !== 0) return created;
     const issued = String(left.fields.issued).localeCompare(String(right.fields.issued));
     if (issued !== 0) return issued;
     return left.id - right.id;
   });
-  return { delivery: verified[verified.length - 1] };
+  const newest = verified[verified.length - 1];
+  const issued = String(newest.fields.issued);
+  const texts = new Set(verified.filter((row) => String(row.fields.issued) === issued).map((row) => row.clearanceText));
+  if (texts.size !== 1) return { problem: 'signed clearances for this pull request do not agree' };
+  return { delivery: newest };
 }
 
 export function parseGovernedQueue(text) {
@@ -176,10 +188,21 @@ export function parseAuditRecord(message) {
   return { status: status[1], pr: Number(pr[1]), method: method[1], main: main[1] };
 }
 
-/** `contains(ancestor, descendant)` is true when ancestor is descendant or a first-parent ancestor of it. */
-export function landedPullsFromAudits(audits, mainSha, contains) {
+/**
+ * `contains(ancestor, descendant)` is true when ancestor is descendant or a
+ * first-parent ancestor of it. An audit counts only when that commit was
+ * created by the App: committer id is the bot id, and GitHub reports the
+ * signature verified and valid. A `main:` line in any other commit is not a sha.
+ */
+export function landedPullsFromAudits(audits, mainSha, contains, botId) {
   const landed = new Set();
   for (const audit of Array.isArray(audits) ? audits : []) {
+    if (landingIdentityProblem({
+      committerId: audit?.committerId,
+      verificationVerified: audit?.verificationVerified === true,
+      verificationReason: audit?.verificationReason,
+      botId,
+    })) continue;
     const record = parseAuditRecord(audit?.message);
     if (!record || typeof contains !== 'function') continue;
     const proven = record.method === 'squash'
@@ -190,6 +213,11 @@ export function landedPullsFromAudits(audits, mainSha, contains) {
   return landed;
 }
 
+/** The create-commit body. GitHub signs an App commit only when author and committer are both omitted. */
+export function governedCommitBody({ message, tree, parents }) {
+  return { message, tree, parents };
+}
+
 export const GOVERNED_READ_PERMISSIONS = Object.freeze({
   contents: 'read',
   pull_requests: 'read',
@@ -197,7 +225,6 @@ export const GOVERNED_READ_PERMISSIONS = Object.freeze({
   actions: 'read',
   metadata: 'read',
   statuses: 'read',
-  administration: 'read',
 });
 
 /** workflows:write only when a changed path is under .github/workflows. statuses:read is always requested. */
@@ -227,36 +254,87 @@ export function checkWorkflowOrigin({ ref, sha, workflowRef, workflowSha }) {
   return problems;
 }
 
-const rulesetIncludesMain = (ruleset) => {
-  const include = ruleset?.conditions?.ref_name?.include ?? [];
-  const exclude = ruleset?.conditions?.ref_name?.exclude ?? [];
-  const hit = include.some((ref) => ref === 'refs/heads/main' || ref === '~DEFAULT_BRANCH' || ref === '~ALL');
-  const skip = exclude.some((ref) => ref === 'refs/heads/main' || ref === '~DEFAULT_BRANCH');
-  return hit && !skip;
-};
-
 const appBypass = (actor, appId) => actor?.actor_type === 'Integration' && String(actor?.actor_id) === appId && actor?.bypass_mode === 'always';
 
 /**
- * An active ruleset on main must block deletion and force pushes, and the only
- * bypass actor on every applicable ruleset is this App. Anything else refuses.
+ * GitHub ruleset ref pattern. `~ALL` and `~DEFAULT_BRANCH` are the whole pattern.
+ * `*` and `?` are fnmatch. A character class or an escape cannot be evaluated
+ * here and returns null, which the caller treats as a refusal.
  */
-export function mainRulesetProblems(rulesets, appId) {
-  const id = String(appId ?? '').trim();
-  if (!/^[1-9][0-9]{0,16}$/u.test(id)) return ['JULIUS_GOVERNED_LANDER_APP_ID is unset'];
-  if (!Array.isArray(rulesets)) return ['the main ruleset list could not be read'];
-  const applicable = rulesets.filter((ruleset) => ruleset?.target === 'branch' && ruleset?.enforcement === 'active' && rulesetIncludesMain(ruleset));
-  for (const ruleset of applicable) {
-    for (const actor of ruleset.bypass_actors ?? []) {
-      if (!appBypass(actor, id)) return ['a main ruleset lets someone other than the governed lander app bypass'];
+export function refPatternMatches(pattern, ref) {
+  if (pattern === '~ALL') return true;
+  if (pattern === '~DEFAULT_BRANCH') return ref === 'refs/heads/main';
+  if (typeof pattern !== 'string' || pattern === '' || typeof ref !== 'string') return null;
+  if (/[[\]\\]/u.test(pattern)) return null;
+  let source = '^';
+  for (const char of pattern) {
+    if (char === '*') source += '.*';
+    else if (char === '?') source += '.';
+    else if (/[.+^${}()|]/u.test(char)) source += `\\${char}`;
+    else source += char;
+  }
+  try {
+    return new RegExp(`${source}$`, 'u').test(ref);
+  } catch {
+    return null;
+  }
+}
+
+/** Whether the snapshot's include and exclude patterns cover `ref`. Unevaluable patterns refuse. */
+export function rulesetCoversRef(conditions, ref = 'refs/heads/main') {
+  const include = conditions?.ref_name?.include;
+  const exclude = conditions?.ref_name?.exclude ?? [];
+  if (!Array.isArray(include) || include.length === 0 || !Array.isArray(exclude)) {
+    return { ok: false, problem: `the main ruleset snapshot does not cover ${ref}` };
+  }
+  for (const pattern of [...include, ...exclude]) {
+    if (refPatternMatches(pattern, ref) === null) {
+      return { ok: false, problem: 'the main ruleset snapshot has a ref pattern that cannot be evaluated' };
     }
   }
-  const gate = applicable.find((ruleset) => {
-    const types = new Set((ruleset.rules ?? []).map((rule) => rule?.type));
-    const actors = ruleset.bypass_actors ?? [];
-    return types.has('deletion') && types.has('non_fast_forward') && types.has('update') && actors.length === 1 && appBypass(actors[0], id);
-  });
-  if (!gate) return ['main has no active ruleset that blocks force pushes and deletions and lets only the governed lander app push'];
+  const hit = include.some((pattern) => refPatternMatches(pattern, ref) === true);
+  const skip = exclude.some((pattern) => refPatternMatches(pattern, ref) === true);
+  if (!hit || skip) return { ok: false, problem: `the main ruleset snapshot does not cover ${ref}` };
+  return { ok: true };
+}
+
+const RULE_TYPES = ['deletion', 'non_fast_forward', 'update'];
+
+/**
+ * The branch-rules list is what metadata can read. The snapshot is the admin's
+ * out-of-band copy of the ruleset, including bypass actors, and it is part of
+ * the trusted computing base. Live rules for the pinned ruleset id must match
+ * the snapshot's rule types and parameters. Bypass actors are compared to the
+ * App id from the environment. They are not on the live response.
+ */
+export function branchRulesProblems(liveRules, snapshot, appId) {
+  const id = String(appId ?? '').trim();
+  if (!/^[1-9][0-9]{0,16}$/u.test(id)) return ['JULIUS_GOVERNED_LANDER_APP_ID is unset'];
+  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return ['the main ruleset snapshot could not be read'];
+  if (!Number.isInteger(snapshot.id) || snapshot.id < 1) return ['the main ruleset snapshot has no pinned ruleset id'];
+  if (snapshot.enforcement !== 'active') return ['the main ruleset snapshot is not active'];
+  const mainCover = rulesetCoversRef(snapshot.conditions, 'refs/heads/main');
+  if (!mainCover.ok) return [mainCover.problem];
+  const auditCover = rulesetCoversRef(snapshot.conditions, 'refs/julius-governed-audit/pr/1');
+  if (!auditCover.ok) return ['the main ruleset snapshot does not cover refs/julius-governed-audit/**'];
+  const actors = snapshot.bypass_actors;
+  if (!Array.isArray(actors) || actors.length !== 1 || !appBypass(actors[0], id)) {
+    return ['the main ruleset snapshot does not name only the governed lander app as an always bypass'];
+  }
+  const snapshotRules = Array.isArray(snapshot.rules) ? snapshot.rules : [];
+  const snapshotTypes = snapshotRules.map((rule) => rule?.type);
+  if (snapshotTypes.length !== RULE_TYPES.length || RULE_TYPES.some((type) => !snapshotTypes.includes(type))) {
+    return ['the main ruleset snapshot does not block deletion, force pushes, and updates'];
+  }
+  if (!Array.isArray(liveRules)) return ['the main branch rules could not be read'];
+  const live = liveRules.filter((rule) => rule?.ruleset_id === snapshot.id);
+  if (live.length !== snapshotRules.length) return ['the live main branch rules do not match the pinned ruleset snapshot'];
+  for (const rule of snapshotRules) {
+    const match = live.find((row) => row?.type === rule.type);
+    if (!match || JSON.stringify(match.parameters ?? {}) !== JSON.stringify(rule.parameters ?? {})) {
+      return ['the live main branch rules do not match the pinned ruleset snapshot'];
+    }
+  }
   return [];
 }
 
@@ -306,12 +384,8 @@ export function evaluateGovernedLanding(input) {
   if (input?.pr?.state !== 'open' || input?.pr?.merged === true) problems.push('the pull request is not open');
   if (input?.pr?.base?.ref !== 'main') problems.push('the PR does not target main');
   if (input?.pr?.head?.repo?.full_name !== REPO) problems.push('the PR head is not in this repository');
-  if (input?.fileRows !== input?.pr?.changed_files) {
-    problems.push(`the files list is incomplete: read ${input?.fileRows} rows, the PR reports ${input?.pr?.changed_files} changed files`);
-  }
-  const changedFiles = input?.pr?.changed_files;
-  if (!Number.isInteger(changedFiles) || changedFiles >= 300 || changedFiles < 1) {
-    problems.push('the PR changes 300 or more files, or the count is unknown; a governed landing is refused');
+  if (input?.treeDiffComplete !== true) {
+    problems.push('the diff of the signed base against the head tree is missing or truncated');
   }
   const files = Array.isArray(input?.files) ? input.files : [];
   if (files.length === 0) problems.push('the PR changes no files');
@@ -337,6 +411,21 @@ export function evaluateGovernedLanding(input) {
   }));
   if (fields['landing-method'] === 'fast-forward' && input?.fastForward !== true) {
     problems.push('the pull request head is not a fast-forward of the signed base');
+  }
+  if (fields['landing-method'] === 'squash') {
+    const compare = input?.compare;
+    const descends = compare?.behind_by === 0 && (compare?.status === 'ahead' || compare?.status === 'identical');
+    if (!descends) problems.push('the pull request head does not descend from the signed base');
+  }
+  if (checkpointPairingRequired(files)) {
+    const attestationProblems = checkpointAttestationProblems({
+      text: input?.attestationText,
+      signatureB64: input?.attestationSignatureB64,
+      pem: input?.publicKeyPem,
+      treeHashes: input?.treeHashes,
+      now: input?.now,
+    });
+    if (attestationProblems.length > 0) problems.push('the checkpoint attestation was not verified', ...attestationProblems);
   }
   if (problems.length > 0) return { ok: false, problems };
   const checkRunIds = (input.checkRuns ?? [])
@@ -488,22 +577,21 @@ async function runCli() {
     return;
   }
   const publicKeyPem = readFileSync(join(here, 'reviewer-ed25519.pub'), 'utf8');
-  let rulesets;
+  let snapshot;
   try {
-    const rulesetSummaries = await paged(`/repos/${REPO}/rulesets`);
-    rulesets = [];
-    for (const summary of rulesetSummaries) {
-      if (!Number.isInteger(summary?.id)) {
-        fail(['a ruleset id could not be read']);
-        return;
-      }
-      rulesets.push(await api(`/repos/${REPO}/rulesets/${summary.id}`));
-    }
-  } catch (error) {
-    fail([`the main ruleset list could not be read: ${error instanceof Error ? error.message : 'unknown'}`]);
+    snapshot = JSON.parse(readFileSync(join(here, 'main-ruleset.json'), 'utf8'));
+  } catch {
+    fail(['the main ruleset snapshot could not be read']);
     return;
   }
-  const rulesetProblems = mainRulesetProblems(rulesets, appId);
+  let liveRules;
+  try {
+    liveRules = await api(`/repos/${REPO}/rules/branches/main`);
+  } catch (error) {
+    fail([`the main branch rules could not be read: ${error instanceof Error ? error.message : 'unknown'}`]);
+    return;
+  }
+  const rulesetProblems = branchRulesProblems(liveRules, snapshot, appId);
   if (rulesetProblems.length > 0) {
     fail(rulesetProblems);
     return;
@@ -531,55 +619,60 @@ async function runCli() {
     if (typeof body?.token !== 'string' || body.token === '') throw new Error('POST /app/installations/access_tokens -> no token');
     return body.token;
   };
-  const auditRefs = [];
-  try {
-    for (let page = 1; page <= 10; page += 1) {
-      const response = await readRaw(`/repos/${REPO}/git/matching-refs/julius-governed-audit?per_page=100&page=${page}`);
-      if (page === 1 && response.status === 404) break;
-      if (response.status !== 200 || !Array.isArray(response.body)) {
-        fail([`the governed audit refs could not be read: GET /repos/${REPO}/git/matching-refs/julius-governed-audit -> ${response.status}`]);
-        return;
-      }
-      auditRefs.push(...response.body);
-      if (response.body.length < 100) break;
-      if (page === 10) {
-        fail(['more than 1000 audit refs: refusing rather than reading a partial set']);
-        return;
-      }
-    }
-  } catch (error) {
-    fail([`the governed audit record could not be read: ${error instanceof Error ? error.message : 'unknown'}`]);
-    return;
-  }
+  const blobBytes = async (path, ref) => {
+    const body = await api(`/repos/${REPO}/contents/${path}?ref=${ref}`);
+    if (body?.encoding !== 'base64' || typeof body?.content !== 'string') throw new Error(`the blob ${path} at ${ref} could not be read`);
+    return Buffer.from(body.content.replace(/\n/g, ''), 'base64');
+  };
   const mainShaNow = (await api('/repos/ohdieyuh-glitch/sunday-relay/git/ref/heads/main')).object.sha;
   const audits = [];
   const provenAncestors = new Set();
+  const seenAudits = new Set();
+  const readAudit = async (pr) => {
+    if (seenAudits.has(pr)) return;
+    seenAudits.add(pr);
+    const response = await readRaw(`/repos/${REPO}/git/ref/julius-governed-audit/pr/${pr}`);
+    if (response.status === 404) return;
+    if (response.status !== 200 || typeof response.body?.object?.sha !== 'string') {
+      throw new Error(`GET /repos/${REPO}/git/ref/julius-governed-audit/pr/${pr} -> ${response.status}`);
+    }
+    const sha = response.body.object.sha;
+    const commit = await api(`/repos/${REPO}/commits/${sha}`);
+    const audit = {
+      sha,
+      message: commit?.commit?.message ?? '',
+      committerId: commit?.committer?.id,
+      verificationVerified: commit?.commit?.verification?.verified === true,
+      verificationReason: typeof commit?.commit?.verification?.reason === 'string' ? commit.commit.verification.reason : '',
+    };
+    audits.push(audit);
+    if (landingIdentityProblem({
+      committerId: audit.committerId,
+      verificationVerified: audit.verificationVerified,
+      verificationReason: audit.verificationReason,
+      botId,
+    })) return;
+    const record = parseAuditRecord(audit.message);
+    if (!record) return;
+    const ancestor = record.method === 'squash' ? sha : (record.main !== 'pending' ? record.main : '');
+    if (ancestor === '') return;
+    if (ancestor === mainShaNow) {
+      provenAncestors.add(ancestor);
+      return;
+    }
+    const compared = await api(`/repos/${REPO}/compare/${ancestor}...${mainShaNow}`);
+    if (compared?.status === 'ahead' || compared?.status === 'identical') provenAncestors.add(ancestor);
+  };
   try {
-    for (const ref of auditRefs) {
-      const sha = ref?.object?.sha;
-      if (typeof sha !== 'string') {
-        fail(['a governed audit ref has no sha']);
-        return;
-      }
-      const commit = await api(`/repos/${REPO}/commits/${sha}`);
-      const message = commit?.commit?.message ?? '';
-      audits.push({ sha, message });
-      const record = parseAuditRecord(message);
-      if (!record) continue;
-      const ancestor = record.method === 'squash' ? sha : (record.main !== 'pending' ? record.main : '');
-      if (ancestor === '') continue;
-      if (ancestor === mainShaNow) {
-        provenAncestors.add(ancestor);
-        continue;
-      }
-      const compared = await api(`/repos/${REPO}/compare/${ancestor}...${mainShaNow}`);
-      if (compared?.status === 'ahead' || compared?.status === 'identical') provenAncestors.add(ancestor);
+    for (const entry of entries) {
+      for (const dep of entry.depends) await readAudit(dep);
     }
   } catch (error) {
     fail([`the governed audit record could not be read: ${error instanceof Error ? error.message : 'unknown'}`]);
     return;
   }
-  const landedOnMain = landedPullsFromAudits(audits, mainShaNow, (ancestor) => provenAncestors.has(ancestor));
+  const auditsLanded = () => landedPullsFromAudits(audits, mainShaNow, (ancestor) => provenAncestors.has(ancestor), botId);
+  const landedOnMain = auditsLanded();
   const note = (text) => {
     process.stdout.write(`${text}\n`);
     if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, `${text}\n`);
@@ -602,16 +695,23 @@ async function runCli() {
       let updateAccepted = false;
       try {
       const pull = await api(`/repos/${REPO}/pulls/${number}`);
+      const liveMain = (await api('/repos/ohdieyuh-glitch/sunday-relay/git/ref/heads/main')).object.sha;
+      const liveHead = pull?.head?.sha;
+      const liveCommit = typeof liveHead === 'string' ? await api(`/repos/${REPO}/commits/${liveHead}`) : null;
+      const liveTree = liveCommit?.commit?.tree?.sha;
       const issueComments = await paged(`/repos/${REPO}/issues/${number}/comments`);
-      const chosen = chooseClearanceDelivery(issueComments, publicKeyPem);
+      const chosen = typeof liveHead === 'string' && typeof liveTree === 'string' && typeof liveMain === 'string'
+        ? chooseClearanceDelivery(issueComments, publicKeyPem, { head: liveHead, tree: liveTree, base: liveMain })
+        : { problem: 'the pull request head, tree, or main could not be read' };
       if (chosen.problem) {
         decision = { ok: false, problems: [chosen.problem] };
       } else {
         const clearance = parseClearance(chosen.delivery.clearanceText).fields;
+        for (const dep of splitClearanceList(clearance.depends).map(Number)) await readAudit(dep);
+        for (const id of auditsLanded()) landed.add(id);
         const head = clearance.head;
-        const [commit, files, inlineComments, reviews, checkBody, compare] = await Promise.all([
+        const [commit, inlineComments, reviews, checkBody, compare] = await Promise.all([
           api(`/repos/${REPO}/commits/${head}`),
-          paged(`/repos/${REPO}/pulls/${number}/files`),
           paged(`/repos/${REPO}/pulls/${number}/comments`),
           paged(`/repos/${REPO}/pulls/${number}/reviews`),
           api(`/repos/${REPO}/commits/${head}/check-runs?per_page=100`),
@@ -632,7 +732,25 @@ async function runCli() {
             ...(!tagReadable ? ['the nonce tag could not be read'] : []),
           ] };
         } else {
-        const changedPaths = files.flatMap((file) => [file?.filename, file?.previous_filename].filter((path) => typeof path === 'string'));
+        const compareFiles = Array.isArray(compare?.files) ? compare.files : null;
+        const treeDiffComplete = compareFiles !== null && compareFiles.length < 300;
+        const changedPaths = treeDiffComplete
+          ? compareFiles.flatMap((file) => [file?.filename, file?.previous_filename].filter((path) => typeof path === 'string'))
+          : [];
+        let attestationText = '';
+        let attestationSignatureB64 = '';
+        const treeHashes = {};
+        if (treeDiffComplete && checkpointPairingRequired(changedPaths)) {
+          const txtPath = changedPaths.find((path) => /^\.github\/julius-landing\/checkpoints\/[0-9a-f]{40}\.txt$/iu.test(path));
+          const sigPath = changedPaths.find((path) => /^\.github\/julius-landing\/checkpoints\/[0-9a-f]{40}\.sig$/iu.test(path));
+          if (typeof txtPath === 'string' && typeof sigPath === 'string') {
+            attestationText = (await blobBytes(txtPath, head)).toString('utf8');
+            attestationSignatureB64 = (await blobBytes(sigPath, head)).toString('utf8').trim();
+            for (const path of TRUSTED_COMPUTING_BASE) {
+              treeHashes[path] = createHash('sha256').update(await blobBytes(path, head)).digest('hex');
+            }
+          }
+        }
         const mainSha = (await api('/repos/ohdieyuh-glitch/sunday-relay/git/ref/heads/main')).object.sha;
         decision = evaluateGovernedLanding({
           clearanceText: chosen.delivery.clearanceText,
@@ -642,7 +760,8 @@ async function runCli() {
           pr: pull,
           commit,
           files: changedPaths,
-          fileRows: files.length,
+          treeDiffComplete,
+          compare: { behind_by: compare?.behind_by, ahead_by: compare?.ahead_by, status: compare?.status },
           mainSha,
           digest: botCommentsDigest({ issueComments, inlineComments, reviews }),
           commitMessages: [],
@@ -652,6 +771,9 @@ async function runCli() {
           required: requiredChecks,
           landedOnMain: landed,
           fastForward: compare?.status === 'ahead' && compare?.behind_by === 0 && compare?.ahead_by > 0,
+          attestationText,
+          attestationSignatureB64,
+          treeHashes,
         });
         decision.changedPaths = changedPaths;
         }
@@ -677,7 +799,7 @@ async function runCli() {
             const created = await apiWrite(`/repos/${REPO}/git/commits`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ message: decision.message, tree, parents: [base], author: identity, committer: identity }),
+              body: JSON.stringify(governedCommitBody({ message: decision.message, tree, parents: [base] })),
             });
             rememberSha(created?.sha);
             const readBack = await api(`/repos/${REPO}/commits/${sha}`);
@@ -703,7 +825,7 @@ async function runCli() {
               const created = await apiWrite(`/repos/${REPO}/git/commits`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: auditMessage, tree: mainTree, parents: [base], author: identity, committer: identity }),
+                body: JSON.stringify(governedCommitBody({ message: auditMessage, tree: mainTree, parents: [base] })),
               });
               auditSha = created?.sha;
               const readBack = await api(`/repos/${REPO}/commits/${auditSha}`);
@@ -726,12 +848,11 @@ async function runCli() {
             }
           }
           if (decision.ok) {
-            const nonce = decision.fields.nonce;
             try {
               await apiWrite('/repos/ohdieyuh-glitch/sunday-relay/git/refs', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ref: `refs/julius-governed-audit/${nonce}`, sha: auditSha }),
+                body: JSON.stringify({ ref: `refs/julius-governed-audit/pr/${decision.record.pr}`, sha: auditSha }),
               });
             } catch (error) {
               decision = { ok: false, problems: [`the audit record could not be created; main was not moved: ${error instanceof Error ? error.message : 'unknown'}`] };

@@ -77,6 +77,14 @@ export declare function landingIdentityProblem(input?: {
   readonly verificationReadProblem?: unknown;
 }): string | null;
 export declare function governedLandingShapeProblem(files: unknown, method: unknown): string | null;
+export declare function checkpointPairingRequired(files: unknown): boolean;
+export declare function checkpointAttestationProblems(input?: {
+  readonly text?: unknown;
+  readonly signatureB64?: unknown;
+  readonly pem?: unknown;
+  readonly treeHashes?: unknown;
+  readonly now?: unknown;
+}): string[];
 export declare function judgeClearanceWindow(fields: { readonly issued?: string; readonly expires?: string } | undefined, now: number): string | null;
 
 export interface LandingJudgement {
@@ -173,4 +181,12 @@ export declare function applyTrustChain<T extends { readonly verdict?: string; r
 export declare function readCheckpointAttestation(root?: string): { readonly text: string; readonly signatureB64: string | null; readonly fileName: string; readonly path: string } | null;
 export declare function attestedCheckpointFloor(root?: string, env?: NodeJS.ProcessEnv, now?: number): string | null;
 export declare function attestationWorktreeMatchesHead(root?: string): Promise<{ readonly ok: boolean; readonly reason: string }>;
-export declare function requireTrustedVerifier(env?: NodeJS.ProcessEnv, options?: { readonly root?: string; readonly now?: number }): Promise<{ readonly ok: boolean; readonly reason: string }>;
+export declare function requireTrustedVerifier(env?: NodeJS.ProcessEnv, options?: {
+  readonly root?: string;
+  readonly now?: number;
+  readonly identities?: Readonly<Record<string, {
+    readonly committerId?: unknown;
+    readonly verificationVerified?: unknown;
+    readonly verificationReason?: unknown;
+  }>>;
+}): Promise<{ readonly ok: boolean; readonly reason: string }>;

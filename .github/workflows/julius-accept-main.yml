@@ -150,6 +150,7 @@ jobs:
       - name: 'Gate: signed checkpoint attestation, attested hashes, and attestation integrity'
         env:
           JULIUS_REVIEWER_KEY_SHA256: ${{ vars.JULIUS_REVIEWER_KEY_SHA256 }}
+          JULIUS_GOVERNED_LANDER_BOT_ID: ${{ vars.JULIUS_GOVERNED_LANDER_BOT_ID }}
         run: |
           set -euo pipefail
           # The attested verifier. It fails closed when main has no signed
@@ -174,6 +175,7 @@ jobs:
           .github/julius-landing/land.mjs
           .github/julius-landing/governed-land.mjs
           .github/julius-landing/governed-queue.txt
+          .github/julius-landing/main-ruleset.json
           .github/julius-landing/reviewer-tools.mjs
           .github/julius-landing/allowed-branches.txt
           .github/julius-landing/required-checks.txt
@@ -205,6 +207,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           JULIUS_REVIEWER_KEY_SHA256: ${{ vars.JULIUS_REVIEWER_KEY_SHA256 }}
+          JULIUS_GOVERNED_LANDER_BOT_ID: ${{ vars.JULIUS_GOVERNED_LANDER_BOT_ID }}
         run: |
           set -euo pipefail
           # The attested tip, after the signature and the cmp above. A missing

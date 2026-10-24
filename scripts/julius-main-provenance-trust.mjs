@@ -102,6 +102,7 @@ export const TRUSTED_COMPUTING_BASE = Object.freeze([
   '.github/julius-landing/land.mjs',
   '.github/julius-landing/governed-land.mjs',
   '.github/julius-landing/governed-queue.txt',
+  '.github/julius-landing/main-ruleset.json',
   '.github/julius-landing/reviewer-tools.mjs',
   '.github/julius-landing/allowed-branches.txt',
   '.github/julius-landing/required-checks.txt',
@@ -401,6 +402,32 @@ export function attestationCoversCommits(parsed, commits, prior) {
   return parsed.fields.checkpoint === commits[commits.length - 1]?.sha;
 }
 
+/**
+ * The attestation signature must verify against the pinned key, and every
+ * trusted-file hash in it must be the post-landing tree. Presence of the file
+ * is not that proof. Any failure is a refusal; the caller says the attestation
+ * was not verified.
+ */
+export function checkpointAttestationProblems({ text, signatureB64, pem, treeHashes, now } = {}) {
+  if (typeof text !== 'string' || text === '' || typeof signatureB64 !== 'string' || signatureB64 === '') {
+    return ['the checkpoint attestation was not verified'];
+  }
+  const parsed = parseCheckpointAttestation(text);
+  if (parsed.problems.length > 0) return ['the checkpoint attestation was not verified'];
+  const material = reviewerKeyMaterial(pem);
+  if (!material.key || !signatureVerifies(text, signatureB64, material)) return ['the checkpoint attestation was not verified'];
+  const listed = parsed.fields.tcb ?? [];
+  if (listed.length !== TRUSTED_COMPUTING_BASE.length || listed.some((row, index) => row.path !== TRUSTED_COMPUTING_BASE[index])) {
+    return ['the checkpoint attestation was not verified'];
+  }
+  if (!treeHashes || typeof treeHashes !== 'object') return ['the checkpoint attestation was not verified'];
+  for (const row of listed) {
+    if (treeHashes[row.path] !== row.sha256) return ['the checkpoint attestation was not verified'];
+  }
+  if (judgeAttestationWindow(parsed.fields, now)) return ['the checkpoint attestation was not verified'];
+  return [];
+}
+
 function signatureVerifies(text, signatureB64, material) {
   try {
     if (typeof signatureB64 !== 'string' || signatureB64 === '') return false;
@@ -444,6 +471,12 @@ export function governedLandingShapeProblem(files, method) {
     return 'fast-forward is only for a checkpoint or bootstrap landing';
   }
   return null;
+}
+
+/** A trusted file or a checkpoint attestation file in the diff has to be signature-checked before main moves. */
+export function checkpointPairingRequired(files) {
+  const list = Array.isArray(files) ? files : [];
+  return list.some((path) => typeof path === 'string' && (TRUSTED_COMPUTING_BASE.includes(path) || ATTESTATION_FILE.test(path)));
 }
 
 function introducesAttestationSignature(commit) {
@@ -954,24 +987,26 @@ async function fetchGithubCommitIdentity(sha, env) {
   };
 }
 
-async function attachLanderIdentity(commit, env) {
+async function attachLanderIdentity(commit, env, identities) {
   const message = typeof commit?.message === 'string' ? commit.message : '';
   const paths = Array.isArray(commit?.paths) ? commit.paths : [];
   if (!message.includes('BEGIN JULIUS LANDING')) return commit;
   const { HARD_FORBIDDEN_PATH } = await landingLib();
   const needs = paths.some((path) => HARD_FORBIDDEN_PATH.test(path) || TRUSTED_COMPUTING_BASE.includes(path));
   if (!needs) return commit;
+  const preset = identities && typeof commit?.sha === 'string' ? identities[commit.sha] : undefined;
+  if (preset && typeof preset === 'object') return { ...commit, ...preset };
   const identity = await fetchGithubCommitIdentity(commit.sha, env);
   if (identity.problem) return { ...commit, verificationReadProblem: identity.problem };
   return { ...commit, ...identity };
 }
 
-async function classifyWalkedCommit(commit, pem, anchor, now, seen) {
+async function classifyWalkedCommit(commit, pem, anchor, now, seen, env) {
   if (commit.installerLineage === true) {
-    await judgeCommitLanding(commit, { pem, anchor, now, seenNonces: seen });
+    await judgeCommitLanding(commit, { pem, anchor, now, seenNonces: seen, env });
     return { ...commit, classification: 'installer', reason: 'installer commit in the signed checkpoint lineage' };
   }
-  const judged = await judgeCommitLanding(commit, { pem, anchor, now, seenNonces: seen });
+  const judged = await judgeCommitLanding(commit, { pem, anchor, now, seenNonces: seen, env });
   if (judged.ok) return { ...commit, classification: 'signed-landing', reason: judged.reason, nonce: judged.nonce };
   if (!judged.absent) return { ...commit, classification: 'unprovenanced', reason: judged.reason };
   const recorded = classifyCommit(commit);
@@ -1086,8 +1121,8 @@ export async function requireTrustedVerifier(env = process.env, options = {}) {
     const classified = [];
     for (const commit of markInstallerLineage(walked.slice().reverse(), true)) {
       const bound = await attachHeadBinding(commit, root);
-      const identified = await attachLanderIdentity(bound, env);
-      classified.push(await classifyWalkedCommit(identified, pem, env[EXTERNAL_ANCHOR_VARIABLE], now, seen));
+      const identified = await attachLanderIdentity(bound, env, options.identities);
+      classified.push(await classifyWalkedCommit(identified, pem, env[EXTERNAL_ANCHOR_VARIABLE], now, seen, env));
     }
     const unjustified = classified.filter((row) => row.classification !== 'installer' && row.classification !== 'signed-landing' && row.classification !== 'signed-g6');
     if (unjustified.length > 0) {
