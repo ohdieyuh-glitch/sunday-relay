@@ -326,7 +326,7 @@ describe('provider readiness fails before spending, and never exposes a key', ()
 });
 
 describe('the coder stops before a provider call unless the user-owned API key is present', () => {
-  const gate = step(job('first-live-mission'), "'Gate: coder uses the user-owned Anthropic API key (pending founder ruling)'");
+  const gate = step(job('first-live-mission'), "'Gate: coder uses the Anthropic API key'");
   const body = script(gate);
 
   const runGate = (apiKey: string): { status: number; stderr: string; stdout: string } => {
@@ -368,7 +368,7 @@ describe('the coder stops before a provider call unless the user-owned API key i
       expect(block).not.toContain('CLAUDE_SUBSCRIPTION');
     }
     const liveAt = paid.indexOf("- name: 'LIVE: run the first real Julius mission'");
-    const gateAt = paid.indexOf("- name: 'Gate: coder uses the user-owned Anthropic API key (pending founder ruling)'");
+    const gateAt = paid.indexOf("- name: 'Gate: coder uses the Anthropic API key'");
     const readyAt = paid.indexOf(`- name: ${READINESS}`);
     expect(gateAt).toBeGreaterThan(-1);
     expect(gateAt).toBeLessThan(readyAt);
