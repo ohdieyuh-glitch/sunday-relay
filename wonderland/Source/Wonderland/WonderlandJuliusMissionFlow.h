@@ -10,9 +10,11 @@
 // exists. Julius states past that, and the wrapper tokens "running" and "completed", stay at that
 // ceiling. They are not a finished mission.
 //
-// RESULT. A separate reader. Until the B3 result route exists, the reader reports nothing and the
-// panel says "No result reported yet". A verified:false read is shown as verified:false. An artifact
-// is shown only when a read says verified. This file does not name the route's fields.
+// RESULT. A separate reader. FBridgeMissionResultClient parses the JSON bodies of
+// GET /relay-api/wonderland/julius/missions/{wljRunId}/result and /progress
+// (relay-bridge/wonderland-mission-result-route.ts at 7e71a122). It does not fetch them and it does
+// not derive a trace id, a cost, or an artifact reference. An unplugged reader reports nothing, and
+// the panel says "No result reported yet". dispatched stays the furthest progress until a read verifies.
 //
 // WINDOWS. The bridge's operator window is 360 minutes from acceptance. The client hold is 362
 // minutes (that window plus one slow poll). PollDispatchWatchMs is also 360 minutes, but it starts
@@ -43,8 +45,8 @@ namespace WonderlandJuliusMissionFlow
 	inline constexpr const char* CopyClientHold =
 		"This client keeps the watch for 362 minutes: the bridge window plus one slow poll.";
 	inline constexpr const char* CopyNoResultYet = "No result reported yet";
-	inline constexpr const char* CopyVerifiedFalse = "verified: false";
-	inline constexpr const char* CopyVerifiedTrue = "verified: true";
+	/** The result route's state word, copied onto the panel only after the completion evidence verifies. */
+	inline constexpr const char* CopyStateCompleted = "state: completed";
 
 	enum class EFlowStep : std::uint8_t
 	{
@@ -94,18 +96,93 @@ namespace WonderlandJuliusMissionFlow
 		bool bShowsArtifact = false;
 		bool bVerified = false;
 		bool bReported = false;
+		/** True only when the result route's state is completed and the completion evidence verified. */
+		bool bFinished = false;
+		/** Reported fields, in display order. Empty when that field was null, absent, or not verified. */
+		std::vector<std::string> Lines;
 	};
 
 	/**
-	 * TODO(B3): BRIDGE's result route, keyed by the client's wlj_ id, returns completion, an artifact
-	 * reference, cost, and trace ids from the spend tag and the run record. Those field names belong to
-	 * the B3 contract. They are not declared here. bReported is whether a read exists at all.
-	 * bVerified is the route's verified flag; false must be shown as false.
+	 * A field as the JSON body reported it. bKnown means a value was present. bNull means the key was
+	 * present and null. Neither is zero, and neither is a value this client computed.
+	 */
+	struct FReportedString
+	{
+		bool bKnown = false;
+		bool bNull = false;
+		std::string Text;
+	};
+
+	struct FReportedInt64
+	{
+		bool bKnown = false;
+		bool bNull = false;
+		std::int64_t Value = 0;
+	};
+
+	struct FReportedBool
+	{
+		bool bKnown = false;
+		bool bNull = false;
+		bool bValue = false;
+	};
+
+	/**
+	 * One parse of BRIDGE's result and progress bodies.
+	 *
+	 * Field names, from bridge/wonderland-julius-mission-result-20261024 @ 7e71a122fe03a2538904ab4b8651e034dcf2c1f3:
+	 *   relay-bridge/wonderland-mission-result-route.ts (blob 4e34e0d6fab93b6ba4f7183ac6bfb02ece3ea6f1)
+	 *     shared body 137-144: wljRunId, serverRunId, legacyRunId, traceId, state, updatedAt
+	 *     progress 150: phases
+	 *     result 154-162: cause (only when state is not completed and cause is non-null), dispatchedAt, completion
+	 *     state is "completed" only when evidence.completion !== null (136). Otherwise ceilingState (187-189).
+	 *   relay-bridge/julius-mission-evidence.ts (blob af82258f94e0df0637622e5da7afb9bb298f5a67)
+	 *     spendTag 52-60, spendAccounting 63-68, coderCost 71-76, missionCost 79-83
+	 *     archive 104-112 (artifactName, artifactDigest), workArtifactRefs 330-337
+	 *     completion 135-156, including juliusFinalState "COMPLETED", traceId, traceparent null
+	 *     acceptJuliusMissionEvidence 380-404
+	 *   docs/JULIUS_MISSION_EVIDENCE_READER.md (blob 4f1ab222a8519635b9b9cc4c0073c3266ee7a99a)
+	 *     13-18: completion requires juliusFinalState "COMPLETED" and spendTag.run equal to the path wlj_ id.
+	 *     A missing cost is null, not zero. 77: this route does not recompute JuliusMissionResultView.verified.
+	 *     63-67: traceId and spanId are derived on the bridge. This client displays the strings the body carried.
 	 */
 	struct FResultRead
 	{
+		bool bParsed = false;
 		bool bReported = false;
+		/** state "completed" and the completion object carries the spend-tag evidence. */
 		bool bVerified = false;
+		bool bFinished = false;
+		/** state "unknown", or a state word this client will not treat as a ceiling it understands. */
+		bool bUnknownState = false;
+		/** state "failed" and cause "AWAITING_OPERATOR_EXPIRED". Stays NotStarted. */
+		bool bExpired = false;
+		/** state "dispatched" and completion did not verify. The furthest unplugged progress. */
+		bool bDispatchedCeiling = false;
+		std::string State;
+		FReportedString Cause;
+		FReportedString TraceId;
+		FReportedString CompletionTraceId;
+		FReportedString CompletionTraceparent;
+		FReportedString ArtifactName;
+		FReportedString ArtifactDigest;
+		std::vector<std::string> WorkArtifactRefs;
+		bool bSpendTagPresent = false;
+		FReportedInt64 ReservedUsdMicros;
+		bool bSpendAccountingPresent = false;
+		FReportedInt64 SpendAccountingKnownUsdMicros;
+		bool bCoderCostPresent = false;
+		FReportedInt64 CoderCostUsdMicros;
+		FReportedString CoderCostBasis;
+		bool bMissionCostPresent = false;
+		FReportedInt64 MissionKnownUsdMicros;
+		FReportedInt64 MissionUnknownComponents;
+		FReportedBool MissionCostComplete;
+		FReportedString ProviderMessageId;
+		FReportedString SecretText;
+		/** Honest parse leaves both false. They exist so a display flip is observable. */
+		bool bEchoProviderMessageId = false;
+		bool bEchoSecret = false;
 	};
 
 	class IMissionResultReader
@@ -121,6 +198,40 @@ namespace WonderlandJuliusMissionFlow
 	public:
 		FResultRead Read(std::string_view) const override { return {}; }
 	};
+
+	/**
+	 * Parses the result and progress response bodies. It does not open a connection. Status 0 and an
+	 * empty body mean that response was not supplied. While neither response is supplied, Read matches
+	 * FAbsentResultReader: nothing is reported, and dispatched stays the furthest progress.
+	 */
+	class FBridgeMissionResultClient final : public IMissionResultReader
+	{
+	public:
+		void Clear();
+		void SetResultResponse(int Status, std::string_view Json);
+		void SetProgressResponse(int Status, std::string_view Json);
+		FResultRead Read(std::string_view WljRunId) const override;
+
+	private:
+		bool bHaveResult = false;
+		int ResultStatus = 0;
+		std::string ResultJson;
+		bool bHaveProgress = false;
+		int ProgressStatus = 0;
+		std::string ProgressJson;
+	};
+
+	/**
+	 * Fail-closed parse of the two bodies. ProgressJson may be empty when that response was not supplied.
+	 * A non-200 result, an error object, a wljRunId other than WljRunId, or evidence short of the spend
+	 * tag is not completion.
+	 */
+	FResultRead ParseBridgeMissionResponses(
+		std::string_view WljRunId,
+		int ResultStatus,
+		std::string_view ResultJson,
+		int ProgressStatus,
+		std::string_view ProgressJson);
 
 	FProgressPanel PanelForProgress(WonderlandJuliusMissionLogic::EMissionProgress Meaning);
 	FProgressPanel PanelForStatusRouteWord(std::string_view Word);
@@ -188,5 +299,6 @@ namespace WonderlandJuliusMissionFlow
 		bool bHaveToken = false;
 		std::string WrapperToken;
 		FResultPanel Result;
+		FResultRead RouteRead;
 	};
 }

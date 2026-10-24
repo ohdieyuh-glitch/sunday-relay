@@ -32,10 +32,11 @@ public:
 	void SetOffers(TArray<TPair<FString, FString>> InOffers);
 
 	/**
-	 * TODO(B3): replace the absent reader once BRIDGE's result route names its fields.
-	 * Until then the panel says "No result reported yet".
+	 * Hands the host's result and progress response bodies to FBridgeMissionResultClient.
+	 * Status 0 and an empty body mean that response was not fetched. Until the host supplies
+	 * them, the panel keeps the absent reader and does not go past dispatched.
 	 */
-	void SetVerifiedResult(bool bReported, bool bVerified);
+	void SetMissionResponses(int32 ResultStatus, const FString& ResultJson, int32 ProgressStatus, const FString& ProgressJson);
 
 private:
 	void PullWrapper();
@@ -49,6 +50,6 @@ private:
 	WonderlandJuliusMissionFlow::FMissionFlow Flow;
 	TSharedPtr<class SVerticalBox> Body;
 	FString ShownKey;
-	bool bHaveVerifiedRead = false;
-	bool bVerified = false;
+	bool bHaveMissionRead = false;
+	WonderlandJuliusMissionFlow::FBridgeMissionResultClient MissionRead;
 };

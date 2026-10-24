@@ -1,5 +1,12 @@
 #include "WonderlandJuliusMissionFlow.h"
 
+#include <cctype>
+#include <cstdint>
+#include <limits>
+#include <string>
+#include <utility>
+#include <vector>
+
 namespace WonderlandJuliusMissionFlow
 {
 	using WonderlandJuliusMissionLogic::EMissionProgress;
@@ -7,6 +14,480 @@ namespace WonderlandJuliusMissionFlow
 
 	namespace
 	{
+		constexpr int JsonDepthLimit = 32;
+		constexpr std::size_t JsonNodeLimit = 4096;
+
+		enum class EJsonKind : std::uint8_t
+		{
+			Null,
+			Bool,
+			Number,
+			String,
+			Array,
+			Object,
+		};
+
+		struct FJson
+		{
+			EJsonKind Kind = EJsonKind::Null;
+			bool bBool = false;
+			bool bInt = false;
+			std::int64_t Int = 0;
+			std::string Text;
+			std::vector<FJson> Array;
+			std::vector<std::pair<std::string, FJson>> Object;
+		};
+
+		bool SameText(const std::string& Left, std::string_view Right)
+		{
+			return Left.size() == Right.size() && Left.compare(0, Left.size(), Right.data(), Right.size()) == 0;
+		}
+
+		const FJson* Field(const FJson& Object, const char* Name)
+		{
+			if (Object.Kind != EJsonKind::Object || Name == nullptr) { return nullptr; }
+			for (const std::pair<std::string, FJson>& Pair : Object.Object)
+			{
+				if (Pair.first == Name) { return &Pair.second; }
+			}
+			return nullptr;
+		}
+
+		bool IsExactString(const FJson* Node, const char* Text)
+		{
+			return Node != nullptr && Node->Kind == EJsonKind::String && Text != nullptr && Node->Text == Text;
+		}
+
+		bool Digits(const std::string& Text)
+		{
+			if (Text.empty() || Text.size() > 20) { return false; }
+			for (const char C : Text)
+			{
+				if (C < '0' || C > '9') { return false; }
+			}
+			return true;
+		}
+
+		bool LowerHex(const std::string& Text, std::size_t Width)
+		{
+			if (Text.size() != Width) { return false; }
+			for (const char C : Text)
+			{
+				const bool bOk = (C >= '0' && C <= '9') || (C >= 'a' && C <= 'f');
+				if (!bOk) { return false; }
+			}
+			return true;
+		}
+
+		bool ParseNonNegativeInt(const std::string& Token, std::int64_t& Out)
+		{
+			if (Token.empty() || Token.size() > 18) { return false; }
+			if (Token.size() > 1 && Token[0] == '0') { return false; }
+			std::uint64_t Acc = 0;
+			for (const char C : Token)
+			{
+				if (C < '0' || C > '9') { return false; }
+				const std::uint64_t Digit = static_cast<std::uint64_t>(C - '0');
+				if (Acc > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) / 10ull) { return false; }
+				Acc = Acc * 10ull + Digit;
+			}
+			Out = static_cast<std::int64_t>(Acc);
+			return true;
+		}
+
+		class FJsonParser
+		{
+		public:
+			explicit FJsonParser(std::string_view In)
+				: Text(In)
+			{
+			}
+
+			bool Parse(FJson& Out)
+			{
+				Skip();
+				if (!ParseValue(Out, 0) || !Ok) { return false; }
+				Skip();
+				return Index == Text.size();
+			}
+
+		private:
+			std::string_view Text;
+			std::size_t Index = 0;
+			std::size_t Nodes = 0;
+			bool Ok = true;
+
+			void Fail() { Ok = false; }
+
+			void Skip()
+			{
+				while (Ok && Index < Text.size())
+				{
+					const unsigned char C = static_cast<unsigned char>(Text[Index]);
+					if (C != ' ' && C != '\t' && C != '\n' && C != '\r') { return; }
+					++Index;
+				}
+			}
+
+			bool Consume(char C)
+			{
+				if (!Ok || Index >= Text.size() || Text[Index] != C) { Fail(); return false; }
+				++Index;
+				return true;
+			}
+
+			bool AddNode()
+			{
+				if (Nodes >= JsonNodeLimit) { Fail(); return false; }
+				++Nodes;
+				return true;
+			}
+
+			bool ParseValue(FJson& Out, int Depth)
+			{
+				if (!Ok || !AddNode()) { return false; }
+				if (Depth > JsonDepthLimit) { Fail(); return false; }
+				Skip();
+				if (Index >= Text.size()) { Fail(); return false; }
+				const char C = Text[Index];
+				if (C == '"')
+				{
+					Out.Kind = EJsonKind::String;
+					return ParseString(Out.Text);
+				}
+				if (C == '{') { return ParseObject(Out, Depth); }
+				if (C == '[') { return ParseArray(Out, Depth); }
+				if (C == 't') { return ConsumeLiteral("true", Out, true); }
+				if (C == 'f') { return ConsumeLiteral("false", Out, false); }
+				if (C == 'n')
+				{
+					if (Text.substr(Index, 4) != "null") { Fail(); return false; }
+					Index += 4;
+					Out.Kind = EJsonKind::Null;
+					return true;
+				}
+				return ParseNumber(Out);
+			}
+
+			bool ConsumeLiteral(const char* Literal, FJson& Out, bool bValue)
+			{
+				const std::size_t Length = std::char_traits<char>::length(Literal);
+				if (Text.substr(Index, Length) != Literal) { Fail(); return false; }
+				Index += Length;
+				Out.Kind = EJsonKind::Bool;
+				Out.bBool = bValue;
+				return true;
+			}
+
+			int HexNibble(char C)
+			{
+				if (C >= '0' && C <= '9') { return C - '0'; }
+				if (C >= 'a' && C <= 'f') { return C - 'a' + 10; }
+				if (C >= 'A' && C <= 'F') { return C - 'A' + 10; }
+				return -1;
+			}
+
+			bool ParseString(std::string& Out)
+			{
+				if (!Consume('"')) { return false; }
+				Out.clear();
+				while (Ok && Index < Text.size())
+				{
+					const unsigned char C = static_cast<unsigned char>(Text[Index]);
+					if (C == '"') { ++Index; return true; }
+					if (C < 0x20) { Fail(); return false; }
+					if (C != '\\')
+					{
+						Out.push_back(static_cast<char>(C));
+						++Index;
+						continue;
+					}
+					++Index;
+					if (Index >= Text.size()) { Fail(); return false; }
+					const char Esc = Text[Index++];
+					switch (Esc)
+					{
+					case '"':
+					case '\\':
+					case '/': Out.push_back(Esc); break;
+					case 'b': Out.push_back('\b'); break;
+					case 'f': Out.push_back('\f'); break;
+					case 'n': Out.push_back('\n'); break;
+					case 'r': Out.push_back('\r'); break;
+					case 't': Out.push_back('\t'); break;
+					case 'u':
+					{
+						if (Index + 4 > Text.size()) { Fail(); return false; }
+						int Code = 0;
+						for (int Nibble = 0; Nibble < 4; ++Nibble)
+						{
+							const int Value = HexNibble(Text[Index++]);
+							if (Value < 0) { Fail(); return false; }
+							Code = (Code << 4) | Value;
+						}
+						if (Code < 0x80) { Out.push_back(static_cast<char>(Code)); }
+						else if (Code < 0x800)
+						{
+							Out.push_back(static_cast<char>(0xC0 | (Code >> 6)));
+							Out.push_back(static_cast<char>(0x80 | (Code & 0x3F)));
+						}
+						else
+						{
+							Out.push_back(static_cast<char>(0xE0 | (Code >> 12)));
+							Out.push_back(static_cast<char>(0x80 | ((Code >> 6) & 0x3F)));
+							Out.push_back(static_cast<char>(0x80 | (Code & 0x3F)));
+						}
+						break;
+					}
+					default: Fail(); return false;
+					}
+					if (Out.size() > 4000) { Fail(); return false; }
+				}
+				Fail();
+				return false;
+			}
+
+			bool ParseNumber(FJson& Out)
+			{
+				const std::size_t Start = Index;
+				if (Index < Text.size() && Text[Index] == '-') { ++Index; }
+				if (Index >= Text.size() || Text[Index] < '0' || Text[Index] > '9') { Fail(); return false; }
+				if (Text[Index] == '0') { ++Index; }
+				else
+				{
+					while (Index < Text.size() && Text[Index] >= '0' && Text[Index] <= '9') { ++Index; }
+				}
+				bool bFraction = false;
+				if (Index < Text.size() && Text[Index] == '.')
+				{
+					bFraction = true;
+					++Index;
+					if (Index >= Text.size() || Text[Index] < '0' || Text[Index] > '9') { Fail(); return false; }
+					while (Index < Text.size() && Text[Index] >= '0' && Text[Index] <= '9') { ++Index; }
+				}
+				if (Index < Text.size() && (Text[Index] == 'e' || Text[Index] == 'E'))
+				{
+					bFraction = true;
+					++Index;
+					if (Index < Text.size() && (Text[Index] == '+' || Text[Index] == '-')) { ++Index; }
+					if (Index >= Text.size() || Text[Index] < '0' || Text[Index] > '9') { Fail(); return false; }
+					while (Index < Text.size() && Text[Index] >= '0' && Text[Index] <= '9') { ++Index; }
+				}
+				Out.Kind = EJsonKind::Number;
+				Out.Text.assign(Text.data() + Start, Index - Start);
+				if (!bFraction && !Out.Text.empty() && Out.Text[0] != '-')
+				{
+					Out.bInt = ParseNonNegativeInt(Out.Text, Out.Int);
+				}
+				return true;
+			}
+
+			bool ParseObject(FJson& Out, int Depth)
+			{
+				if (!Consume('{')) { return false; }
+				Out.Kind = EJsonKind::Object;
+				Skip();
+				if (Index < Text.size() && Text[Index] == '}') { ++Index; return true; }
+				while (Ok)
+				{
+					Skip();
+					std::string Key;
+					if (!ParseString(Key)) { return false; }
+					for (const std::pair<std::string, FJson>& Pair : Out.Object)
+					{
+						if (Pair.first == Key) { Fail(); return false; }
+					}
+					Skip();
+					if (!Consume(':')) { return false; }
+					FJson Child;
+					if (!ParseValue(Child, Depth + 1)) { return false; }
+					Out.Object.emplace_back(std::move(Key), std::move(Child));
+					if (Out.Object.size() > 64) { Fail(); return false; }
+					Skip();
+					if (Index < Text.size() && Text[Index] == ',') { ++Index; continue; }
+					return Consume('}');
+				}
+				return false;
+			}
+
+			bool ParseArray(FJson& Out, int Depth)
+			{
+				if (!Consume('[')) { return false; }
+				Out.Kind = EJsonKind::Array;
+				Skip();
+				if (Index < Text.size() && Text[Index] == ']') { ++Index; return true; }
+				while (Ok)
+				{
+					FJson Child;
+					if (!ParseValue(Child, Depth + 1)) { return false; }
+					Out.Array.push_back(std::move(Child));
+					if (Out.Array.size() > 64) { Fail(); return false; }
+					Skip();
+					if (Index < Text.size() && Text[Index] == ',') { ++Index; continue; }
+					return Consume(']');
+				}
+				return false;
+			}
+		};
+
+		bool ParseJson(std::string_view Text, FJson& Out)
+		{
+			FJsonParser Parser(Text);
+			return Parser.Parse(Out);
+		}
+
+		FReportedString ReadString(const FJson* Object, const char* Name)
+		{
+			FReportedString Out;
+			if (Object == nullptr || Object->Kind != EJsonKind::Object) { return Out; }
+			const FJson* Node = Field(*Object, Name);
+			if (Node == nullptr) { return Out; }
+			if (Node->Kind == EJsonKind::Null) { Out.bNull = true; return Out; }
+			if (Node->Kind == EJsonKind::String && !Node->Text.empty())
+			{
+				Out.bKnown = true;
+				Out.Text = Node->Text;
+			}
+			return Out;
+		}
+
+		FReportedInt64 ReadInt(const FJson* Object, const char* Name)
+		{
+			FReportedInt64 Out;
+			if (Object == nullptr || Object->Kind != EJsonKind::Object) { return Out; }
+			const FJson* Node = Field(*Object, Name);
+			if (Node == nullptr) { return Out; }
+			if (Node->Kind == EJsonKind::Null) { Out.bNull = true; return Out; }
+			if (Node->Kind == EJsonKind::Number && Node->bInt)
+			{
+				Out.bKnown = true;
+				Out.Value = Node->Int;
+			}
+			return Out;
+		}
+
+		FReportedBool ReadBool(const FJson* Object, const char* Name)
+		{
+			FReportedBool Out;
+			if (Object == nullptr || Object->Kind != EJsonKind::Object) { return Out; }
+			const FJson* Node = Field(*Object, Name);
+			if (Node == nullptr) { return Out; }
+			if (Node->Kind == EJsonKind::Null) { Out.bNull = true; return Out; }
+			if (Node->Kind == EJsonKind::Bool)
+			{
+				Out.bKnown = true;
+				Out.bValue = Node->bBool;
+			}
+			return Out;
+		}
+
+		bool BoolIsTrue(const FJson* Object, const char* Name)
+		{
+			const FReportedBool Flag = ReadBool(Object, Name);
+			return Flag.bKnown && Flag.bValue;
+		}
+
+		FReportedString ReadFileSha(const FJson* Archive)
+		{
+			FReportedString Out;
+			if (Archive == nullptr || Archive->Kind != EJsonKind::Object) { return Out; }
+			const FJson* Files = Field(*Archive, "files");
+			if (Files == nullptr || Files->Kind != EJsonKind::Array || Files->Array.empty()) { return Out; }
+			if (Files->Array[0].Kind != EJsonKind::Object) { return Out; }
+			return ReadString(&Files->Array[0], "sha256");
+		}
+
+		void ReadArtifact(const FJson* Completion, FResultRead& Out)
+		{
+			if (Completion == nullptr || Completion->Kind != EJsonKind::Object) { return; }
+			const FJson* Archive = Field(*Completion, "archive");
+			if (Archive != nullptr && Archive->Kind == EJsonKind::Object)
+			{
+				Out.ArtifactName = ReadString(Archive, "artifactName");
+				Out.ArtifactDigest = ReadString(Archive, "artifactDigest");
+				constexpr bool bInferDigestFromFile = false;
+				if (bInferDigestFromFile && !Out.ArtifactDigest.bKnown) { Out.ArtifactDigest = ReadFileSha(Archive); } // FLOW_DIGEST_NOT_INFERRED
+			}
+			const FJson* Refs = Field(*Completion, "workArtifactRefs");
+			if (Refs != nullptr && Refs->Kind == EJsonKind::Array)
+			{
+				for (const FJson& Item : Refs->Array)
+				{
+					if (Item.Kind == EJsonKind::String && !Item.Text.empty()) { Out.WorkArtifactRefs.push_back(Item.Text); }
+				}
+			}
+		}
+
+		void ReadCosts(const FJson* Completion, FResultRead& Out)
+		{
+			if (Completion == nullptr || Completion->Kind != EJsonKind::Object) { return; }
+			const FJson* Tag = Field(*Completion, "spendTag");
+			if (Tag != nullptr && Tag->Kind == EJsonKind::Object)
+			{
+				Out.bSpendTagPresent = true;
+				Out.ReservedUsdMicros = ReadInt(Tag, "reservedUsdMicros");
+			}
+			const FJson* Accounting = Field(*Completion, "spendAccounting");
+			if (Accounting != nullptr && Accounting->Kind == EJsonKind::Object)
+			{
+				Out.bSpendAccountingPresent = true;
+				Out.SpendAccountingKnownUsdMicros = ReadInt(Accounting, "knownUsdMicros");
+			}
+			const FJson* Coder = Field(*Completion, "coderCost");
+			if (Coder != nullptr && Coder->Kind == EJsonKind::Object)
+			{
+				Out.bCoderCostPresent = true;
+				Out.CoderCostUsdMicros = ReadInt(Coder, "costUsdMicros"); // FLOW_COST_AS_REPORTED
+				Out.CoderCostBasis = ReadString(Coder, "costBasis");
+			}
+			const FJson* Mission = Field(*Completion, "missionCost");
+			if (Mission != nullptr && Mission->Kind == EJsonKind::Object)
+			{
+				Out.bMissionCostPresent = true;
+				Out.MissionKnownUsdMicros = ReadInt(Mission, "knownUsdMicros");
+				Out.MissionUnknownComponents = ReadInt(Mission, "unknownComponents");
+				Out.MissionCostComplete = ReadBool(Mission, "complete");
+			}
+			const FJson* Receipt = Field(*Completion, "providerReceipt");
+			if (Receipt != nullptr && Receipt->Kind == EJsonKind::Object)
+			{
+				Out.ProviderMessageId = ReadString(Receipt, "providerMessageId");
+			}
+			Out.SecretText = ReadString(Completion, "apiKey");
+			if (!Out.SecretText.bKnown) { Out.SecretText = ReadString(Completion, "token"); }
+		}
+
+		bool SpendTagVerifies(const FJson* Completion, std::string_view WljRunId)
+		{
+			if (Completion == nullptr || Completion->Kind != EJsonKind::Object) { return false; }
+			const FJson* Tag = Field(*Completion, "spendTag");
+			if (Tag == nullptr || Tag->Kind != EJsonKind::Object) { return false; } // FLOW_SPEND_TAG_REQUIRED
+			const FJson* Schema = Field(*Tag, "schema");
+			if (!IsExactString(Schema, "julius-run-spent.v1")) { return false; } // FLOW_SPEND_SCHEMA_REQUIRED
+			const FReportedString Run = ReadString(Tag, "run");
+			if (!Run.bKnown || !SameText(Run.Text, WljRunId)) { return false; } // FLOW_SPEND_RUN_REQUIRED
+			const FReportedString Namespace = ReadString(Tag, "namespace");
+			const FReportedInt64 Reserved = ReadInt(Tag, "reservedUsdMicros");
+			const FReportedString Workflow = ReadString(Tag, "workflowRunId");
+			const FReportedString Attempt = ReadString(Tag, "workflowRunAttempt");
+			const FReportedString Head = ReadString(Tag, "headSha");
+			if (!Namespace.bKnown || Namespace.Text.size() > 200) { return false; }
+			if (!Reserved.bKnown) { return false; }
+			if (!Workflow.bKnown || !Digits(Workflow.Text)) { return false; }
+			if (!Attempt.bKnown || !Digits(Attempt.Text)) { return false; }
+			if (!Head.bKnown || !LowerHex(Head.Text, 40)) { return false; }
+			return true;
+		}
+
+		bool EvidenceVerifies(const FJson& Root, const FJson* Completion, std::string_view WljRunId)
+		{
+			if (Completion == nullptr || Completion->Kind != EJsonKind::Object) { return false; }
+			const FJson* State = Field(Root, "state");
+			if (!IsExactString(State, "completed")) { return false; } // FLOW_STATE_COMPLETED_REQUIRED
+			const FJson* FinalState = Field(*Completion, "juliusFinalState");
+			if (!IsExactString(FinalState, "COMPLETED")) { return false; } // FLOW_JULIUS_FINAL_STATE_REQUIRED
+			return SpendTagVerifies(Completion, WljRunId);
+		}
 
 		bool MissionFlowPastDispatched(EMissionProgress Meaning)
 		{
@@ -31,6 +512,38 @@ namespace WonderlandJuliusMissionFlow
 			Out.bFinished = false;
 			Out.bPaid = false;
 			Out.bHeldAtDispatched = true;
+			return Out;
+		}
+
+		bool HasReportedArtifact(const FResultRead& Read)
+		{
+			return Read.ArtifactName.bKnown || Read.ArtifactDigest.bKnown || !Read.WorkArtifactRefs.empty();
+		}
+
+		void AppendInt(std::vector<std::string>& Lines, const char* Name, const FReportedInt64& Field, bool bSection)
+		{
+			if (!bSection) { return; }
+			if (!Field.bKnown)
+			{
+				Lines.push_back(std::string(Name) + ": Unknown"); // FLOW_NULL_COST_IS_UNKNOWN
+				return;
+			}
+			Lines.push_back(std::string(Name) + ": " + std::to_string(Field.Value));
+		}
+
+		FProgressPanel ProgressForExpiredRoute()
+		{
+			FProgressPanel Out = PanelForProgress(EMissionProgress::NotStarted);
+			Out.Line = ProgressDisplayLabel(EMissionProgress::NotStarted); // FLOW_ROUTE_EXPIRED_SHOWS_NOT_STARTED
+			Out.bFinished = false; // FLOW_ROUTE_EXPIRED_NOT_FINISHED
+			Out.bNotStarted = true;
+			return Out;
+		}
+
+		FProgressPanel ProgressForUnknownRoute()
+		{
+			FProgressPanel Out = PanelForProgress(EMissionProgress::Waiting);
+			Out.bFinished = false; // FLOW_ROUTE_UNKNOWN_NOT_FINISHED
 			return Out;
 		}
 	}
@@ -79,7 +592,7 @@ namespace WonderlandJuliusMissionFlow
 			Out = MissionFlowCeiling();
 			Out.bFault = true;
 			Out.bPaid = false;
-			Out.bFinished = false;
+			Out.bFinished = false; // FLOW_STATUS_COMPLETED_NOT_FINISHED
 			return Out;
 		}
 		Out.Line = ProgressDisplayLabel(EMissionProgress::Waiting);
@@ -109,21 +622,229 @@ namespace WonderlandJuliusMissionFlow
 	{
 		FResultPanel Out;
 		Out.Panel = EFlowPanel::Result;
-		if (!Read.bReported)
+		Out.bReported = Read.bReported;
+		Out.bVerified = Read.bVerified;
+		Out.bFinished = Read.bFinished || Read.bVerified;
+		if (!Read.bReported && !Read.bVerified)
 		{
 			Out.Line = CopyNoResultYet;
 			return Out;
 		}
-		Out.bReported = true;
+		if (Read.TraceId.bKnown)
+		{
+			Out.Lines.push_back(std::string("traceId: ") + Read.TraceId.Text); // FLOW_TRACE_ID_AS_REPORTED
+		}
+		else if (Read.TraceId.bNull)
+		{
+			Out.Lines.push_back("traceId: Unknown");
+		}
+		const bool bArtifactAllowed = Read.bVerified; // FLOW_ARTIFACT_ONLY_IF_VERIFIED
+		if (bArtifactAllowed && Read.ArtifactName.bKnown)
+		{
+			Out.Lines.push_back(std::string("archive.artifactName: ") + Read.ArtifactName.Text);
+		}
+		else if (bArtifactAllowed && Read.ArtifactName.bNull)
+		{
+			Out.Lines.push_back("archive.artifactName: Unknown");
+		}
+		if (bArtifactAllowed && Read.ArtifactDigest.bKnown)
+		{
+			Out.Lines.push_back(std::string("archive.artifactDigest: ") + Read.ArtifactDigest.Text);
+		}
+		else if (bArtifactAllowed && Read.ArtifactDigest.bNull)
+		{
+			Out.Lines.push_back("archive.artifactDigest: Unknown");
+		}
+		if (bArtifactAllowed)
+		{
+			for (const std::string& Ref : Read.WorkArtifactRefs)
+			{
+				Out.Lines.push_back(std::string("workArtifactRefs: ") + Ref);
+			}
+		}
+		Out.bShowsArtifact = bArtifactAllowed && HasReportedArtifact(Read);
 		if (!Read.bVerified)
 		{
-			Out.Line = CopyVerifiedFalse;
+			Out.Line = CopyNoResultYet;
 			return Out;
 		}
-		Out.bVerified = true;
-		Out.bShowsArtifact = true;
-		Out.Line = CopyVerifiedTrue;
+		Out.Line = CopyStateCompleted;
+		if (Read.CompletionTraceId.bKnown)
+		{
+			Out.Lines.push_back(std::string("completion.traceId: ") + Read.CompletionTraceId.Text);
+		}
+		else if (Read.CompletionTraceId.bNull)
+		{
+			Out.Lines.push_back("completion.traceId: Unknown");
+		}
+		constexpr bool bSynthesizeTraceparent = false; // FLOW_TRACEPARENT_NOT_COMPUTED
+		if (Read.CompletionTraceparent.bKnown)
+		{
+			Out.Lines.push_back(std::string("traceparent: ") + Read.CompletionTraceparent.Text);
+		}
+		else if (bSynthesizeTraceparent && Read.TraceId.bKnown)
+		{
+			Out.Lines.push_back(std::string("traceparent: 00-") + Read.TraceId.Text + "-0000000000000001-01");
+		}
+		AppendInt(Out.Lines, "spendTag.reservedUsdMicros", Read.ReservedUsdMicros, Read.bSpendTagPresent);
+		AppendInt(Out.Lines, "spendAccounting.knownUsdMicros", Read.SpendAccountingKnownUsdMicros, Read.bSpendAccountingPresent);
+		AppendInt(Out.Lines, "coderCost.costUsdMicros", Read.CoderCostUsdMicros, Read.bCoderCostPresent);
+		if (Read.bCoderCostPresent && Read.CoderCostBasis.bKnown)
+		{
+			Out.Lines.push_back(std::string("coderCost.costBasis: ") + Read.CoderCostBasis.Text);
+		}
+		AppendInt(Out.Lines, "missionCost.knownUsdMicros", Read.MissionKnownUsdMicros, Read.bMissionCostPresent);
+		AppendInt(Out.Lines, "missionCost.unknownComponents", Read.MissionUnknownComponents, Read.bMissionCostPresent);
+		if (Read.bMissionCostPresent)
+		{
+			if (Read.MissionCostComplete.bKnown)
+			{
+				Out.Lines.push_back(std::string("missionCost.complete: ") + (Read.MissionCostComplete.bValue ? "true" : "false"));
+			}
+			else
+			{
+				Out.Lines.push_back("missionCost.complete: Unknown");
+			}
+		}
+		if (Read.bEchoProviderMessageId && Read.ProviderMessageId.bKnown)
+		{
+			Out.Lines.push_back(std::string("providerMessageId: ") + Read.ProviderMessageId.Text);
+		}
+		if (Read.bEchoSecret && Read.SecretText.bKnown)
+		{
+			Out.Lines.push_back(std::string("apiKey: ") + Read.SecretText.Text);
+		}
 		return Out;
+	}
+
+	FResultRead ParseBridgeMissionResponses(
+		std::string_view WljRunId,
+		int ResultStatus,
+		std::string_view ResultJson,
+		int ProgressStatus,
+		std::string_view ProgressJson)
+	{
+		if (!WonderlandJuliusMissionLogic::IsClientMintedRunId(WljRunId)) { return {}; }
+		if (ResultStatus != 200) { return FResultRead{}; } // FLOW_NON_200_IS_NO_READ
+		FJson Root;
+		if (!ParseJson(ResultJson, Root) || Root.Kind != EJsonKind::Object) { return {}; }
+		if (Field(Root, "error") != nullptr) { return FResultRead{}; } // FLOW_ERROR_BODY_IS_NOT_A_RESULT
+		const FReportedString BodyRun = ReadString(&Root, "wljRunId");
+		if (!BodyRun.bKnown || !SameText(BodyRun.Text, WljRunId)) { return FResultRead{}; } // FLOW_WLJ_MISMATCH_NO_READ
+
+		FResultRead Out;
+		Out.bParsed = true;
+		Out.bReported = true;
+		Out.TraceId = ReadString(&Root, "traceId");
+		const FReportedString State = ReadString(&Root, "state");
+		if (State.bKnown) { Out.State = State.Text; }
+		Out.Cause = ReadString(&Root, "cause");
+		const FJson* Completion = Field(Root, "completion");
+		const bool bCompletionObject = Completion != nullptr && Completion->Kind == EJsonKind::Object;
+		if (bCompletionObject)
+		{
+			ReadArtifact(Completion, Out);
+			ReadCosts(Completion, Out);
+			Out.CompletionTraceId = ReadString(Completion, "traceId");
+			Out.CompletionTraceparent = ReadString(Completion, "traceparent");
+		}
+
+		bool bVerified = EvidenceVerifies(Root, bCompletionObject ? Completion : nullptr, WljRunId);
+		if (Completion == nullptr || Completion->Kind == EJsonKind::Null)
+		{
+			bVerified = false; // FLOW_NULL_COMPLETION_NOT_VERIFIED
+		}
+		constexpr bool bAcceptBareCompleted = false; // FLOW_BARE_COMPLETED_IS_NOT_EVIDENCE
+		if (bAcceptBareCompleted && BoolIsTrue(&Root, "completed")) { bVerified = true; }
+
+		bool bPhasesPresent = false;
+		bool bProgressParsed = false;
+		std::string ProgressState;
+		const bool bProgressSupplied = ProgressStatus != 0 || !ProgressJson.empty();
+		if (bProgressSupplied && ProgressStatus == 200)
+		{
+			FJson Progress;
+			const FReportedString ProgressRun = ParseJson(ProgressJson, Progress) && Progress.Kind == EJsonKind::Object
+				? ReadString(&Progress, "wljRunId")
+				: FReportedString{};
+			if (Progress.Kind == EJsonKind::Object && ProgressRun.bKnown && SameText(ProgressRun.Text, WljRunId))
+			{
+				bProgressParsed = true;
+				const FReportedString ProgressWord = ReadString(&Progress, "state");
+				if (ProgressWord.bKnown) { ProgressState = ProgressWord.Text; }
+				const FJson* Phases = Field(Progress, "phases");
+				bPhasesPresent = Phases != nullptr && Phases->Kind == EJsonKind::Array;
+			}
+			else
+			{
+				bVerified = false;
+			}
+		}
+		constexpr bool bAcceptPhasesAsCompletion = false; // FLOW_PHASES_ARE_NOT_COMPLETION
+		if (bAcceptPhasesAsCompletion && bPhasesPresent) { bVerified = true; }
+		constexpr bool bAcceptProgressStateCompleted = false; // FLOW_PROGRESS_STATE_IS_NOT_EVIDENCE
+		if (bAcceptProgressStateCompleted && ProgressState == "completed") { bVerified = true; }
+		if (bProgressParsed && ProgressState != Out.State) { bVerified = false; } // FLOW_SPLIT_STATE_NOT_VERIFIED
+
+		const bool bUnknown = !State.bKnown || State.Text == "unknown";
+		const bool bExpired = State.bKnown && State.Text == "failed" && Out.Cause.bKnown
+			&& Out.Cause.Text == "AWAITING_OPERATOR_EXPIRED";
+		if (bUnknown)
+		{
+			Out.bUnknownState = true;
+			bVerified = false; // FLOW_ROUTE_UNKNOWN_NOT_VERIFIED
+			Out.bFinished = false; // FLOW_ROUTE_UNKNOWN_READ_NOT_FINISHED
+		}
+		else if (bExpired)
+		{
+			Out.bExpired = true;
+			bVerified = false; // FLOW_EXPIRED_NOT_VERIFIED
+			Out.bFinished = false; // FLOW_EXPIRED_READ_NOT_FINISHED
+		}
+		else
+		{
+			Out.bFinished = bVerified;
+		}
+		Out.bVerified = bVerified;
+		Out.bDispatchedCeiling = Out.bParsed && !Out.bVerified && Out.State == "dispatched";
+		Out.bEchoProviderMessageId = false; // FLOW_MESSAGE_ID_IS_NOT_A_RECEIPT
+		Out.bEchoSecret = false; // FLOW_SECRET_NOT_DISPLAYED
+		return Out;
+	}
+
+	void FBridgeMissionResultClient::Clear()
+	{
+		bHaveResult = false;
+		ResultStatus = 0;
+		ResultJson.clear();
+		bHaveProgress = false;
+		ProgressStatus = 0;
+		ProgressJson.clear();
+	}
+
+	void FBridgeMissionResultClient::SetResultResponse(int Status, std::string_view Json)
+	{
+		bHaveResult = true;
+		ResultStatus = Status;
+		ResultJson.assign(Json.data(), Json.size());
+	}
+
+	void FBridgeMissionResultClient::SetProgressResponse(int Status, std::string_view Json)
+	{
+		bHaveProgress = true;
+		ProgressStatus = Status;
+		ProgressJson.assign(Json.data(), Json.size());
+	}
+
+	FResultRead FBridgeMissionResultClient::Read(std::string_view WljRunId) const
+	{
+		if (!bHaveResult && !bHaveProgress) { return {}; }
+		return ParseBridgeMissionResponses(
+			WljRunId,
+			bHaveResult ? ResultStatus : 0,
+			bHaveResult ? std::string_view(ResultJson) : std::string_view{},
+			bHaveProgress ? ProgressStatus : 0,
+			bHaveProgress ? std::string_view(ProgressJson) : std::string_view{});
 	}
 
 	void FMissionFlow::SetOffers(std::vector<FMissionOffer> InOffers)
@@ -207,10 +928,12 @@ namespace WonderlandJuliusMissionFlow
 	{
 		if (!bRunIdOk)
 		{
-			Result = ResultPanelFor(FResultRead{});
+			RouteRead = {};
+			Result = ResultPanelFor(RouteRead);
 			return;
 		}
-		Result = ResultPanelFor(Reader.Read(ClientRunId));
+		RouteRead = Reader.Read(ClientRunId);
+		Result = ResultPanelFor(RouteRead);
 	}
 
 	FFlowView FMissionFlow::View() const
@@ -228,6 +951,36 @@ namespace WonderlandJuliusMissionFlow
 		Out.Result = bRunIdOk ? Result : ResultPanelFor(FResultRead{});
 		if (!Out.bShowProgress) { return Out; }
 
+		if (bRunIdOk && RouteRead.bExpired)
+		{
+			Out.Progress = ProgressForExpiredRoute();
+			return Out;
+		}
+		if (bRunIdOk && RouteRead.bUnknownState)
+		{
+			Out.Progress = ProgressForUnknownRoute();
+			return Out;
+		}
+		if (bRunIdOk && RouteRead.bParsed && !RouteRead.bVerified && RouteRead.State == "completed")
+		{
+			Out.Progress = MissionFlowCeiling();
+			Out.Progress.bFault = true;
+			Out.Progress.bPaid = false;
+			Out.Progress.bFinished = false; // FLOW_UNVERIFIED_COMPLETED_STAYS_DISPATCHED
+			return Out;
+		}
+		if (bRunIdOk && RouteRead.bParsed && !RouteRead.bVerified && RouteRead.bDispatchedCeiling)
+		{
+			Out.Progress = PanelForProgress(EMissionProgress::OperatorStarted);
+			Out.Progress.bFinished = false; // FLOW_UNPLUGGED_NOT_FINISHED
+			return Out;
+		}
+		if (bRunIdOk && RouteRead.bParsed && !RouteRead.bVerified && RouteRead.State == "awaiting_operator")
+		{
+			Out.Progress = PanelForProgress(EMissionProgress::AdmittedHeld);
+			Out.Progress.bFinished = false;
+			return Out;
+		}
 		if (bHaveWord && (StatusWord == "running" || StatusWord == "completed"))
 		{
 			Out.Progress = PanelForStatusRouteWord(StatusWord);

@@ -68,10 +68,25 @@ void SWonderlandJuliusMissionFlow::SetOffers(TArray<TPair<FString, FString>> InO
 	Rebuild();
 }
 
-void SWonderlandJuliusMissionFlow::SetVerifiedResult(bool bReported, bool bInVerified)
+void SWonderlandJuliusMissionFlow::SetMissionResponses(
+	int32 ResultStatus,
+	const FString& ResultJson,
+	int32 ProgressStatus,
+	const FString& ProgressJson)
 {
-	bHaveVerifiedRead = bReported;
-	bVerified = bInVerified;
+	bHaveMissionRead = ResultStatus != 0 || ProgressStatus != 0 || !ResultJson.IsEmpty() || !ProgressJson.IsEmpty();
+	MissionRead.Clear();
+	if (bHaveMissionRead)
+	{
+		if (ResultStatus != 0 || !ResultJson.IsEmpty())
+		{
+			MissionRead.SetResultResponse(ResultStatus, TCHAR_TO_UTF8(*ResultJson));
+		}
+		if (ProgressStatus != 0 || !ProgressJson.IsEmpty())
+		{
+			MissionRead.SetProgressResponse(ProgressStatus, TCHAR_TO_UTF8(*ProgressJson));
+		}
+	}
 	PullWrapper();
 	Rebuild();
 }
@@ -84,27 +99,12 @@ void SWonderlandJuliusMissionFlow::PullWrapper()
 		Flow.NoteWrapperToken(TCHAR_TO_UTF8(*Live->UiStateToken()));
 		Flow.NoteClientRunId(TCHAR_TO_UTF8(*MissionFlowWljRunId(Live->StatusLine())));
 	}
-	if (!bHaveVerifiedRead)
+	if (!bHaveMissionRead)
 	{
 		Flow.NoteResult(WonderlandJuliusMissionFlow::FAbsentResultReader{});
 		return;
 	}
-	struct FPinnedRead final : WonderlandJuliusMissionFlow::IMissionResultReader
-	{
-		bool bReported = false;
-		bool bVerified = false;
-		WonderlandJuliusMissionFlow::FResultRead Read(std::string_view) const override
-		{
-			WonderlandJuliusMissionFlow::FResultRead Out;
-			Out.bReported = bReported;
-			Out.bVerified = bVerified;
-			return Out;
-		}
-	};
-	FPinnedRead Read;
-	Read.bReported = bHaveVerifiedRead;
-	Read.bVerified = bVerified;
-	Flow.NoteResult(Read);
+	Flow.NoteResult(MissionRead);
 }
 
 FReply SWonderlandJuliusMissionFlow::UseTerminal()
@@ -149,8 +149,14 @@ void SWonderlandJuliusMissionFlow::Rebuild()
 	{
 		ProgressLine = WrapperLabel;
 	}
+	FString Reported;
+	for (const std::string& Line : View.Result.Lines)
+	{
+		Reported += MissionFlowUtf8(Line.c_str());
+		Reported += TEXT("\n");
+	}
 	const FString Key = FString::Printf(
-		TEXT("%d|%d%d%d%d|%s|%s|%s|%d"),
+		TEXT("%d|%d%d%d%d|%s|%s|%s|%d|%d|%s"),
 		static_cast<int32>(View.Step),
 		View.bShowChoice ? 1 : 0,
 		View.bShowConfirm ? 1 : 0,
@@ -159,7 +165,9 @@ void SWonderlandJuliusMissionFlow::Rebuild()
 		*ProgressLine,
 		*MissionFlowUtf8(View.Result.Line),
 		*MissionFlowUtf8(View.PaidOnDispatch),
-		View.Result.bShowsArtifact ? 1 : 0);
+		View.Result.bShowsArtifact ? 1 : 0,
+		View.Result.bFinished ? 1 : 0,
+		*Reported);
 	if (Key == ShownKey) { return; }
 	ShownKey = Key;
 
@@ -242,10 +250,9 @@ void SWonderlandJuliusMissionFlow::Rebuild()
 	{
 		AddText(TEXT("Result"));
 		AddText(MissionFlowUtf8(View.Result.Line));
-		if (View.Result.bShowsArtifact)
+		for (const std::string& Line : View.Result.Lines)
 		{
-			// TODO(B3): the artifact reference, cost, and trace ids are drawn here once the contract names them.
-			AddText(TEXT("A verified result was reported. The artifact fields are not named yet."));
+			AddText(MissionFlowUtf8(Line.c_str()));
 		}
 	}
 }

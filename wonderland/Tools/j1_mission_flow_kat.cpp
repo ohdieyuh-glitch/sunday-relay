@@ -27,6 +27,7 @@ namespace
 	int Results = 0;
 	int FlowSteps = 0;
 	int Windows = 0;
+	int Bridge = 0;
 
 	void Expect(bool bOk, const char* What)
 	{
@@ -41,6 +42,27 @@ namespace
 	{
 		if (Left == nullptr || Right == nullptr) { return Left == Right; }
 		return std::strcmp(Left, Right) == 0;
+	}
+
+	bool HasLine(const FResultPanel& Panel, const char* Line)
+	{
+		if (Line == nullptr) { return false; }
+		for (const std::string& Row : Panel.Lines)
+		{
+			if (Row == Line) { return true; }
+		}
+		return false;
+	}
+
+	bool ContainsText(const FResultPanel& Panel, const char* Piece)
+	{
+		if (Piece == nullptr) { return false; }
+		if (Panel.Line != nullptr && std::strstr(Panel.Line, Piece) != nullptr) { return true; }
+		for (const std::string& Row : Panel.Lines)
+		{
+			if (Row.find(Piece) != std::string::npos) { return true; }
+		}
+		return false;
 	}
 
 	void ExpectProgress(EMissionProgress Meaning, EMissionProgress Shown, bool bPaid, bool bUnconfirmed, bool bNotStarted, bool bHeld, const char* What)
@@ -72,6 +94,422 @@ namespace
 
 	const char* const WljOk = "wlj_0b1f3c2a-5d4e-4f60-8a71-92b3c4d5e6f7";
 	const char* const RunLegacy = "run:0123456789abcdef01234567";
+
+	// Verbatim from relay-bridge/wonderland-mission-result-route.test.ts
+	// blob 46b8b095e4aa923fa1cb49333076f83f9918e45e
+	// commit 7e71a122fe03a2538904ab4b8651e034dcf2c1f3
+	// completionValue(), lines 102-161. The route does not echo traceId 'f'*32,
+	// providerMessageId, or the secret fields. Those stay in this excerpt only.
+	const char* const VerbatimCompletionValue = R"BRIDGE(function completionValue(over: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    juliusFinalState: 'COMPLETED',
+    spendTag: {
+      schema: 'julius-run-spent.v1',
+      run: RUN,
+      namespace: 'julius-live-mission-5',
+      reservedUsdMicros: 30_000_000,
+      workflowRunId: '4242',
+      workflowRunAttempt: '1',
+      headSha: SHA,
+    },
+    spendAccounting: {
+      knownUsdMicros: 30_000_000,
+      unknownCostComponents: 0,
+      unverifiableApiSpend: false,
+      spendVerified: true,
+    },
+    coderCost: {
+      costUsdMicros: 608861,
+      costBasis: 'PROVIDER_REPORTED',
+      executionCostUsdMicros: null,
+      billingPath: 'API_BILLED',
+    },
+    missionCost: {
+      knownUsdMicros: 608861,
+      unknownComponents: 2,
+      complete: false,
+    },
+    providerReceipt: {
+      providerRequestId: 'req_0123456789abcdef',
+      responseId: 'req_0123456789abcdef',
+      providerMessageId: 'msg_does_not_count',
+      providerRequestAvailability: 'CAPTURED',
+      providerRequestUnavailableReason: null,
+    },
+    archive: {
+      artifactName: 'julius-live-evidence',
+      artifactDigest: DIGEST,
+      fileCount: 1,
+      totalBytes: 12,
+      conclusion: 'success',
+      failedSteps: [],
+      files: [{ path: 'tasks.tsv', sha256: DIGEST, kind: 'table' }],
+    },
+    workArtifactRefs: [`artifact:julius-work-artifact.v1:${RUN}:build-1:g1:DIFF`],
+    projectBrainRevision: 3,
+    phases: [
+      { role: 'PROMPT_ARCHITECT', state: 'IDLE', stage: 'plan', attempt: 1, knownUsdMicros: null, costComplete: false },
+      { role: 'CODING_AGENT', state: 'IDLE', stage: 'build', attempt: 1, knownUsdMicros: 608861, costComplete: true },
+      { role: 'INDEPENDENT_REVIEWER', state: 'IDLE', stage: null, attempt: 1, knownUsdMicros: null, costComplete: false },
+    ],
+    traceId: 'f'.repeat(32),
+    traceparent: `00-${'f'.repeat(32)}-${'a'.repeat(16)}-01`,
+    apiKey: SECRET,
+    token: 'ghp_FAKETESTNOTREAL', // relay-boundary:allow-fixture — synthetic
+    password: 'super-secret-password',
+    ...over,
+  };
+})BRIDGE";
+
+	const char* const BridgeRun = "wlj_0b7a1c2e-4f3d-4a6b-8c2d-3e4f5a6b7c8d";
+	const char* const OtherRun = "wlj_11111111-2222-4333-8444-555555555555";
+	const char* const BridgeTrace = "0ef34f0df7cf2cf89b844dcfa5fe084f";
+	const char* const ReaderTrace = "ffffffffffffffffffffffffffffffff";
+	const char* const When = "2026-10-23T17:18:00.000Z";
+
+	std::string Repeat(char C, int Count)
+	{
+		return std::string(static_cast<std::size_t>(Count), C);
+	}
+
+	std::string SpendTag(const char* Run, const char* Schema)
+	{
+		return std::string("{\"schema\":\"") + Schema + "\",\"run\":\"" + Run
+			+ "\",\"namespace\":\"julius-live-mission-5\",\"reservedUsdMicros\":30000000,"
+			"\"workflowRunId\":\"4242\",\"workflowRunAttempt\":\"1\",\"headSha\":\""
+			+ Repeat('a', 40) + "\"}";
+	}
+
+	std::string ArchiveJson(const char* DigestOrNull)
+	{
+		const std::string FileSha = Repeat('b', 64);
+		const std::string Digest = DigestOrNull == nullptr ? std::string("null") : std::string("\"") + DigestOrNull + "\"";
+		return std::string("{\"artifactName\":\"julius-live-evidence\",\"artifactDigest\":") + Digest
+			+ ",\"fileCount\":1,\"totalBytes\":12,\"conclusion\":\"success\",\"failedSteps\":[],\"files\":[{\"path\":\"tasks.tsv\",\"sha256\":\""
+			+ FileSha + "\",\"kind\":\"table\"}]}";
+	}
+
+	std::string CompletionJson(const char* FinalState, const char* Run, const char* Schema, const char* CoderMicros, const char* DigestOrNull, const char* Trace, const char* ReceiptExtra, const char* Tail)
+	{
+		std::string Receipt = std::string("{\"providerRequestId\":\"req_0123456789abcdef\",\"responseId\":\"req_0123456789abcdef\"");
+		if (ReceiptExtra != nullptr) { Receipt += ReceiptExtra; }
+		Receipt += ",\"providerRequestAvailability\":\"CAPTURED\",\"providerRequestUnavailableReason\":null}";
+		std::string Out = std::string("{\"juliusFinalState\":\"") + FinalState + "\"";
+		if (Schema != nullptr)
+		{
+			Out += std::string(",\"spendTag\":") + SpendTag(Run, Schema);
+		}
+		Out += std::string(",\"spendAccounting\":{\"knownUsdMicros\":30000000,\"unknownCostComponents\":0,\"unverifiableApiSpend\":false,\"spendVerified\":true}")
+			+ ",\"coderCost\":{\"costUsdMicros\":" + CoderMicros + ",\"costBasis\":\"PROVIDER_REPORTED\",\"executionCostUsdMicros\":null,\"billingPath\":\"API_BILLED\"}"
+			+ ",\"missionCost\":{\"knownUsdMicros\":608861,\"unknownComponents\":2,\"complete\":false}"
+			+ ",\"providerReceipt\":" + Receipt
+			+ ",\"archive\":" + ArchiveJson(DigestOrNull)
+			+ ",\"workArtifactRefs\":[\"artifact:julius-work-artifact.v1:" + Run + ":build-1:g1:DIFF\"]"
+			+ ",\"projectBrainRevision\":3,\"traceId\":\"" + Trace + "\",\"traceparent\":null";
+		if (Tail != nullptr) { Out += Tail; }
+		Out += "}";
+		return Out;
+	}
+
+	std::string ResultJson(const char* Wlj, const char* State, const char* TraceJson, const char* Cause, const char* Completion, const char* Extra)
+	{
+		std::string Out = std::string("{\"wljRunId\":\"") + Wlj + "\",\"serverRunId\":\"" + Wlj
+			+ "\",\"legacyRunId\":null,\"traceId\":" + TraceJson + ",\"state\":\"" + State
+			+ "\",\"updatedAt\":\"" + When + "\",\"dispatchedAt\":";
+		if (std::strcmp(State, "dispatched") == 0 || std::strcmp(State, "completed") == 0)
+		{
+			Out += std::string("\"") + When + "\"";
+		}
+		else
+		{
+			Out += "null";
+		}
+		if (Cause != nullptr)
+		{
+			Out += std::string(",\"cause\":\"") + Cause + "\"";
+		}
+		if (Extra != nullptr) { Out += Extra; }
+		Out += ",\"completion\":";
+		Out += Completion == nullptr ? "null" : Completion;
+		Out += "}";
+		return Out;
+	}
+
+	std::string ProgressJson(const char* Wlj, const char* State, const char* TraceJson, const char* Phases)
+	{
+		return std::string("{\"wljRunId\":\"") + Wlj + "\",\"serverRunId\":\"" + Wlj
+			+ "\",\"legacyRunId\":null,\"traceId\":" + TraceJson + ",\"state\":\"" + State
+			+ "\",\"updatedAt\":\"" + When + "\",\"phases\":" + (Phases == nullptr ? "null" : Phases) + "}";
+	}
+
+	FResultRead Load(const std::string& Result, const std::string& Progress, int ResultStatus = 200, int ProgressStatus = 200)
+	{
+		FBridgeMissionResultClient Client;
+		Client.SetResultResponse(ResultStatus, Result);
+		if (!Progress.empty()) { Client.SetProgressResponse(ProgressStatus, Progress); }
+		return Client.Read(BridgeRun);
+	}
+
+	FFlowView WatchRead(const FResultRead& Read)
+	{
+		FMissionFlow Flow;
+		Flow.SetOffers({FMissionOffer{"julius-first-live", "First live mission"}});
+		Flow.InteractWithTerminal();
+		Flow.ChooseMission("julius-first-live");
+		Flow.NoteDispatchHandedToWrapper(true);
+		Flow.NoteClientRunId(BridgeRun);
+		FScriptReader Reader;
+		Reader.Body = Read;
+		Flow.NoteResult(Reader);
+		return Flow.View();
+	}
+
+	void ExpectHidden(const FResultPanel& Panel, const char* What)
+	{
+		Expect(Panel.bVerified == false && Panel.bFinished == false && Panel.bShowsArtifact == false, What);
+		Expect(Same(Panel.Line, CopyNoResultYet), What);
+		Expect(!ContainsText(Panel, "archive.artifactName"), What);
+		Expect(!ContainsText(Panel, "coderCost.costUsdMicros"), What);
+		Expect(!ContainsText(Panel, "608861"), What);
+		Expect(!ContainsText(Panel, "30000000"), What);
+	}
+
+	void BridgeRouteFixtures()
+	{
+		const std::string Sha = Repeat('a', 40);
+		const std::string Digest = Repeat('b', 64);
+		const std::string TraceJson = std::string("\"") + BridgeTrace + "\"";
+		const char* Phases = "[{\"role\":\"PROMPT_ARCHITECT\",\"state\":\"IDLE\",\"stage\":\"plan\",\"attempt\":1,\"spanId\":\"20d74ea3e2204340\",\"traceparent\":\"00-0ef34f0df7cf2cf89b844dcfa5fe084f-20d74ea3e2204340-01\",\"knownUsdMicros\":null,\"costComplete\":false},{\"role\":\"CODING_AGENT\",\"state\":\"IDLE\",\"stage\":\"build\",\"attempt\":1,\"spanId\":\"6bc1bfe65ed9e64b\",\"traceparent\":\"00-0ef34f0df7cf2cf89b844dcfa5fe084f-6bc1bfe65ed9e64b-01\",\"knownUsdMicros\":608861,\"costComplete\":true},{\"role\":\"INDEPENDENT_REVIEWER\",\"state\":\"IDLE\",\"stage\":null,\"attempt\":1,\"spanId\":null,\"traceparent\":null,\"knownUsdMicros\":null,\"costComplete\":false}]";
+		const std::string HappyCompletion = CompletionJson("COMPLETED", BridgeRun, "julius-run-spent.v1", "608861", Digest.c_str(), BridgeTrace, nullptr, nullptr);
+		const std::string HappyResult = ResultJson(BridgeRun, "completed", TraceJson.c_str(), nullptr, HappyCompletion.c_str(), nullptr);
+		const std::string HappyProgress = ProgressJson(BridgeRun, "completed", TraceJson.c_str(), Phases);
+
+		Expect(std::strstr(VerbatimCompletionValue, "juliusFinalState: 'COMPLETED'") != nullptr, "verbatim final state");
+		Expect(std::strstr(VerbatimCompletionValue, "reservedUsdMicros: 30_000_000") != nullptr, "verbatim reservation");
+		Expect(std::strstr(VerbatimCompletionValue, "costUsdMicros: 608861") != nullptr, "verbatim coder cost");
+		Expect(std::strstr(VerbatimCompletionValue, "artifactName: 'julius-live-evidence'") != nullptr, "verbatim artifact");
+		Expect(std::strstr(VerbatimCompletionValue, "traceId: 'f'.repeat(32)") != nullptr, "verbatim reader trace");
+		Expect(std::strstr(VerbatimCompletionValue, "providerMessageId: 'msg_does_not_count'") != nullptr, "verbatim message id");
+		Expect(std::strstr(VerbatimCompletionValue, "apiKey: SECRET") != nullptr, "verbatim secret");
+		Expect(std::strstr(VerbatimCompletionValue, "token: 'ghp_FAKETESTNOTREAL'") != nullptr, "verbatim token");
+		Expect(Sha.size() == 40 && Digest.size() == 64, "sha and digest widths");
+		++Bridge;
+
+		FBridgeMissionResultClient Unplugged;
+		const FResultRead Absent = Unplugged.Read(BridgeRun);
+		Expect(Absent.bParsed == false && Absent.bReported == false && Absent.bVerified == false && Absent.bFinished == false, "unplugged client");
+		ExpectHidden(ResultPanelFor(Absent), "unplugged panel");
+		++Bridge;
+
+		const FResultRead Awaiting = Load(
+			ResultJson(BridgeRun, "awaiting_operator", TraceJson.c_str(), nullptr, nullptr, nullptr),
+			ProgressJson(BridgeRun, "awaiting_operator", TraceJson.c_str(), nullptr));
+		Expect(Awaiting.bParsed && Awaiting.bVerified == false && Awaiting.bFinished == false && Awaiting.bDispatchedCeiling == false, "awaiting parse");
+		Expect(HasLine(ResultPanelFor(Awaiting), "traceId: 0ef34f0df7cf2cf89b844dcfa5fe084f"), "awaiting trace reported");
+		ExpectHidden(ResultPanelFor(Awaiting), "awaiting hides completion");
+		const FFlowView AwaitingView = WatchRead(Awaiting);
+		Expect(AwaitingView.Progress.bFinished == false && AwaitingView.Progress.bPaid == false, "awaiting not paid");
+		Expect(Same(AwaitingView.Progress.Line, ProgressDisplayLabel(EMissionProgress::AdmittedHeld)), "awaiting label");
+		++Bridge;
+
+		const FResultRead Dispatched = Load(
+			ResultJson(BridgeRun, "dispatched", TraceJson.c_str(), nullptr, nullptr, nullptr),
+			ProgressJson(BridgeRun, "dispatched", TraceJson.c_str(), nullptr));
+		Expect(Dispatched.bDispatchedCeiling && Dispatched.bVerified == false && Dispatched.bFinished == false, "dispatched ceiling");
+		Expect(HasLine(ResultPanelFor(Dispatched), "traceId: 0ef34f0df7cf2cf89b844dcfa5fe084f"), "dispatched trace");
+		ExpectHidden(ResultPanelFor(Dispatched), "dispatched hides completion");
+		const FFlowView DispatchedView = WatchRead(Dispatched);
+		Expect(DispatchedView.Progress.bFinished == false && DispatchedView.Progress.bPaid, "dispatched is the furthest and is not finished");
+		Expect(Same(DispatchedView.Progress.Line, ProgressDisplayLabel(EMissionProgress::OperatorStarted)), "dispatched label");
+		Expect(!Same(DispatchedView.Progress.Line, ProgressDisplayLabel(EMissionProgress::Succeeded)), "dispatched is not succeeded");
+		++Bridge;
+
+		const FResultRead Done = Load(HappyResult, HappyProgress);
+		const FResultPanel DonePanel = ResultPanelFor(Done);
+		Expect(Done.bVerified && Done.bFinished && Done.State == "completed", "completed verifies");
+		Expect(Same(DonePanel.Line, CopyStateCompleted) && DonePanel.bShowsArtifact && DonePanel.bFinished, "completed panel");
+		Expect(HasLine(DonePanel, "traceId: 0ef34f0df7cf2cf89b844dcfa5fe084f"), "completed trace");
+		Expect(HasLine(DonePanel, "completion.traceId: 0ef34f0df7cf2cf89b844dcfa5fe084f"), "completion trace");
+		Expect(HasLine(DonePanel, "archive.artifactName: julius-live-evidence"), "artifact name");
+		Expect(HasLine(DonePanel, std::string("archive.artifactDigest: " + Digest).c_str()), "artifact digest");
+		Expect(HasLine(DonePanel, (std::string("workArtifactRefs: artifact:julius-work-artifact.v1:") + BridgeRun + ":build-1:g1:DIFF").c_str()), "work artifact");
+		Expect(HasLine(DonePanel, "spendTag.reservedUsdMicros: 30000000"), "reservation as reported");
+		Expect(HasLine(DonePanel, "spendAccounting.knownUsdMicros: 30000000"), "accounting as reported");
+		Expect(HasLine(DonePanel, "coderCost.costUsdMicros: 608861"), "coder cost as reported");
+		Expect(HasLine(DonePanel, "coderCost.costBasis: PROVIDER_REPORTED"), "cost basis as reported");
+		Expect(HasLine(DonePanel, "missionCost.knownUsdMicros: 608861"), "mission cost as reported");
+		Expect(HasLine(DonePanel, "missionCost.unknownComponents: 2"), "unknown components as reported");
+		Expect(HasLine(DonePanel, "missionCost.complete: false"), "incomplete total stays false");
+		Expect(!ContainsText(DonePanel, ReaderTrace), "reader trace is not substituted");
+		Expect(!ContainsText(DonePanel, "traceparent:"), "null traceparent is not computed");
+		Expect(!ContainsText(DonePanel, "msg_does_not_count"), "message id absent");
+		Expect(!ContainsText(DonePanel, "sk-"), "secret absent");
+		Expect(WatchRead(Done).Progress.bFinished == false, "progress is not marked finished by the result");
+		++Bridge;
+
+		const std::string NullCost = CompletionJson("COMPLETED", BridgeRun, "julius-run-spent.v1", "null", Digest.c_str(), BridgeTrace, nullptr, nullptr);
+		const FResultPanel NullCostPanel = ResultPanelFor(Load(ResultJson(BridgeRun, "completed", TraceJson.c_str(), nullptr, NullCost.c_str(), nullptr), HappyProgress));
+		Expect(NullCostPanel.bVerified, "null coder cost still verified");
+		Expect(HasLine(NullCostPanel, "coderCost.costUsdMicros: Unknown"), "null coder cost is Unknown");
+		Expect(!HasLine(NullCostPanel, "coderCost.costUsdMicros: 0"), "null coder cost is not zero");
+		Expect(!HasLine(NullCostPanel, "coderCost.costUsdMicros: 30000000"), "null coder cost is not the reservation");
+		Expect(HasLine(NullCostPanel, "spendTag.reservedUsdMicros: 30000000"), "reservation stays on its own line");
+		++Bridge;
+
+		const std::string NullDigest = CompletionJson("COMPLETED", BridgeRun, "julius-run-spent.v1", "608861", nullptr, BridgeTrace, nullptr, nullptr);
+		const FResultPanel NullDigestPanel = ResultPanelFor(Load(ResultJson(BridgeRun, "completed", TraceJson.c_str(), nullptr, NullDigest.c_str(), nullptr), HappyProgress));
+		Expect(NullDigestPanel.bVerified && NullDigestPanel.bShowsArtifact, "null digest keeps the reported name");
+		Expect(HasLine(NullDigestPanel, "archive.artifactDigest: Unknown"), "null digest is Unknown");
+		Expect(!HasLine(NullDigestPanel, (std::string("archive.artifactDigest: ") + Digest).c_str()), "file sha is not the artifact digest");
+		++Bridge;
+
+		const char* MovingPhases = "[{\"role\":\"CODING_AGENT\",\"state\":\"ACTIVE\",\"stage\":\"build\",\"attempt\":null,\"spanId\":null,\"traceparent\":null,\"knownUsdMicros\":null,\"costComplete\":null}]";
+		const FResultRead Moving = Load(
+			ResultJson(BridgeRun, "dispatched", TraceJson.c_str(), nullptr, nullptr, nullptr),
+			ProgressJson(BridgeRun, "dispatched", TraceJson.c_str(), MovingPhases));
+		Expect(Moving.bVerified == false && Moving.bDispatchedCeiling, "phases are not completion");
+		ExpectHidden(ResultPanelFor(Moving), "phases hide cost and artifact");
+		++Bridge;
+
+		const FResultRead Bare = Load(
+			ResultJson(BridgeRun, "dispatched", TraceJson.c_str(), nullptr, nullptr, ",\"completed\":true"),
+			ProgressJson(BridgeRun, "dispatched", TraceJson.c_str(), nullptr));
+		Expect(Bare.bVerified == false && Bare.bFinished == false, "bare completed bool is not evidence");
+		ExpectHidden(ResultPanelFor(Bare), "bare completed hides a result");
+		++Bridge;
+
+		const FResultRead WordOnly = Load(
+			ResultJson(BridgeRun, "completed", TraceJson.c_str(), nullptr, nullptr, nullptr),
+			ProgressJson(BridgeRun, "completed", TraceJson.c_str(), nullptr));
+		Expect(WordOnly.bVerified == false && WordOnly.bFinished == false, "completed without evidence");
+		ExpectHidden(ResultPanelFor(WordOnly), "completed word hides a result");
+		const FFlowView WordView = WatchRead(WordOnly);
+		Expect(WordView.Progress.bFinished == false && WordView.Progress.bFault && WordView.Progress.bPaid == false, "unverified completed stays unfinished");
+		Expect(Same(WordView.Progress.Line, ProgressDisplayLabel(EMissionProgress::OperatorStarted)), "unverified completed holds at dispatched");
+		++Bridge;
+
+		const std::string Executing = CompletionJson("EXECUTING", BridgeRun, "julius-run-spent.v1", "608861", Digest.c_str(), BridgeTrace, nullptr, nullptr);
+		const FResultRead NotFinal = Load(
+			ResultJson(BridgeRun, "completed", TraceJson.c_str(), nullptr, Executing.c_str(), nullptr),
+			HappyProgress);
+		Expect(NotFinal.bVerified == false && NotFinal.ArtifactName.bKnown, "executing is parsed and not verified");
+		ExpectHidden(ResultPanelFor(NotFinal), "executing hides the artifact");
+		++Bridge;
+
+		const FResultRead Early = Load(
+			ResultJson(BridgeRun, "dispatched", TraceJson.c_str(), nullptr, HappyCompletion.c_str(), nullptr),
+			ProgressJson(BridgeRun, "dispatched", TraceJson.c_str(), nullptr));
+		Expect(Early.bVerified == false && Early.ArtifactName.bKnown && Early.bDispatchedCeiling, "evidence under dispatched is not completion");
+		ExpectHidden(ResultPanelFor(Early), "dispatched evidence hides the artifact");
+		++Bridge;
+
+		const FResultRead Unknown = Load(
+			ResultJson(BridgeRun, "unknown", TraceJson.c_str(), nullptr, HappyCompletion.c_str(), nullptr),
+			ProgressJson(BridgeRun, "unknown", TraceJson.c_str(), nullptr));
+		Expect(Unknown.bUnknownState && Unknown.bVerified == false && Unknown.bFinished == false, "unknown is not finished");
+		ExpectHidden(ResultPanelFor(Unknown), "unknown hides completion");
+		const FFlowView UnknownView = WatchRead(Unknown);
+		Expect(UnknownView.Progress.bFinished == false && UnknownView.Result.bFinished == false, "unknown panels are not finished");
+		Expect(Same(UnknownView.Progress.Line, ProgressDisplayLabel(EMissionProgress::Waiting)), "unknown label");
+		Expect(!Same(UnknownView.Progress.Line, ProgressDisplayLabel(EMissionProgress::Succeeded)), "unknown is not succeeded");
+		++Bridge;
+
+		const FResultRead Expired = Load(
+			ResultJson(BridgeRun, "failed", TraceJson.c_str(), "AWAITING_OPERATOR_EXPIRED", HappyCompletion.c_str(), nullptr),
+			ProgressJson(BridgeRun, "failed", TraceJson.c_str(), nullptr));
+		Expect(Expired.bExpired && Expired.bVerified == false && Expired.bFinished == false, "expired is not verified");
+		ExpectHidden(ResultPanelFor(Expired), "expired hides completion");
+		const FFlowView ExpiredView = WatchRead(Expired);
+		Expect(ExpiredView.Progress.bNotStarted && ExpiredView.Progress.bFinished == false && ExpiredView.Progress.bPaid == false, "expired stays NotStarted");
+		Expect(Same(ExpiredView.Progress.Line, ProgressDisplayLabel(EMissionProgress::NotStarted)), "expired label");
+		Expect(!Same(ExpiredView.Progress.Line, ProgressDisplayLabel(EMissionProgress::Succeeded)), "expired is not succeeded");
+		Expect(ExpiredView.Result.bFinished == false, "expired result is not finished");
+		++Bridge;
+
+		const std::string NoTag = CompletionJson("COMPLETED", BridgeRun, nullptr, "608861", Digest.c_str(), BridgeTrace, nullptr, nullptr);
+		const FResultRead MissingTag = Load(
+			ResultJson(BridgeRun, "completed", TraceJson.c_str(), nullptr, NoTag.c_str(), nullptr),
+			HappyProgress);
+		Expect(MissingTag.bVerified == false, "missing spend tag");
+		ExpectHidden(ResultPanelFor(MissingTag), "missing spend tag hides the artifact");
+		++Bridge;
+
+		const std::string BadSchemaCompletion = CompletionJson("COMPLETED", BridgeRun, "not-a-spend-tag", "608861", Digest.c_str(), BridgeTrace, nullptr, nullptr);
+		Expect(Load(ResultJson(BridgeRun, "completed", TraceJson.c_str(), nullptr, BadSchemaCompletion.c_str(), nullptr), HappyProgress).bVerified == false, "wrong spend schema");
+		++Bridge;
+
+		const std::string WrongRunCompletion = CompletionJson("COMPLETED", OtherRun, "julius-run-spent.v1", "608861", Digest.c_str(), BridgeTrace, nullptr, nullptr);
+		Expect(Load(ResultJson(BridgeRun, "completed", TraceJson.c_str(), nullptr, WrongRunCompletion.c_str(), nullptr), HappyProgress).bVerified == false, "spend tag run mismatch");
+		++Bridge;
+
+		const FResultRead Mismatch = Load(
+			ResultJson(OtherRun, "completed", TraceJson.c_str(), nullptr, HappyCompletion.c_str(), nullptr),
+			HappyProgress);
+		Expect(Mismatch.bParsed == false && Mismatch.bVerified == false, "wljRunId mismatch");
+		++Bridge;
+
+		const FResultRead Split = Load(HappyResult, ProgressJson(BridgeRun, "dispatched", TraceJson.c_str(), nullptr));
+		Expect(Split.bVerified == false && Split.bFinished == false, "split state is not completion");
+		ExpectHidden(ResultPanelFor(Split), "split state hides the artifact");
+		++Bridge;
+
+		Expect(Load(HappyResult, HappyProgress, 404, 200).bVerified == false, "404 is not a result");
+		Expect(Load(HappyResult, HappyProgress, 403, 200).bParsed == false, "403 is not a result");
+		const char* NotFound = "{\"error\":{\"kind\":\"not_found\",\"message\":\"Not found.\"}}";
+		const char* Denied = "{\"error\":{\"kind\":\"julius_dispatch_not_loopback\",\"message\":\"Mission dispatch is only served to the same machine.\"}}";
+		Expect(Load(NotFound, "", 404, 0).bParsed == false, "not_found body");
+		Expect(Load(Denied, "", 403, 0).bParsed == false, "loopback body");
+		Expect(!ContainsText(ResultPanelFor(Load(NotFound, "", 404, 0)), BridgeRun), "not_found does not echo the run");
+		++Bridge;
+
+		const FResultRead Errored = Load(
+			ResultJson(BridgeRun, "completed", TraceJson.c_str(), nullptr, HappyCompletion.c_str(), ",\"error\":{\"kind\":\"not_found\",\"message\":\"Not found.\"}"),
+			HappyProgress);
+		Expect(Errored.bParsed == false && Errored.bVerified == false, "error object is not a result");
+		++Bridge;
+
+		const std::string HostileCompletion = CompletionJson(
+			"COMPLETED", BridgeRun, "julius-run-spent.v1", "608861", Digest.c_str(), ReaderTrace,
+			",\"providerMessageId\":\"msg_does_not_count\"",
+			",\"apiKey\":\"sk-ant-FAKETESTNOTREAL\",\"token\":\"ghp_FAKETESTNOTREAL\"");
+		const FResultPanel Hostile = ResultPanelFor(Load(
+			ResultJson(BridgeRun, "completed", TraceJson.c_str(), nullptr, HostileCompletion.c_str(), nullptr),
+			HappyProgress));
+		Expect(Hostile.bVerified, "hostile extras do not erase evidence");
+		Expect(HasLine(Hostile, "traceId: 0ef34f0df7cf2cf89b844dcfa5fe084f"), "top level trace kept");
+		Expect(HasLine(Hostile, "completion.traceId: ffffffffffffffffffffffffffffffff"), "reported completion trace kept");
+		Expect(!ContainsText(Hostile, "msg_does_not_count"), "message id is not a receipt");
+		Expect(!ContainsText(Hostile, "sk-ant-FAKETESTNOTREAL"), "apiKey is not displayed");
+		Expect(!ContainsText(Hostile, "ghp_FAKETESTNOTREAL"), "token is not displayed");
+		++Bridge;
+
+		const FResultRead NullTrace = Load(
+			ResultJson(BridgeRun, "dispatched", "null", nullptr, nullptr, nullptr),
+			ProgressJson(BridgeRun, "dispatched", "null", nullptr));
+		Expect(NullTrace.TraceId.bNull && NullTrace.TraceId.bKnown == false && NullTrace.bVerified == false, "null trace stays unknown");
+		Expect(HasLine(ResultPanelFor(NullTrace), "traceId: Unknown"), "null trace renders Unknown");
+		Expect(!HasLine(ResultPanelFor(NullTrace), "traceId: 0ef34f0df7cf2cf89b844dcfa5fe084f"), "null trace is not derived");
+		++Bridge;
+
+		const char* ReaderShaped = "{\"juliusFinalState\":\"COMPLETED\",\"completed\":true,\"traceId\":\"ffffffffffffffffffffffffffffffff\",\"archive\":{\"artifactName\":\"julius-live-evidence\"},\"apiKey\":\"sk-ant-FAKETESTNOTREAL\"}";
+		const FResultRead ReaderPayload = Load(ReaderShaped, "");
+		Expect(ReaderPayload.bParsed == false && ReaderPayload.bVerified == false, "reader payload is not a route body");
+		Expect(!ContainsText(ResultPanelFor(ReaderPayload), "julius-live-evidence"), "reader payload artifact hidden");
+		Expect(!ContainsText(ResultPanelFor(ReaderPayload), "sk-ant"), "reader payload secret hidden");
+		++Bridge;
+
+		const std::string Redacted = std::string("{\"juliusFinalState\":\"COMPLETED\",\"spendTag\":") + SpendTag(BridgeRun, "julius-run-spent.v1")
+			+ ",\"coderCost\":{\"costUsdMicros\":608861,\"costBasis\":\"PROVIDER_REPORTED\",\"executionCostUsdMicros\":null,\"billingPath\":\"API_BILLED\"}"
+			+ ",\"missionCost\":{\"knownUsdMicros\":608861,\"unknownComponents\":2,\"complete\":false}"
+			+ ",\"providerReceipt\":{\"providerRequestId\":null,\"responseId\":null,\"providerRequestAvailability\":\"UNAVAILABLE\",\"providerRequestUnavailableReason\":\"provider_request_id_credential_shaped\"}"
+			+ ",\"archive\":" + ArchiveJson(Digest.c_str())
+			+ ",\"traceId\":\"" + BridgeTrace + "\",\"traceparent\":null}";
+		const FResultPanel RedactedPanel = ResultPanelFor(Load(ResultJson(BridgeRun, "completed", TraceJson.c_str(), nullptr, Redacted.c_str(), nullptr), HappyProgress));
+		Expect(RedactedPanel.bVerified, "redacted receipt still completes");
+		Expect(!ContainsText(RedactedPanel, "sk-ant-FAKETESTNOTREAL"), "credential was not in the body and is not invented");
+		Expect(!HasLine(RedactedPanel, "providerRequestId: "), "request id is not invented");
+		++Bridge;
+	}
 }
 
 int main()
@@ -165,20 +603,31 @@ int main()
 
 	Expect(ResultPanelFor(FResultRead{}).bShowsArtifact == false, "no result artifact");
 	Expect(Same(ResultPanelFor(FResultRead{}).Line, CopyNoResultYet), "no result line");
+	Expect(ResultPanelFor(FResultRead{}).bFinished == false, "no result is not finished");
 	++Results;
 	FResultRead Unverified;
 	Unverified.bReported = true;
 	Unverified.bVerified = false;
+	Unverified.ArtifactName.bKnown = true;
+	Unverified.ArtifactName.Text = "julius-live-evidence";
 	const FResultPanel ShownFalse = ResultPanelFor(Unverified);
-	Expect(ShownFalse.bReported && ShownFalse.bVerified == false && ShownFalse.bShowsArtifact == false, "verified false");
-	Expect(Same(ShownFalse.Line, CopyVerifiedFalse), "verified false line");
+	Expect(ShownFalse.bReported && ShownFalse.bVerified == false && ShownFalse.bShowsArtifact == false, "unverified artifact hidden");
+	Expect(ShownFalse.bFinished == false, "unverified is not finished");
+	Expect(Same(ShownFalse.Line, CopyNoResultYet), "unverified line");
+	Expect(!HasLine(ShownFalse, "archive.artifactName: julius-live-evidence"), "unverified name hidden");
 	++Results;
 	FResultRead Verified;
 	Verified.bReported = true;
 	Verified.bVerified = true;
+	Verified.ArtifactName.bKnown = true;
+	Verified.ArtifactName.Text = "julius-live-evidence";
+	Verified.TraceId.bKnown = true;
+	Verified.TraceId.Text = "0ef34f0df7cf2cf89b844dcfa5fe084f";
 	const FResultPanel ShownTrue = ResultPanelFor(Verified);
-	Expect(ShownTrue.bShowsArtifact && ShownTrue.bVerified, "verified artifact");
-	Expect(Same(ShownTrue.Line, CopyVerifiedTrue), "verified true line");
+	Expect(ShownTrue.bShowsArtifact && ShownTrue.bVerified && ShownTrue.bFinished, "verified artifact");
+	Expect(Same(ShownTrue.Line, CopyStateCompleted), "verified line is the route state");
+	Expect(HasLine(ShownTrue, "archive.artifactName: julius-live-evidence"), "verified name");
+	Expect(HasLine(ShownTrue, "traceId: 0ef34f0df7cf2cf89b844dcfa5fe084f"), "verified trace");
 	Expect(!Same(ShownTrue.Line, CopyNoResultYet), "verified is not a synthesized absence");
 	++Results;
 
@@ -238,6 +687,8 @@ int main()
 	FScriptReader Eager;
 	Eager.Body.bReported = true;
 	Eager.Body.bVerified = true;
+	Eager.Body.ArtifactName.bKnown = true;
+	Eager.Body.ArtifactName.Text = "julius-live-evidence";
 	Flow.NoteResult(Eager);
 	Expect(Eager.bCall == false, "reader is not called without a wlj_ id");
 	Expect(Flow.View().Result.bShowsArtifact == false, "bad id shows no artifact");
@@ -246,18 +697,23 @@ int main()
 	Flow.NoteResult(Eager);
 	Expect(Eager.bCall, "reader is called for the minted id");
 	Expect(Flow.View().Result.bShowsArtifact, "verified read shows the artifact slot");
-	Expect(Same(Flow.View().Result.Line, CopyVerifiedTrue), "verified read line");
+	Expect(Same(Flow.View().Result.Line, CopyStateCompleted), "verified read line");
+	Expect(HasLine(Flow.View().Result, "archive.artifactName: julius-live-evidence"), "verified read names the artifact");
 	++FlowSteps;
 	Eager.bCall = false;
 	Eager.Body.bVerified = false;
 	Flow.NoteResult(Eager);
 	Expect(Flow.View().Result.bShowsArtifact == false, "verified false shows no artifact");
-	Expect(Same(Flow.View().Result.Line, CopyVerifiedFalse), "verified false line");
+	Expect(!HasLine(Flow.View().Result, "archive.artifactName: julius-live-evidence"), "verified false hides the artifact");
+	Expect(Same(Flow.View().Result.Line, CopyNoResultYet), "verified false line");
 	++FlowSteps;
 	FAbsentResultReader Absent;
 	Flow.NoteResult(Absent);
 	Expect(Same(Flow.View().Result.Line, CopyNoResultYet) && Flow.View().Result.bShowsArtifact == false, "absent reader");
+	Expect(Flow.View().Result.bFinished == false, "absent reader is not finished");
 	++FlowSteps;
+
+	BridgeRouteFixtures();
 
 	if (Failures != 0)
 	{
@@ -265,7 +721,7 @@ int main()
 		return 1;
 	}
 	std::printf(
-		"J1 MISSION FLOW KAT PASS meanings=%d route=%d result=%d flow=%d windows=%d\n",
-		Meanings, Routes, Results, FlowSteps, Windows);
+		"J1 MISSION FLOW KAT PASS meanings=%d route=%d result=%d flow=%d windows=%d bridge=%d\n",
+		Meanings, Routes, Results, FlowSteps, Windows, Bridge);
 	return 0;
 }
