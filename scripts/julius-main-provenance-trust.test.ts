@@ -370,24 +370,36 @@ describe('the checkpoint workflow and the working tree', () => {
     }
     expect(attestationNonceProblems(live.fields)).toBeNull();
     expect(existsSync(livePath.replace(/\.txt$/u, '.sig'))).toBe(false);
-    // A depth-1 checkout keeps the commit object and hides its parents from
-    // rev-parse and log. cat-file reads the parent line from the object.
-    const firstParent = (sha: string) => {
-      const parents = git(['cat-file', '-p', sha]).split('\n').filter((line) => line.startsWith('parent ')).map((line) => line.slice('parent '.length));
-      expect(parents, sha).toHaveLength(1);
-      return parents[0]!;
-    };
-    const parentReadFix = 'f9b5b051b546787b486079f945ced851b1f46382';
-    const boundaryFix = 'bdd2194bb6d2a721da16e14546c7115915f5b5d3';
+    // The installer object's single parent is the checkpoint. Both commits
+    // stay ancestors of HEAD. The tip is not pinned, so a later commit or a
+    // merge with two parents still passes. A squash or rewrite that drops
+    // either commit is not an ancestor and fails.
     const installer = 'b994daebe511e3bbddcd18edb1a7caf221810387';
-    const head = git(['rev-parse', 'HEAD']).trim();
-    expect(firstParent(head)).toBe(parentReadFix);
-    ensureCommit(parentReadFix, 1);
-    expect(firstParent(parentReadFix)).toBe(boundaryFix);
-    ensureCommit(boundaryFix, 1);
-    expect(firstParent(boundaryFix)).toBe(installer);
+    ensureCommit(checkpoint, 1);
     ensureCommit(installer, 1);
-    expect(firstParent(installer)).toBe(checkpoint);
+    const installerParents = git(['cat-file', '-p', installer]).split('\n').filter((line) => line.startsWith('parent ')).map((line) => line.slice('parent '.length));
+    expect(installerParents, installer).toEqual([checkpoint]);
+    const isAncestor = (older: string, newer: string) => {
+      try {
+        git(['merge-base', '--is-ancestor', older, newer]);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    const head = git(['rev-parse', 'HEAD']).trim();
+    const shallow = () => git(['rev-parse', '--is-shallow-repository']).trim() === 'true';
+    // A depth-1 checkout has these objects only after ensureCommit, and the
+    // path from HEAD to them is missing until the shallow boundary moves.
+    for (let attempt = 0; shallow() && !isAncestor(installer, head) && attempt < 20; attempt += 1) {
+      execFileSync('git', ['fetch', '--deepen=1000', 'origin', head], {
+        cwd: ROOT,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+      });
+    }
+    expect(isAncestor(installer, head), installer).toBe(true);
+    expect(isAncestor(checkpoint, head), checkpoint).toBe(true);
   });
 });
 
