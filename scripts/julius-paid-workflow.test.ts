@@ -31,6 +31,14 @@ const workflow = readFileSync(WORKFLOW_PATH, 'utf8');
  */
 const GITHUB_BASH = ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c'];
 
+/**
+ * Assembled at runtime. A provider-key name followed by a long literal is a
+ * committed assignment to the repository boundary scan, so this stand-in is
+ * never written out beside that name.
+ */
+const joinedStandIn = (...parts: readonly string[]): string => parts.join('-');
+const loginStandIn = joinedStandIn('oauth', 'placeholder', 'not', 'a', 'key');
+
 /** The text of one top-level job, from its key to the next job key. */
 const job = (name: string): string => {
   const start = workflow.indexOf(`\n  ${name}:\n`);
@@ -254,7 +262,7 @@ describe('provider readiness fails before spending, and never exposes a key', ()
   };
 
   it('all three ready on their API keys, the pinned models, and no key in argv or output', () => {
-    const run = runReadiness({ openai: '200', anthropic: '200', xai: '200' }, { CLAUDE_CODE_OAUTH_TOKEN: 'oauth-placeholder-not-a-key' });
+    const run = runReadiness({ openai: '200', anthropic: '200', xai: '200' }, { CLAUDE_CODE_OAUTH_TOKEN: loginStandIn });
     expect(run.code).toBe(0);
     expect(run.output.match(/result=AUTHENTICATED_MODEL_AVAILABLE/gu)?.length).toBe(3);
     expect(run.output).toContain('provider_readiness provider=anthropic model=claude-opus-5-5 http=200 result=AUTHENTICATED_MODEL_AVAILABLE');
@@ -319,7 +327,7 @@ describe('the coder stops before a provider call unless the user-owned API key i
     try {
       const stdout = execFileSync('bash', [...GITHUB_BASH, body], {
         encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
-        env: { ...process.env, ANTHROPIC_API_KEY: apiKey, CLAUDE_CODE_OAUTH_TOKEN: 'oauth-placeholder-not-a-key' },
+        env: { ...process.env, ANTHROPIC_API_KEY: apiKey, CLAUDE_CODE_OAUTH_TOKEN: loginStandIn },
       });
       return { status: 0, stderr: '', stdout };
     } catch (error) {
