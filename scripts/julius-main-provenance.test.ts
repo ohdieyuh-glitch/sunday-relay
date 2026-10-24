@@ -15,6 +15,8 @@ import {
   REVIEW_AUTHORITY_LOGINS,
   WORKER_AUTHOR_LOGINS,
   evaluateMainProvenance,
+  pagedCommitFiles,
+  readFirstParentChain,
 } from './julius-main-provenance.mjs';
 
 /**
@@ -589,4 +591,38 @@ describe('the CLI, against a stubbed GitHub', () => {
       rmSync(directory, { recursive: true, force: true });
     }
   }, 30_000);
+});
+
+describe('commit file pages and the first-parent cap', () => {
+  it('reads every page of a commit file list and fails closed when a page stays full', () => {
+    const files = (count: number, start = 0) => Array.from({ length: count }, (_, index) => ({ filename: `src/f${start + index}.ts` }));
+    const read = pagedCommitFiles((page) => ({ files: page === 1 ? files(100) : files(2, 100) }));
+    expect(read.map((file) => file.filename)).toHaveLength(102);
+    expect(() => pagedCommitFiles(() => ({ files: files(100) }))).toThrow(/did not finish|incomplete/u);
+  });
+
+  it('a first-parent walk that hits the 30-commit cap fails closed', () => {
+    const repo = 'ohdieyuh-glitch/sunday-relay';
+    const floor = 'f'.repeat(40);
+    const shas = Array.from({ length: 31 }, (_, index) => index.toString(16).padStart(40, '0'));
+    const tip = shas[0]!;
+    const table = new Map<string, unknown>();
+    shas.forEach((sha, index) => {
+      const parent = index === shas.length - 1 ? floor : shas[index + 1];
+      table.set(`repos/${repo}/commits/${sha}`, {
+        sha,
+        commit: { tree: { sha: 'a'.repeat(40) }, message: 'pad\n', committer: { date: '2026-10-23T18:30:00Z' } },
+        parents: [{ sha: parent }],
+        files: [{ filename: 'src/pad.ts' }],
+      });
+    });
+    let caught = '';
+    try {
+      const chain = readFirstParentChain((path) => table.get(path.split('?')[0] ?? path), repo, tip, floor);
+      caught = chain === null ? 'null' : 'array';
+    } catch (error) {
+      caught = error instanceof Error ? error.message : 'error';
+    }
+    expect(caught).toMatch(/stopped after 30 commits/u);
+  });
 });

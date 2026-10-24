@@ -43,8 +43,10 @@ import {
 } from './julius-review-currency.mjs';
 import {
   EXTERNAL_ANCHOR_VARIABLE,
+  FIRST_PARENT_WALK_CAP,
   TRUSTED_CHECKPOINT_SHA,
   annotateChainLandings,
+  firstParentWalkCapReason,
   applyTrustChain,
   attestedCheckpointFloor,
   evaluateTrustChain,
@@ -337,9 +339,10 @@ export function evaluateSignedLanding(input, tip) {
 async function withTrustChain(single, source) {
   if (single?.verdict !== 'provenant') return single;
   let commits = source?.chainCommits;
-  // Every ancestor landing is verified on its own. The tip's flag is kept only
-  // when that commit carries no landing block, because evaluateSignedLanding
-  // already judged it. A block on the tip is judged again here, including its window.
+  // Every ancestor landing is verified on its own, at that commit's committer
+  // time. The tip's flag is kept only when that commit carries no landing block,
+  // because evaluateSignedLanding already judged it. A block on the tip is
+  // judged again here. The verifier's clock is not the clearance window.
   if (Array.isArray(commits) && commits.length > 0) {
     const anchor = source && Object.prototype.hasOwnProperty.call(source, 'externalReviewerKeySha256')
       ? source.externalReviewerKeySha256
@@ -371,27 +374,66 @@ async function withTrustChain(single, source) {
   return applyTrustChain(single, chain);
 }
 
-function readFirstParentChain(gh, repo, tipSha, floorSha = TRUSTED_CHECKPOINT_SHA) {
+/**
+ * Every page of a commit's file list, or a refusal.
+ * A response longer than the requested page is the server's whole list only
+ * when it is under the 300-file ceiling. A full page asks for the next one.
+ * A walk that never sees a short page fails closed.
+ */
+export function pagedCommitFiles(fetchPage, { perPage = 100, maxPages = 30 } = {}) {
+  const rows = [];
+  for (let page = 1; page <= maxPages; page += 1) {
+    const commit = fetchPage(page, perPage);
+    if (!commit || typeof commit !== 'object' || !Array.isArray(commit.files)) {
+      throw new Error('a commit file page was not a list');
+    }
+    if (page === 1 && commit.files.length > perPage) {
+      if (commit.files.length >= 300) throw new Error('the commit file list is incomplete');
+      return commit.files;
+    }
+    rows.push(...commit.files);
+    if (commit.files.length < perPage) return rows;
+  }
+  throw new Error(`pagination did not finish within ${maxPages} pages`);
+}
+
+function pathsFromFiles(files) {
+  return files.flatMap((file) => [file?.filename, file?.previous_filename].filter((path) => typeof path === 'string'));
+}
+
+export function readFirstParentChain(gh, repo, tipSha, floorSha = TRUSTED_CHECKPOINT_SHA) {
   if (tipSha === floorSha) return [];
   const reversed = [];
   let sha = tipSha;
-  for (let i = 0; i < 30 && typeof sha === 'string' && sha !== floorSha; i += 1) {
+  let steps = 0;
+  for (let i = 0; i < FIRST_PARENT_WALK_CAP && typeof sha === 'string' && sha !== floorSha; i += 1) {
+    steps += 1;
     const commit = gh(`repos/${repo}/commits/${sha}`);
-    const paths = Array.isArray(commit?.files)
-      ? commit.files.flatMap((file) => [file?.filename, file?.previous_filename].filter((path) => typeof path === 'string'))
-      : undefined;
+    let files = null;
+    try {
+      files = pagedCommitFiles((page, perPage) => (
+        page === 1 ? commit : gh(`repos/${repo}/commits/${sha}?per_page=${perPage}&page=${page}`)
+      ));
+    } catch (error) {
+      if (error instanceof Error && /incomplete|did not finish/u.test(error.message)) throw error;
+      files = null;
+    }
+    const committerDate = commit?.commit?.committer?.date;
+    const committerTime = typeof committerDate === 'string' ? Date.parse(committerDate) : Number.NaN;
     reversed.push({
       sha: commit?.sha,
       tree: commit?.commit?.tree?.sha,
-      paths,
+      paths: Array.isArray(files) ? pathsFromFiles(files) : undefined,
       message: commit?.commit?.message,
       parent: commit?.parents?.[0]?.sha,
       parentCount: Array.isArray(commit?.parents) ? commit.parents.length : undefined,
+      committerTime: Number.isFinite(committerTime) ? committerTime : undefined,
     });
     const parent = commit?.parents?.[0]?.sha;
     if (parent === floorSha) return reversed.reverse();
     sha = parent;
   }
+  if (steps >= FIRST_PARENT_WALK_CAP && sha !== floorSha) throw new Error(firstParentWalkCapReason(floorSha));
   return null;
 }
 
@@ -802,8 +844,10 @@ async function main(argv) {
     try {
       chainCommits = readFirstParentChain(gh, repo, mainSha, floor);
       if (chainCommits === null) chainProblem = 'the first-parent chain does not reach the trusted checkpoint';
-    } catch {
-      chainProblem = 'the trust chain from the trusted checkpoint could not be read';
+    } catch (error) {
+      chainProblem = error instanceof Error && /stopped after 30 commits|incomplete|did not finish/u.test(error.message)
+        ? error.message
+        : 'the trust chain from the trusted checkpoint could not be read';
     }
     if (result.verdict === 'provenant' && chainProblem) {
       result = { ...result, verdict: 'unprovenanced', reason: chainProblem };

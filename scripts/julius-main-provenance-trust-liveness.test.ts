@@ -27,6 +27,8 @@ const gitEnv = {
   GIT_AUTHOR_EMAIL: 'liveness@example.com',
   GIT_COMMITTER_NAME: 'Liveness',
   GIT_COMMITTER_EMAIL: 'liveness@example.com',
+  GIT_AUTHOR_DATE: '2026-10-23T18:30:00Z',
+  GIT_COMMITTER_DATE: '2026-10-23T18:30:00Z',
   GIT_CONFIG_COUNT: '1',
   GIT_CONFIG_KEY_0: 'commit.gpgsign',
   GIT_CONFIG_VALUE_0: 'false',
@@ -60,9 +62,9 @@ type TrustModule = {
 let base = '';
 let mod: TrustModule;
 
-const git = (repo: string, args: string[]) => execFileSync('git', ['-c', 'commit.gpgsign=false', '-c', 'user.name=Liveness', '-c', 'user.email=liveness@example.com', ...args], {
+const git = (repo: string, args: string[], extra: Record<string, string> = {}) => execFileSync('git', ['-c', 'commit.gpgsign=false', '-c', 'user.name=Liveness', '-c', 'user.email=liveness@example.com', ...args], {
   cwd: repo,
-  env: gitEnv,
+  env: { ...gitEnv, ...extra },
   encoding: 'utf8',
   stdio: ['ignore', 'pipe', 'pipe'],
 });
@@ -407,11 +409,13 @@ describe('signed checkpoint liveness', () => {
     writeFileSync(join(dir, `${checkpoint}.sig`), `${signText(text)}\n`);
     git(repo, ['add', '-A']);
     git(repo, ['commit', '-m', 'founder installer companions and attestation']);
+    const installed = await gate(repo);
+    expect(installed.ok, installed.reason).toBe(true);
     writeFileSync(join(repo, 'scripts/julius-main-provenance-trust.test.ts'), 'test\nlater\n');
     git(repo, ['add', 'scripts/julius-main-provenance-trust.test.ts']);
     git(repo, ['commit', '-m', 'installer follow-up touches only the trust test']);
     const result = await gate(repo);
-    expect(result.ok, result.reason).toBe(true);
+    expect(result.ok, result.reason).toBe(false);
 
     mkdirSync(join(repo, 'src'), { recursive: true });
     writeFileSync(join(repo, 'src/ride-along.ts'), 'no\n');
@@ -530,9 +534,10 @@ describe('signed checkpoint liveness', () => {
     const blockFor = (text: string) => landingMessage(text, signText(text)).replace(`clearance-nonce: ${'ab'.repeat(16)}`, `clearance-nonce: ${text.match(/nonce: ([0-9a-f]{32})/u)?.[1] ?? ''}`);
     const olderText = clearanceFor(olderTree, parent, '11'.repeat(16));
     const newerText = clearanceFor(newerTree, older, '22'.repeat(16));
+    const landedAt = NOW;
     const commits = [
-      { sha: older, tree: olderTree, parent, message: blockFor(olderText), paths: ['src/older.ts'] },
-      { sha: newer, tree: newerTree, parent: older, message: blockFor(newerText), paths: ['src/newer.ts'] },
+      { sha: older, tree: olderTree, parent, message: blockFor(olderText), paths: ['src/older.ts'], committerTime: landedAt },
+      { sha: newer, tree: newerTree, parent: older, message: blockFor(newerText), paths: ['src/newer.ts'], committerTime: landedAt },
     ];
     const annotated = await annotate(commits, { pem: publicPem, anchor: spki, now: NOW });
     expect(annotated[0]?.signedLanding, 'older landing').toBe(true);
@@ -540,7 +545,7 @@ describe('signed checkpoint liveness', () => {
     const replayText = clearanceFor('1'.repeat(40), newer, '22'.repeat(16));
     const replayed = await annotate([
       ...commits,
-      { sha: 'f'.repeat(40), tree: '1'.repeat(40), parent: newer, message: blockFor(replayText), paths: ['src/replay.ts'] },
+      { sha: 'f'.repeat(40), tree: '1'.repeat(40), parent: newer, message: blockFor(replayText), paths: ['src/replay.ts'], committerTime: landedAt },
     ], { pem: publicPem, anchor: spki, now: NOW });
     expect(replayed[2]?.signedLanding).not.toBe(true);
     const chain = mod.evaluateTrustChain({
@@ -605,5 +610,227 @@ describe('signed checkpoint liveness', () => {
     rmSync(only, { recursive: true, force: true });
     rmSync(both, { recursive: true, force: true });
     rmSync(stale, { recursive: true, force: true });
+  });
+
+  it('keeps landings that were inside their window when committed, and refuses a new expired landing', async () => {
+    const repo = copyFixture();
+    const buildLandingCommitMessage = await landingBuilder();
+    const later = Date.parse('2026-10-24T19:30:00Z');
+    writeFileSync(join(repo, 'src/second.txt'), 'second landing\n');
+    git(repo, ['add', 'src/second.txt']);
+    const parent = git(repo, ['rev-parse', 'HEAD']).trim();
+    const tree = git(repo, ['write-tree']).trim();
+    const head = git(repo, ['commit-tree', tree, '-p', parent, '-m', 'reviewed head']).trim();
+    const text = [
+      'JULIUS-CLEARANCE-V1',
+      'repo: ohdieyuh-glitch/sunday-relay',
+      'pr: 381',
+      `head: ${head}`,
+      `tree: ${tree}`,
+      `base: ${parent}`,
+      'kind: CLEARED',
+      `bot-comments-sha256: ${'c'.repeat(64)}`,
+      'governed-exceptions: -',
+      `nonce: ${'44'.repeat(16)}`,
+      'by: INDEPENDENT_REVIEW',
+      'issued: 2026-10-23T18:00:00Z',
+      'expires: 2026-10-24T18:00:00Z',
+      '',
+    ].join('\n');
+    const messagePath = join(repo, '.git/second-message.txt');
+    writeFileSync(messagePath, buildLandingCommitMessage({ clearanceText: text, signatureB64: signText(text) }));
+    git(repo, ['commit', '-F', messagePath]);
+    const aged = await gate(repo, { [mod.EXTERNAL_ANCHOR_VARIABLE]: spki }, later);
+    expect(aged.ok, aged.reason).toBe(true);
+    expect(aged.reason).not.toMatch(/expired/u);
+
+    writeFileSync(join(repo, 'src/late.txt'), 'new landing after expiry\n');
+    git(repo, ['add', 'src/late.txt']);
+    const lateParent = git(repo, ['rev-parse', 'HEAD']).trim();
+    const lateTree = git(repo, ['write-tree']).trim();
+    const lateWhen = '2026-10-24T19:30:00Z';
+    const lateHead = git(repo, ['commit-tree', lateTree, '-p', lateParent, '-m', 'late head'], {
+      GIT_AUTHOR_DATE: lateWhen,
+      GIT_COMMITTER_DATE: lateWhen,
+    }).trim();
+    const lateText = [
+      'JULIUS-CLEARANCE-V1',
+      'repo: ohdieyuh-glitch/sunday-relay',
+      'pr: 382',
+      `head: ${lateHead}`,
+      `tree: ${lateTree}`,
+      `base: ${lateParent}`,
+      'kind: CLEARED',
+      `bot-comments-sha256: ${'c'.repeat(64)}`,
+      'governed-exceptions: -',
+      `nonce: ${'55'.repeat(16)}`,
+      'by: INDEPENDENT_REVIEW',
+      'issued: 2026-10-23T18:00:00Z',
+      'expires: 2026-10-24T18:00:00Z',
+      '',
+    ].join('\n');
+    const latePath = join(repo, '.git/late-message.txt');
+    writeFileSync(latePath, buildLandingCommitMessage({ clearanceText: lateText, signatureB64: signText(lateText) }));
+    git(repo, ['commit', '-F', latePath], { GIT_AUTHOR_DATE: lateWhen, GIT_COMMITTER_DATE: lateWhen });
+    const fresh = await gate(repo, { [mod.EXTERNAL_ANCHOR_VARIABLE]: spki }, later);
+    expect(fresh.ok, fresh.reason).toBe(false);
+    expect(fresh.reason).toContain('expired');
+    rmSync(repo, { recursive: true, force: true });
+  });
+
+  it('refuses a companion-only commit after the signed installer', async () => {
+    const repo = mkdtempSync(join(tmpdir(), 'julius-installer-after-sig-'));
+    for (const rel of mod.TRUSTED_COMPUTING_BASE) {
+      mkdirSync(join(repo, dirname(rel)), { recursive: true });
+      cpSync(join(base, rel), join(repo, rel));
+    }
+    git(repo, ['init', '-b', 'main']);
+    git(repo, ['add', '-A']);
+    git(repo, ['commit', '-m', 'checkpoint']);
+    const checkpoint = git(repo, ['rev-parse', 'HEAD']).trim();
+    const tree = git(repo, ['rev-parse', 'HEAD^{tree}']).trim();
+    mkdirSync(join(repo, '.github/julius-landing'), { recursive: true });
+    const tcb = mod.TRUSTED_COMPUTING_BASE.map((path) => ({
+      path,
+      sha256: createHash('sha256').update(readFileSync(join(repo, path))).digest('hex'),
+    }));
+    const text = mod.canonicalCheckpointAttestation({
+      checkpoint,
+      commits: [{ sha: checkpoint, tree, basis: 'signed installer' }],
+      tcb,
+      issued: mod.ATTESTATION_ISSUED,
+      expires: mod.ATTESTATION_EXPIRES,
+    });
+    const dir = join(repo, mod.CHECKPOINT_ATTESTATION_DIR);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, `${checkpoint}.txt`), text);
+    writeFileSync(join(dir, `${checkpoint}.sig`), `${signText(text)}\n`);
+    git(repo, ['add', '-A']);
+    git(repo, ['commit', '-m', 'founder installer with signature']);
+    const installed = await gate(repo);
+    expect(installed.ok, installed.reason).toBe(true);
+    mkdirSync(join(repo, 'scripts'), { recursive: true });
+    writeFileSync(join(repo, 'scripts/julius-main-provenance-trust.test.ts'), 'weakened\n');
+    git(repo, ['add', 'scripts/julius-main-provenance-trust.test.ts']);
+    git(repo, ['commit', '-m', 'unsigned edit of a companion test']);
+    const weakened = await gate(repo);
+    expect(weakened.ok, weakened.reason).toBe(false);
+    expect(weakened.reason).not.toContain('chain verified');
+    rmSync(repo, { recursive: true, force: true });
+  });
+
+  it('an unsigned installer block does not burn a nonce a later landing needs', async () => {
+    const repo = mkdtempSync(join(tmpdir(), 'julius-nonce-burn-'));
+    for (const rel of mod.TRUSTED_COMPUTING_BASE) {
+      mkdirSync(join(repo, dirname(rel)), { recursive: true });
+      cpSync(join(base, rel), join(repo, rel));
+    }
+    git(repo, ['init', '-b', 'main']);
+    git(repo, ['add', '-A']);
+    git(repo, ['commit', '-m', 'checkpoint']);
+    const checkpoint = git(repo, ['rev-parse', 'HEAD']).trim();
+    const tree = git(repo, ['rev-parse', 'HEAD^{tree}']).trim();
+    const buildLandingCommitMessage = await landingBuilder();
+    const burned = '66'.repeat(16);
+    const fake = [
+      'JULIUS-CLEARANCE-V1',
+      'repo: ohdieyuh-glitch/sunday-relay',
+      'pr: 381',
+      `head: ${'a'.repeat(40)}`,
+      `tree: ${'b'.repeat(40)}`,
+      `base: ${checkpoint}`,
+      'kind: CLEARED',
+      `bot-comments-sha256: ${'c'.repeat(64)}`,
+      'governed-exceptions: -',
+      `nonce: ${burned}`,
+      'by: INDEPENDENT_REVIEW',
+      'issued: 2026-10-23T18:00:00Z',
+      'expires: 2026-10-24T18:00:00Z',
+      '',
+    ].join('\n');
+    const tcb = mod.TRUSTED_COMPUTING_BASE.map((path) => ({
+      path,
+      sha256: createHash('sha256').update(readFileSync(join(repo, path))).digest('hex'),
+    }));
+    const text = mod.canonicalCheckpointAttestation({
+      checkpoint,
+      commits: [{ sha: checkpoint, tree, basis: 'installer burns nothing' }],
+      tcb,
+      issued: mod.ATTESTATION_ISSUED,
+      expires: mod.ATTESTATION_EXPIRES,
+    });
+    const dir = join(repo, mod.CHECKPOINT_ATTESTATION_DIR);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, `${checkpoint}.txt`), text);
+    writeFileSync(join(dir, `${checkpoint}.sig`), `${signText(text)}\n`);
+    const fakePath = join(repo, '.git/fake-installer-message.txt');
+    writeFileSync(fakePath, buildLandingCommitMessage({ clearanceText: fake, signatureB64: signText(fake, attacker.privateKey) }));
+    git(repo, ['add', '-A']);
+    git(repo, ['commit', '-F', fakePath]);
+    mkdirSync(join(repo, 'src'), { recursive: true });
+    writeFileSync(join(repo, 'src/real.txt'), 'real landing\n');
+    git(repo, ['add', 'src/real.txt']);
+    const parent = git(repo, ['rev-parse', 'HEAD']).trim();
+    const landingTree = git(repo, ['write-tree']).trim();
+    const head = git(repo, ['commit-tree', landingTree, '-p', parent, '-m', 'reviewed head']).trim();
+    const real = [
+      'JULIUS-CLEARANCE-V1',
+      'repo: ohdieyuh-glitch/sunday-relay',
+      'pr: 381',
+      `head: ${head}`,
+      `tree: ${landingTree}`,
+      `base: ${parent}`,
+      'kind: CLEARED',
+      `bot-comments-sha256: ${'c'.repeat(64)}`,
+      'governed-exceptions: -',
+      `nonce: ${burned}`,
+      'by: INDEPENDENT_REVIEW',
+      'issued: 2026-10-23T18:00:00Z',
+      'expires: 2026-10-24T18:00:00Z',
+      '',
+    ].join('\n');
+    const realPath = join(repo, '.git/real-landing-message.txt');
+    writeFileSync(realPath, buildLandingCommitMessage({ clearanceText: real, signatureB64: signText(real) }));
+    git(repo, ['commit', '-F', realPath]);
+    const result = await gate(repo);
+    expect(result.ok, result.reason).toBe(true);
+    expect(result.reason).not.toMatch(/already used/u);
+    rmSync(repo, { recursive: true, force: true });
+  });
+
+  it('a walk longer than 30 commits fails closed instead of verifying', async () => {
+    const repo = mkdtempSync(join(tmpdir(), 'julius-walk-cap-'));
+    for (const rel of mod.TRUSTED_COMPUTING_BASE) {
+      mkdirSync(join(repo, dirname(rel)), { recursive: true });
+      cpSync(join(base, rel), join(repo, rel));
+    }
+    git(repo, ['init', '-b', 'main']);
+    git(repo, ['add', '-A']);
+    git(repo, ['commit', '-m', 'checkpoint']);
+    const checkpoint = git(repo, ['rev-parse', 'HEAD']).trim();
+    const tree = git(repo, ['rev-parse', 'HEAD^{tree}']).trim();
+    const tcb = mod.TRUSTED_COMPUTING_BASE.map((path) => ({
+      path,
+      sha256: createHash('sha256').update(readFileSync(join(repo, path))).digest('hex'),
+    }));
+    const text = mod.canonicalCheckpointAttestation({
+      checkpoint,
+      commits: [{ sha: checkpoint, tree, basis: 'walk cap' }],
+      tcb,
+      issued: mod.ATTESTATION_ISSUED,
+      expires: mod.ATTESTATION_EXPIRES,
+    });
+    const dir = join(repo, mod.CHECKPOINT_ATTESTATION_DIR);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, `${checkpoint}.txt`), text);
+    writeFileSync(join(dir, `${checkpoint}.sig`), `${signText(text)}\n`);
+    git(repo, ['add', '-A']);
+    git(repo, ['commit', '-m', 'founder installer with signature']);
+    for (let i = 0; i < 30; i += 1) git(repo, ['commit', '--allow-empty', '-m', `pad ${i}`]);
+    const result = await gate(repo);
+    expect(result.ok, result.reason).toBe(false);
+    expect(result.reason).toMatch(/stopped after 30 commits/u);
+    expect(result.reason).not.toContain('chain verified');
+    rmSync(repo, { recursive: true, force: true });
   });
 });
