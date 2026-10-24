@@ -283,6 +283,82 @@ describe('signed checkpoint liveness', () => {
     }
   });
 
+  it('reads the landing identity from GitHub when none is injected', async () => {
+    for (const file of [
+      '.github/workflows/julius-governed-land.yml',
+      '.github/workflows/julius-accept-main.yml',
+      '.github/workflows/julius-land.yml',
+    ]) {
+      const text = readFileSync(join(ROOT, file), 'utf8');
+      const at = text.indexOf('node scripts/julius-main-provenance-trust.mjs --require-trusted-verifier');
+      expect(at, file).toBeGreaterThan(0);
+      expect(text.slice(Math.max(0, at - 500), at)).toContain('GH_TOKEN: ${{ github.token }}');
+    }
+    const repo = copyFixture();
+    mkdirSync(join(repo, '.github/workflows'), { recursive: true });
+    writeFileSync(join(repo, '.github/workflows/ci.yml'), 'name: ci\n');
+    git(repo, ['add', '.github/workflows/ci.yml']);
+    const landingTree = git(repo, ['write-tree']).trim();
+    const parent = git(repo, ['rev-parse', 'HEAD']).trim();
+    const head = git(repo, ['commit-tree', landingTree, '-p', parent, '-m', 'reviewed head']).trim();
+    const clearance = [
+      'JULIUS-CLEARANCE-V1',
+      'repo: ohdieyuh-glitch/sunday-relay',
+      'pr: 452',
+      `head: ${head}`,
+      `tree: ${landingTree}`,
+      `base: ${parent}`,
+      'kind: CLEARED',
+      `bot-comments-sha256: ${'c'.repeat(64)}`,
+      'governed-exceptions: -',
+      `nonce: ${'ef'.repeat(16)}`,
+      'by: INDEPENDENT_REVIEW',
+      'issued: 2026-10-23T18:00:00Z',
+      'expires: 2026-10-24T18:00:00Z',
+      'protected-paths: .github/workflows/ci.yml',
+      'landing-method: squash',
+      '',
+    ].join('\n');
+    const buildLandingCommitMessage = await landingBuilder();
+    const message = buildLandingCommitMessage({ clearanceText: clearance, signatureB64: signText(clearance) });
+    const messagePath = join(repo, '.git/identity-message.txt');
+    writeFileSync(messagePath, message);
+    git(repo, ['commit', '-F', messagePath]);
+    const landingSha = git(repo, ['rev-parse', 'HEAD']).trim();
+    const env = {
+      [mod.EXTERNAL_ANCHOR_VARIABLE]: spki,
+      JULIUS_GOVERNED_LANDER_BOT_ID: '347502603',
+    };
+    const original = globalThis.fetch;
+    try {
+      const closed = await mod.requireTrustedVerifier(env, { root: repo, now: NOW });
+      expect(closed.ok, closed.reason).toBe(false);
+      expect(closed.reason).toMatch(/verification could not be read/u);
+      let calls = 0;
+      globalThis.fetch = (async (url: unknown) => {
+        calls += 1;
+        expect(String(url)).toContain(`/commits/${landingSha}`);
+        return {
+          ok: true,
+          json: async () => ({
+            committer: { id: 347502603 },
+            commit: { verification: { verified: true, reason: 'valid' } },
+          }),
+        };
+      }) as typeof fetch;
+      const accepted = await mod.requireTrustedVerifier(
+        { ...env, GH_TOKEN: 'identity-test-token' },
+        { root: repo, now: NOW },
+      );
+      expect(accepted.ok, accepted.reason).toBe(true);
+      expect(calls).toBeGreaterThan(0);
+      expect(accepted.reason).not.toContain('identity-test-token');
+    } finally {
+      globalThis.fetch = original;
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
   it('the same tree without the attestation fails closed', async () => {
     const repo = copyFixture();
     rmSync(join(repo, mod.CHECKPOINT_ATTESTATION_DIR), { recursive: true, force: true });

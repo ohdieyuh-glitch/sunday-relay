@@ -7,7 +7,10 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    branches:
+      - main
+      - gatekeeper/prov1-review-fixes-20261024
+      - gatekeeper/governed-lander-20261024
   workflow_dispatch:
 
 permissions:
@@ -20,6 +23,7 @@ concurrency:
 jobs:
   verify:
     name: Verify Relay
+    if: ${{ !startsWith(github.ref, 'refs/heads/julius-governed-audit/') && !startsWith(github.head_ref, 'julius-governed-audit/') && !startsWith(github.base_ref, 'julius-governed-audit/') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:

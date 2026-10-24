@@ -402,6 +402,7 @@ describe('the checkpoint workflow and the working tree', () => {
       '.github/julius-landing/governed-queue.txt',
       '.github/julius-landing/main-ruleset.json',
       '.github/workflows/julius-governed-land.yml',
+      'scripts/julius-governed-bootstrap.mjs',
     ];
     expect(TRUSTED_COMPUTING_BASE.length).toBe(attested.length + added.length);
     for (const path of attested) expect(TRUSTED_COMPUTING_BASE).toContain(path);

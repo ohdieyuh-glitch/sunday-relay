@@ -74,6 +74,15 @@ describe('reviewed main provenance', () => {
     expect(result.reason).toContain('approved by');
   });
 
+  it('refuses a governed audit branch as the pull request head or base', () => {
+    const head = provenance({ pullRequests: [landedPull({ headRef: 'julius-governed-audit/pr/1' })] });
+    expect(head.verdict).toBe('unprovenanced');
+    expect(head.reason).toMatch(/julius-governed-audit\/pr\/1 is a governed audit branch/u);
+    const base = provenance({ pullRequests: [landedPull({ baseRef: 'refs/heads/julius-governed-audit/pr/1' })] });
+    expect(base.verdict).toBe('unprovenanced');
+    expect(base.reason).toMatch(/refs\/heads\/julius-governed-audit\/pr\/1 is a governed audit branch/u);
+  });
+
   it('there is one passing verdict and it is named', () => {
     expect(PROVENANCE_VERDICTS.filter((name) => name !== 'provenant'))
       .toEqual(['unprovenanced', 'indeterminate']);
