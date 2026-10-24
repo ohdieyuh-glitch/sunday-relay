@@ -9,8 +9,11 @@
  * With no {@link JuliusMissionEvidenceReader} wired, both routes report the
  * admission status and nothing past it. `dispatched` is the furthest state
  * that status route can show. Neither route reports `completed` unless YUJI's
- * reader returns the completion evidence shape. A dispatch record is not
- * that shape. YUJI owns the reader; this route does not match workflow runs.
+ * reader returns the completion evidence shape. A null read stays on that
+ * ceiling. `phases: null` and `projectBrainRevision: null` are returned as
+ * null on both routes: absent, not an empty list and not 0. A dispatch
+ * record is not that shape. YUJI owns the reader; this route does not match
+ * workflow runs.
  */
 
 import { juliusMissionTraceId } from '../scripts/julius-mission-trace.mjs';
@@ -134,6 +137,9 @@ export function handleWonderlandMissionReadRoute(
     if (admission === null) return { status: 500, body: {} };
     const evidence = await readEvidence(evidenceReader, parsed.runId);
     const state = evidence.completion === null ? ceilingState(admission.state) : 'completed';
+    // Null from the reader is the ceiling. A null phase list and a null
+    // project-brain revision stay null: absent, not an empty list and not 0.
+    const projectBrainRevision = evidence.completion === null ? null : evidence.completion.projectBrainRevision;
     const shared = {
       wljRunId: textOrNull(admission.wljRunId),
       serverRunId: textOrNull(admission.serverRunId),
@@ -141,14 +147,13 @@ export function handleWonderlandMissionReadRoute(
       traceId: juliusMissionTraceId(parsed.runId),
       state,
       updatedAt: textOrNull(admission.updatedAt),
+      phases: evidence.phases,
+      projectBrainRevision,
     };
     if (target.kind === 'progress') {
       return {
         status: 200,
-        body: {
-          ...shared,
-          phases: evidence.phases,
-        },
+        body: shared,
       };
     }
     const cause = textOrNull(admission.cause);

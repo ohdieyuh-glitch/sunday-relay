@@ -7,6 +7,9 @@
  * No network, no real provider, no gh, no spend.
  *
  * The fixtures below are synthetic. They are not a bill and not a workflow run.
+ * The completion object is the shape PR 446 returns at 041d2599: null phases,
+ * null projectBrainRevision, null spendAccounting, and a response id that is
+ * not the request id. This file does not import that reader.
  */
 
 import { createHash } from 'node:crypto';
@@ -47,7 +50,6 @@ const PLAN_SPAN = '20d74ea3e2204340';
 const BUILD_SPAN = '6bc1bfe65ed9e64b';
 const REVIEW_SPAN = '4d4c5030f6bc2dbc';
 const SUPPLIED_TRACE = 'f'.repeat(32);
-const WORK_REF = `artifact:julius-work-artifact.v1:${RUN}:build-1:g1:DIFF`;
 const NOT_FOUND = { status: 404, body: { error: { kind: 'not_found', message: 'Not found.' } } };
 
 /**
@@ -144,25 +146,54 @@ function readRequest(kind: 'result' | 'progress', runId: string): WonderlandAdmi
   };
 }
 
-function phase(role: string, stage: string, attempt: number, state = 'ACTIVE'): Record<string, unknown> {
-  return { role, state, stage, attempt, knownUsdMicros: null, costComplete: false };
-}
-
-interface PhaseView {
-  readonly role: string;
-  readonly stage: string | null;
-  readonly attempt: number | null;
-  readonly spanId: string | null;
-  readonly traceparent: string | null;
-}
-
-function phasesOf(body: unknown): PhaseView[] {
-  const record = body !== null && typeof body === 'object' ? body as { phases?: PhaseView[] | null } : {};
-  return record.phases ?? [];
-}
-
-function traceparent(spanId: string): string {
-  return `00-${TRACE_ID}-${spanId}-01`;
+/**
+ * Shape copied from 041d2599
+ * relay-bridge/julius-mission-evidence-reader.test.ts:158-197,
+ * with `spendTag.run` set to this admitted id. The reader builds that
+ * object at relay-bridge/julius-mission-evidence-reader.ts:523-537.
+ * `phases`, `spendAccounting`, and `projectBrainRevision` are null there.
+ */
+function readerCompletion(): Record<string, unknown> {
+  return {
+    juliusFinalState: 'COMPLETED',
+    spendTag: {
+      schema: 'julius-run-spent.v1',
+      run: RUN,
+      namespace: 'julius-first-live',
+      reservedUsdMicros: 5_000_000,
+      workflowRunId: '4242',
+      workflowRunAttempt: '1',
+      headSha: 'ab'.repeat(20),
+    },
+    spendAccounting: null,
+    coderCost: {
+      costUsdMicros: 1200,
+      costBasis: 'PROVIDER_REPORTED',
+      executionCostUsdMicros: 1200,
+      billingPath: 'API_BILLED',
+    },
+    missionCost: { knownUsdMicros: 1200, unknownComponents: 0, complete: true },
+    providerReceipt: {
+      providerRequestId: 'req_0123456789abcdef',
+      responseId: 'resp_0123456789abcdef',
+      providerRequestAvailability: 'CAPTURED',
+      providerRequestUnavailableReason: null,
+    },
+    archive: {
+      artifactName: 'julius-live-evidence',
+      artifactDigest: 'cd'.repeat(32),
+      fileCount: 1,
+      totalBytes: 12,
+      conclusion: 'success',
+      failedSteps: [],
+      files: [{ path: 'cost-accounting.tsv', sha256: 'cd'.repeat(32), kind: 'table' }],
+    },
+    workArtifactRefs: ['artifact:julius-work-artifact.v1:plan'],
+    projectBrainRevision: null,
+    phases: null,
+    traceId: SUPPLIED_TRACE,
+    traceparent: `00-${SUPPLIED_TRACE}-${'a'.repeat(16)}-01`,
+  };
 }
 
 /**
@@ -196,7 +227,7 @@ async function admittedStore(): Promise<{ dir: string; storePath: string }> {
 }
 
 describe('OFFLINE / NOT A PAID RUN — wonderland mission result end to end', () => {
-  it('admits a wlj id, fake-dispatches, and walks plan, build, review, and COMPLETED', async () => {
+  it('admits a wlj id, fake-dispatches, and completes only from the #446 evidence shape', async () => {
     expect(juliusMissionTraceId(RUN)).toBe(TRACE_ID);
     expect(juliusMissionSpanId(RUN, 'PROMPT_ARCHITECT', 'plan', 1)).toBe(PLAN_SPAN);
     expect(juliusMissionSpanId(RUN, 'CODING_AGENT', 'build', 1)).toBe(BUILD_SPAN);
@@ -212,6 +243,8 @@ describe('OFFLINE / NOT A PAID RUN — wonderland mission result end to end', ()
         serverRunId: RUN,
         traceId: TRACE_ID,
         state: 'awaiting_operator',
+        phases: null,
+        projectBrainRevision: null,
         completion: null,
       });
       ports.close();
@@ -244,113 +277,67 @@ describe('OFFLINE / NOT A PAID RUN — wonderland mission result end to end', ()
           state: 'dispatched',
           traceId: TRACE_ID,
           dispatchedAt: WHEN,
+          phases: null,
+          projectBrainRevision: null,
           completion: null,
         });
-        expect(bareProgress?.body).toMatchObject({ state: 'dispatched', traceId: TRACE_ID, phases: null });
+        expect(bareProgress?.body).toMatchObject({
+          state: 'dispatched', traceId: TRACE_ID, phases: null, projectBrainRevision: null,
+        });
         expect(JSON.stringify(bareResult?.body)).not.toContain('"completed"');
         expect(JSON.stringify(bareProgress?.body)).not.toContain('"completed"');
 
-        const evidence: Record<string, unknown> = {
-          traceId: SUPPLIED_TRACE,
-          traceparent: `00-${SUPPLIED_TRACE}-${'a'.repeat(16)}-01`,
-          spanId: 'a'.repeat(16),
-          phases: [phase('PROMPT_ARCHITECT', 'plan', 1)],
-        };
-        const reader = createJuliusMissionEvidenceTestDouble({ [RUN]: evidence });
-
-        const plan = await handleWonderlandMissionReadRoute(readRequest('progress', RUN), reading, reader);
-        expect(plan?.body).toMatchObject({ state: 'dispatched', traceId: TRACE_ID });
-        expect(phasesOf(plan?.body)).toEqual([
-          expect.objectContaining({
-            role: 'PROMPT_ARCHITECT', stage: 'plan', attempt: 1, spanId: PLAN_SPAN, traceparent: traceparent(PLAN_SPAN),
-          }),
-        ]);
-
-        evidence.phases = [
-          phase('PROMPT_ARCHITECT', 'plan', 1),
-          phase('CODING_AGENT', 'build', 1),
-        ];
-        const build = await handleWonderlandMissionReadRoute(readRequest('progress', RUN), reading, reader);
-        expect(build?.body).toMatchObject({ state: 'dispatched', traceId: TRACE_ID });
-        expect(phasesOf(build?.body).map((row) => [row.role, row.spanId])).toEqual([
-          ['PROMPT_ARCHITECT', PLAN_SPAN],
-          ['CODING_AGENT', BUILD_SPAN],
-        ]);
-
-        // The closed stage set has no stage named "review". The review step
-        // is the independent reviewer. repair:plan attempt 1 is that role's
-        // KAT span for this wlj id.
-        evidence.phases = [
-          phase('PROMPT_ARCHITECT', 'plan', 1),
-          phase('CODING_AGENT', 'build', 1),
-          phase('INDEPENDENT_REVIEWER', 'repair:plan', 1),
-        ];
-        const review = await handleWonderlandMissionReadRoute(readRequest('progress', RUN), reading, reader);
-        const reviewResult = await handleWonderlandMissionReadRoute(readRequest('result', RUN), reading, reader);
-        expect(review?.body).toMatchObject({ state: 'dispatched', traceId: TRACE_ID });
-        expect(reviewResult?.body).toMatchObject({ state: 'dispatched', traceId: TRACE_ID, completion: null });
-        expect(phasesOf(review?.body).map((row) => [row.role, row.spanId, row.traceparent])).toEqual([
-          ['PROMPT_ARCHITECT', PLAN_SPAN, traceparent(PLAN_SPAN)],
-          ['CODING_AGENT', BUILD_SPAN, traceparent(BUILD_SPAN)],
-          ['INDEPENDENT_REVIEWER', REVIEW_SPAN, traceparent(REVIEW_SPAN)],
-        ]);
-
-        Object.assign(evidence, {
-          juliusFinalState: 'COMPLETED',
-          spendTag: {
-            schema: 'julius-run-spent.v1',
-            run: RUN,
-            namespace: 'offline-fixture',
-            reservedUsdMicros: 0,
-            workflowRunId: '4242',
-            workflowRunAttempt: '1',
-            headSha: 'ab'.repeat(20),
-          },
-          coderCost: {
-            costUsdMicros: 12,
-            costBasis: 'PROVIDER_REPORTED',
-            executionCostUsdMicros: null,
-            billingPath: 'API_BILLED',
-          },
-          workArtifactRefs: [WORK_REF],
-          projectBrainRevision: 3,
-          providerReceipt: {
-            providerRequestId: 'req_offline_fixture_1',
-            responseId: 'req_offline_fixture_1',
-            providerRequestAvailability: 'CAPTURED',
-            providerRequestUnavailableReason: null,
-          },
-          phases: [
-            phase('PROMPT_ARCHITECT', 'plan', 1, 'IDLE'),
-            phase('CODING_AGENT', 'build', 1, 'IDLE'),
-            phase('INDEPENDENT_REVIEWER', 'repair:plan', 1, 'IDLE'),
-          ],
+        const nullReader = createJuliusMissionEvidenceTestDouble({ [RUN]: null });
+        const nullResult = await handleWonderlandMissionReadRoute(readRequest('result', RUN), reading, nullReader);
+        const nullProgress = await handleWonderlandMissionReadRoute(readRequest('progress', RUN), reading, nullReader);
+        expect(nullResult?.body).toMatchObject({
+          state: 'dispatched', traceId: TRACE_ID, phases: null, projectBrainRevision: null, completion: null,
         });
+        expect(nullProgress?.body).toMatchObject({
+          state: 'dispatched', traceId: TRACE_ID, phases: null, projectBrainRevision: null,
+        });
+
+        const reader = createJuliusMissionEvidenceTestDouble({ [RUN]: readerCompletion() });
         const doneResult = await handleWonderlandMissionReadRoute(readRequest('result', RUN), reading, reader);
         const doneProgress = await handleWonderlandMissionReadRoute(readRequest('progress', RUN), reading, reader);
         expect(doneResult?.status).toBe(200);
         expect(doneResult?.body).toMatchObject({
           state: 'completed',
           traceId: TRACE_ID,
+          phases: null,
+          projectBrainRevision: null,
           completion: {
             juliusFinalState: 'COMPLETED',
             traceId: TRACE_ID,
             traceparent: null,
-            projectBrainRevision: 3,
-            workArtifactRefs: [WORK_REF],
-            coderCost: { costUsdMicros: 12 },
+            spendAccounting: null,
+            projectBrainRevision: null,
+            phases: null,
+            workArtifactRefs: ['artifact:julius-work-artifact.v1:plan'],
+            coderCost: { costUsdMicros: 1200, costBasis: 'PROVIDER_REPORTED' },
+            missionCost: { knownUsdMicros: 1200, unknownComponents: 0, complete: true },
             providerReceipt: {
-              providerRequestId: 'req_offline_fixture_1',
-              responseId: 'req_offline_fixture_1',
+              providerRequestId: 'req_0123456789abcdef',
+              responseId: 'resp_0123456789abcdef',
               providerRequestAvailability: 'CAPTURED',
             },
           },
         });
-        expect(doneProgress?.body).toMatchObject({ state: 'completed', traceId: TRACE_ID });
-        expect(phasesOf(doneProgress?.body).map((row) => row.spanId)).toEqual([PLAN_SPAN, BUILD_SPAN, REVIEW_SPAN]);
-        const serialized = `${JSON.stringify(doneResult?.body)}${JSON.stringify(doneProgress?.body)}${JSON.stringify(review?.body)}`;
+        expect(doneProgress?.body).toMatchObject({
+          state: 'completed',
+          traceId: TRACE_ID,
+          phases: null,
+          projectBrainRevision: null,
+        });
+        const serialized = `${JSON.stringify(doneResult?.body)}${JSON.stringify(doneProgress?.body)}`;
         expect(serialized).not.toContain(SUPPLIED_TRACE);
+        expect(serialized).not.toContain(PLAN_SPAN);
+        expect(serialized).not.toContain(BUILD_SPAN);
+        expect(serialized).not.toContain(REVIEW_SPAN);
         expect(serialized).not.toContain(`"spanId":"${'a'.repeat(16)}"`);
+        expect(serialized).not.toContain('"phases":[]');
+        expect(serialized).not.toContain('"projectBrainRevision":0');
+        expect(serialized).not.toContain('"responseId":"req_0123456789abcdef"');
       } finally {
         reading.close();
       }
@@ -384,8 +371,12 @@ describe('OFFLINE / NOT A PAID RUN — wonderland mission result end to end', ()
     try {
       const result = await handleWonderlandMissionReadRoute(readRequest('result', RUN), ports);
       const progress = await handleWonderlandMissionReadRoute(readRequest('progress', RUN), ports);
-      expect(result?.body).toMatchObject({ state: 'dispatched', traceId: TRACE_ID, completion: null });
-      expect(progress?.body).toMatchObject({ state: 'dispatched', traceId: TRACE_ID, phases: null });
+      expect(result?.body).toMatchObject({
+        state: 'dispatched', traceId: TRACE_ID, phases: null, projectBrainRevision: null, completion: null,
+      });
+      expect(progress?.body).toMatchObject({
+        state: 'dispatched', traceId: TRACE_ID, phases: null, projectBrainRevision: null,
+      });
       expect(JSON.stringify(result?.body)).not.toContain('"completed"');
 
       const supplied = createJuliusMissionEvidenceTestDouble({

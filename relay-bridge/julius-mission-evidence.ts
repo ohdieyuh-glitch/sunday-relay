@@ -84,6 +84,7 @@ export interface JuliusMissionCostEvidence {
 
 /**
  * Provider receipt. `CAPTURED` is the provider `request_id` itself.
+ * `responseId` is a different field. It is never copied from `providerRequestId`.
  * `providerMessageId` is not a field here: a message id does not capture a request.
  */
 export interface JuliusMissionProviderReceipt {
@@ -261,6 +262,9 @@ function missionCost(value: unknown): JuliusMissionCostEvidence | null {
 /**
  * CAPTURED survives only when the provider request id itself survives.
  * A credential-shaped id is dropped and does not count as captured.
+ *
+ * `responseId` is read from its own field. A missing response id stays null.
+ * It is not filled from `providerRequestId`.
  */
 function providerReceipt(value: unknown): JuliusMissionProviderReceipt | null {
   const body = record(value);
@@ -280,7 +284,7 @@ function providerReceipt(value: unknown): JuliusMissionProviderReceipt | null {
       : statedReason ?? (stated === 'CAPTURED' ? 'provider_request_id_unusable' : null);
   return {
     providerRequestId: captured ? providerRequestId : null,
-    responseId: captured ? providerRequestId : null,
+    responseId: captured ? plain(body.responseId, 200) : null,
     providerRequestAvailability: captured ? 'CAPTURED' : 'UNAVAILABLE',
     providerRequestUnavailableReason,
   };
@@ -370,12 +374,17 @@ function phases(wljRunId: string, value: unknown): readonly JuliusMissionPhaseEv
  * Accepts YUJI's evidence object and nothing else.
  *
  * Completion requires the spend-tag fields and `juliusFinalState: "COMPLETED"`
- * on that same object. `{ completed: true }` is not that object. Phases are
- * read from the same object when the reader supplied a list, including when
- * the run is not complete.
+ * on that same object. `{ completed: true }` is not that object. A null
+ * reader result is not that object: the route stays on the status ceiling.
+ *
+ * YUJI's reader at `041d2599` returns `phases: null`, `spendAccounting: null`,
+ * and `projectBrainRevision: null` until a real source exists. Those nulls
+ * stay null. They are not replaced with an empty list, zero, or a guessed
+ * phase. A phase list is read only when the reader supplied one.
  *
  * `traceId`, `spanId`, and `traceparent` are derived here from the admitted
- * `wlj_` id. The same fields on the payload are ignored.
+ * `wlj_` id. The same fields on the payload are ignored. `responseId` is
+ * kept as its own field and is never copied from `providerRequestId`.
  */
 export function acceptJuliusMissionEvidence(wljRunId: string, value: unknown): JuliusMissionEvidenceReading {
   const body = record(value);
@@ -407,8 +416,10 @@ export function acceptJuliusMissionEvidence(wljRunId: string, value: unknown): J
 /**
  * Test double for {@link JuliusMissionEvidenceReader}.
  *
- * Not YUJI's reader. It returns the value stored for that id and does not
- * match `workflow_run_id` to a workflow run. Production wires no reader.
+ * Not YUJI's reader. The stored value is the completion object PR 446
+ * returns at `041d2599`, or null. A stored null is a null read, and the
+ * route stays on the status ceiling. This double does not match
+ * `workflow_run_id` to a workflow run. Production wires no reader.
  */
 export function createJuliusMissionEvidenceTestDouble(
   byRunId: Readonly<Record<string, unknown>>,

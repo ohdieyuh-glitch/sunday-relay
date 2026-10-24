@@ -17,7 +17,34 @@ Until that reader is wired, `GET /relay-api/wonderland/julius/missions/{wljRunId
 
 A missing section is null on the completion object. Null is unknown. A missing cost is not zero. `providerMessageId` is not a field: a message id does not make a receipt `CAPTURED`.
 
+## What PR 446 returns
+
+`041d2599` `relay-bridge/julius-mission-evidence-reader.ts` `read` returns one object, or null. This branch does not import that file. The check in `acceptJuliusMissionEvidence` accepts the object and ignores a `traceId` on it.
+
+`read` is non-null only for a verified completion. The `julius-run-spent.v1` tag carries the `wlj_` id, the Actions run succeeded, the completion marker matches, `live-mission.evidence.txt` has exactly one `RESULT: COMPLETED` line for that id, and `runs.tsv` is absent or agrees (that file, the `read` body above the return at lines 523–537).
+
+| Field | What `041d2599` puts there |
+|---|---|
+| `spendTag` | The annotated `julius-run-spent.v1` tag. `run` is the requested `wlj_` id. |
+| `juliusFinalState` | `"COMPLETED"`. |
+| `spendAccounting` | `null` (line 526). No source is wired yet. |
+| `coderCost` | `coderCostFrom` of the `CODING_AGENT` rows in `worker-diagnostics.tsv` (line 527). |
+| `missionCost` | `missionCostFrom` of `cost-accounting.tsv` (line 528). |
+| `providerReceipt` | The single `CODING_AGENT` receipt (line 529). `providerRequestId` is the `provider_request_id` column. `responseId` is the `response_id` column (`receiptFromRow`, lines 341–364, assigned at lines 348–349). The response id is kept only when the request was captured and the response string is plain. It is a different field. It is never copied from `providerRequestId`. |
+| `archive` | `archiveFrom` of the `julius-live-evidence` artifact (line 530). |
+| `workArtifactRefs` | `workRefsFrom` of `evidence.tsv` (line 531). |
+| `projectBrainRevision` | `null` (line 532). No source is wired yet. |
+| `phases` | `null` (line 533). No source is wired yet. |
+| `traceId` | `juliusMissionTraceId` of the admitted id (line 534). `acceptJuliusMissionEvidence` ignores this value and derives the id again. |
+| `traceparent` | `null` (line 535). The mission is not a span. |
+
+A completion object with those three nulls is still completion. A null `read()` is not. After a recorded dispatch the route stays `dispatched`.
+
+`/result` and `/progress` both include `phases` and `projectBrainRevision`. Null stays null in the JSON. That is absent. It is not `[]`, not `0`, and not a phase list built from the trace module. The website's word for a null is Unknown. These routes return the null.
+
 `traceId` and `traceparent` are on this shape. The bridge fills them from `scripts/julius-mission-trace.mjs` using the admitted `wlj_` id. A `traceId`, `traceparent`, or `spanId` on the reader payload is ignored. The paid workflow derives the same values from the admitted `JULIUS_RUN_ID` by importing that module. Dispatch does not send a trace id. A trace id supplied by dispatch is never trusted. See `docs/JULIUS_MISSION_TRACE.md`.
+
+The table below is the field inventory those names were read from. `#446` does not fill `spendAccounting`, `phases`, or `projectBrainRevision` from those rows. It returns null for each, and accept keeps the null.
 
 | Interface field | Source field | Where it was read |
 |---|---|---|
@@ -40,7 +67,7 @@ A missing section is null on the completion object. Null is unknown. A missing c
 | `missionCost.unknownComponents` | `cost.unknownComponents` | same `cost` object |
 | `missionCost.complete` | `cost.complete` | same `cost` object. False means the total is a floor. |
 | `providerReceipt.providerRequestId` | `providerRequestId` | `#445` `da345243` `relay-bridge/julius/claude-code-coding-provider.ts` `anthropicProviderIds`; enforced again in `src/relay/mission/julius/julius-router.ts:216` |
-| `providerReceipt.responseId` | `responseId` | same. Set only when the request id survived. |
+| `providerReceipt.responseId` | `response_id` | `#446` `041d2599` `relay-bridge/julius-mission-evidence-reader.ts:348`. Kept only when the request id was captured and this string is plain. Never copied from `providerRequestId`. Absent is null. |
 | `providerReceipt.providerRequestAvailability` | `CAPTURED` \| `UNAVAILABLE` | same. `CAPTURED` means the provider `request_id` survived. Reviewer side: `relay-bridge/reviewer-harness/hermes/runner.ts:43` (`#438` `ddb8d92b`, ancestor of `#445`). |
 | `providerReceipt.providerRequestUnavailableReason` | `provider_request_id_not_reported`, `provider_request_id_credential_shaped`, `provider_request_id_unusable`, or the adapter's own token | `claude-code-coding-provider.ts` and `julius-router.ts` |
 | `archive.artifactName` | `artifact_name` (`julius-live-evidence`) | `#445` `da345243` `scripts/julius-paid-run-archive.mjs:45` and the `paid_runs.runs` column |
@@ -53,7 +80,7 @@ A missing section is null on the completion object. Null is unknown. A missing c
 | `archive.files[].sha256` | `paid_runs.files.sha256` | same schema |
 | `archive.files[].kind` | `table` \| `text` | same schema |
 | `workArtifactRefs` | `artifact:` + `julius-work-artifact.v1` | `#445` `da345243` `src/relay/mission/julius/julius-work-artifact.ts:94` `juliusWorkArtifactRef`. Kinds at line 34: `PLAN`, `GUIDANCE`, `DIFF`, `TEST_OUTPUT`, `BASE_REVISION`, `REVIEW_PACKET`, `RESEARCH`. |
-| `projectBrainRevision` | `projectBrainRevision` | `#445` `da345243` `src/relay/mission/julius/julius-runtime-api.ts:93` `JuliusRunView` |
+| `projectBrainRevision` | `projectBrainRevision` | Named on `#445` `da345243` `src/relay/mission/julius/julius-runtime-api.ts:93` `JuliusRunView`. `#446` `041d2599` returns null (line 532) until a real source is read. |
 | `phases[].role` | `PROMPT_ARCHITECT` \| `CODING_AGENT` \| `INDEPENDENT_REVIEWER` | `JuliusSlotView.role`, `julius-runtime-api.ts` `JULIUS_DEFAULT_ROLES` |
 | `phases[].state` | `NEVER_DISPATCHED` \| `ACTIVE` \| `IDLE` \| `FAILED` | `julius-runtime-api.ts:239` |
 | `phases[].stage` | `plan` \| `build` \| `repair:plan` \| `repair:build` | `julius-router.ts:224`. Repair is a stage on the parent role. |
@@ -82,6 +109,6 @@ No stored `traceId` turned up on the Julius run view, the coder or reviewer rece
 
 Both routes are loopback-only and use the shared `wlj_` parser. A legacy `run:` id, a `preflight:` id, a malformed id, and an unknown id are `404 { error: { kind: "not_found", message: "Not found." } }`. Any other peer is `403` `julius_dispatch_not_loopback`.
 
-`/result` returns the status identity, the derived `traceId`, and `completion: null`, or `state: "completed"` and the evidence object when the reader returns the shape above. The completion object carries the same derived `traceId`.
+`/result` returns the status identity, the derived `traceId`, `phases`, `projectBrainRevision`, and `completion: null`, or `state: "completed"` and the evidence object when the reader returns the shape above. The completion object carries the same derived `traceId`. Its `traceparent` is null.
 
-`/progress` returns that same ceiling or `completed`, the same `traceId`, and `phases` from the same object. Each phase includes `spanId` when role, stage, and attempt are all present. No phase list from the reader is `phases: null`.
+`/progress` returns that same ceiling or `completed`, the same `traceId`, the same `phases`, and the same `projectBrainRevision`. A phase list is rendered only when the reader supplied one. Each supplied phase includes `spanId` when role, stage, and attempt are all present. `#446` supplies `phases: null` and `projectBrainRevision: null`, and both routes return those nulls. A null `read()` leaves `state` on the status ceiling.
