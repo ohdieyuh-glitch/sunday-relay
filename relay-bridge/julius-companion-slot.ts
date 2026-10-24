@@ -15,13 +15,13 @@ import { parseJuliusAdmissionRunId } from '../scripts/julius-admission-run-id.mj
  *
  * BYOAI. The companion is the caller's own agent. Julius does not call a
  * provider for it, does not host it, and does not relabel it as a Julius role.
- * A wake may declare an agent id, a provider id, capabilities, and a session
- * or authorization context. Those values are opaque. An unknown or
- * disconnected provider is recorded when it declared itself and is not a
- * mission failure. A model name is not an agent id. This module does not
- * branch on a provider. Provider-specific handling belongs in an adapter
- * outside this path. Companion spend stays out of the run ledger and out of
- * reconciliation. Companion evidence stays off the spend ledger.
+ * A wake may declare an agent. Julius records that descriptor and does not
+ * branch on `providerId`. An unknown provider is an unsupported slot, and
+ * that is not a mission fault. A disconnected wake is a disconnected slot.
+ * A model name is not an agent id. Declared capabilities are informational.
+ * Only authorized capabilities are acted on. Companion spend stays out of
+ * the run ledger and out of reconciliation. Companion evidence stays off
+ * the spend ledger.
  *
  * Julius does not block on the wake. The deadline comes from config. A timeout,
  * a failure, or a missing result lets the mission continue. There is no retry.
@@ -67,17 +67,42 @@ export interface CompanionArtifact {
   readonly bytes: Uint8Array;
 }
 
+export const COMPANION_AGENT_KINDS = ['single', 'compound'] as const;
+export type CompanionAgentKind = (typeof COMPANION_AGENT_KINDS)[number];
+
+export const COMPANION_AGENT_CONNECTIONS = ['connected', 'disconnected', 'unsupported', 'error'] as const;
+export type CompanionAgentConnection = (typeof COMPANION_AGENT_CONNECTIONS)[number];
+
 /**
- * Identity the companion declared about itself. Every field is opaque.
- * `providerId` is not matched against a catalog. `session` and `authorization`
- * are references, and a credential-shaped value is withheld rather than stored.
+ * BRIDGE companion contract v0.2 agent descriptor. `providerId` is an opaque
+ * string. This module has no provider adapter, so a claim of `connected` is
+ * recorded as `unsupported`. Declared capabilities are not permissions.
  */
-export interface CompanionIdentity {
-  readonly agentId: string | null;
-  readonly providerId: string | null;
-  readonly capabilities: readonly string[];
-  readonly session: string | null;
-  readonly authorization: string | null;
+export interface CompanionAgentDescriptor {
+  readonly agentId: string;
+  readonly providerId: string;
+  readonly displayName: string | null;
+  readonly kind: CompanionAgentKind;
+  readonly adapterVersion: string | null;
+  readonly declaredCapabilities: readonly string[];
+  readonly authorizedCapabilities: readonly string[];
+  readonly connection: CompanionAgentConnection;
+}
+
+/**
+ * An unknown provider cannot be connected here. An observed drop is
+ * `disconnected`. A declared `error` stays `error`. None of these is a
+ * mission fault. The provider id is not an input to this choice.
+ */
+export function companionAgentConnection(declared: unknown, observedDisconnect: boolean): CompanionAgentConnection {
+  if (observedDisconnect) return 'disconnected';
+  if (declared === 'disconnected' || declared === 'error' || declared === 'unsupported') return declared;
+  return 'unsupported';
+}
+
+/** The only capability list Julius may act on. The declared list is informational. */
+export function capabilitiesActedOn(agent: CompanionAgentDescriptor): readonly string[] {
+  return agent.authorizedCapabilities;
 }
 
 export interface CompanionWakeResult {
@@ -125,8 +150,8 @@ export interface CompanionEvidence {
   readonly artifactHashes: readonly string[];
   readonly disposition: CompanionDisposition;
   readonly reason: string | null;
-  /** Null when the companion did not declare itself. Never copied from a model name. */
-  readonly identity: CompanionIdentity | null;
+  /** Null when the companion did not declare an agent id. Never copied from a model name. */
+  readonly agent: CompanionAgentDescriptor | null;
 }
 
 export interface CompanionSlotResult {
@@ -172,29 +197,40 @@ const safeWakeId = (wakeId: string): string | null => (credentialShaped(wakeId) 
 const opaqueToken = (value: unknown, max: number): string | null => {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
-  if (trimmed.length === 0 || trimmed.length > max) return null;
+  if (trimmed.length === 0 || trimmed.length > max || trimmed.includes('\0')) return null;
   if (credentialShaped(trimmed)) return null;
   return trimmed;
 };
 
-/** Reads the declaration only. A sibling `model` field is never an agent id. */
-const acceptDeclaration = (raw: unknown): CompanionIdentity | null => {
+const capabilityList = (raw: unknown): readonly string[] => {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const item of raw) {
+    if (out.length >= CAPABILITIES_MAX) break;
+    const token = opaqueToken(item, CAPABILITY_MAX);
+    if (token !== null) out.push(token);
+  }
+  return out;
+};
+
+/** Reads the descriptor fields only. A `model` field is never the agent, the name, or the provider. */
+const acceptDeclaration = (raw: unknown, observedDisconnect: boolean): CompanionAgentDescriptor | null => {
   if (raw === null || raw === undefined || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const v = raw as Record<string, unknown>;
   const agentId = opaqueToken(v.agentId, IDENTITY_MAX);
-  const providerId = opaqueToken(v.providerId, IDENTITY_MAX);
-  const session = opaqueToken(v.session, IDENTITY_MAX);
-  const authorization = opaqueToken(v.authorization, IDENTITY_MAX);
-  const capabilities: string[] = [];
-  if (Array.isArray(v.capabilities)) {
-    for (const item of v.capabilities) {
-      if (capabilities.length >= CAPABILITIES_MAX) break;
-      const token = opaqueToken(item, CAPABILITY_MAX);
-      if (token !== null) capabilities.push(token);
-    }
-  }
-  if (agentId === null && providerId === null && session === null && authorization === null && capabilities.length === 0) return null;
-  return { agentId, providerId, capabilities, session, authorization };
+  if (agentId === null) return null;
+  const providerId = opaqueToken(v.providerId, IDENTITY_MAX) ?? '';
+  const kind: CompanionAgentKind = v.kind === 'compound' ? 'compound' : 'single';
+  return {
+    agentId,
+    providerId,
+    displayName: opaqueToken(v.displayName, IDENTITY_MAX),
+    kind,
+    adapterVersion: opaqueToken(v.adapterVersion, IDENTITY_MAX),
+    declaredCapabilities: capabilityList(v.declaredCapabilities),
+    authorizedCapabilities: capabilityList(v.authorizedCapabilities),
+    connection: companionAgentConnection(v.connection, observedDisconnect),
+  };
 };
 
 const evidence = (
@@ -206,7 +242,7 @@ const evidence = (
     readonly wakeId?: string | null;
     readonly bodyDigest?: string | null;
     readonly artifactHashes?: readonly string[];
-    readonly identity?: CompanionIdentity | null;
+    readonly agent?: CompanionAgentDescriptor | null;
   } = {},
 ): CompanionEvidence => ({
   runId,
@@ -216,7 +252,7 @@ const evidence = (
   artifactHashes: extra.artifactHashes ?? [],
   disposition,
   reason: safeReason(reason),
-  identity: extra.identity ?? null,
+  agent: extra.agent ?? null,
 });
 
 const done = (row: CompanionEvidence, reviewed: boolean): CompanionSlotResult => ({
@@ -366,10 +402,10 @@ export async function runJuliusCompanionSlot(input: {
   if (winner.kind === 'failed') return done(evidence(ids.runId, ids.legacyRunId, 'failed', 'wake_failed', { bodyDigest: read.bodyDigest }), false);
   open = false;
   const posted = winner.result;
-  const identity = acceptDeclaration(posted.declaration);
+  const agent = acceptDeclaration(posted.declaration, posted.outcome === 'failed');
   const wakeId = safeWakeId(posted.wakeId);
   const wakeReason = wakeId === null && posted.wakeId !== '' ? 'wake_id_withheld' : null;
-  const base = { wakeId, bodyDigest: read.bodyDigest, identity };
+  const base = { wakeId, bodyDigest: read.bodyDigest, agent };
   if (posted.outcome === 'failed') return done(evidence(ids.runId, ids.legacyRunId, 'failed', wakeReason ?? 'wake_failed', base), false);
   if (posted.outcome === 'missing' || posted.artifact === null) {
     return done(evidence(ids.runId, ids.legacyRunId, 'missing', wakeReason ?? 'wake_missing', base), false);

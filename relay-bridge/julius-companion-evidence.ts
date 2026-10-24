@@ -1,17 +1,22 @@
 import { parseJuliusAdmissionRunId } from '../scripts/julius-admission-run-id.mjs';
-import type { CompanionDisposition, CompanionIdentity } from './julius-companion-slot';
+import {
+  companionAgentConnection,
+  type CompanionAgentDescriptor,
+  type CompanionAgentKind,
+  type CompanionDisposition,
+} from './julius-companion-slot';
 
 /**
  * COMPANION EVIDENCE THE LOOPBACK READ WILL SERVE.
  *
- * BRIDGE owns `GET /relay-api/wonderland/julius/missions/{wljRunId}/companion`.
- * This module does not mount that route. It stores the row the route reads:
- * the companion state, an untrusted summary, a content hash, provenance, and
- * the identity the companion declared. A provider id is opaque data. This
- * module does not branch on it, and a model name is not stored as the agent.
- * The key is a canonical `wlj_` id. A legacy `run:` id is refused on read and
- * on write. A missing row is no result. The summary is never verified.
- * One row per `wlj_` id. Two runs keep two providers at once.
+ * BRIDGE owns the route. This module does not mount it. The served body is
+ * companion status shape v0.1 plus `agents[]` from companion contract v0.2.
+ * v0.1 is the state, the untrusted summary, the content hash, and provenance.
+ * `verified` is false. v0.2 keys each agent by the canonical `wlj_` id and
+ * its `agentId`. `providerId` is an opaque string: it is stored as written
+ * and never matched against a catalog. An unknown provider is an unsupported
+ * slot, and that write still succeeds. A legacy `run:` id is refused on read
+ * and on write. A missing run is no result.
  */
 
 const IDENTITY_MAX = 200;
@@ -31,7 +36,7 @@ export const COMPANION_EVIDENCE_FIELDS = [
   'artifactKind',
   'byteLength',
   'provenance',
-  'identity',
+  'agent',
   'updatedAt',
 ] as const;
 
@@ -86,8 +91,8 @@ export interface StoredCompanionEvidence {
   readonly artifactKind: CompanionArtifactKind | null;
   readonly byteLength: number | null;
   readonly provenance: CompanionProvenance | null;
-  /** Declared by the companion. Null when it declared nothing. Not a model name. */
-  readonly identity: CompanionIdentity | null;
+  /** Null on a status-only row. A model name is not stored here. */
+  readonly agent: CompanionAgentDescriptor | null;
   readonly updatedAt: string;
 }
 
@@ -98,13 +103,13 @@ export interface CompanionEvidenceDraft {
   /** Slot disposition. Mapped onto the wire state. Refused when it disagrees with `state`. */
   readonly disposition?: CompanionDisposition;
   readonly state?: CompanionWireState;
-  /** Untrusted text. The store has no verified flag for it. */
+  /** Untrusted text. Served with verified false, never as a verified summary. */
   readonly summary: string | null;
   readonly contentSha256: string | null;
   readonly artifactKind?: CompanionArtifactKind | null;
   readonly byteLength?: number | null;
   readonly provenance: CompanionProvenance | null;
-  readonly identity?: CompanionIdentity | null;
+  readonly agent?: CompanionAgentDescriptor | null;
   readonly updatedAt: string;
 }
 
@@ -114,7 +119,10 @@ export type CompanionEvidenceWrite =
   | { readonly ok: true }
   | { readonly ok: false; readonly reason: CompanionEvidenceRefusal };
 
-/** The body the route will serve. `result` is null when there is nothing to show. */
+/**
+ * Status shape v0.1, with contract v0.2 `agents` and `verified: false`
+ * beside it. `result` is null when there is nothing to show.
+ */
 export interface CompanionEvidenceView {
   readonly wljRunId: string;
   readonly taskId: string | null;
@@ -125,9 +133,10 @@ export interface CompanionEvidenceView {
     readonly artifact: { readonly kind: CompanionArtifactKind; readonly sha256: string; readonly byteLength: number };
   };
   readonly provenance: CompanionProvenance | null;
-  readonly identity: CompanionIdentity | null;
   readonly legacyRunId: string | null;
   readonly updatedAt: string;
+  readonly verified: false;
+  readonly agents: readonly CompanionAgentDescriptor[];
 }
 
 export type CompanionEvidenceRead =
@@ -152,38 +161,56 @@ export function companionStateFromDisposition(disposition: CompanionDisposition)
   }
 }
 
+interface HeldRow {
+  readonly row: StoredCompanionEvidence;
+  readonly seq: number;
+}
+
+/** `wlj_` plus `agentId`. A status-only row uses an empty agent id. */
+const evidenceKey = (wljRunId: string, agentId: string | null): string => `${wljRunId}\0${agentId ?? ''}`;
+
 export function createMemoryCompanionEvidenceStore(): CompanionEvidenceStore {
-  const rows = new Map<string, StoredCompanionEvidence>();
+  const rows = new Map<string, HeldRow>();
+  let seq = 0;
   return {
     schemaVersion: COMPANION_EVIDENCE_SCHEMA_VERSION,
     record(draft) {
       const stored = validateDraft(draft);
       if (!stored.ok) return stored;
-      rows.set(stored.row.wljRunId, stored.row);
+      seq += 1;
+      rows.set(evidenceKey(stored.row.wljRunId, stored.row.agent?.agentId ?? null), { row: stored.row, seq });
       return { ok: true };
     },
     read(runId) {
       const parsed = parseJuliusAdmissionRunId(runId);
       if (!parsed.ok) return { ok: false, reason: 'companion_run_id_invalid' };
       if (parsed.form === 'legacy') return { ok: false, reason: 'companion_legacy_read_only' };
-      const row = rows.get(parsed.runId);
-      if (row === undefined) return { ok: true, result: null };
-      return { ok: true, result: project(row) };
+      const prefix = `${parsed.runId}\0`;
+      const matched = [...rows.entries()].filter(([key]) => key.startsWith(prefix)).map(([, held]) => held);
+      if (matched.length === 0) return { ok: true, result: null };
+      return { ok: true, result: project(matched) };
     },
   };
 }
 
-function project(row: StoredCompanionEvidence): CompanionEvidenceView {
+function project(held: readonly HeldRow[]): CompanionEvidenceView {
+  const latest = held.reduce((best, item) => (item.seq > best.seq ? item : best));
+  const row = latest.row;
   const received = RESULT_STATES.has(row.state);
+  const agents: CompanionAgentDescriptor[] = [];
+  for (const item of [...held].sort((a, b) => a.seq - b.seq)) {
+    if (item.row.agent !== null) agents.push(item.row.agent);
+  }
   return {
     wljRunId: row.wljRunId,
     taskId: row.taskId,
     companion: { state: row.state },
     result: received ? servedResult(row) : null,
     provenance: received ? row.provenance : null,
-    identity: row.identity,
     legacyRunId: row.legacyRunId,
     updatedAt: row.updatedAt,
+    verified: false,
+    agents,
   };
 }
 
@@ -223,8 +250,8 @@ function validateDraft(draft: CompanionEvidenceDraft): { readonly ok: true; read
   if (provenance !== null && draft.contentSha256 !== null && provenance.contentSha256 !== draft.contentSha256) {
     return { ok: false, reason: 'companion_evidence_invalid' };
   }
-  const identity = normalizeIdentity(draft.identity);
-  if (!identity.ok) return { ok: false, reason: 'companion_evidence_invalid' };
+  const agent = normalizeAgent(draft.agent);
+  if (!agent.ok) return { ok: false, reason: 'companion_evidence_invalid' };
   return {
     ok: true,
     row: {
@@ -238,7 +265,7 @@ function validateDraft(draft: CompanionEvidenceDraft): { readonly ok: true; read
       artifactKind,
       byteLength,
       provenance,
-      identity: identity.identity,
+      agent: agent.agent,
       updatedAt: draft.updatedAt,
     },
   };
@@ -256,7 +283,7 @@ function strictOpaque(value: unknown, max: number): string | null | typeof INVAL
   if (value === null || value === undefined) return null;
   if (typeof value !== 'string') return INVALID;
   const trimmed = value.trim();
-  if (trimmed.length === 0 || trimmed.length > max) return INVALID;
+  if (trimmed.length === 0 || trimmed.length > max || trimmed.includes('\0')) return INVALID;
   if (credentialShaped(trimmed)) return null;
   return trimmed;
 }
@@ -273,27 +300,47 @@ function strictCapabilities(value: unknown): readonly string[] | typeof INVALID 
   return out;
 }
 
+function kindOf(value: unknown): CompanionAgentKind | typeof INVALID {
+  if (value === undefined || value === 'single') return 'single';
+  if (value === 'compound') return 'compound';
+  return INVALID;
+}
+
 /**
- * Copies the declared identity and drops every other field. A `model` on the
- * object is not an agent. An unrecognized provider id is kept as written.
- * A credential-shaped field is withheld, and that does not refuse the row.
+ * Copies the descriptor and drops every other field, including `model`.
+ * `providerId` is kept as an opaque string. A connected claim becomes
+ * `unsupported` because this store has no provider adapter. That rewrite
+ * still returns ok. A credential-shaped field is withheld.
  */
-function normalizeIdentity(value: unknown): { readonly ok: true; readonly identity: CompanionIdentity | null } | { readonly ok: false } {
-  if (value === undefined || value === null) return { ok: true, identity: null };
+function normalizeAgent(value: unknown): { readonly ok: true; readonly agent: CompanionAgentDescriptor | null } | { readonly ok: false } {
+  if (value === undefined || value === null) return { ok: true, agent: null };
   if (typeof value !== 'object' || Array.isArray(value)) return { ok: false };
   const v = value as Record<string, unknown>;
   const agentId = strictOpaque(v.agentId, IDENTITY_MAX);
   const providerId = strictOpaque(v.providerId, IDENTITY_MAX);
-  const session = strictOpaque(v.session, IDENTITY_MAX);
-  const authorization = strictOpaque(v.authorization, IDENTITY_MAX);
-  const capabilities = strictCapabilities(v.capabilities);
-  if (agentId === INVALID || providerId === INVALID || session === INVALID || authorization === INVALID || capabilities === INVALID) {
-    return { ok: false };
-  }
-  if (agentId === null && providerId === null && session === null && authorization === null && capabilities.length === 0) {
-    return { ok: true, identity: null };
-  }
-  return { ok: true, identity: { agentId, providerId, capabilities, session, authorization } };
+  const displayName = strictOpaque(v.displayName, IDENTITY_MAX);
+  const adapterVersion = strictOpaque(v.adapterVersion, IDENTITY_MAX);
+  const kind = kindOf(v.kind);
+  const declaredCapabilities = strictCapabilities(v.declaredCapabilities);
+  const authorizedCapabilities = strictCapabilities(v.authorizedCapabilities);
+  if (
+    agentId === INVALID || providerId === INVALID || displayName === INVALID || adapterVersion === INVALID
+    || kind === INVALID || declaredCapabilities === INVALID || authorizedCapabilities === INVALID
+  ) return { ok: false };
+  if (agentId === null) return { ok: true, agent: null };
+  return {
+    ok: true,
+    agent: {
+      agentId,
+      providerId: providerId ?? '',
+      displayName,
+      kind,
+      adapterVersion,
+      declaredCapabilities,
+      authorizedCapabilities,
+      connection: companionAgentConnection(v.connection, false),
+    },
+  };
 }
 
 /** Copies the four provenance fields. A provider id does not belong here. */

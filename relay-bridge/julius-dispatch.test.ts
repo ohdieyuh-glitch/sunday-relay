@@ -1455,9 +1455,11 @@ describe('companion slot beside the chain', () => {
               declaration: {
                 agentId: 'agent-from-caller',
                 providerId: 'provider.example.unknown',
-                capabilities: ['note'],
-                session: 'sess-ref',
-                authorization: null,
+                displayName: 'Caller agent',
+                kind: 'single',
+                declaredCapabilities: ['draft'],
+                authorizedCapabilities: ['note'],
+                connection: 'connected',
               },
             };
           },
@@ -1478,18 +1480,24 @@ describe('companion slot beside the chain', () => {
         companion: { state: 'no_result' },
         result: null,
         provenance: null,
-        identity: {
+        verified: false,
+        agents: [{
           agentId: 'agent-from-caller',
           providerId: 'provider.example.unknown',
-          capabilities: ['note'],
-          session: 'sess-ref',
-          authorization: null,
-        },
+          displayName: 'Caller agent',
+          kind: 'single',
+          adapterVersion: null,
+          declaredCapabilities: ['draft'],
+          authorizedCapabilities: ['note'],
+          connection: 'unsupported',
+        }],
       },
     });
     expect(evidence.read(serverRunId)).toEqual({ ok: false, reason: 'companion_legacy_read_only' });
     const served = evidence.read(RUN);
-    expect(JSON.stringify(served)).not.toContain('verified');
+    expect(JSON.stringify(served)).toContain('"verified":false');
+    expect(JSON.stringify(served)).not.toContain('"verified":true');
+    expect(JSON.stringify(served)).not.toContain('verifiedBy');
     expect(JSON.stringify(served)).not.toContain('generic-model-name');
     const events = h.controller.events({ projectId: PROJECT, runId: RUN, callerPlayerId: FOUNDER, cursor: 0 });
     const wire = JSON.stringify(events);

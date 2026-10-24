@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 import { validateArchitectPlan } from '../src/relay/mission/prompt-architect/prompt-architect-plan';
 import {
-  readCompanionTask, runJuliusCompanionSlot,
+  capabilitiesActedOn, readCompanionTask, runJuliusCompanionSlot,
   type ChangeReviewPort, type CoderIntegrationPort, type CompanionPort, type CompanionWakeResult, type JuliusValidationPort,
 } from './julius-companion-slot';
 
@@ -263,7 +263,7 @@ describe('canonical id first, legacy id read-only', () => {
 describe('a companion is recorded by its declaration', () => {
   const model = 'generic-model-name';
 
-  it('keeps an unknown provider and does not treat a model as the agent', async () => {
+  it('an unknown provider is an unsupported slot and a model is not the agent', async () => {
     const built = ports({
       wake: async () => ({
         wakeId: 'wake_01ABCDEF',
@@ -275,9 +275,12 @@ describe('a companion is recorded by its declaration', () => {
         declaration: {
           agentId: 'agent-from-caller',
           providerId: 'openai',
-          capabilities: ['draft'],
-          session: 'sess-ref-1',
-          authorization: 'grant-ref-1',
+          displayName: 'Caller agent',
+          kind: 'single',
+          adapterVersion: 'caller-adapter/1',
+          declaredCapabilities: ['draft'],
+          authorizedCapabilities: ['note'],
+          connection: 'connected',
         },
       }),
     });
@@ -285,13 +288,17 @@ describe('a companion is recorded by its declaration', () => {
     expect(result.missionContinues).toBe(true);
     expect(result.spendUsdMicros).toBe(0);
     expect(result.evidence.disposition).toBe('integrated');
-    expect(result.evidence.identity).toEqual({
+    expect(result.evidence.agent).toEqual({
       agentId: 'agent-from-caller',
       providerId: 'openai',
-      capabilities: ['draft'],
-      session: 'sess-ref-1',
-      authorization: 'grant-ref-1',
+      displayName: 'Caller agent',
+      kind: 'single',
+      adapterVersion: 'caller-adapter/1',
+      declaredCapabilities: ['draft'],
+      authorizedCapabilities: ['note'],
+      connection: 'unsupported',
     });
+    expect(result.evidence.agent === null ? [] : capabilitiesActedOn(result.evidence.agent)).toEqual(['note']);
     const recorded = JSON.stringify(result.evidence);
     expect(recorded).not.toContain(model);
     expect(recorded).not.toContain('should-not-be-read');
@@ -310,7 +317,7 @@ describe('a companion is recorded by its declaration', () => {
     const result = await run(task(), built);
     expect(result.missionContinues).toBe(true);
     expect(result.evidence.disposition).toBe('integrated');
-    expect(result.evidence.identity).toBeNull();
+    expect(result.evidence.agent).toBeNull();
     expect(JSON.stringify(result.evidence)).not.toContain(model);
   });
 
@@ -325,9 +332,10 @@ describe('a companion is recorded by its declaration', () => {
         declaration: {
           agentId: 'agent-from-caller',
           providerId: 'provider.offline.example',
-          capabilities: ['draft'],
-          session: secret,
-          authorization: null,
+          displayName: secret,
+          declaredCapabilities: ['draft'],
+          authorizedCapabilities: [],
+          connection: 'connected',
         },
       }),
     });
@@ -335,12 +343,15 @@ describe('a companion is recorded by its declaration', () => {
     expect(result.missionContinues).toBe(true);
     expect(result.spendUsdMicros).toBe(0);
     expect(result.evidence).toMatchObject({ disposition: 'failed', reason: 'wake_failed' });
-    expect(result.evidence.identity).toEqual({
+    expect(result.evidence.agent).toEqual({
       agentId: 'agent-from-caller',
       providerId: 'provider.offline.example',
-      capabilities: ['draft'],
-      session: null,
-      authorization: null,
+      displayName: null,
+      kind: 'single',
+      adapterVersion: null,
+      declaredCapabilities: ['draft'],
+      authorizedCapabilities: [],
+      connection: 'disconnected',
     });
     const recorded = JSON.stringify(result.evidence);
     expect(recorded).not.toContain(secret);
@@ -353,7 +364,14 @@ describe('a companion is recorded by its declaration', () => {
       wakeId: `wake_${agentId}`,
       outcome: 'posted',
       artifact: { bytes: new TextEncoder().encode('fixture') },
-      declaration: { agentId, providerId, capabilities: ['draft'], session: null, authorization: null },
+      declaration: {
+        agentId,
+        providerId,
+        kind: 'single',
+        declaredCapabilities: ['draft'],
+        authorizedCapabilities: ['note'],
+        connection: 'connected',
+      },
     });
     const left = ports({ wake: wakeFor('openai', 'agent-a') });
     const right = ports({ wake: wakeFor('provider.example.unknown', 'agent-b') });
@@ -369,8 +387,9 @@ describe('a companion is recorded by its declaration', () => {
     ]);
     expect(a.missionContinues).toBe(true);
     expect(b.missionContinues).toBe(true);
-    expect(a.evidence.identity).toMatchObject({ agentId: 'agent-a', providerId: 'openai' });
-    expect(b.evidence.identity).toMatchObject({ agentId: 'agent-b', providerId: 'provider.example.unknown' });
+    expect(a.evidence.agent).toMatchObject({ agentId: 'agent-a', providerId: 'openai', connection: 'unsupported' });
+    expect(b.evidence.agent).toMatchObject({ agentId: 'agent-b', providerId: 'provider.example.unknown', connection: 'unsupported' });
+    expect(a.evidence.agent === null ? [] : capabilitiesActedOn(a.evidence.agent)).toEqual(['note']);
     expect(a.evidence.runId).toBe(RUN_ID);
     expect(b.evidence.runId).toBe(OTHER);
     expect(a.spendUsdMicros).toBe(0);
@@ -391,5 +410,6 @@ describe('the companion path imports no provider client', () => {
     ]);
     expect(source).not.toMatch(/randomUUID/);
     expect(source).not.toMatch(/openai|@anthropic|anthropic|xai|hermes-reviewer|julius-xai-direct-reviewer|gpt-runner|openai-architect|live-workers|MISSION_LIMITS|spendLedger|authorizeJuliusLiveSpend|julius-dispatch-spend|process\.env|node:fs|writeFile/iu);
+    expect(source).not.toMatch(/providerId\s*===|switch\s*\([^)]*providerId/);
   });
 });

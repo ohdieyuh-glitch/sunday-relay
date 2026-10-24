@@ -726,7 +726,7 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
                   bodyDigest: slot.evidence.bodyDigest,
                   contentSha256: hash,
                 },
-                identity: slot.evidence.identity,
+                agent: slot.evidence.agent,
                 updatedAt: new Date(deps.now()).toISOString(),
               });
             }
