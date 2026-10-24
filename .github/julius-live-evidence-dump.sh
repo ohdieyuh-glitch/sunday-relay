@@ -142,7 +142,10 @@ write_manifest || echo 'JULIUS_EVIDENCE_MANIFEST unavailable'
 # HOW EACH TOOL INVOCATION ENDED. `exit_code` tells a test that ran and failed (settled, the thing
 # the repair loop exists for) from an invocation that never settled; `recovery_state` names the
 # UNKNOWN_OUTCOME the terminal sweep closes an unsettled one as; `task_id` ties it to its task.
-dump "SELECT run_id,mission_id,state,card_revision,created_at,updated_at FROM relay_wonderland.julius_runs ORDER BY created_at" runs.tsv
+# `project_brain_revision` is the run's own counter, appended last so `card_revision` stays
+# where a reader already finds it. `0` is that stored counter after bootstrap seeds brain
+# entries at 1..N. The entries' own `revision` in `project-brain.tsv` is a different number.
+dump "SELECT run_id,mission_id,state,card_revision,created_at,updated_at,project_brain_revision FROM relay_wonderland.julius_runs ORDER BY created_at" runs.tsv
 dump "SELECT task_id,task_type,role,state,ordinal,parent_task_id,run_id,lease_generation FROM relay_wonderland.julius_tasks ORDER BY ordinal,task_id" tasks.tsv
 dump "SELECT evidence_id,evidence_type,status,safe_summary,occurred_at,run_id,task_id,integrity_hash,artifact_ref FROM relay_wonderland.julius_evidence ORDER BY occurred_at" evidence.tsv
 dump "SELECT decision_id,task_id,action,reason_code,occurred_at,run_id,evidence_ids FROM relay_wonderland.julius_verification_decisions ORDER BY occurred_at" decisions.tsv
@@ -210,6 +213,17 @@ dump "SELECT e.stream_id AS run_id,e.sequence,e.payload->>'taskId' AS task_id,t.
 # database dies with the runner, so without these two columns no bundle could
 # show a subscription settlement was never counted as API spend.
 dump "SELECT e.stream_id AS run_id,e.sequence,e.payload->>'taskId' AS task_id,e.event_type,e.payload->'facts'->>'role' AS role,e.payload->'facts'->>'allocatedUsdMicros' AS allocated_usd_micros,e.payload->'facts'->>'allocationBasis' AS allocation_basis,e.payload->'facts'->>'shareUsdMicros' AS share_usd_micros,e.payload->'facts'->>'remainingUsdMicros' AS remaining_usd_micros,e.payload->'facts'->>'allocationPolicy' AS allocation_policy,e.payload->'facts'->>'usdMicros' AS settled_usd_micros,e.payload->'facts'->>'costBasis' AS cost_basis,e.payload->'facts'->>'estimatedUsdMicros' AS estimated_usd_micros,e.payload->'facts'->>'billingPath' AS billing_path,e.payload->'facts'->>'executionUsdMicros' AS execution_usd_micros,e.payload->'facts'->>'reason' AS reason,e.payload->'facts'->>'slotRefusal' AS slot_refusal,e.payload->'facts'->>'reservationId' AS reservation_id,e.occurred_at FROM relay_wonderland.events e WHERE e.event_type IN ('julius.budget.allocated','julius.budget.reserved','julius.budget.settled','julius.budget.denied') ORDER BY e.stream_id,e.sequence" budget.tsv
+
+# THE THREE SLOTS, IN LEDGER ORDER.
+#
+# `projectJuliusSlotViews` writes NEVER_DISPATCHED, ACTIVE, IDLE and FAILED from the
+# event ledger. It reads every `julius.*` event in `(stream_id, sequence)` order, and
+# it takes a row's role from `facts.role` or from an earlier event of the same task
+# (`budget.reserved` states the role; `worker.dispatched` names its reservation and
+# often does not state a role). This file is that ledger, so a reader runs the same
+# projection. `stage` is `diag_stage` when the diagnostic fact is present, otherwise
+# `facts.stage`. `attempt` is the fact the diagnostics dump already exports.
+dump "SELECT e.stream_id AS run_id,e.sequence,e.event_id,e.event_type,e.payload->>'taskId' AS task_id,e.payload->>'workerId' AS worker_id,e.payload->'facts'->>'role' AS role,e.payload->'facts'->>'costBasis' AS cost_basis,e.payload->'facts'->>'usdMicros' AS usd_micros,e.payload->'facts'->>'reservationId' AS reservation_id,e.payload->'facts'->>'failureClass' AS failure_class,e.payload->'facts'->>'provider' AS provider,e.payload->'facts'->>'providerId' AS provider_id,e.payload->'facts'->>'requestedModel' AS requested_model,e.payload->'facts'->>'servedModel' AS served_model,COALESCE(e.payload->'facts'->>'diag_stage',e.payload->'facts'->>'stage') AS stage,e.payload->'facts'->>'attempt' AS attempt,e.occurred_at FROM relay_wonderland.events e WHERE e.event_type LIKE 'julius.%' ORDER BY e.stream_id,e.sequence" slot-events.tsv
 
 # WHAT THE MISSION COST, PER ROLE, WITH THE UNKNOWN PART STILL VISIBLE.
 #

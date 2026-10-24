@@ -71,6 +71,31 @@ const MARKER = [
 
 const RESULT = `RESULT: COMPLETED after 2 ticks\n  run: ${WLJ}\n`;
 
+/** psql -A -F $'\t' header of slot-events.tsv, alias order of the dump. */
+const SLOT_COLUMNS = [
+  'run_id', 'sequence', 'event_id', 'event_type', 'task_id', 'worker_id', 'role',
+  'cost_basis', 'usd_micros', 'reservation_id', 'failure_class', 'provider', 'provider_id',
+  'requested_model', 'served_model', 'stage', 'attempt', 'occurred_at',
+] as const;
+
+function slotCells(overrides: Partial<Record<(typeof SLOT_COLUMNS)[number], string>>): string[] {
+  return SLOT_COLUMNS.map((column) => overrides[column] ?? (column === 'run_id' ? WLJ : ''));
+}
+
+function slotEvents(rows: readonly (readonly string[])[]): string {
+  const footer = `(${rows.length} ${rows.length === 1 ? 'row' : 'rows'})`;
+  return [SLOT_COLUMNS.join('\t'), ...rows.map((row) => row.join('\t')), footer, ''].join('\n');
+}
+
+function runsTsv(revision: string): string {
+  return [
+    'run_id\tmission_id\tstate\tcard_revision\tcreated_at\tupdated_at\tproject_brain_revision',
+    `${WLJ}\tmission:julius-continuous-1\tCOMPLETED\tcard-r1\t2026-10-24 12:00:00+00\t2026-10-24 13:00:00+00\t${revision}`,
+    '(1 row)',
+    '',
+  ].join('\n');
+}
+
 function withProof(files: readonly { path: string; text: string }[], overrides: Partial<JuliusMissionWorkflowRun> = {}): JuliusMissionWorkflowRun {
   return workflow({
     ...overrides,
@@ -205,11 +230,11 @@ describe('JuliusMissionEvidenceReader', () => {
   });
 
   it('does not promote the dump tables into slot state, a verified spend cap, or the run brain revision', async () => {
-    // Column order is the psql -A -F tab header of .github/julius-live-evidence-dump.sh
-    // at da345243: tasks.tsv (line 146), project-brain.tsv (line 341), runs.tsv (line 145),
-    // budget.tsv (line 212), cost-accounting.tsv (line 241), and the stage/attempt columns
-    // of worker-diagnostics.tsv (line 325). Task state ACTIVE is a JuliusTaskState.
-    // Brain `revision` is the entry's revision. Neither is the field this reader leaves null.
+    // A bundle with no slot-events.tsv, and a runs.tsv header that stops at updated_at,
+    // still leaves the three fields null. tasks.tsv state ACTIVE is a JuliusTaskState.
+    // project-brain.tsv revision is the entry's revision. budget.tsv and
+    // cost-accounting.tsv are the ledger and missionCost. worker-diagnostics.tsv
+    // stage and dispatch_attempt are not a slot projection.
     const tasks = [
       'task_id\ttask_type\trole\tstate\tordinal\tparent_task_id\trun_id\tlease_generation',
       `plan:${WLJ}\tplan\tPROMPT_ARCHITECT\tSUCCEEDED\t0\t\t${WLJ}\t1`,
@@ -335,6 +360,155 @@ describe('JuliusMissionEvidenceReader', () => {
       },
     });
     expect(JSON.stringify(reading)).not.toContain(secret);
+  });
+
+  it('reads phases from the ledger dump and the run counter from runs.tsv', async () => {
+    const task = `build:${WLJ}`;
+    // File order is not ledger order. The settlement and the repair stage sit
+    // above the row that states the role, which is how a dispatch's predecessor
+    // is lost when the reader sorts by the wall clock or by file order.
+    const slots = slotEvents([
+      slotCells({ sequence: '5', event_id: 'e5', event_type: 'julius.worker.completed', task_id: task, stage: 'repair:build', attempt: '2', occurred_at: '2026-10-24 13:00:05+00' }),
+      slotCells({ sequence: '4', event_id: 'e4', event_type: 'julius.budget.settled', task_id: task, cost_basis: 'PROVIDER_REPORTED', usd_micros: '1000', reservation_id: 'res-1', occurred_at: '2026-10-24 13:00:04+00' }),
+      slotCells({ sequence: '6', event_id: 'e6', event_type: 'julius.worker.completed', task_id: task, stage: 'checkpoint', occurred_at: '2026-10-24 13:00:06+00' }),
+      slotCells({ sequence: '1', event_id: 'e1', event_type: 'julius.budget.reserved', task_id: task, role: 'CODING_AGENT', stage: 'plan', attempt: '1', reservation_id: 'res-1', occurred_at: '2026-10-24 13:00:01+00' }),
+      slotCells({ sequence: '8', event_id: 'e8', event_type: 'julius.worker.completed', task_id: task, stage: 'deliver', occurred_at: '2026-10-24 13:00:08+00' }),
+      slotCells({ sequence: '2', event_id: 'e2', event_type: 'julius.worker.dispatched', task_id: task, worker_id: 'w-coder', reservation_id: 'res-1', occurred_at: '2026-10-24 13:00:02+00' }),
+      slotCells({ sequence: '7', event_id: 'e7', event_type: 'julius.worker.completed', task_id: task, stage: 'guidance', occurred_at: '2026-10-24 13:00:07+00' }),
+      slotCells({ sequence: '3', event_id: 'e3', event_type: 'julius.worker.completed', task_id: task, stage: 'build', attempt: '1', occurred_at: '2026-10-24 13:00:03+00' }),
+      slotCells({ sequence: '9', event_id: 'e9', event_type: 'julius.worker.completed', task_id: task, stage: 'issue', occurred_at: '2026-10-24 13:00:09+00' }),
+      slotCells({ run_id: 'other-run', sequence: '1', event_id: 'ox', event_type: 'julius.budget.settled', usd_micros: 'nope' }),
+    ]);
+    const coder = {
+      role: 'CODING_AGENT',
+      state: 'IDLE',
+      stage: 'repair:build',
+      attempt: 2,
+      spanId: null,
+      traceparent: null,
+      knownUsdMicros: 1000,
+      costComplete: true,
+    };
+    const absent = {
+      state: 'NEVER_DISPATCHED',
+      stage: null,
+      attempt: null,
+      spanId: null,
+      traceparent: null,
+      knownUsdMicros: 0,
+      costComplete: true,
+    };
+    const readAt = async (revision: string) => createJuliusMissionEvidenceReader(github(tagMessage(WLJ), withProof([
+      { path: 'live-mission.evidence.txt', text: RESULT },
+      { path: 'runs.tsv', text: runsTsv(revision) },
+      { path: 'slot-events.tsv', text: slots },
+    ]))).read(WLJ);
+    const atZero = await readAt('0');
+    expect(atZero).toMatchObject({
+      juliusFinalState: 'COMPLETED',
+      spendAccounting: null,
+      projectBrainRevision: 0,
+      phases: [
+        { role: 'PROMPT_ARCHITECT', ...absent },
+        coder,
+        { role: 'INDEPENDENT_REVIEWER', ...absent },
+      ],
+    });
+    expect(await readAt('4')).toMatchObject({ projectBrainRevision: 4, spendAccounting: null });
+    const json = JSON.stringify(atZero);
+    expect(json).not.toContain('spendVerified');
+    expect(json).not.toContain('unverifiableApiSpend');
+    expect(json).toContain('"spanId":null');
+    expect(json).not.toContain('"spanId":"');
+  });
+
+  it('treats an empty slot ledger as three never-dispatched phases and a missing one as null', async () => {
+    const empty = slotEvents([]);
+    const headerOnly = await createJuliusMissionEvidenceReader(github(tagMessage(WLJ), withProof([
+      { path: 'live-mission.evidence.txt', text: RESULT },
+      { path: 'runs.tsv', text: runsTsv('0') },
+      { path: 'slot-events.tsv', text: empty },
+    ]))).read(WLJ);
+    expect(headerOnly).toMatchObject({
+      juliusFinalState: 'COMPLETED',
+      projectBrainRevision: 0,
+      phases: [
+        { role: 'PROMPT_ARCHITECT', state: 'NEVER_DISPATCHED', knownUsdMicros: 0, costComplete: true, stage: null, attempt: null },
+        { role: 'CODING_AGENT', state: 'NEVER_DISPATCHED', knownUsdMicros: 0, costComplete: true, stage: null, attempt: null },
+        { role: 'INDEPENDENT_REVIEWER', state: 'NEVER_DISPATCHED', knownUsdMicros: 0, costComplete: true, stage: null, attempt: null },
+      ],
+    });
+    for (const text of ['unavailable\n', null]) {
+      const files = [
+        { path: 'live-mission.evidence.txt', text: RESULT },
+        { path: 'runs.tsv', text: runsTsv('4') },
+        ...(text === null ? [] : [{ path: 'slot-events.tsv', text }]),
+      ];
+      const reading = await createJuliusMissionEvidenceReader(github(tagMessage(WLJ), withProof(files))).read(WLJ);
+      expect(reading, text ?? 'missing').toMatchObject({
+        juliusFinalState: 'COMPLETED',
+        projectBrainRevision: 4,
+        phases: null,
+        spendAccounting: null,
+      });
+    }
+  });
+
+  it('nulls phases on a drifted or malformed slot file and still returns the completion', async () => {
+    const task = `build:${WLJ}`;
+    const sound = [
+      slotCells({ sequence: '1', event_id: 'e1', event_type: 'julius.budget.reserved', task_id: task, role: 'CODING_AGENT', stage: 'build', attempt: '1' }),
+      slotCells({ sequence: '2', event_id: 'e2', event_type: 'julius.worker.dispatched', task_id: task, reservation_id: 'res-1' }),
+    ];
+    const cases: Array<{ name: string; text: string }> = [
+      { name: 'duplicate sequence', text: slotEvents([...sound, slotCells({ sequence: '2', event_id: 'e3', event_type: 'julius.worker.completed', task_id: task, stage: 'build' })]) },
+      { name: 'usd', text: slotEvents([...sound, slotCells({ sequence: '3', event_id: 'e3', event_type: 'julius.budget.settled', task_id: task, usd_micros: '12x', cost_basis: 'PROVIDER_REPORTED' })]) },
+      { name: 'attempt', text: slotEvents([...sound, slotCells({ sequence: '3', event_id: 'e3', event_type: 'julius.worker.completed', task_id: task, attempt: '1.5', stage: 'build' })]) },
+      { name: 'sequence 0', text: slotEvents([slotCells({ sequence: '0', event_id: 'e0', event_type: 'julius.worker.dispatched', task_id: task, role: 'CODING_AGENT' })]) },
+      {
+        name: 'missing column',
+        text: [
+          SLOT_COLUMNS.filter((column) => column !== 'attempt').join('\t'),
+          SLOT_COLUMNS.filter((column) => column !== 'attempt').map((column) => (column === 'run_id' ? WLJ : column === 'sequence' ? '1' : column === 'event_type' ? 'julius.worker.dispatched' : '')).join('\t'),
+          '(1 row)',
+          '',
+        ].join('\n'),
+      },
+    ];
+    for (const item of cases) {
+      const reading = await createJuliusMissionEvidenceReader(github(tagMessage(WLJ), withProof([
+        { path: 'live-mission.evidence.txt', text: RESULT },
+        { path: 'runs.tsv', text: runsTsv('4') },
+        { path: 'slot-events.tsv', text: item.text },
+      ]))).read(WLJ);
+      expect(reading, item.name).toMatchObject({
+        juliusFinalState: 'COMPLETED',
+        projectBrainRevision: 4,
+        phases: null,
+        spendAccounting: null,
+      });
+    }
+  });
+
+  it('leaves the run counter null when the cell is empty or not an integer', async () => {
+    const slots = slotEvents([]);
+    for (const revision of ['', 'nope']) {
+      const reading = await createJuliusMissionEvidenceReader(github(tagMessage(WLJ), withProof([
+        { path: 'live-mission.evidence.txt', text: RESULT },
+        { path: 'runs.tsv', text: runsTsv(revision) },
+        { path: 'slot-events.tsv', text: slots },
+      ]))).read(WLJ);
+      expect(reading, revision === '' ? 'empty' : revision).toMatchObject({
+        juliusFinalState: 'COMPLETED',
+        projectBrainRevision: null,
+        spendAccounting: null,
+        phases: [
+          { role: 'PROMPT_ARCHITECT', state: 'NEVER_DISPATCHED' },
+          { role: 'CODING_AGENT', state: 'NEVER_DISPATCHED' },
+          { role: 'INDEPENDENT_REVIEWER', state: 'NEVER_DISPATCHED' },
+        ],
+      });
+    }
   });
 
   it('returns null when runs.tsv names a different state', async () => {
