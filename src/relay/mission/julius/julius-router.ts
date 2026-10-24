@@ -211,6 +211,15 @@ export type JuliusSafeDiagnostics=Readonly<Record<string,string|number|boolean|n
 export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
  if(value===null||typeof value!=='object'||Array.isArray(value))return null;
  const v=value as Record<string,unknown>;
+ const providerRequestId=safeResponseId(v.providerRequestId);
+ const providerMessageId=safeResponseId(v.providerMessageId);
+ const statedRequestAvailability=safeEnum(v.providerRequestAvailability,['CAPTURED','UNAVAILABLE'] as const);
+ // A message id is not a request id. CAPTURED requires the request id itself.
+ const captured=providerRequestId!==null;
+ const providerRequestAvailability=statedRequestAvailability==='CAPTURED'&&!captured?'UNAVAILABLE':statedRequestAvailability;
+ const statedRequestReason=safeToken(v.providerRequestUnavailableReason);
+ const credentialShapedRequest=typeof v.providerRequestId==='string'&&CREDENTIAL_SHAPED.test(v.providerRequestId);
+ const providerRequestUnavailableReason=captured?null:statedRequestReason??(credentialShapedRequest?'provider_request_id_credential_shaped':statedRequestAvailability==='CAPTURED'?'provider_request_id_unusable':null);
  return Object.freeze({
   stage:safeEnum(v.stage,['plan','build','repair:plan','repair:build'] as const),
   transport:safeEnum(v.transport,['local','remote','openai','hosted'] as const),
@@ -311,6 +320,22 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   /* --- Prompt Architect (plan stage). Null for the reviewer, and vice versa. */
   requestedModel:safeModel(v.requestedModel),
   responseId:safeResponseId(v.responseId),
+  /**
+   * THE PROVIDER REQUEST ID. The coder also keeps the message id beside it.
+   *
+   * `providerRequestId` is the Anthropic API `request_id`, the same kind of id
+   * the reviewer reads from Hermes' usage file. `responseId` is that request
+   * id when one was safe to keep, never a runtime session id and never
+   * `message.id`. `providerMessageId` is the Messages API `message.id`. It is
+   * an extra field. It does not make the leg `CAPTURED`, and it is not a
+   * substitute for a request id that was present but refused. `CAPTURED`
+   * survives only when the request id survives {@link safeResponseId}. The
+   * status word is never written into `responseId`.
+   */
+  providerRequestId:providerRequestId,
+  providerMessageId:providerMessageId,
+  providerRequestAvailability:providerRequestAvailability,
+  providerRequestUnavailableReason:providerRequestUnavailableReason,
   validationPassed:safeNullableBool(v.validationPassed),
   /** A member of the closed `ArchitectPlanReasonCode` union, never validator prose. */
   validationReasonCode:safeToken(v.validationReasonCode),

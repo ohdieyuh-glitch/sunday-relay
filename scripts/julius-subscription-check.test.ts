@@ -27,7 +27,7 @@ const OK_REPLY = '{"type":"result","is_error":false,"result":"OK"}';
 const OK_ATTESTED = '{"type":"result","subtype":"success","is_error":false,"result":"OK","modelUsage":{"claude-opus-5-5":{"inputTokens":3,"outputTokens":1}}}';
 const apiError = (status: number, type: string) => JSON.stringify({
   type: 'result', subtype: 'success', is_error: true,
-  result: `API Error: ${String(status)} ${JSON.stringify({ type: 'error', error: { type, message: 'model: claude-fable-5 FAKETESTNOTREAL-free-text' } })}`,
+  result: `API Error: ${String(status)} ${JSON.stringify({ type: 'error', error: { type, message: 'model: claude-opus-5-5 FAKETESTNOTREAL-free-text' } })}`,
 });
 
 /** The exits the workflow reports beside a clean CLI (F3): `auth status` and `claude -p` both exited 0. */
@@ -100,13 +100,13 @@ describe('status verdicts over the measured shapes', () => {
 describe('env-check: presence only, before the CLI runs', () => {
   it('a token and nothing that outranks it: silent success', () => {
     expect(check.envReason(READY)).toBeNull();
-    expect(capture(['env-check', '--model', 'claude-fable-5'], READY)).toEqual({ code: 0, output: '' });
+    expect(capture(['env-check', '--model', 'claude-opus-5-5'], READY)).toEqual({ code: 0, output: '' });
   });
 
   it('no token: SUBSCRIPTION_NOT_READY / TOKEN_MISSING', () => {
-    const run = capture(['env-check', '--model', 'claude-fable-5'], {});
+    const run = capture(['env-check', '--model', 'claude-opus-5-5'], {});
     expect(run.code).toBe(1);
-    expect(run.output).toBe('provider_readiness provider=anthropic model=claude-fable-5 http=none auth=CLAUDE_SUBSCRIPTION reason=TOKEN_MISSING result=SUBSCRIPTION_NOT_READY');
+    expect(run.output).toBe('provider_readiness provider=anthropic model=claude-opus-5-5 http=none auth=CLAUDE_SUBSCRIPTION reason=TOKEN_MISSING result=SUBSCRIPTION_NOT_READY');
   });
 
   it.each([...ANTHROPIC_CREDENTIAL_ENV_NAMES])('token + %s: refused by name, in every mode, the value never printed', (name) => {
@@ -119,8 +119,8 @@ describe('env-check: presence only, before the CLI runs', () => {
   });
 
   it('the smoke purpose labels its line for the smoke log', () => {
-    expect(capture(['env-check', '--for', 'smoke', '--model', 'claude-fable-5'], {}).output)
-      .toBe('subscription_smoke_auth provider=anthropic model=claude-fable-5 http=none auth=CLAUDE_SUBSCRIPTION reason=TOKEN_MISSING result=SUBSCRIPTION_NOT_READY');
+    expect(capture(['env-check', '--for', 'smoke', '--model', 'claude-opus-5-5'], {}).output)
+      .toBe('subscription_smoke_auth provider=anthropic model=claude-opus-5-5 http=none auth=CLAUDE_SUBSCRIPTION reason=TOKEN_MISSING result=SUBSCRIPTION_NOT_READY');
   });
 });
 
@@ -129,16 +129,16 @@ describe('status-verdict and smoke-verdict print the exact lines the workflow gr
   const SMOKE_PASS = /^subscription_smoke provider=anthropic .* auth=CLAUDE_SUBSCRIPTION method=(oauth_token|claude\.ai) reply=OK result=PASS$/u;
 
   it('a token-only status: SUBSCRIPTION_LOGIN_PRESENT, matching the readiness grep', () => {
-    const run = capture(['status-verdict', '--model', 'claude-fable-5'], READY, TOKEN_ONLY);
+    const run = capture(['status-verdict', '--model', 'claude-opus-5-5'], READY, TOKEN_ONLY);
     expect(run.code).toBe(0);
-    expect(run.output).toBe('provider_readiness provider=anthropic model=claude-fable-5 http=none auth=CLAUDE_SUBSCRIPTION method=oauth_token plan=absent result=SUBSCRIPTION_LOGIN_PRESENT');
+    expect(run.output).toBe('provider_readiness provider=anthropic model=claude-opus-5-5 http=none auth=CLAUDE_SUBSCRIPTION method=oauth_token plan=absent result=SUBSCRIPTION_LOGIN_PRESENT');
     expect(run.output).toMatch(READINESS_LINE);
   });
 
   it('an api_key method FAILS CLOSED: not ready, and no line the readiness grep would count', () => {
-    const run = capture(['status-verdict', '--model', 'claude-fable-5'], READY, API_KEY_METHOD);
+    const run = capture(['status-verdict', '--model', 'claude-opus-5-5'], READY, API_KEY_METHOD);
     expect(run.code).toBe(1);
-    expect(run.output).toBe('provider_readiness provider=anthropic model=claude-fable-5 http=none auth=CLAUDE_SUBSCRIPTION reason=API_KEY_IN_PLAY result=SUBSCRIPTION_NOT_READY');
+    expect(run.output).toBe('provider_readiness provider=anthropic model=claude-opus-5-5 http=none auth=CLAUDE_SUBSCRIPTION reason=API_KEY_IN_PLAY result=SUBSCRIPTION_NOT_READY');
     expect(run.output).not.toMatch(READINESS_LINE);
   });
 
@@ -159,9 +159,9 @@ describe('status-verdict and smoke-verdict print the exact lines the workflow gr
   });
 
   it('an OK beside an api_key status FAILS CLOSED: the reply is not even read', () => {
-    const run = capture(['smoke-verdict', '--model', 'claude-fable-5', '--status-file', 's.json'], READY, OK_REPLY, { 's.json': API_KEY_METHOD });
+    const run = capture(['smoke-verdict', '--model', 'claude-opus-5-5', '--status-file', 's.json'], READY, OK_REPLY, { 's.json': API_KEY_METHOD });
     expect(run.code).toBe(1);
-    expect(run.output).toBe('subscription_smoke provider=anthropic model=claude-fable-5 auth=CLAUDE_SUBSCRIPTION method=none reply=NO_SUBSCRIPTION_STATUS result=FAIL');
+    expect(run.output).toBe('subscription_smoke provider=anthropic model=claude-opus-5-5 auth=CLAUDE_SUBSCRIPTION method=none reply=NO_SUBSCRIPTION_STATUS result=FAIL');
     expect(run.output).not.toMatch(SMOKE_PASS);
   });
 
@@ -223,12 +223,12 @@ describe('smoke failures say why, in closed tokens only', () => {
   });
 
   it('smoke-verdict prints the reason on its own closed line, before the FAIL line, which is unchanged', () => {
-    const run = capture(['smoke-verdict', '--model', 'claude-fable-5', '--status-file', 's.json', ...ERROR_EXITS], READY, apiError(429, 'rate_limit_error'), { 's.json': TOKEN_ONLY });
+    const run = capture(['smoke-verdict', '--model', 'claude-opus-5-5', '--status-file', 's.json', ...ERROR_EXITS], READY, apiError(429, 'rate_limit_error'), { 's.json': TOKEN_ONLY });
     expect(run.code).toBe(1);
     expect(run.output.split('\n')).toEqual([
-      'subscription_smoke_served provider=anthropic requested=claude-fable-5 served=none match=NONE',
-      'subscription_smoke_reason provider=anthropic model=claude-fable-5 reason=RATE_LIMITED http=429 subtype=success',
-      'subscription_smoke provider=anthropic model=claude-fable-5 auth=CLAUDE_SUBSCRIPTION method=oauth_token reply=ERROR result=FAIL',
+      'subscription_smoke_served provider=anthropic requested=claude-opus-5-5 served=none match=NONE',
+      'subscription_smoke_reason provider=anthropic model=claude-opus-5-5 reason=RATE_LIMITED http=429 subtype=success',
+      'subscription_smoke provider=anthropic model=claude-opus-5-5 auth=CLAUDE_SUBSCRIPTION method=oauth_token reply=ERROR result=FAIL',
     ]);
     expect(run.output).not.toContain('FAKETESTNOTREAL');
   });
@@ -247,7 +247,7 @@ describe('smoke failures say why, in closed tokens only', () => {
       '{"is_error":true,"api_error_status":999}', '[]', 'null', '"a string"', '{"is_error":true,"result":42}',
     ];
     for (const raw of hostile) {
-      const run = capture(['smoke-verdict', '--model', 'claude-fable-5', '--status-file', 's.json', ...ERROR_EXITS], READY, raw, { 's.json': TOKEN_ONLY });
+      const run = capture(['smoke-verdict', '--model', 'claude-opus-5-5', '--status-file', 's.json', ...ERROR_EXITS], READY, raw, { 's.json': TOKEN_ONLY });
       const reasons = run.output.split('\n').filter((line) => line.startsWith('subscription_smoke_reason'));
       expect(reasons, raw).toHaveLength(1);
       expect(reasons[0], raw).toMatch(REASON_LINE);

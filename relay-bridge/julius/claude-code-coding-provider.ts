@@ -102,6 +102,50 @@ export function hostedCoderCost(
 }
 
 /**
+ * THE ANTHROPIC API REQUEST ID FOR THIS DISPATCH, NEVER THE RUNTIME SESSION ID.
+ *
+ * Console reconciliation needs `request_id`. `CAPTURED` is that id, and only
+ * that id. `message.id` is kept beside it and never promotes a leg to
+ * `CAPTURED`, never fills `responseId`, and never replaces a request id that
+ * was present but refused. `sessionId` is not consulted.
+ */
+function anthropicProviderIds(observed: HostedObservation | null): {
+  readonly responseId: string | null;
+  readonly providerRequestId: string | null;
+  readonly providerMessageId: string | null;
+  readonly providerRequestAvailability: 'CAPTURED' | 'UNAVAILABLE';
+  readonly providerRequestUnavailableReason: string | null;
+} {
+  if (observed === null) {
+    return {
+      responseId: null,
+      providerRequestId: null,
+      providerMessageId: null,
+      providerRequestAvailability: 'UNAVAILABLE',
+      providerRequestUnavailableReason: 'provider_request_id_not_reported',
+    };
+  }
+  const requestId = observed.anthropicRequestId ?? null;
+  const messageId = observed.anthropicMessageId ?? null;
+  if (requestId !== null) {
+    return {
+      responseId: requestId,
+      providerRequestId: requestId,
+      providerMessageId: messageId,
+      providerRequestAvailability: 'CAPTURED',
+      providerRequestUnavailableReason: null,
+    };
+  }
+  return {
+    responseId: null,
+    providerRequestId: null,
+    providerMessageId: messageId,
+    providerRequestAvailability: 'UNAVAILABLE',
+    providerRequestUnavailableReason: observed.anthropicRequestRejection ?? 'provider_request_id_not_reported',
+  };
+}
+
+/**
  * THE CODER'S STRUCTURAL FACTS, ON BOTH ENDINGS, FROM ONE BUILDER.
  *
  * A success and a failure used to be described by two hand-built objects, and
@@ -201,7 +245,7 @@ export const hostedCoderDiagnostics = (input: {
     resultModelThird: usageEntry(2)?.model ?? null,
     resultModelThirdInputTokens: usageEntry(2)?.inputTokens ?? null,
     resultModelThirdOutputTokens: usageEntry(2)?.outputTokens ?? null,
-    responseId: observed?.sessionId ?? null,
+    ...anthropicProviderIds(observed),
     numTurns: observed?.numTurns ?? null,
     // The effort option the runner handed the SDK (absent when it passed none); the runtime echoes nothing of it, so there is no `effortEchoed` for the coder.
     ...(observed?.effortSent === undefined ? {} : { effortSent: observed.effortSent }),
