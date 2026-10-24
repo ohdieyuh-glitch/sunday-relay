@@ -81,5 +81,15 @@ public class Wonderland : ModuleRules
 			// Editor-only test hooks (WonderlandUiTestLibrary::SetBackgroundThrottleSuspended).
 			PrivateDependencyModuleNames.Add("UnrealEd");
 		}
+
+		// J1 dispatch randomness only. The wrapper calls IPlatformCrypto
+		// CreateRandomBytes and treats any other result as failure. It does
+		// not call CreatePseudoRandomBytes and it does not fall back to RAND_bytes.
+		PrivateDependencyModuleNames.AddRange(new string[]
+		{
+			"PlatformCrypto",
+			"PlatformCryptoTypes",
+			"PlatformCryptoContext"
+		});
 	}
 }
