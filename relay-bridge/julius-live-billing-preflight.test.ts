@@ -203,13 +203,10 @@ describe('every reader of the preflight finds its own line', () => {
     expect(loop, 'the loop the workflow runs, read from the workflow').not.toBeNull();
     const names = loop![1]!.trim().split(/\s+/u);
     expect(names.length).toBeGreaterThanOrEqual(5);
-    // THE TOPOLOGY THE PAID WORKFLOW RUNS: its Coding Agent is the Claude subscription,
-    // so its loop asks for CLAUDE_CODE_OAUTH_TOKEN and not ANTHROPIC_API_KEY. A preflight
-    // driven in API mode would answer a loop this workflow no longer runs.
-    const { ANTHROPIC_API_KEY: _key, ...withoutKey } = READY_RIG;
+    // PENDING FOUNDER RULING. The paid workflow's loop asks for ANTHROPIC_API_KEY.
+    // The consumer login token is not a name that loop requires to be SET.
     const run = preflight({
-      ...withoutKey, HOME: dir, JULIUS_CLAUDE_AUTH: 'CLAUDE_SUBSCRIPTION', RELAY_HERMES_BILLING_MODE: 'api_billed',
-      CLAUDE_CODE_OAUTH_TOKEN: TOKEN_SENTINEL,
+      ...READY_RIG, HOME: dir, JULIUS_CLAUDE_AUTH: 'ANTHROPIC_API', RELAY_HERMES_BILLING_MODE: 'api_billed',
     });
     expect(run.code).toBe(5);
     for (const name of names) expect(physical(run.output), name).toContain(`  ${name}: SET`);
