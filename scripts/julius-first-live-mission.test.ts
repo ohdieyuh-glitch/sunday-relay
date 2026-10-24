@@ -4021,9 +4021,12 @@ describe('a learning pair is two jobs on one store: arm WITHOUT exports it, arm 
       writeFileSync(join(stub, 'state'), 'COMPLETED\n');
       writeFileSync(join(stub, 'record'), '1\n');
       writeFileSync(join(stub, 'occupied'), '0\n');
-      // The step runs the store script from the job's checkout, so the job holds it, byte for byte.
+      // The step runs the store script from the job's checkout, so the job holds it, byte for byte,
+      // and the script asks the shared admission parser beside it.
       mkdirSync(join(job, '.github'));
+      mkdirSync(join(job, 'scripts'));
       writeFileSync(join(job, '.github', 'julius-learning-store.sh'), readFileSync(join(ROOT, '.github', 'julius-learning-store.sh')), { mode: 0o755 });
+      writeFileSync(join(job, 'scripts', 'julius-admission-run-id.mjs'), readFileSync(join(ROOT, 'scripts', 'julius-admission-run-id.mjs')));
       writeFileSync(join(bin, 'gh'), ['#!/usr/bin/env bash', 'case "$2" in',
         '  */runs/999) echo 111;;', '  */runs/4242) cat "$STUB/run.txt";;', '  */runs/4242/artifacts?name=*) cat "$STUB/artifact.id";;',
         '  */zip) echo zip;;', '  *) exit 9;;', 'esac'].join('\n'), { mode: 0o755 });
