@@ -402,8 +402,10 @@ const PROGRESS_STATE = /^[a-z][a-z0-9_]{0,63}$/;
 const PROGRESS_CAUSE = /^[\x20-\x7e]{1,200}$/;
 const CLAIM_KEYS = [
   'wonderlandRunId', 'serverRunId', 'state', 'spentTag', 'spentTagState', 'at',
-  'dispatchAttempted', 'dispatchError', 'halt',
+  'dispatchAttempted', 'dispatchError', 'halt', 'workflowRunId',
 ] as const;
+/** A GitHub Actions workflow run id. Null until dispatch learns one. */
+const WORKFLOW_RUN_ID = /^[1-9][0-9]{0,18}$/;
 
 export type OperatorClaimState = (typeof CLAIM_STATES)[number];
 export type SpentTagState = (typeof SPENT_TAG_STATES)[number];
@@ -425,6 +427,14 @@ export interface ClaimEvent {
   readonly dispatchError: DispatchError | null;
   /** Workflow halt, when one was visible. Terminal. Never returns the record to admitted. */
   readonly halt: WorkflowHalt | null;
+  /** GitHub `workflow_run_id` once dispatch has learned it. Null until then. */
+  readonly workflowRunId: string | null;
+}
+
+/** True for a decimal GitHub workflow run id that fits in a signed 64-bit integer. */
+export function isStoredWorkflowRunId(value: string): boolean {
+  if (!WORKFLOW_RUN_ID.test(value)) return false;
+  return value.length < 19 || value <= '9223372036854775807';
 }
 
 export interface StoredProgress {
@@ -789,6 +799,7 @@ function claimStamp(claim: ClaimEvent): string {
     claim.dispatchAttempted ? '1' : '0',
     claim.dispatchError ?? '',
     claim.halt ?? '',
+    claim.workflowRunId ?? '',
   ].join('\0');
 }
 
@@ -804,9 +815,16 @@ function writeJournalBytes(path: string, body: OperatorJournal): void {
 function parseClaim(value: unknown, schemaVersion: OperatorJournal['schemaVersion']): ClaimEvent {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new AdmissionFileClosedError('corrupt');
   const claim = value as Record<string, unknown>;
-  if (Object.keys(claim).length !== CLAIM_KEYS.length || CLAIM_KEYS.some((key) => !Object.hasOwn(claim, key))) {
+  const keys = Object.keys(claim);
+  if (keys.some((key) => !(CLAIM_KEYS as readonly string[]).includes(key))) {
     throw new AdmissionFileClosedError('corrupt');
   }
+  if (CLAIM_KEYS.some((key) => key !== 'workflowRunId' && !Object.hasOwn(claim, key))) {
+    throw new AdmissionFileClosedError('corrupt');
+  }
+  const workflowRunId = Object.hasOwn(claim, 'workflowRunId')
+    ? storedWorkflowRunId(claim.workflowRunId)
+    : null;
   const identity = identifyAdmissionRun(claim.wonderlandRunId, claim.serverRunId);
   const form = schemaVersion === LEGACY_ADMISSION_SCHEMA_VERSION ? 'legacy' : 'wlj';
   if (!identity.ok || identity.form !== form) throw new AdmissionFileClosedError('corrupt');
@@ -857,5 +875,12 @@ function parseClaim(value: unknown, schemaVersion: OperatorJournal['schemaVersio
     dispatchAttempted: claim.dispatchAttempted,
     dispatchError,
     halt: state === 'dispatched' ? null : recordedHalt,
+    workflowRunId,
   };
+}
+
+function storedWorkflowRunId(value: unknown): string | null {
+  if (value === null) return null;
+  if (typeof value === 'string' && isStoredWorkflowRunId(value)) return value;
+  throw new AdmissionFileClosedError('corrupt');
 }

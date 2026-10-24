@@ -47,7 +47,7 @@ import type {
   StoredProgress,
   WorkflowHalt,
 } from './admission-file';
-import { noteAwaitingOperatorExpiry, openAdmissionFile, readAdmissionDocument } from './admission-file';
+import { isStoredWorkflowRunId, noteAwaitingOperatorExpiry, openAdmissionFile, readAdmissionDocument } from './admission-file';
 
 /** The workflow input the paid run must gain before this tool will dispatch. */
 export const SERVER_RUN_ID_INPUT = 'server_run_id';
@@ -110,6 +110,8 @@ export interface OperatorView {
   readonly halt: WorkflowHalt | null;
   readonly concurrencyGroup: string;
   readonly claimedAt: string | null;
+  /** GitHub Actions workflow run id, once dispatch has learned it. Null until then. */
+  readonly workflowRunId: string | null;
 }
 
 export interface ClaimInput {
@@ -160,8 +162,16 @@ export function serverRunHex(serverRunId: string): string {
   return derivedRun(serverRunId).suffix;
 }
 
+/**
+ * The spent lock PR #434 derives. A `wlj_` id checks
+ * `julius-run-spent-<32hex>`. A legacy `run:` id checks `<24hex>`.
+ * The name is the module's tag with `refs/tags/` removed, so the `gh api`
+ * path does not double that prefix.
+ */
 export function spentTagName(serverRunId: string): string {
-  return `julius-run-spent-${serverRunHex(serverRunId)}`;
+  const derived = deriveJuliusSpentTag(serverRunId);
+  if (!derived.ok || !derived.tag.startsWith('refs/tags/')) throw new Error('run_id_invalid');
+  return derived.tag.slice('refs/tags/'.length);
 }
 
 export function concurrencyGroupName(serverRunId: string): string {
@@ -267,6 +277,27 @@ export function interpretWorkflowHalt(result: GhResult): WorkflowHalt | null {
 }
 
 /** Read `gh api --include` output. Anything that is not a clear 200 ref or a clear 404 is unreadable. */
+/**
+ * The run id `gh workflow run` printed, when it printed one URL for this repo.
+ * Two different ids, a URL for another repo, or no URL means dispatch did not
+ * learn an id. The claim stays null rather than guessing.
+ */
+export function learnWorkflowRunId(result: GhResult, repo: string): string | null {
+  if (!isRepo(repo)) return null;
+  const blob = `${result.stdout}\n${result.stderr}`;
+  const pattern = new RegExp(
+    `https://github\\.com/${escapeRegExp(repo)}/actions/runs/([0-9]+)\\b`,
+    'g',
+  );
+  const ids = new Set<string>();
+  for (const match of blob.matchAll(pattern)) {
+    const id = match[1];
+    if (id !== undefined && isStoredWorkflowRunId(id)) ids.add(id);
+  }
+  if (ids.size !== 1) return null;
+  return [...ids][0] ?? null;
+}
+
 export function interpretSpentTagResponse(result: GhResult): 'present' | 'absent' | 'unreadable' {
   if (result.code === 0 && /"ref"\s*:/.test(result.stdout)) return 'present';
   const blob = `${result.stdout}\n${result.stderr}`;
@@ -451,6 +482,7 @@ function claimInside(
     serverRunId: admission.serverRunId,
   }));
   const halt = interpretWorkflowHalt(ran);
+  const workflowRunId = learnWorkflowRunId(ran, input.repo);
   if (halt === 'RUN_ID_ALREADY_SPENT') {
     const spent = baseEvent(admission, nowIso, {
       state: 'already_spent',
@@ -458,6 +490,7 @@ function claimInside(
       dispatchAttempted: true,
       dispatchError: null,
       halt,
+      workflowRunId,
     });
     io.write(appendClaim(claimedDoc, spent));
     return fail(
@@ -474,6 +507,7 @@ function claimInside(
       dispatchAttempted: true,
       dispatchError: unverified ? 'SPENT_TAG_UNVERIFIED' : 'gh_workflow_run_failed',
       halt: unverified ? 'SPENT_TAG_UNVERIFIED' : null,
+      workflowRunId,
     });
     io.write(appendClaim(claimedDoc, failed));
     return fail(
@@ -490,6 +524,7 @@ function claimInside(
     dispatchAttempted: true,
     dispatchError: null,
     halt: null,
+    workflowRunId,
   });
   io.write(appendClaim(claimedDoc, attempted));
   return {
@@ -716,13 +751,19 @@ function baseEvent(admission: StoredAdmission, at: string, fields: {
   readonly dispatchAttempted: boolean;
   readonly dispatchError: ClaimEvent['dispatchError'];
   readonly halt: ClaimEvent['halt'];
+  readonly workflowRunId?: string | null;
 }): ClaimEvent {
   return {
     wonderlandRunId: admission.runId,
     serverRunId: admission.serverRunId,
     spentTag: spentTagName(admission.serverRunId),
     at,
-    ...fields,
+    state: fields.state,
+    spentTagState: fields.spentTagState,
+    dispatchAttempted: fields.dispatchAttempted,
+    dispatchError: fields.dispatchError,
+    halt: fields.halt,
+    workflowRunId: fields.workflowRunId ?? null,
   };
 }
 
@@ -740,6 +781,7 @@ function viewFromClaim(claim: ClaimEvent): OperatorView {
     halt: claim.halt,
     concurrencyGroup: concurrencyGroupName(claim.serverRunId),
     claimedAt: claim.at,
+    workflowRunId: claim.workflowRunId,
   };
 }
 
@@ -762,11 +804,16 @@ function toView(admission: StoredAdmission, claim: ClaimEvent | null): OperatorV
     halt: claim?.halt ?? null,
     concurrencyGroup: concurrencyGroupName(admission.serverRunId),
     claimedAt: claim?.at ?? null,
+    workflowRunId: claim?.workflowRunId ?? null,
   };
 }
 
 function fail(kind: string, message: string, record: OperatorView | null, requiredInput: string | null = null): ClaimResult {
   return { ok: false, kind, message, record, command: null, requiredInput };
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function quoteArg(arg: string): string {

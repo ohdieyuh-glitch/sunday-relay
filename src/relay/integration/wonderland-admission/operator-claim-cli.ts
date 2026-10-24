@@ -202,6 +202,7 @@ function publicRecord(record: OperatorView): Record<string, unknown> {
     dispatchAttempted: record.dispatchAttempted,
     dispatchError: record.dispatchError,
     claimedAt: record.claimedAt,
+    workflowRunId: record.workflowRunId,
   };
 }
 

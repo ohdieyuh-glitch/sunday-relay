@@ -313,13 +313,17 @@ or a child path stays on the Wonderland catch-all.
 The guards are the admission guards: loopback peer and Host, no forwarding
 header, a native session, the founder player, and the paired project. The
 route then reads the file and returns `{ wljRunId, serverRunId, legacyRunId,
-dispatchedAt, state, cause?, updatedAt }`. `legacyRunId` is always present.
+dispatchedAt, workflowRunId, state, cause?, updatedAt }`. `legacyRunId` is always present.
 It is `null` for a new row, and the row's `run:` id for a legacy row.
 `serverRunId` is the `wlj_` id for a new row and the `run:` id for a legacy
 row. The status route and the operator claim key a new row on the `wlj_` id.
-`dispatchedAt` is the
+A query is parsed by the PR #434 module. Either form selects the row whose
+`runId` or `serverRunId` is that id. An unknown id of either form is the
+same `404` `not_found` body. `dispatchedAt` is the
 ISO timestamp of the first recorded operator dispatch, or `null` when that
-dispatch has not been recorded. `state` and `cause` are closed. The route checks the stored
+dispatch has not been recorded. `workflowRunId` is the GitHub Actions run id
+the operator dispatch learned from the workflow run URL, or `null` until that
+URL is known. The status route only reads it. `state` and `cause` are closed. The route checks the stored
 value against those unions. A stored state outside the union, or a stored
 cause outside the union, is returned as `state: "unknown"` with no cause.
 The stored token is not copied into the answer. `unknown` is never terminal.

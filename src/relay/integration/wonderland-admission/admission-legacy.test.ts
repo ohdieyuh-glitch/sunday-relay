@@ -212,6 +212,7 @@ describe('legacy schema v2 rows', () => {
           serverRunId: LEGACY,
           legacyRunId: LEGACY,
           dispatchedAt: null,
+          workflowRunId: null,
         });
       }
       expect(readFileSync(file, 'utf8')).toBe(text);

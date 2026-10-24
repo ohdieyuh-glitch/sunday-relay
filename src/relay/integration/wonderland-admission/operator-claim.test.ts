@@ -15,6 +15,7 @@ import {
   formatGhCommand,
   interpretSpentTagResponse,
   interpretWorkflowHalt,
+  learnWorkflowRunId,
   spentTagApiArgs,
   spentTagName,
   workflowDeclaresServerRunId,
@@ -217,6 +218,13 @@ describe('spent tag', () => {
     expect(spentTagApiArgs(REPO, SERVER).join(' ')).not.toContain('run:');
     expect(spentTagName(LEGACY_SERVER)).toBe(`julius-run-spent-${LEGACY_HEX}`);
     expect(concurrencyGroupName(LEGACY_SERVER)).toBe(`julius-paid-${LEGACY_HEX}`);
+    const spentTagSource = readFileSync(join(__dirname, 'operator-claim.ts'), 'utf8');
+    const spentTagFn = spentTagSource.slice(
+      spentTagSource.indexOf('export function spentTagName'),
+      spentTagSource.indexOf('export function concurrencyGroupName'),
+    );
+    expect(spentTagFn).toContain('deriveJuliusSpentTag');
+    expect(spentTagFn).not.toMatch(/\[0-9a-f\]\{24\}/);
     const command = workflowDispatchArgs({
       repo: REPO,
       mission: MISSION,
@@ -497,6 +505,12 @@ describe('operator claim', () => {
       if (!result.ok) return;
       expect(result.record.spentTagState).toBe('absent');
       expect(result.record.state).toBe('dispatched');
+      expect(result.record.workflowRunId).toBeNull();
+      expect(fake.calls[0]).toEqual([
+        'api', '--include', `repos/${REPO}/git/ref/tags/julius-run-spent-${HEX}`,
+      ]);
+      expect(HEX).toHaveLength(32);
+      expect(LEGACY_HEX).toHaveLength(24);
       const status = await claims.status(RUN, SERVER);
       expect(status.ok && status.record.spentTagState).toBe('absent');
       expect(status.ok && status.record.serverRunId).toBe(SERVER);
@@ -688,6 +702,69 @@ describe('operator claim', () => {
       if (!replay.ok) return;
       expect(replay.run.serverRunId).toBe(SERVER);
       expect(reloaded.admissionCount()).toBe(1);
+    });
+  });
+});
+
+describe('workflow run id', () => {
+  const WORKFLOW_RUN = '36568129865';
+
+  function printed(id: string, repo = REPO): GhResult {
+    return { code: 0, stdout: `https://github.com/${repo}/actions/runs/${id}\n`, stderr: '' };
+  }
+
+  it('learns one workflow run URL for this repo', () => {
+    expect(learnWorkflowRunId(printed(WORKFLOW_RUN), REPO)).toBe(WORKFLOW_RUN);
+    expect(learnWorkflowRunId(WORKFLOW_OK, REPO)).toBeNull();
+    expect(learnWorkflowRunId({
+      code: 0,
+      stdout: `https://github.com/${REPO}/actions/runs/${WORKFLOW_RUN}\nhttps://github.com/${REPO}/actions/runs/4242\n`,
+      stderr: '',
+    }, REPO)).toBeNull();
+    expect(learnWorkflowRunId(printed(WORKFLOW_RUN, 'other/repo'), REPO)).toBeNull();
+    expect(learnWorkflowRunId(printed('0'), REPO)).toBeNull();
+    expect(learnWorkflowRunId({
+      code: 0,
+      stdout: `https://github.com/${REPO}/actions/runs/01\n`,
+      stderr: '',
+    }, REPO)).toBeNull();
+    expect(learnWorkflowRunId({
+      code: 0,
+      stdout: `https://github.com/${REPO}/actions/runs/${WORKFLOW_RUN}\nhttps://github.com/${REPO}/actions/runs/${WORKFLOW_RUN}\n`,
+      stderr: '',
+    }, REPO)).toBe(WORKFLOW_RUN);
+  });
+
+  it('stores the id when dispatch prints it, and leaves the claim null until then', async () => {
+    await withStore(async (path) => {
+      await admit(path);
+      const quiet = scripted(ABSENT, WORKFLOW_OK);
+      const unknown = await claimTool(path, quiet.spawn).claim(claimInput({
+        dispatch: true,
+        confirmation: OPERATOR_DISPATCH_CONFIRMATION,
+      }));
+      expect(unknown.ok && unknown.record.workflowRunId).toBeNull();
+      expect(readAdmissionDocument(path).claims.at(-1)?.workflowRunId).toBeNull();
+    });
+    await withStore(async (path) => {
+      await admit(path);
+      const dry = await claimTool(path, { run() { throw new Error('dry-run must not spawn'); } }).claim(claimInput());
+      expect(dry.ok && dry.record.workflowRunId).toBeNull();
+    });
+    await withStore(async (path) => {
+      await admit(path);
+      const fake = scripted(ABSENT, printed(WORKFLOW_RUN));
+      const result = await claimTool(path, fake.spawn).claim(claimInput({
+        dispatch: true,
+        confirmation: OPERATOR_DISPATCH_CONFIRMATION,
+      }));
+      expect(result.ok && result.dispatchedWorkflow && result.record.workflowRunId).toBe(WORKFLOW_RUN);
+      const saved = readAdmissionDocument(path);
+      expect(saved.claims[0]?.workflowRunId).toBeNull();
+      expect(saved.claims.at(-1)?.workflowRunId).toBe(WORKFLOW_RUN);
+      const status = await claimTool(path, fake.spawn).status(RUN, SERVER);
+      expect(status.ok && status.record.workflowRunId).toBe(WORKFLOW_RUN);
+      expect(fake.calls[0]).toEqual(spentTagApiArgs(REPO, SERVER));
     });
   });
 });

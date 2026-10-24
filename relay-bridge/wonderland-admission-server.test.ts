@@ -246,6 +246,7 @@ describe('admission through createBridgeServer', () => {
       serverRunId,
       legacyRunId: null,
       dispatchedAt: null,
+      workflowRunId: null,
       state: 'awaiting_operator',
       updatedAt: expect.any(String),
     });
@@ -411,6 +412,7 @@ describe('admission through createBridgeServer', () => {
       serverRunId,
       legacyRunId: null,
       dispatchedAt: null,
+      workflowRunId: null,
       state: 'unknown',
       updatedAt: '2026-10-23T18:00:00.000Z',
     });

@@ -142,6 +142,7 @@ describe('wonderland status', () => {
           serverRunId: SERVER,
           legacyRunId: null,
           dispatchedAt: null,
+          workflowRunId: null,
           state: 'awaiting_operator',
           updatedAt: WHEN,
         },
@@ -175,6 +176,7 @@ describe('wonderland status', () => {
         serverRunId: SERVER,
         legacyRunId: null,
         dispatchedAt: null,
+          workflowRunId: null,
         state: 'awaiting_operator',
         updatedAt: WHEN,
       });
@@ -192,6 +194,7 @@ describe('wonderland status', () => {
         serverRunId: SERVER,
         legacyRunId: null,
         dispatchedAt: null,
+          workflowRunId: null,
         state: 'failed',
         cause: 'AWAITING_OPERATOR_EXPIRED',
         updatedAt: new Date(expiredAtMs).toISOString(),
@@ -266,6 +269,7 @@ describe('wonderland status', () => {
           serverRunId: SERVER,
           legacyRunId: null,
           dispatchedAt: WHEN,
+          workflowRunId: null,
           updatedAt: WHEN,
         });
         expect(status?.body, state).not.toHaveProperty('cause');
@@ -288,6 +292,11 @@ describe('wonderland status', () => {
       const before = readFileSync(storePath, 'utf8');
       const malformed = await handleWonderlandStatusRoute(statusRequest('not-a-run'), ports);
       const unknown = await handleWonderlandStatusRoute(statusRequest(`run:${'b'.repeat(24)}`), ports);
+      const otherWlj = await handleWonderlandStatusRoute(
+        statusRequest('wlj_aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'),
+        ports,
+      );
+      const found = await handleWonderlandStatusRoute(statusRequest(RUN), ports);
       expect(readFileSync(storePath, 'utf8')).toBe(before);
       const journalPath = `${storePath}.operator.json`;
       const journal = JSON.parse(readFileSync(journalPath, 'utf8')) as { owners: Record<string, string> };
@@ -295,8 +304,11 @@ describe('wonderland status', () => {
       writeFileSync(journalPath, `${JSON.stringify(journal)}\n`);
       const ownedBySomeoneElse = readFileSync(journalPath, 'utf8');
       const otherOwner = await handleWonderlandStatusRoute(statusRequest(SERVER), ports);
+      expect(found?.status).toBe(200);
+      expect(found?.body).toMatchObject({ wljRunId: RUN, serverRunId: RUN, legacyRunId: null, workflowRunId: null });
       expect(malformed).toEqual(NOT_FOUND);
       expect(unknown).toEqual(NOT_FOUND);
+      expect(otherWlj).toEqual(NOT_FOUND);
       expect(otherOwner).toEqual(NOT_FOUND);
       expect(JSON.stringify(malformed)).toBe(JSON.stringify(unknown));
       expect(JSON.stringify(unknown)).toBe(JSON.stringify(otherOwner));
@@ -328,6 +340,7 @@ describe('wonderland status', () => {
           serverRunId: SERVER,
           legacyRunId: null,
           dispatchedAt: null,
+          workflowRunId: null,
           state: 'unknown',
           updatedAt: '2026-10-23T18:00:00.000Z',
         },
@@ -396,6 +409,7 @@ describe('wonderland status', () => {
             serverRunId: SERVER,
             legacyRunId: null,
             dispatchedAt: null,
+          workflowRunId: null,
             state,
             updatedAt: '2026-10-23T18:00:00.000Z',
           },
@@ -414,6 +428,7 @@ describe('wonderland status', () => {
             serverRunId: SERVER,
             legacyRunId: null,
             dispatchedAt: null,
+          workflowRunId: null,
             state: 'dispatch_failed',
             cause,
             updatedAt: '2026-10-23T18:00:00.000Z',
@@ -428,6 +443,7 @@ describe('wonderland status', () => {
         serverRunId: SERVER,
         legacyRunId: null,
         dispatchedAt: null,
+        workflowRunId: null,
         state: 'unknown',
         updatedAt: '2026-10-23T18:00:00.000Z',
       });
@@ -447,6 +463,48 @@ describe('wonderland status', () => {
       expect(fromRow?.body).not.toHaveProperty('cause');
       expect(readFileSync(storePath, 'utf8')).toBe(admissionBytes);
       expect(readFileSync(journalPath, 'utf8')).toBe(cleared);
+
+      const learned = '36568129865';
+      const withClaim = JSON.parse(readFileSync(journalPath, 'utf8')) as {
+        schemaVersion: number;
+        revision: number;
+        claims: Array<Record<string, unknown>>;
+        owners: Record<string, string>;
+        progress: unknown[];
+      };
+      withClaim.claims = [{
+        wonderlandRunId: RUN,
+        serverRunId: SERVER,
+        state: 'dispatched',
+        spentTag: SPENT,
+        spentTagState: 'absent',
+        at: WHEN,
+        dispatchAttempted: true,
+        dispatchError: null,
+        halt: null,
+      }];
+      withClaim.progress = [];
+      writeFileSync(journalPath, `${JSON.stringify(withClaim)}\n`);
+      const omitted = await handleWonderlandStatusRoute(statusRequest(RUN), ports);
+      expect(omitted?.status).toBe(200);
+      expect(omitted?.body).toMatchObject({ state: 'dispatched', workflowRunId: null });
+      withClaim.claims[0] = { ...withClaim.claims[0], workflowRunId: learned };
+      writeFileSync(journalPath, `${JSON.stringify(withClaim)}\n`);
+      const known = await handleWonderlandStatusRoute(statusRequest(RUN), ports);
+      expect(known?.body).toMatchObject({
+        wljRunId: RUN,
+        serverRunId: RUN,
+        workflowRunId: learned,
+        state: 'dispatched',
+      });
+      const beforeBad = readFileSync(journalPath, 'utf8');
+      withClaim.claims[0] = { ...withClaim.claims[0], workflowRunId: '0' };
+      writeFileSync(journalPath, `${JSON.stringify(withClaim)}\n`);
+      const bad = await handleWonderlandStatusRoute(statusRequest(RUN), ports);
+      expect(bad?.status).toBe(503);
+      expect(readFileSync(storePath, 'utf8')).toBe(admissionBytes);
+      expect(readFileSync(journalPath, 'utf8')).toBe(`${JSON.stringify(withClaim)}\n`);
+      expect(readFileSync(journalPath, 'utf8')).not.toBe(beforeBad);
       ports.close();
     } finally {
       rmSync(dir, { recursive: true, force: true });

@@ -429,6 +429,7 @@ function statusView(
     && event.wonderlandRunId === admission.runId
     && (event.state === 'dispatched' || event.dispatchAttempted));
   const dispatchedAt = recordedDispatchAt(document, serverRunId, admission.runId);
+  const workflowRunId = recordedWorkflowRunId(document, serverRunId, admission.runId);
   const progress = [...(document.progress ?? [])].reverse().find((note) => note.serverRunId === serverRunId) ?? null;
   if (progress !== null) {
     const decision = applyWonderlandStatusTransition({
@@ -436,7 +437,7 @@ function statusView(
       proposedState: progress.state,
       proposedCause: progress.cause,
     });
-    if (decision.ok) return statusBody(admission.runId, serverRunId, decision.projection, progress.updatedAt, dispatchedAt);
+    if (decision.ok) return statusBody(admission.runId, serverRunId, decision.projection, progress.updatedAt, dispatchedAt, workflowRunId);
   }
   const claim = [...document.claims].reverse().find((event) => event.serverRunId === serverRunId && event.wonderlandRunId === admission.runId) ?? null;
   if (claim !== null) {
@@ -446,12 +447,13 @@ function statusView(
       projectWonderlandStatus({ state: claim.state, cause: claimCause(claim) }),
       claim.at,
       dispatchedAt,
+      workflowRunId,
     );
   }
   if (admission.admissionState === 'ADMISSION_HELD') {
     const phase = projectUnclaimedHeldPhase(admission.receivedAt, nowMs);
     if (phase.kind === 'operator_expired') noteAwaitingOperatorExpiry(storePath, serverRunId, phase.updatedAt);
-    return statusBody(admission.runId, serverRunId, phase.projection, phase.updatedAt, dispatchedAt);
+    return statusBody(admission.runId, serverRunId, phase.projection, phase.updatedAt, dispatchedAt, workflowRunId);
   }
   return statusBody(
     admission.runId,
@@ -462,6 +464,7 @@ function statusView(
     }),
     admission.receivedAt,
     dispatchedAt,
+    workflowRunId,
   );
 }
 
@@ -472,6 +475,16 @@ function recordedDispatchAt(document: OperatorDocument, serverRunId: string, won
     if (event.state === 'dispatched' || event.dispatchAttempted) return event.at;
   }
   return null;
+}
+
+/** The latest workflow run id dispatch stored for this pair. Null until one is known. */
+function recordedWorkflowRunId(document: OperatorDocument, serverRunId: string, wonderlandRunId: string): string | null {
+  let found: string | null = null;
+  for (const event of document.claims) {
+    if (event.serverRunId !== serverRunId || event.wonderlandRunId !== wonderlandRunId) continue;
+    if (event.workflowRunId !== null) found = event.workflowRunId;
+  }
+  return found;
 }
 
 function claimCause(claim: ClaimEvent): string | null {
@@ -485,14 +498,18 @@ function statusBody(
   projected: WonderlandStatusProjection,
   updatedAt: string,
   dispatchedAt: string | null,
+  workflowRunId: string | null,
 ): Record<string, string | null> {
   const identity = identifyAdmissionRun(wljRunId, serverRunId);
-  if (!identity.ok) return { wljRunId, serverRunId, legacyRunId: null, dispatchedAt, state: 'unknown', updatedAt };
+  if (!identity.ok) {
+    return { wljRunId, serverRunId, legacyRunId: null, dispatchedAt, workflowRunId: null, state: 'unknown', updatedAt };
+  }
   const body: Record<string, string | null> = {
     wljRunId: identity.wljRunId,
     serverRunId: identity.serverRunId,
     legacyRunId: identity.legacyRunId,
     dispatchedAt,
+    workflowRunId,
     state: projected.state,
     updatedAt,
   };
