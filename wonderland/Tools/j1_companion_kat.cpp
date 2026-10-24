@@ -16,10 +16,10 @@ namespace
 {
 	int Failures = 0;
 	enum ESection { Json, Sse, Chat, Session, Key, Status, Pin, History, Result, Route, Answers, Mint, Agents, Multi, Unsupported, Isolation, Caps,
-		Verified, Bridge, SectionCount };
+		Verified, Bridge, Trace, SectionCount };
 	int Checks[SectionCount] = {};
 	const char* SectionNames[SectionCount] = {"json", "sse", "chat", "session", "key", "status", "pin", "history", "result", "route", "answers", "mint",
-		"agents", "multi", "unsupported", "isolation", "caps", "verified", "bridge"};
+		"agents", "multi", "unsupported", "isolation", "caps", "verified", "bridge", "trace"};
 
 	void Expect(ESection S, bool bOk, const char* What, int Line)
 	{
@@ -1198,6 +1198,95 @@ namespace
 			+ ",\"provenance\":" + Provenance + ",\"updatedAt\":\"" + T0 + "\"" + Verified + "}";
 	}
 
+	/* ------------------------------------------------------------ #447 081d46e6: companion GET traceId */
+	// BRIDGE's vectors, verbatim from scripts/julius-mission-trace.test.mjs / JULIUS_MISSION_TRACE.md at 081d46e6:
+	//   wlj_01234567-89ab-4cde-8fab-0123456789ab -> 192b1fbb866790da0ba590b4a8f45144
+	//   wlj_0b7a1c2e-4f3d-4a6b-8c2d-3e4f5a6b7c8d -> 0ef34f0df7cf2cf89b844dcfa5fe084f
+	// The client parses these; it does not compute them (no SHA-256 in the core).
+	const std::string TraceRunA = "wlj_01234567-89ab-4cde-8fab-0123456789ab";
+	const std::string TraceA = "192b1fbb866790da0ba590b4a8f45144";
+	const std::string TraceRunB = "wlj_0b7a1c2e-4f3d-4a6b-8c2d-3e4f5a6b7c8d";
+	const std::string TraceB = "0ef34f0df7cf2cf89b844dcfa5fe084f";
+
+	std::string TracedBody(const std::string& Run, const std::string& TraceJson, const std::string& State = "delivered")
+	{
+		return MissionBody(State, "null", "null", Run, "\"cmp_" + U3 + "\"", ",\"verified\":false,\"traceId\":" + TraceJson);
+	}
+
+	void TestTrace()
+	{
+		FCompanionMissionView V;
+		// The two BRIDGE vectors, read as reported.
+		EXPECT(Trace, ParseCompanionMission(200, TracedBody(TraceRunA, "\"" + TraceA + "\""), TraceRunA, V) == ECompanionMissionParse::Ok);
+		EXPECT(Trace, V.bHasAnswer && V.TraceIdParse == ETraceIdParse::Ok && V.TraceId == TraceA);
+		EXPECT(Trace, SameMissionTrace(V, TraceA) && !SameMissionTrace(V, TraceB));
+		const std::string WithResult = MissionBody("result_received", CompanionResult(), "null", TraceRunB, "\"cmp_" + U3 + "\"",
+			",\"verified\":false,\"traceId\":\"" + TraceB + "\"");
+		EXPECT(Trace, ParseCompanionMission(200, WithResult, TraceRunB, V) == ECompanionMissionParse::Ok);
+		EXPECT(Trace, V.bHasResult && V.TraceIdParse == ETraceIdParse::Ok && V.TraceId == TraceB && SameMissionTrace(V, TraceB));
+		EXPECT(Trace, !V.bShowVerified); // a trace id is a correlation key, never evidence
+		// Absent: a route before #447. The v0.1 read still works; no trace id is invented.
+		EXPECT(Trace, ParseCompanionMission(200, MissionBody("delivered", "null", "null", TraceRunA), TraceRunA, V) == ECompanionMissionParse::Ok);
+		EXPECT(Trace, V.bHasAnswer && V.TraceIdParse == ETraceIdParse::Absent && V.TraceId.empty());
+		EXPECT(Trace, !SameMissionTrace(V, TraceA) && !SameMissionTrace(V, ""));
+		// null (BRIDGE: derivation found no wlj_ id).
+		EXPECT(Trace, ParseCompanionMission(200, TracedBody(TraceRunA, "null"), TraceRunA, V) == ECompanionMissionParse::Ok);
+		EXPECT(Trace, V.bHasAnswer && V.TraceIdParse == ETraceIdParse::Null && V.TraceId.empty() && !SameMissionTrace(V, TraceA));
+		// Malformed: each is no trace id, and never fails the v0.1 read.
+		const std::string Malformed[] = {
+			"\"" + std::string("192B1FBB866790DA0BA590B4A8F45144") + "\"", // uppercase
+			"\"" + TraceA.substr(0, 31) + "\"",                            // 31
+			"\"" + TraceA + "0\"",                                          // 33
+			"\"" + std::string(32, '0') + "\"",                             // all zero (W3C invalid)
+			"\"" + std::string(31, 'a') + "g\"",                            // not hex
+			"\"00-" + TraceA + "-20d74ea3e2204340-01\"",                    // a traceparent is not a trace id
+			"\"\"", "1234", "true", "[\"" + TraceA + "\"]", "{\"traceId\":\"" + TraceA + "\"}"};
+		for (const std::string& Bad : Malformed)
+		{
+			const bool bOk = ParseCompanionMission(200, TracedBody(TraceRunA, Bad), TraceRunA, V) == ECompanionMissionParse::Ok;
+			EXPECT(Trace, bOk && V.bHasAnswer && V.TraceIdParse == ETraceIdParse::Malformed && V.TraceId.empty() && !SameMissionTrace(V, TraceA));
+		}
+		// A body that fails a v0.1 check exposes no trace id, even a well-formed one.
+		EXPECT(Trace, ParseCompanionMission(200, TracedBody(TraceRunA, "\"" + TraceA + "\"", "paid"), TraceRunA, V) == ECompanionMissionParse::BadState);
+		EXPECT(Trace, !V.bHasAnswer && V.TraceId.empty() && V.TraceIdParse == ETraceIdParse::Absent && !SameMissionTrace(V, TraceA));
+		// Another run's body is not read for a trace id.
+		EXPECT(Trace, ParseCompanionMission(200, TracedBody(TraceRunB, "\"" + TraceB + "\""), TraceRunA, V) == ECompanionMissionParse::RunIdMismatch);
+		EXPECT(Trace, V.TraceId.empty() && !SameMissionTrace(V, TraceB));
+		// Non-200 (BRIDGE's 404 body has no traceId; a 404 with one is still no answer).
+		for (int Code : {404, 409, 503})
+		{
+			EXPECT(Trace, ParseCompanionMission(Code, TracedBody(TraceRunA, "\"" + TraceA + "\""), TraceRunA, V) == ECompanionMissionParse::NotOk);
+			EXPECT(Trace, V.TraceId.empty() && !SameMissionTrace(V, TraceA));
+		}
+		// The trace id is not a stand-in for the wljRunId and is not the other vector's id.
+		EXPECT(Trace, ParseCompanionMission(200, TracedBody(TraceRunA, "\"" + TraceB + "\""), TraceRunA, V) == ECompanionMissionParse::Ok);
+		EXPECT(Trace, V.TraceId == TraceB && !SameMissionTrace(V, TraceA)); // reported as is: the client does not re-derive
+		// SameMissionTrace never matches a malformed result id, even one equal to the companion's text.
+		FCompanionMissionView Forged;
+		Forged.bHasAnswer = true;
+		Forged.TraceIdParse = ETraceIdParse::Ok;
+		Forged.TraceId = std::string(32, '0');
+		EXPECT(Trace, !SameMissionTrace(Forged, std::string(32, '0')));
+		Forged.TraceId = "192B1FBB866790DA0BA590B4A8F45144";
+		EXPECT(Trace, !SameMissionTrace(Forged, "192B1FBB866790DA0BA590B4A8F45144"));
+		Forged.TraceId.clear();
+		EXPECT(Trace, !SameMissionTrace(Forged, ""));
+		Forged.TraceId = TraceA;
+		EXPECT(Trace, SameMissionTrace(Forged, TraceA));
+		Forged.bHasAnswer = false; // a view without an answer never matches, whatever it holds
+		EXPECT(Trace, !SameMissionTrace(Forged, TraceA));
+		Forged.bHasAnswer = true;
+		Forged.TraceIdParse = ETraceIdParse::Malformed;
+		EXPECT(Trace, !SameMissionTrace(Forged, TraceA));
+		// The client never sends a traceId: the request carries none in the URL or the body.
+		const FRelayRequest R = CompanionMissionRequest(Origin, TraceRunA, "project-1");
+		EXPECT(Trace, R.Method == "GET" && R.Url.find("traceId") == std::string::npos && R.Url.find(TraceA) == std::string::npos && R.Body.empty());
+		// Names.
+		EXPECT(Trace, std::strcmp(TraceIdParseName(ETraceIdParse::Ok), "ok") == 0 && std::strcmp(TraceIdParseName(ETraceIdParse::Malformed), "malformed") == 0);
+		EXPECT(Trace, std::strcmp(TraceIdParseName(ETraceIdParse::Absent), "absent") == 0 && std::strcmp(TraceIdParseName(ETraceIdParse::Null), "null") == 0);
+		EXPECT(Trace, IsMissionTraceId(TraceA) && IsMissionTraceId(TraceB) && !IsMissionTraceId(std::string(32, '0')) && IsMissionTraceId(std::string(31, '0') + "1"));
+	}
+
 	void TestRoute()
 	{
 		// The request: wlj_ only, loopback only, query-safe projectId.
@@ -2204,6 +2293,7 @@ int main()
 	TestCaps();
 	TestVerified();
 	TestBridge();
+	TestTrace();
 	if (Failures != 0)
 	{
 		std::printf("J1 COMPANION KAT FAIL failures=%d\n", Failures);

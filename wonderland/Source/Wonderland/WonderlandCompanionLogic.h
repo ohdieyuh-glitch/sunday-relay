@@ -39,6 +39,9 @@
 //  10. CompanionMissionRequest / ParseCompanionMission: contract v0.1 section 3.7, the loopback read of an agent's
 //      result and provenance (GET .../julius/missions/{wljRunId}/companion), plus v0.2 agents[]. wlj_ only; any
 //      non-200 answer, and any body that fails a check, is "no companion result" and never "verified".
+//      #447 (081d46e6) adds top-level traceId (string | null): parsed as reported, exactly 32 lowercase hex and not
+//      all zero, else no trace id. The client never computes one and never sends one (SameMissionTrace matches it to
+//      the #448 result's traceId).
 //
 // THE CONTRACT this follows is BRIDGE's DRAFT /workspace/bridge/companion-contract-v0.1.md (file written Fri 2026-10-23 22:28 PT),
 // which supersedes v0 (~21:50 PT) and answers Q1-Q24 (ANSWERS_FROM_BRIDGE.md), plus the v0.2 interface BRIDGE posted
@@ -949,6 +952,19 @@ namespace WonderlandCompanionLogic
 	 */
 	FRelayRequest CompanionMissionRequest(std::string_view RelayOrigin, std::string_view WljRunId, std::string_view ProjectId);
 
+	/**
+	 * #447 081d46e6: the companion GET 200 carries top-level "traceId": string | null, derived by BRIDGE from the row's
+	 * wljRunId (julius-mission-trace.mjs). The client PARSES it and never computes, repairs or invents one. Absent (a
+	 * route before #447), null, or anything but 32 lowercase hex that is not all zero is no trace id, and never fails the
+	 * v0.1 read. The 404 body has no traceId; a non-200 answer is never read for one.
+	 */
+	enum class ETraceIdParse : std::uint8_t { Absent, Null, Ok, Malformed };
+	const char* TraceIdParseName(ETraceIdParse Result);
+	/** 32 lowercase hex, not all zero (W3C trace-id). */
+	bool IsMissionTraceId(std::string_view Text);
+	/** Reads Root["traceId"]. Out is set only on Ok and is empty otherwise. */
+	ETraceIdParse ParseMissionTraceId(const FJsonValue& Root, std::string& Out);
+
 	struct FCompanionMissionView
 	{
 		/** False: "no companion result" -- show nothing about the companion. Every non-Ok parse leaves it false. */
@@ -966,6 +982,12 @@ namespace WonderlandCompanionLogic
 		/** Always false: the route's top-level verified is a literal false (route.ts:249) and provenance carries none. */
 		bool bShowVerified = false;
 		std::uint64_t UpdatedAtMs = 0;
+		/**
+		 * #447 traceId as BRIDGE reported it. TraceId is non-empty only when bHasAnswer and TraceIdParse == Ok; a body
+		 * that fails any v0.1 check exposes no trace id. Shown as text; never sent back, never used as an id.
+		 */
+		ETraceIdParse TraceIdParse = ETraceIdParse::Absent;
+		std::string TraceId;
 		/**
 		 * v0.2 agents[], read on its own: filled whenever the body is JSON for THIS wljRunId, even if a v0.1 field
 		 * fails (and an agents[] problem never fails the v0.1 read). Feed it to FCompanionSession::ApplyAgentSlots.
@@ -996,4 +1018,10 @@ namespace WonderlandCompanionLogic
 	 */
 	ECompanionMissionParse ParseCompanionMission(int HttpStatus, std::string_view Body, std::string_view OwnWljRunId,
 		FCompanionMissionView& Out);
+
+	/**
+	 * True only when the companion read for OwnWljRunId exposed a trace id and it equals ResultTraceId (the #448 mission
+	 * result's top-level traceId) byte for byte. Two missing ids never match; a malformed ResultTraceId never matches.
+	 */
+	bool SameMissionTrace(const FCompanionMissionView& Companion, std::string_view ResultTraceId);
 }

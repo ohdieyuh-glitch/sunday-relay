@@ -246,6 +246,24 @@ M = [
  ("mission_wake_id_not_sanitized", CPP, "Out.WakeId = Wake->IsNull() ? std::string() : SanitizeUntrustedText(Wake->Text);", "Out.WakeId = Wake->IsNull() ? std::string() : Wake->Text;"),
  ("mission_body_digest_any_string", CPP, "(Digest->IsString() && WonderlandJuliusMissionLogic::IsLowerHex64(Digest->Text))", "Digest->IsString()"),
  ("mission_simulated_source_read_as_port", CPP, "Out.bSimulated = Source->Text == \"simulated\";\n\t\t\tOut.ResultSha256 = Content->Text;", "Out.bSimulated = false;\n\t\t\tOut.ResultSha256 = Content->Text;"),
+ # #447 081d46e6 traceId: parsed as reported, never computed, never invented.
+ ("trace_uppercase_accepted", CPP, "const bool bHex = (C >= '0' && C <= '9') || (C >= 'a' && C <= 'f'); // TRACE_LOWER_HEX_ONLY", "const bool bHex = (C >= '0' && C <= '9') || (C >= 'a' && C <= 'f') || (C >= 'A' && C <= 'F'); // TRACE_LOWER_HEX_ONLY"),
+ ("trace_any_char_accepted", CPP, "if (!bHex) { return false; }", "(void)bHex;"),
+ ("trace_length_unchecked", CPP, "if (Text.size() != 32) { return false; } // TRACE_LENGTH_EXACT", "if (Text.empty()) { return false; } // TRACE_LENGTH_EXACT"),
+ ("trace_all_zero_accepted", CPP, "return bNonZero; // TRACE_ALL_ZERO_IS_INVALID", "(void)bNonZero; return true; // TRACE_ALL_ZERO_IS_INVALID"),
+ ("trace_null_read_as_ok", CPP, "if (Trace->IsNull()) { return ETraceIdParse::Null; }", "if (Trace->IsNull()) { return ETraceIdParse::Ok; }"),
+ ("trace_non_string_accepted", CPP, "if (!Trace->IsString() || !IsMissionTraceId(Trace->Text))", "if (Trace->IsString() && !IsMissionTraceId(Trace->Text))"),
+ ("trace_malformed_kept", CPP, "{ return ETraceIdParse::Malformed; }\n\t\tOut = Trace->Text;", "{ Out = Trace->Text; return ETraceIdParse::Malformed; }\n\t\tOut = Trace->Text;"),
+ ("trace_malformed_fails_read", CPP, "Out.TraceIdParse = ParseMissionTraceId(Root, Out.TraceId);\n\t\treturn ECompanionMissionParse::Ok;", "Out.TraceIdParse = ParseMissionTraceId(Root, Out.TraceId);\n\t\tif (Out.TraceIdParse == ETraceIdParse::Malformed) { Out = FCompanionMissionView(); return ECompanionMissionParse::BadJson; }\n\t\treturn ECompanionMissionParse::Ok;"),
+ ("trace_absent_fails_read", CPP, "Out.TraceIdParse = ParseMissionTraceId(Root, Out.TraceId);\n\t\treturn ECompanionMissionParse::Ok;", "Out.TraceIdParse = ParseMissionTraceId(Root, Out.TraceId);\n\t\tif (Out.TraceIdParse == ETraceIdParse::Absent) { Out = FCompanionMissionView(); return ECompanionMissionParse::BadJson; }\n\t\treturn ECompanionMissionParse::Ok;"),
+ ("trace_not_parsed", CPP, "Out.TraceIdParse = ParseMissionTraceId(Root, Out.TraceId);\n\t\treturn ECompanionMissionParse::Ok;", "return ECompanionMissionParse::Ok;"),
+ ("trace_read_before_checks", CPP, "Out.AgentsParse = ParseAgentList(Root, Out.Agents);", "Out.AgentsParse = ParseAgentList(Root, Out.Agents);\n\t\tOut.TraceIdParse = ParseMissionTraceId(Root, Out.TraceId);"),
+ ("trace_invented_from_run", CPP, "if (Trace == nullptr) { return ETraceIdParse::Absent; }", "if (Trace == nullptr) { Out = \"192b1fbb866790da0ba590b4a8f45144\"; return ETraceIdParse::Ok; }"),
+ ("trace_match_ignores_value", CPP, "return Companion.TraceId == ResultTraceId;", "return true;"),
+ ("trace_match_without_answer", CPP, "if (!Companion.bHasAnswer || Companion.TraceIdParse != ETraceIdParse::Ok) { return false; }", "if (Companion.TraceIdParse != ETraceIdParse::Ok && !Companion.TraceId.empty()) { return false; }"),
+ ("trace_match_skips_shape", CPP, "if (!IsMissionTraceId(Companion.TraceId) || !IsMissionTraceId(ResultTraceId)) { return false; }", ""),
+ ("trace_sent_in_request", CPP, "+ \"/companion?projectId=\" + std::string(ProjectId);", "+ \"/companion?projectId=\" + std::string(ProjectId) + \"&traceId=192b1fbb866790da0ba590b4a8f45144\";"),
+
 ]
 
 def run_one(cxx, name, rel, old, new):

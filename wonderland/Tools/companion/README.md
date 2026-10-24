@@ -20,9 +20,9 @@ Nothing here has been committed, pushed or opened as a PR. The founder asked for
 | `wonderland/Source/Wonderland/WonderlandJuliusMission{Logic,Progress}.{h,cpp}` | Copies of the #444 files (361edf58), with `Progress.h` replaced by the v0.1 re-pin (`/workspace/cosmo-checkpoint/wlj-v01-repin.patch`, blob `3aa4c941`). Logic.h/.cpp and Progress.cpp blobs are unchanged from #444 (`c0f7fca6`, `0ce9f30a`, `e09bba0d`). The companion core does not read the re-pinned constants. |
 | `wonderland/Tools/j1_companion_kat.cpp` | Standalone KAT. |
 | `build_and_test.sh` | First lints the four core companion files for provider literals (`grok\|chatgpt\|openai\|claude\|anthropic\|gemini\|xai`, case-insensitive; allowed only between `// BEGIN PROVIDER-ADAPTER` and `// END PROVIDER-ADAPTER`, none today; an open or nested block fails), with a 4-case self-test. Then builds and runs the KAT four ways: g++ and clang++, each at -O2 and with ASan+UBSan. |
-| `sabotage.py` | 228 single-rule mutations, applied to temp copies 4 at a time (`SABOTAGE_JOBS`). The KAT must fail on every one. A mutation that does not compile counts as a BROKEN target, not as caught. 7e5e1e30 alignment: 189 → 228. 22 mutations whose code changed (the key field and handoff are gone, new agentId/providerId/displayName rules, `verified` refused, the v0.1 422 path gone) were rewritten as 38, covering the new connect body, publish invariants, the JS-trim set and mission `verified`. 23 more were added for projectId, the chat-route switch, GET/DELETE answers, mission provenance and credential names at any depth and case. One candidate, clearing capabilities on a forced disconnect, was dropped as equivalent: the view never shows capabilities for an agent that is not connected. |
+| `sabotage.py` | 244 single-rule mutations (228 before #447's traceId; 16 added for it), applied to temp copies 4 at a time (`SABOTAGE_JOBS`). The KAT must fail on every one. A mutation that does not compile counts as a BROKEN target, not as caught. 7e5e1e30 alignment: 189 → 228. 22 mutations whose code changed (the key field and handoff are gone, new agentId/providerId/displayName rules, `verified` refused, the v0.1 422 path gone) were rewritten as 38, covering the new connect body, publish invariants, the JS-trim set and mission `verified`. 23 more were added for projectId, the chat-route switch, GET/DELETE answers, mission provenance and credential names at any depth and case. One candidate, clearing capabilities on a forced disconnect, was dropped as equivalent: the view never shows capabilities for an agent that is not connected. |
 | `test-output.txt` | Exact output of both scripts. |
-| `OPEN_QUESTIONS_FOR_BRIDGE.md` | Open questions only (O1-O12). What was settled is in "Aligned with BRIDGE 7e5e1e30" below. |
+| `OPEN_QUESTIONS_FOR_BRIDGE.md` | Open questions only (O1-O13). What was settled is in "Aligned with BRIDGE 7e5e1e30" below. |
 
 ## Aligned with BRIDGE 7e5e1e30 (Sat Oct 24 2026, about 6:30 AM PT)
 
@@ -59,6 +59,18 @@ Whatever the code did not settle is still a fail-closed guess and is listed in `
 
 Still open: A3 (O2), A7 (O3), A15 (O9), A19 (O4), A20 (O10). The key flow (O5), Relay-Session (O6) and Origin (O7) are also open.
 
+
+## traceId from BRIDGE #447 (081d46e6)
+
+#447's head `081d46e6be531235b20729aec5a39550fc3590a8` adds top-level `traceId` (string or null) to the companion `GET` 200 body. BRIDGE derives it from the row's `wljRunId` (`relay-bridge/wonderland-companion-route.ts:258`, `scripts/julius-mission-trace.mjs:91-93`). It is never copied from the query, the body or the stored row, and the 404 body has none.
+
+The client parses it and never computes it.
+- `ParseMissionTraceId` reads `traceId`. It is Ok only for exactly 32 lowercase hex that is not all zero. Absent (a route before #447), `null`, or anything else (uppercase, 31 or 33 characters, all zero, non-hex, a traceparent, a number, a bool, an array, an object) is no trace id: `TraceId` stays empty and the v0.1 read is unaffected.
+- `FCompanionMissionView.TraceId` is set only when the whole body passed (`bHasAnswer`). A body that fails any check, another run's body, and any non-200 answer expose none.
+- `SameMissionTrace(view, resultTraceId)` matches the companion read to the #448 mission result's `traceId`, byte for byte. Two missing ids never match, and a malformed id never matches.
+- The request never carries a `traceId`.
+- The adapter keeps the last parsed id per run (`GetMissionTraceId(wljRunId)`, case-sensitive run match). It is not compiled.
+- KAT section `trace=` uses BRIDGE's two vectors (`wlj_01234567-89ab-4cde-8fab-0123456789ab` → `192b1fbb866790da0ba590b4a8f45144`, `wlj_0b7a1c2e-4f3d-4a6b-8c2d-3e4f5a6b7c8d` → `0ef34f0df7cf2cf89b844dcfa5fe084f`). They are read as reported; the core has no SHA-256, so a well-formed id for the wrong run cannot be detected here (O13).
 
 ### What the pure core does
 
@@ -178,9 +190,9 @@ The full output, including compiler versions and every sabotage line, is in `tes
 
 ```
 LINT PROVIDER-LITERALS PASS files=4 hits=0 (selftest 4/4)
-J1 COMPANION KAT PASS json=27 sse=27 chat=46 session=104 key=55 status=143 pin=51 history=33 result=33 route=121 answers=148 mint=17 agents=93 multi=22 unsupported=15 isolation=23 caps=13 verified=10 bridge=80
+J1 COMPANION KAT PASS json=27 sse=27 chat=46 session=104 key=55 status=143 pin=51 history=33 result=33 route=121 answers=148 mint=17 agents=93 multi=22 unsupported=15 isolation=23 caps=13 verified=10 bridge=80 trace=44
 ```
-That line is printed by all four builds (g++ 14.2.0 -O2, g++ ASan+UBSan, clang++ 19.1.7 -O2, clang++ ASan+UBSan), followed by `ALL BUILDS PASS`. Sabotage: `SABOTAGE RESULT PASS caught=228/228`, no survivors, no BROKEN targets. The new `bridge=80` section checks the 7e5e1e30 behaviour: projectId on every agent URL, the chat-route switch, GET/DELETE answers, mission provenance and credential names at any depth.
+That line is printed by all four builds (g++ 14.2.0 -O2, g++ ASan+UBSan, clang++ 19.1.7 -O2, clang++ ASan+UBSan), followed by `ALL BUILDS PASS`. Sabotage: `SABOTAGE RESULT PASS caught=244/244`, no survivors, no BROKEN targets. The `trace=` section checks #447's traceId. The new `bridge=80` section checks the 7e5e1e30 behaviour: projectId on every agent URL, the chat-route switch, GET/DELETE answers, mission provenance and credential names at any depth.
 
 ## What is NOT done
 

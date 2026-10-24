@@ -74,6 +74,10 @@ public:
 	/** Session-wide: origin, project, connect in flight, the last connect notice, unreadable slots, the SIMULATED banner. */
 	const WonderlandCompanionLogic::FCompanionSessionView& GetSessionView() const { return Session->SessionView(); }
 
+	/** #447: the companion route's traceId for WljRunId as BRIDGE reported it; empty when absent, null, malformed or another run. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
+	FString GetMissionTraceId(const FString& WljRunId) const { return WljRunId.Equals(MissionTraceWljRunId, ESearchCase::CaseSensitive) ? MissionTraceId : FString(); }
+
 	UPROPERTY(BlueprintAssignable, Category = "Wonderland|Companion")
 	FOnWonderlandCompanionViewChanged OnViewChanged;
 
@@ -90,4 +94,7 @@ private:
 	WonderlandCompanionLogic::FIdempotencyKeyMinter KeyMinter;
 	/** One chat stream per agent, keyed by agentId. */
 	TMap<FString, TSharedPtr<IHttpRequest, ESPMode::ThreadSafe>> ChatRequests;
+	/** Last companion read's run and its parsed traceId (ParseCompanionMission). */
+	FString MissionTraceWljRunId;
+	FString MissionTraceId;
 };

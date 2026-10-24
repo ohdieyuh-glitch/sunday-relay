@@ -72,3 +72,9 @@ Each open item names what the client does today. Every choice fails closed, sits
 - Client today: absent, null, or 1-128 bytes of printable ASCII without space are accepted (and ignored).
 - An empty string, an over-cap or non-printable string, or a JSON number is `bad_workflow_run_id`.
 - Can the server send a GitHub run id as a number, or a value longer than 128 bytes?
+
+## traceId (#447, 081d46e6)
+
+**O13. Checking the derivation on the client.**
+- Client today: `traceId` is read as reported (32 lowercase hex, not all zero). The core has no SHA-256, so it cannot check that the id is `julius-trace.v1:` + the `wlj_` id. A well-formed id for another run is shown as is.
+- Should the client re-derive it in the adapter (an engine SHA-256 API, UNVERIFIED), or is "parse, don't compute" the rule?

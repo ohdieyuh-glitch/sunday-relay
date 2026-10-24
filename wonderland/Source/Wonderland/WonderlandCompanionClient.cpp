@@ -62,6 +62,9 @@ void UWonderlandCompanionClient::RefreshMissionAgents(const FString& WljRunId, c
 			FCompanionMissionView Mission;
 			ParseCompanionMission(Status, BytesView(Body), Wlj, Mission); // agents[] are read even if a v0.1 field fails
 			if (Mission.AgentsParse == EAgentListParse::Ok) { Session->ApplyAgentSlots(Mission.Agents); }
+			// #447 traceId: kept as reported for THIS run only; an answer without one clears the last one (never reused).
+			MissionTraceWljRunId = FromUtf8(Wlj);
+			MissionTraceId = Mission.TraceId.empty() ? FString() : FromUtf8(Mission.TraceId);
 			Changed();
 		});
 }

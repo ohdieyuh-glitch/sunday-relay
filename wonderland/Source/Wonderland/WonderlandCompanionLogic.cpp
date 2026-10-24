@@ -2423,6 +2423,49 @@ namespace WonderlandCompanionLogic
 		return "?";
 	}
 
+	const char* TraceIdParseName(ETraceIdParse Result)
+	{
+		switch (Result)
+		{
+		case ETraceIdParse::Absent: return "absent";
+		case ETraceIdParse::Null: return "null";
+		case ETraceIdParse::Ok: return "ok";
+		case ETraceIdParse::Malformed: return "malformed";
+		}
+		return "?";
+	}
+
+	bool IsMissionTraceId(std::string_view Text)
+	{
+		if (Text.size() != 32) { return false; } // TRACE_LENGTH_EXACT
+		bool bNonZero = false;
+		for (const char C : Text)
+		{
+			const bool bHex = (C >= '0' && C <= '9') || (C >= 'a' && C <= 'f'); // TRACE_LOWER_HEX_ONLY
+			if (!bHex) { return false; }
+			if (C != '0') { bNonZero = true; }
+		}
+		return bNonZero; // TRACE_ALL_ZERO_IS_INVALID
+	}
+
+	ETraceIdParse ParseMissionTraceId(const FJsonValue& Root, std::string& Out)
+	{
+		Out.clear();
+		const FJsonValue* Trace = Root.Find("traceId");
+		if (Trace == nullptr) { return ETraceIdParse::Absent; }
+		if (Trace->IsNull()) { return ETraceIdParse::Null; }
+		if (!Trace->IsString() || !IsMissionTraceId(Trace->Text)) { return ETraceIdParse::Malformed; }
+		Out = Trace->Text;
+		return ETraceIdParse::Ok;
+	}
+
+	bool SameMissionTrace(const FCompanionMissionView& Companion, std::string_view ResultTraceId)
+	{
+		if (!Companion.bHasAnswer || Companion.TraceIdParse != ETraceIdParse::Ok) { return false; }
+		if (!IsMissionTraceId(Companion.TraceId) || !IsMissionTraceId(ResultTraceId)) { return false; }
+		return Companion.TraceId == ResultTraceId;
+	}
+
 	ECompanionMissionParse ParseCompanionMission(int HttpStatus, std::string_view Body, std::string_view OwnWljRunId,
 		FCompanionMissionView& Out)
 	{
@@ -2512,6 +2555,8 @@ namespace WonderlandCompanionLogic
 		Out.Provenance = ProvenanceView;
 		Out.bShowVerified = false; // route.ts:249: never verified
 		Out.UpdatedAtMs = UpdatedAt;
+		// #447: parsed, never computed. Only a body that passed every check above exposes one.
+		Out.TraceIdParse = ParseMissionTraceId(Root, Out.TraceId);
 		return ECompanionMissionParse::Ok;
 	}
 }
