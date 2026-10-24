@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, writeSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
+import { parseJuliusAdmissionRunId } from '../scripts/julius-admission-run-id.mjs';
 import { bearerMatches } from './bearer-auth';
 import { sessionTokenFrom } from './browser-session/routes';
 import {
@@ -36,10 +37,12 @@ import type { KeyStore } from './julius-key-store';
  *   8. a ledger that cannot be written: the acceptance row, every pre_call row. NO row = NO provider call.
  *
  * RID-6. The paired client mints the run id. This route checks that shape and echoes it.
- * It does not mint a run id. The only accepted form is `wlj_` plus a canonical
- * lowercase UUIDv4 (version nibble 4, variant nibble 8, 9, a, or b). A bootstrap
- * `run:` id, a bare UUID, and any other string are `400 julius_dispatch_run_invalid`
- * before a ledger row or a provider call.
+ * It does not mint a run id. The accepted form is the `wlj_` result of
+ * `scripts/julius-admission-run-id.mjs` (lowercase UUIDv4: version nibble 4,
+ * variant nibble 8, 9, a, or b). A bootstrap `run:` id, a bare UUID, and any
+ * other string are `400 julius_dispatch_run_invalid` before a ledger row or a
+ * provider call. This handler is not mounted. POST /wonderland/julius/dispatch
+ * belongs to #407.
  *
  * THE TRIGGER ORIGINATES IN THE GAME. The dispatch body must carry `clientLogSha256`: the sha256 of the exact client log line
  * (run id, trigger id, key hash) the game wrote BEFORE it sent the request. The bridge cannot read the client log; it BINDS the
@@ -966,13 +969,18 @@ export function isLoopbackPeer(remoteAddress: string | undefined, host: string |
 }
 
 /**
- * RID-6 client run id. `wlj_` plus a canonical lowercase UUIDv4.
- * The server validates this. It does not mint a substitute.
+ * RID-6 client run id. The shape is `parseJuliusAdmissionRunId` in
+ * `scripts/julius-admission-run-id.mjs` (the same module #445 locks). This
+ * route accepts only that parser's `wlj_` form. A legacy `run:` id is a
+ * valid admission id and is still not a client-minted id here. This module
+ * does not mint a substitute.
+ *
+ * `handleJuliusDispatchRoute` below is not mounted. `POST /wonderland/julius/dispatch`
+ * belongs to #407. This file supplies the validator.
  */
-export const J1_CLIENT_RUN_ID = /^wlj_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-
 export function isClientMintedRunId(value: string): boolean {
-  return J1_CLIENT_RUN_ID.test(value);
+  const parsed = parseJuliusAdmissionRunId(value);
+  return parsed.ok && parsed.form === 'wlj';
 }
 
 const TRIGGER_ID = /^[A-Za-z0-9_-]{8,64}$/;

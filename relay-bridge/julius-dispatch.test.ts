@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { parseJuliusAdmissionRunId } from '../scripts/julius-admission-run-id.mjs';
 import type { KeyStore } from './julius-key-store';
 
 import {
@@ -986,6 +987,8 @@ describe('J1 HTTP edge', () => {
 
   it('RID-6: the route echoes the client-minted run id and rejects every other shape', async () => {
     expect(isClientMintedRunId(RUN)).toBe(true);
+    const parsedRun = parseJuliusAdmissionRunId(RUN);
+    expect(parsedRun.ok && parsedRun.form === 'wlj').toBe(true);
     const h = harness();
     const res = await handleJuliusDispatchRoute(post(), ports(h));
     expect(res.status).toBe(202);
@@ -1008,6 +1011,10 @@ describe('J1 HTTP edge', () => {
       '../x',
       `${RUN}\n`,
     ];
+    for (const runId of [RUN, ...rejected]) {
+      const parsed = parseJuliusAdmissionRunId(runId);
+      expect(isClientMintedRunId(runId), runId).toBe(parsed.ok && parsed.form === 'wlj');
+    }
     for (const runId of rejected) {
       const gate = harness();
       const bad = await handleJuliusDispatchRoute(post({ rawBody: body({ runId }) }), ports(gate));
