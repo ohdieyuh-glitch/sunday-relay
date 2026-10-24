@@ -74,15 +74,20 @@ on:
         description: 'Idempotency key from scripts/julius-paid-dispatch.mjs ([A-Za-z0-9._@#-], 8-96). A second run carrying the same key refuses itself before it can spend.'
         required: false
         default: ''
+      run_id:
+        description: 'Canonical Julius run id, minted by the Wonderland client: wlj_ plus a lowercase UUIDv4. A legacy run: plus 24 lowercase hex already recorded is accepted and is never minted here. Missing or any other shape fails before any provider call. A paid dispatch creates refs/tags/julius-run-spent-<32 hex without dashes> for a wlj id, or julius-run-spent-<24 hex> for a legacy id.'
+        required: false
+        default: ''
       learning_without_run:
         description: 'Only for a mission whose contract is arm WITH of a registered learning pair: the workflow run id of its WITHOUT arm (a successful paid run of this workflow at this commit), whose store this run restores before anything migrates or bootstraps. Empty for every other mission.'
         required: false
         default: ''
 
-# READ-ONLY, and every entry is here because a gate needs it. No write scope of
-# any kind, no PAT, and never the coding worker's credential: the trust gates
-# only ever ASK questions, and a token that could answer them differently is a
-# token that could answer them wrongly.
+# READ-ONLY by default, and every entry is here because a gate needs it. No
+# PAT, and never the coding worker's credential: the trust gates only ever ASK
+# questions, and a token that could answer them differently is a token that
+# could answer them wrongly. The spend-tag job below is the one job that may
+# create a julius-run-spent ref, and it sets that on itself alone.
 #   contents       the branch tip, commit trees and parents, and `compare`
 #   actions        the paid-attempt markers and the accepted-main checkpoints
 #   pull-requests  the merged pull request behind the commit, and its reviews
@@ -114,6 +119,189 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # --------------------------------------- ONE SPENT TAG FOR THIS ADMISSION RUN ID
+  #
+  # The id is supplied. This job never mints one. A missing id halts
+  # admission_run_id_required. Anything that is not the client `wlj_` UUIDv4 or
+  # a legacy `run:` plus 24 lowercase hex halts admission_run_id_malformed.
+  # Both checks run before any GitHub API call and before any provider secret
+  # is in this job: this job holds no provider secret.
+  #
+  # A paid dispatch then creates refs/tags/julius-run-spent-<suffix>. The suffix
+  # is 32 hex from the UUID with the dashes removed, or the legacy 24 hex.
+  # Creation is the only mutation. A tag that already exists, whoever created
+  # it, halts RUN_ID_ALREADY_SPENT. Its message is not read, and it never
+  # allows a run. Any other result is SPENT_TAG_UNVERIFIED. A preflight with a
+  # valid id creates no tag. The paid job's one-at-a-time group is unchanged.
+  spend-tag:
+    name: spend-tag
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    outputs:
+      run_id: ${{ steps.tag.outputs.run_id }}
+      concurrency_group: ${{ steps.tag.outputs.concurrency_group }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: 'Gate: one spent tag for this admission run id, before any provider call'
+        id: tag
+        env:
+          JULIUS_RUN_ID: ${{ inputs.run_id }}
+          CONFIRM_LIVE: ${{ inputs.confirm_live }}
+          MISSION: ${{ inputs.mission }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          JULIUS_RUN_ID="${JULIUS_RUN_ID:-}"
+          CONFIRM_LIVE="${CONFIRM_LIVE:-}"
+          derived=$(node scripts/julius-admission-run-id.mjs derive) || exit 1
+          form=$(printf '%s\n' "$derived" | sed -n 's/^form=//p')
+          run_id=$(printf '%s\n' "$derived" | sed -n 's/^run_id=//p')
+          suffix=$(printf '%s\n' "$derived" | sed -n 's/^tag_suffix=//p')
+          tag_ref=$(printf '%s\n' "$derived" | sed -n 's/^tag_ref=//p')
+          group=$(printf '%s\n' "$derived" | sed -n 's/^concurrency_group=//p')
+          if ! printf '%s' "$run_id" | grep -Eq '^wlj_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$|^run:[0-9a-f]{24}$'; then
+            echo 'admission_run_id_malformed' >&2
+            exit 1
+          fi
+          case "$form" in
+            wlj) [ "${#suffix}" -eq 32 ] || { echo 'admission_run_id_malformed' >&2; exit 1; } ;;
+            legacy) [ "${#suffix}" -eq 24 ] || { echo 'admission_run_id_malformed' >&2; exit 1; } ;;
+            *) echo 'admission_run_id_malformed' >&2; exit 1 ;;
+          esac
+          if ! printf '%s' "$suffix" | grep -Eqx '[0-9a-f]{24}|[0-9a-f]{32}'; then
+            echo 'admission_run_id_malformed' >&2
+            exit 1
+          fi
+          if [ "$tag_ref" != "refs/tags/julius-run-spent-${suffix}" ] || [ "$group" != "julius-paid-${suffix}" ]; then
+            echo 'admission_run_id_malformed' >&2
+            exit 1
+          fi
+          {
+            echo "run_id=${run_id}"
+            echo "concurrency_group=${group}"
+          } >> "${GITHUB_OUTPUT:?}"
+          # A preflight creates no tag. The id was already required above.
+          if [ "$CONFIRM_LIVE" != 'RUN LIVE MISSION' ]; then
+            exit 0
+          fi
+          if ! printf '%s' "${GITHUB_SHA:?}" | grep -Eqx '[0-9a-f]{40}'; then
+            echo 'SPENT_TAG_UNVERIFIED' >&2
+            exit 1
+          fi
+          repository="${GITHUB_REPOSITORY:?}"
+          if ! printf '%s' "$repository" | grep -Eqx '[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+'; then
+            echo 'SPENT_TAG_UNVERIFIED' >&2
+            exit 1
+          fi
+          workflow_run_id="${GITHUB_RUN_ID:?}"
+          workflow_run_attempt="${GITHUB_RUN_ATTEMPT:?}"
+          if ! printf '%s' "$workflow_run_id" | grep -Eqx '[0-9]{1,20}'; then
+            echo 'SPENT_TAG_UNVERIFIED' >&2
+            exit 1
+          fi
+          if ! printf '%s' "$workflow_run_attempt" | grep -Eqx '[0-9]{1,10}'; then
+            echo 'SPENT_TAG_UNVERIFIED' >&2
+            exit 1
+          fi
+          mission="${MISSION:-}"
+          case "$mission" in
+            *[!a-z0-9-]*|'') echo 'SPENT_TAG_UNVERIFIED' >&2; exit 1;;
+          esac
+          contract=".github/julius-missions/${mission}/contract.json"
+          if [ ! -f "$contract" ]; then
+            echo 'SPENT_TAG_UNVERIFIED' >&2
+            exit 1
+          fi
+          reservation=$(node -e 'const fs=require("fs");const c=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const n=c.markerNamespace;const s=c.limits&&c.limits.spendUsd;if(typeof n!=="string"||!/^[a-z0-9-]{1,64}$/.test(n))process.exit(1);if(typeof s!=="number"||!Number.isInteger(s)||s<=0||s>1000000000)process.exit(1);const m=s*1000000;if(!Number.isSafeInteger(m)||String(m).length>15)process.exit(1);process.stdout.write(n+"\n"+String(m));' "$contract") || { echo 'SPENT_TAG_UNVERIFIED' >&2; exit 1; }
+          namespace=${reservation%%$'\n'*}
+          micros=${reservation#*$'\n'}
+          if ! printf '%s' "$namespace" | grep -Eqx '[a-z0-9-]{1,64}'; then
+            echo 'SPENT_TAG_UNVERIFIED' >&2
+            exit 1
+          fi
+          if ! printf '%s' "$micros" | grep -Eqx '[1-9][0-9]{0,14}'; then
+            echo 'SPENT_TAG_UNVERIFIED' >&2
+            exit 1
+          fi
+          gh_api() {
+            local method="$1" path="$2" payload="${3-}"
+            api_body=$(mktemp)
+            set +e
+            if [ "$method" = GET ]; then
+              api_code=$(curl -sS -o "$api_body" -w '%{http_code}' -X GET \
+                -H "Authorization: Bearer ${GH_TOKEN:?}" \
+                -H 'Accept: application/vnd.github+json' \
+                -H 'X-GitHub-Api-Version: 2022-11-28' \
+                "https://api.github.com/repos/${repository}${path}")
+            else
+              api_code=$(curl -sS -o "$api_body" -w '%{http_code}' -X POST \
+                -H "Authorization: Bearer ${GH_TOKEN:?}" \
+                -H 'Accept: application/vnd.github+json' \
+                -H 'X-GitHub-Api-Version: 2022-11-28' \
+                "https://api.github.com/repos/${repository}${path}" \
+                --data-binary "$payload")
+            fi
+            api_status=$?
+            set -e
+          }
+          created_sha() {
+            if [ "$api_status" -ne 0 ] || [ "$api_code" != 201 ]; then
+              echo 'SPENT_TAG_UNVERIFIED' >&2
+              exit 1
+            fi
+            api_sha=$(grep -oE '"sha"[[:space:]]*:[[:space:]]*"[0-9a-f]{40}"' "$api_body" | head -1 | grep -oE '[0-9a-f]{40}' || true)
+            if [ -z "$api_sha" ]; then
+              echo 'SPENT_TAG_UNVERIFIED' >&2
+              exit 1
+            fi
+          }
+          gh_api GET "/git/ref/tags/julius-run-spent-${suffix}"
+          if [ "$api_status" -ne 0 ]; then
+            echo 'SPENT_TAG_UNVERIFIED' >&2
+            exit 1
+          fi
+          if [ "$api_code" = 200 ]; then
+            echo 'RUN_ID_ALREADY_SPENT' >&2
+            exit 1
+          fi
+          if [ "$api_code" != 404 ]; then
+            echo 'SPENT_TAG_UNVERIFIED' >&2
+            exit 1
+          fi
+          json_audit="julius-run-spent.v1\nrun=${run_id}\nnamespace=${namespace}\nreservedUsdMicros=${micros}\nworkflow_run_id=${workflow_run_id}\nworkflow_run_attempt=${workflow_run_attempt}\nhead_sha=${GITHUB_SHA}\n"
+          tagged_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          if ! printf '%s' "$tagged_at" | grep -Eqx '[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z'; then
+            echo 'SPENT_TAG_UNVERIFIED' >&2
+            exit 1
+          fi
+          gh_api POST /git/blobs "$(printf '{"content":"%s","encoding":"utf-8"}' "$json_audit")"
+          created_sha
+          blob_sha=$api_sha
+          gh_api POST /git/trees "$(printf '{"tree":[{"path":"julius-run-spent-audit.txt","mode":"100644","type":"blob","sha":"%s"}]}' "$blob_sha")"
+          created_sha
+          tree_sha=$api_sha
+          gh_api POST /git/commits "$(printf '{"message":"%s","tree":"%s","parents":["%s"]}' "$json_audit" "$tree_sha" "$GITHUB_SHA")"
+          created_sha
+          commit_sha=$api_sha
+          gh_api POST /git/tags "$(printf '{"tag":"julius-run-spent-%s","message":"%s","object":"%s","type":"commit","tagger":{"name":"github-actions[bot]","email":"41898282+github-actions[bot]@users.noreply.github.com","date":"%s"}}' "$suffix" "$json_audit" "$commit_sha" "$tagged_at")"
+          created_sha
+          tag_sha=$api_sha
+          gh_api POST /git/refs "$(printf '{"ref":"refs/tags/julius-run-spent-%s","sha":"%s"}' "$suffix" "$tag_sha")"
+          if [ "$api_status" -eq 0 ] && [ "$api_code" = 422 ] && grep -q 'Reference already exists' "$api_body"; then
+            echo 'RUN_ID_ALREADY_SPENT' >&2
+            exit 1
+          fi
+          if [ "$api_status" -ne 0 ] || [ "$api_code" != 201 ] || ! grep -F -q "$tag_sha" "$api_body"; then
+            echo 'SPENT_TAG_UNVERIFIED' >&2
+            exit 1
+          fi
+          exit 0
+
   # ------------------------------------------------------- THE PAID PROVIDER SLOT
   #
   # ONE PAID RUN AT A TIME, IN AN ORDER SOMEBODY WROTE DOWN.
@@ -135,7 +323,8 @@ jobs:
   # `paid_slot_wait_exhausted` and has spent nothing.
   paid-slot:
     name: paid-slot
-    if: inputs.confirm_live == 'RUN LIVE MISSION'
+    needs: spend-tag
+    if: needs.spend-tag.result == 'success' && inputs.confirm_live == 'RUN LIVE MISSION'
     runs-on: ubuntu-24.04
     timeout-minutes: 350
     defaults:
@@ -213,8 +402,8 @@ jobs:
     # always has; a paid run starts only when admission concluded `success`. A
     # paid run whose admission failed, was cancelled or refused a duplicate never
     # reaches a step that could spend.
-    needs: paid-slot
-    if: ${{ !cancelled() && (needs.paid-slot.result == 'success' || (needs.paid-slot.result == 'skipped' && inputs.confirm_live != 'RUN LIVE MISSION')) }}
+    needs: [spend-tag, paid-slot]
+    if: ${{ !cancelled() && needs.spend-tag.result == 'success' && (needs.paid-slot.result == 'success' || (needs.paid-slot.result == 'skipped' && inputs.confirm_live != 'RUN LIVE MISSION')) }}
     # THE SECOND LINE. With admission correct this group never has a pending
     # member; if admission were ever wrong, two paid jobs still could not run at
     # once. Dry runs keep a group of their own.
@@ -293,11 +482,11 @@ jobs:
       # resolves anything other than these.
       RELAY_PROMPT_ARCHITECT_MODE: live
       OPENAI_PROMPT_ARCHITECT_MODEL: gpt-5.6-sol
-      # THE CODING AGENT IS CLAUDE OPUS 5.5 (founder decision, 2026-09-30), on the
-      # founder's Claude Max subscription. The smoke and the paid run use this one pin,
-      # so the model a smoke qualifies is the model the paid run uses. No other model
-      # is acceptable, and none is a fallback: the smoke's verdict and the coder's
-      # dispatch must refuse any other SERVED model, and a paid run needs both.
+      # THE CODING AGENT IS CLAUDE OPUS 5.5 (founder decision, 2026-09-30). The pin
+      # is unchanged. PENDING FOUNDER RULING: this draft authenticates that model
+      # with the user-owned Anthropic API key, not a consumer Claude Max login.
+      # No other model is acceptable, and none is a fallback: the coder's dispatch
+      # must refuse any other SERVED model.
       RELAY_HOSTED_CODING_MODEL: claude-opus-5-5
       RELAY_HERMES_PROVIDER: xai
       RELAY_HERMES_MODEL: grok-build-0.1
@@ -567,9 +756,20 @@ jobs:
         run: |
           set -euo pipefail
           LEARNING_WITHOUT_RUN="${LEARNING_WITHOUT_RUN:-}"
-          declared=$(node -e 'const p=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).learningPair;if(p===undefined){process.stdout.write("none - -");process.exit(0)}const ok=(v,r)=>typeof v==="string"&&r.test(v);if(!p||(p.arm!=="WITHOUT"&&p.arm!=="WITH")||!ok(p.registrationDigest,/^[0-9a-f]{64}$/)||(p.arm==="WITH"&&!ok(p.withoutRunId,/^run:[0-9a-f]{24}$/))){console.error("learning_pair_unreadable");process.exit(1)}process.stdout.write(p.arm+" "+(p.arm==="WITH"?p.withoutRunId:"-")+" "+p.registrationDigest)' "$CONTRACT")
+          # withoutRunId is one token here. The shared admission parser, below, is what accepts it.
+          declared=$(node -e 'const p=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).learningPair;if(p===undefined){process.stdout.write("none - -");process.exit(0)}const ok=(v,r)=>typeof v==="string"&&r.test(v);if(!p||(p.arm!=="WITHOUT"&&p.arm!=="WITH")||!ok(p.registrationDigest,/^[0-9a-f]{64}$/)||(p.arm==="WITH"&&(typeof p.withoutRunId!=="string"||p.withoutRunId.length===0||/\s/.test(p.withoutRunId)))){console.error("learning_pair_unreadable");process.exit(1)}process.stdout.write(p.arm+" "+(p.arm==="WITH"?p.withoutRunId:"-")+" "+p.registrationDigest)' "$CONTRACT")
           read -r arm without_julius_run registration_digest <<< "$declared"
           if [ "$arm" = WITH ]; then
+            # THE SHARED PARSER. One wlj_ id, or one legacy run: id read as a reference. Anything else fails closed.
+            derived=$(JULIUS_RUN_ID="$without_julius_run" node scripts/julius-admission-run-id.mjs derive) || { echo 'learning_pair_unreadable' >&2; exit 1; }
+            parsed_id=$(printf '%s\n' "$derived" | sed -n 's/^run_id=//p')
+            form=$(printf '%s\n' "$derived" | sed -n 's/^form=//p')
+            [ "$(printf '%s\n' "$derived" | grep -c '^form=')" = 1 ] || { echo 'learning_pair_unreadable' >&2; exit 1; }
+            [ "$(printf '%s\n' "$derived" | grep -c '^run_id=')" = 1 ] || { echo 'learning_pair_unreadable' >&2; exit 1; }
+            case "$form" in
+              wlj|legacy) [ "$parsed_id" = "$without_julius_run" ] || { echo 'learning_pair_unreadable' >&2; exit 1; } ;;
+              *) echo 'learning_pair_unreadable' >&2; exit 1 ;;
+            esac
             case "$LEARNING_WITHOUT_RUN" in
               ''|*[!0-9]*) echo 'learning_without_run_required: arm WITH restores the store of its WITHOUT arm; name that workflow run id' >&2; exit 1;;
             esac
@@ -708,77 +908,36 @@ jobs:
       - name: Install
         run: npm ci
 
-      # THE SUBSCRIPTION SMOKE — ON ITS OWN WHEN ASKED, BEFORE EVERY PAID RUN, AND NEVER API CREDIT.
+      # PENDING FOUNDER RULING. Anthropic's terms disallow routing a product
+      # through a consumer Claude Max login. This draft authenticates the Coding
+      # Agent with the user-owned ANTHROPIC_API_KEY only. If that secret is
+      # absent, including when only CLAUDE_CODE_OAUTH_TOKEN is configured, the
+      # run stops here. No value is printed, and no provider is called.
       #
-      # A PAID RUN QUALIFIES ITS CODER FIRST (Codex review of #302, P1). The readiness
-      # check below proves a LOGIN, not that the pinned model is served: a paid run
-      # that skipped this step could pay the Prompt Architect and the plan review
-      # before learning the coder's model was unavailable or substituted. So
-      # `confirm_live` runs this step too, and the attempt marker, its upload and the
-      # LIVE step each require its `success` by id. The zero-dispatch preflight (no
-      # `confirm_live`, no `subscription_smoke`) still sends nothing.
-      #
-      # The Coding Agent authenticates with the founder's Claude Max subscription
-      # through a `claude setup-token` token (CLAUDE_CODE_OAUTH_TOKEN). The free
-      # readiness check below proves the PATH (`auth status` in the child's own
-      # environment); only a real request proves the token is live and the pinned
-      # model is served on the subscription. This sends exactly one: "Reply with
-      # exactly OK", one turn, in an empty temporary directory (no project
-      # settings, no CLAUDE.md), with the Agent SDK's own bundled CLI for this
-      # runner (ubuntu x64) run as a LITERAL command under `env -i`: its
-      # environment is built from nothing but PATH, a fresh HOME, CI/NO_COLOR/TERM,
-      # the token and the CLI's two small-model slots pinned to the Coding Agent's
-      # own model, so no Anthropic API variable can reach it and no other model can
-      # answer: a housekeeping call the CLI makes lands on the pinned model too, and
-      # the smoke's served-model check may then require that EVERY model that
-      # produced output is the one asked for. No Anthropic API
-      # key exists in this step either, and `env-check` refuses outright if any
-      # variable that outranks the token is present. The CLI's output goes to
-      # files the check script judges; stderr is discarded; only closed tokens
-      # are printed. There is no fallback: anything but a subscription is FAIL.
-      - name: 'Subscription smoke: one tiny request on the Coding Agent''s subscription'
-        id: subscription_smoke
-        if: success() && (inputs.subscription_smoke == 'RUN SUBSCRIPTION SMOKE' || inputs.confirm_live == 'RUN LIVE MISSION')
+      # The pinned model is still checked before a paid step, by the readiness
+      # probe below: GET /v1/models/<id> with the API key, the same metadata
+      # check the other API providers already use. It generates no tokens.
+      - name: 'Gate: coder uses the user-owned Anthropic API key (pending founder ruling)'
+        id: coder_auth
         env:
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          set -uo pipefail
-          # THE STEP ALWAYS REACHES ITS VERDICT. GitHub runs this under `bash -e`, which
-          # `set -uo pipefail` does not clear, so a CLI that exited non-zero (as it does
-          # on an error reply) aborted the step before smoke-verdict read its JSON; with
-          # stderr discarded, run 36685079176 failed and left no reason behind. Errexit
-          # is off for this step only. Every outcome below is still decided explicitly,
-          # and the step still fails closed: only a PASS verdict line lets it succeed.
-          # BOTH EXITS DECIDE TOO (Codex review of #302, P2): each is kept in a variable on
-          # the line straight after its call, handed to smoke-verdict, and required to be
-          # 0 below, so JSON that reads OK from a CLI that then exited non-zero is a FAIL.
-          set +e
-          sub=$(mktemp -d)
-          mkdir "$sub/home" "$sub/work"
-          : > subscription-smoke.log
-          status=1
-          auth_exit=none
-          cli_exit=none
-          if node scripts/julius-subscription-check.mjs env-check --for smoke --model "$RELAY_HOSTED_CODING_MODEL" | tee -a subscription-smoke.log; then
-            env -i -C "$sub/work" PATH="$PATH" HOME="$sub/home" CI=1 NO_COLOR=1 TERM=dumb ANTHROPIC_DEFAULT_HAIKU_MODEL="$RELAY_HOSTED_CODING_MODEL" ANTHROPIC_SMALL_FAST_MODEL="$RELAY_HOSTED_CODING_MODEL" CLAUDE_CODE_OAUTH_TOKEN="$CLAUDE_CODE_OAUTH_TOKEN" \
-              "$PWD/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude" auth status --json > "$sub/status.json" 2>/dev/null
-            auth_exit=$?
-            echo "subscription_smoke_auth_exit=$auth_exit" | tee -a subscription-smoke.log
-            if node scripts/julius-subscription-check.mjs status-verdict --for smoke --model "$RELAY_HOSTED_CODING_MODEL" < "$sub/status.json" | tee -a subscription-smoke.log; then
-              env -i -C "$sub/work" PATH="$PATH" HOME="$sub/home" CI=1 NO_COLOR=1 TERM=dumb ANTHROPIC_DEFAULT_HAIKU_MODEL="$RELAY_HOSTED_CODING_MODEL" ANTHROPIC_SMALL_FAST_MODEL="$RELAY_HOSTED_CODING_MODEL" CLAUDE_CODE_OAUTH_TOKEN="$CLAUDE_CODE_OAUTH_TOKEN" \
-                "$PWD/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude" -p 'Reply with exactly OK' --max-turns 1 --output-format json --model "$RELAY_HOSTED_CODING_MODEL" --setting-sources user --strict-mcp-config --no-session-persistence > "$sub/smoke.json" 2>/dev/null
-              cli_exit=$?
-              echo "subscription_smoke_cli_exit=$cli_exit" | tee -a subscription-smoke.log
-              node scripts/julius-subscription-check.mjs smoke-verdict --model "$RELAY_HOSTED_CODING_MODEL" --status-file "$sub/status.json" --auth-exit "$auth_exit" --cli-exit "$cli_exit" < "$sub/smoke.json" | tee -a subscription-smoke.log
-              status=${PIPESTATUS[0]}
-            fi
+          set -euo pipefail
+          if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+            echo 'coder_auth_api_key_required: refusing before any provider call. CLAUDE_CODE_OAUTH_TOKEN is not a product credential (pending founder ruling).' >&2
+            exit 1
           fi
-          rm -rf "$sub"
-          grep -qE '^subscription_smoke provider=anthropic .* auth=CLAUDE_SUBSCRIPTION method=(oauth_token|claude\.ai) reply=OK result=PASS$' subscription-smoke.log \
-            || { echo 'subscription_smoke_failed: no PASS on the pinned model; the log above says why; nothing else was attempted' >&2; exit 1; }
-          [ "$auth_exit" = 0 ] && [ "$cli_exit" = 0 ] \
-            || { echo "subscription_smoke_failed: a PASS needs both CLI exits to be 0 (auth status: $auth_exit, request: $cli_exit)" >&2; exit 1; }
-          exit "$status"
+          echo 'coder_auth=ANTHROPIC_API_KEY'
+
+      # A dispatch that asks for the old subscription smoke is refused. It does
+      # not run on a paid dispatch, and it does not contact Anthropic.
+      - name: 'Subscription smoke: refused pending founder ruling'
+        id: subscription_smoke
+        if: success() && inputs.subscription_smoke == 'RUN SUBSCRIPTION SMOKE' && inputs.confirm_live != 'RUN LIVE MISSION'
+        run: |
+          set -euo pipefail
+          echo 'coder_auth_subscription_refused: pending founder ruling. This workflow does not send a consumer Claude Max login request. Nothing was contacted.' >&2
+          exit 1
 
       - name: Build the executor, the preflight probe and the live entrypoint
         run: |
@@ -1027,24 +1186,14 @@ jobs:
       # implying "sufficient"; an exhausted balance surfaces as a provider refusal
       # during the run, and the queue report classifies it PROVIDER_BLOCKED.
       #
-      # THE CODING AGENT IS NOT AN API-KEY PROVIDER (founder rule, 2026-09-29). It
-      # authenticates with the founder's Claude Max subscription via a
-      # `claude setup-token` token, so the Anthropic `GET /v1/models` key probe is
-      # gone: it could only ever prove an API key, and paid attempt 1 (run
-      # 36568129865) died on exactly that key (`credit_unavailable`). In its place,
-      # a ZERO-GENERATION subscription check: `auth status --json` with the Agent
-      # SDK's own CLI, in an environment holding nothing but PATH, a fresh HOME and
-      # the token, asserting a logged-in, first-party subscription path with no
-      # API-key source (`scripts/julius-subscription-check.mjs status-verdict`,
-      # which only judges the CLI's JSON and starts no process). It writes
-      # the anthropic readiness line itself, as SUBSCRIPTION_LOGIN_PRESENT — NOT
-      # AUTHENTICATED_MODEL_AVAILABLE, because `auth status` cannot see whether the
-      # model is served; the optional subscription smoke above is what proves that.
-      # OpenAI and xAI stay API-billed and keep their key probes unchanged.
+      # PENDING FOUNDER RULING. The Coding Agent is probed the same way as the
+      # other API providers: GET /v1/models/<id> with the user-owned
+      # ANTHROPIC_API_KEY, through curl --config, generating nothing. A consumer
+      # Claude login token is not a credential of this step.
       - name: 'Preflight: each provider accepts its credential and serves the pinned model, nothing generated'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
         run: |
           set -uo pipefail
@@ -1072,31 +1221,12 @@ jobs:
             esac
             echo "provider_readiness provider=$provider model=$model http=$code result=$result" | tee -a provider-readiness.log
           }
-          [ -n "$OPENAI_API_KEY" ] && [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ] && [ -n "$XAI_API_KEY" ] || {
+          [ -n "$OPENAI_API_KEY" ] && [ -n "$ANTHROPIC_API_KEY" ] && [ -n "$XAI_API_KEY" ] || {
             echo 'provider_credentials_missing: a provider credential is not set in the julius-live-validation environment' >&2; exit 1; }
           printf 'header = "Authorization: Bearer %s"\n' "$OPENAI_API_KEY" \
             | probe openai "$OPENAI_PROMPT_ARCHITECT_MODEL" "https://api.openai.com/v1/models/$OPENAI_PROMPT_ARCHITECT_MODEL"
-          # The Coding Agent: its SUBSCRIPTION, never an API key. `env-check`
-          # refuses a step holding any variable that outranks the token; then the
-          # Agent SDK's bundled CLI for this runner (ubuntu x64) runs as a literal
-          # command under `env -i`, from an empty directory, so nothing but the
-          # allow-listed names can reach it. Its JSON goes to a file the check
-          # script judges; stderr is discarded; only closed tokens are printed.
-          sub=$(mktemp -d)
-          mkdir "$sub/home" "$sub/work"
-          if node scripts/julius-subscription-check.mjs env-check --model "$RELAY_HOSTED_CODING_MODEL" | tee -a provider-readiness.log; then
-            # Errexit is off for these two, as it is for the roles preflight: under this
-            # step's `bash -e`, a non-zero `auth status` or a not-ready verdict would end
-            # the step before the reviewer is probed and before the count below. The
-            # count is the gate, and it still fails closed.
-            set +e
-            env -i -C "$sub/work" PATH="$PATH" HOME="$sub/home" CI=1 NO_COLOR=1 TERM=dumb ANTHROPIC_DEFAULT_HAIKU_MODEL="$RELAY_HOSTED_CODING_MODEL" ANTHROPIC_SMALL_FAST_MODEL="$RELAY_HOSTED_CODING_MODEL" CLAUDE_CODE_OAUTH_TOKEN="$CLAUDE_CODE_OAUTH_TOKEN" \
-              "$PWD/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude" auth status --json > "$sub/status.json" 2>/dev/null
-            node scripts/julius-subscription-check.mjs status-verdict --model "$RELAY_HOSTED_CODING_MODEL" < "$sub/status.json" \
-              | tee -a provider-readiness.log
-            set -e
-          fi
-          rm -rf "$sub"
+          printf 'header = "x-api-key: %s"\nheader = "anthropic-version: 2023-06-01"\n' "$ANTHROPIC_API_KEY" \
+            | probe anthropic "$RELAY_HOSTED_CODING_MODEL" "https://api.anthropic.com/v1/models/$RELAY_HOSTED_CODING_MODEL"
           if [ "$RELAY_HERMES_PROVIDER" = 'xai' ]; then
             printf 'header = "Authorization: Bearer %s"\n' "$XAI_API_KEY" \
               | probe xai "$RELAY_HERMES_MODEL" "https://api.x.ai/v1/models/$RELAY_HERMES_MODEL"
@@ -1104,27 +1234,22 @@ jobs:
             echo "provider_readiness provider=$RELAY_HERMES_PROVIDER model=$RELAY_HERMES_MODEL http=none result=UNCHECKED" | tee -a provider-readiness.log
           fi
           echo 'provider_balance=UNKNOWN (no provider exposes a spend-free balance query; exhaustion surfaces as PROVIDER_BLOCKED when a provider refuses)' | tee -a provider-readiness.log
-          # THREE PROVIDERS READY, AND EACH READY IN ITS OWN SENSE: the two API-billed
-          # providers by key + pinned model (AUTHENTICATED_MODEL_AVAILABLE), the
-          # Coding Agent by a subscription path with no API key in play
-          # (SUBSCRIPTION_LOGIN_PRESENT). Counted per provider, so a subscription
-          # line can never stand in for an API one or the other way round.
+          # THREE API PROVIDERS, EACH BY ITS KEY AND ITS PINNED MODEL. A subscription
+          # line cannot stand in for one of them.
           probed=$(grep -c '^provider_readiness ' provider-readiness.log || true)
-          api_ready=$(grep -cE '^provider_readiness provider=(openai|xai) .* result=AUTHENTICATED_MODEL_AVAILABLE$' provider-readiness.log || true)
-          subscription_ready=$(grep -cE '^provider_readiness provider=anthropic .* auth=CLAUDE_SUBSCRIPTION method=(oauth_token|claude\.ai) .* result=SUBSCRIPTION_LOGIN_PRESENT$' provider-readiness.log || true)
-          ready=$((api_ready + subscription_ready))
-          if [ "$probed" -ne 3 ] || [ "$api_ready" -ne 2 ] || [ "$subscription_ready" -ne 1 ] || [ "$ready" -ne 3 ]; then
-            echo 'provider_not_ready: an API provider refused its credential, does not serve the pinned model, or could not be reached, or the Coding Agent has no subscription path free of an API key; nothing was spent' >&2
+          api_ready=$(grep -cE '^provider_readiness provider=(openai|anthropic|xai) .* result=AUTHENTICATED_MODEL_AVAILABLE$' provider-readiness.log || true)
+          if [ "$probed" -ne 3 ] || [ "$api_ready" -ne 3 ]; then
+            echo 'provider_not_ready: a provider refused its credential, does not serve the pinned model, or could not be reached; nothing was spent' >&2
             exit 1
           fi
 
       - name: 'Preflight: all three roles resolve to the expected models, nothing dispatched'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          # The Coding Agent runs on the founder's Claude subscription, never on an
-          # Anthropic API key: the key is deliberately NOT passed to this step.
-          JULIUS_CLAUDE_AUTH: CLAUDE_SUBSCRIPTION
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # PENDING FOUNDER RULING. The Coding Agent uses the user-owned API key
+          # alone. The consumer login token is not passed into this step.
+          JULIUS_CLAUDE_AUTH: ANTHROPIC_API
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           JULIUS_SCOPED_CREDENTIALS: ${{ steps.identity.outputs.scoped }}
           RELAY_HERMES_EXECUTABLE: /tmp/julius-hermes-bin/hermes
         run: |
@@ -1154,21 +1279,19 @@ jobs:
           # coder stopped after two turns). The entrypoint prints the answer from
           # the store it will actually use; nothing but BOUND is accepted.
           grep -qx '  live_ledger: BOUND' preflight-roles.log || { echo 'live_ledger_unbound: allocation would fall back to a flat estimate' >&2; exit 1; }
-          for name in OPENAI_API_KEY CLAUDE_CODE_OAUTH_TOKEN DATABASE_URL JULIUS_EXECUTOR_ENDPOINT JULIUS_SCOPED_CREDENTIALS EXECUTOR_KEY_ID JULIUS_PUBLIC_KEY_PATH JULIUS_CALLER_ID; do
+          for name in OPENAI_API_KEY ANTHROPIC_API_KEY DATABASE_URL JULIUS_EXECUTOR_ENDPOINT JULIUS_SCOPED_CREDENTIALS EXECUTOR_KEY_ID JULIUS_PUBLIC_KEY_PATH JULIUS_CALLER_ID; do
             grep -q "^  $name: SET$" preflight-roles.log || { echo "preflight_variable_not_set:$name" >&2; exit 1; }
           done
-          # HOW EACH ROLE IS PAID FOR, AS THE ENTRYPOINT RESOLVED IT, OR NO PAID RUN.
-          # Paid attempt 1 (run 36568129865) ran the Coding Agent on an API key and
-          # died on `credit_unavailable`. The founder's rule: the Coding Agent is
-          # the Claude subscription, the architect and reviewer are API-billed.
-          grep -qx '  ANTHROPIC_API_KEY: MISSING' preflight-roles.log || { echo 'coder_api_key_present: the entrypoint saw an Anthropic API key' >&2; exit 1; }
-          grep -qE '^  CLAUDE AUTH: SUBSCRIPTION provider=ANTHROPIC execution=CLAUDE_AGENT_SDK plan=[a-z]+ api_key_used=false api_cost_applicable=false$' preflight-roles.log \
-            || { echo 'coder_auth_not_subscription: the Coding Agent did not resolve to the Claude subscription' >&2; exit 1; }
-          grep -qx '  claude auth source: subscription_oauth_token' preflight-roles.log \
-            || { echo 'coder_auth_source_unexpected: the Coding Agent is not on the setup-token subscription token' >&2; exit 1; }
-          grep -qx '  billing paths: architect=API_BILLED coder=SUBSCRIPTION reviewer=API_BILLED' preflight-roles.log \
-            || { echo 'billing_paths_unexpected: expected architect=API_BILLED coder=SUBSCRIPTION reviewer=API_BILLED' >&2; exit 1; }
-          echo 'PREFLIGHT OK: three roles resolved, every variable present, coder on the Claude subscription, no provider contacted.'
+          # PENDING FOUNDER RULING. The Coding Agent is API-billed on the
+          # user-owned key. A consumer login token in this step is a refusal.
+          grep -qx '  CLAUDE_CODE_OAUTH_TOKEN: MISSING' preflight-roles.log || { echo 'coder_auth_oauth_token_present: the entrypoint saw a consumer Claude login token' >&2; exit 1; }
+          grep -qE '^  CLAUDE AUTH: API KEY provider=ANTHROPIC execution=CLAUDE_AGENT_SDK plan=n/a api_key_used=true api_cost_applicable=true$' preflight-roles.log \
+            || { echo 'coder_auth_not_api_key: the Coding Agent did not resolve to the user-owned Anthropic API key' >&2; exit 1; }
+          grep -qx '  claude auth source: anthropic_api_key' preflight-roles.log \
+            || { echo 'coder_auth_source_unexpected: the Coding Agent is not on the user-owned Anthropic API key' >&2; exit 1; }
+          grep -qx '  billing paths: architect=API_BILLED coder=API_BILLED reviewer=API_BILLED' preflight-roles.log \
+            || { echo 'billing_paths_unexpected: expected architect=API_BILLED coder=API_BILLED reviewer=API_BILLED' >&2; exit 1; }
+          echo 'PREFLIGHT OK: three roles resolved, every variable present, coder on the user-owned Anthropic API key, no provider contacted.'
 
       - name: 'Preflight complete — stopping here (no confirm_live given)'
         if: inputs.confirm_live != 'RUN LIVE MISSION'
@@ -1179,12 +1302,11 @@ jobs:
       # ----------------------------------------------------------------- LIVE
 
       # THE LAST FREE STEP. Everything above proved the rig without spending
-      # anything billable (a paid run's subscription smoke is one tiny request on
-      # the coder's subscription, never API credit); the entrypoint below can
-      # contact a provider on its first tick. The attempt is recorded HERE, in
-      # between, so a run that dies mid-mission still leaves the durable fact that
-      # a paid run was entered. No paid step runs unless that smoke PASSED in this
-      # job: each names `steps.subscription_smoke.outcome == 'success'`.
+      # anything billable; the entrypoint below can contact a provider on its
+      # first tick. The attempt is recorded HERE, in between, so a run that dies
+      # mid-mission still leaves the durable fact that a paid run was entered.
+      # No paid step runs unless the coder API-key gate PASSED in this job:
+      # each names `steps.coder_auth.outcome == 'success'`. PENDING FOUNDER RULING.
       #
       # ORDERING IS THE SEMANTIC. The marker means "authorized and about to
       # start", not "a provider was billed" — a claim this job could never
@@ -1193,7 +1315,7 @@ jobs:
       # behind for the next dispatch to find.
       - name: 'Record that a paid mission was attempted (before any provider can be reached)'
         id: attempt_marker
-        if: success() && inputs.confirm_live == 'RUN LIVE MISSION' && steps.subscription_smoke.outcome == 'success'
+        if: success() && inputs.confirm_live == 'RUN LIVE MISSION' && steps.coder_auth.outcome == 'success'
         env:
           MARKER_DIR: ${{ steps.inputs_gate.outputs.marker_namespace }}-attempted
         run: |
@@ -1216,7 +1338,7 @@ jobs:
           } > "$MARKER_DIR/marker.txt"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        if: success() && inputs.confirm_live == 'RUN LIVE MISSION' && steps.subscription_smoke.outcome == 'success'
+        if: success() && inputs.confirm_live == 'RUN LIVE MISSION' && steps.coder_auth.outcome == 'success'
         with:
           name: ${{ steps.inputs_gate.outputs.marker_namespace }}-attempted
           path: ${{ steps.inputs_gate.outputs.marker_namespace }}-attempted
@@ -1238,14 +1360,15 @@ jobs:
       # obvious mistake instead of a subtle one — and the contract test pins it.
       - name: 'LIVE: run the first real Julius mission'
         id: live_mission
-        if: success() && inputs.confirm_live == 'RUN LIVE MISSION' && steps.subscription_smoke.outcome == 'success'
+        if: success() && inputs.confirm_live == 'RUN LIVE MISSION' && steps.coder_auth.outcome == 'success'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          # The Coding Agent on the founder's Claude subscription. No Anthropic API
-          # key reaches this step; `hostedChildEnv` admits the token into the
-          # Coding Agent's child under CLAUDE_SUBSCRIPTION only.
-          JULIUS_CLAUDE_AUTH: CLAUDE_SUBSCRIPTION
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # PENDING FOUNDER RULING. API key only. The consumer login token is not
+          # mapped into this step, so the Coding Agent child cannot carry it.
+          JULIUS_CLAUDE_AUTH: ANTHROPIC_API
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          JULIUS_RUN_ID: ${{ needs.spend-tag.outputs.run_id }}
+          JULIUS_SERVER_RUN_ID: ${{ needs.spend-tag.outputs.run_id }}
           JULIUS_SCOPED_CREDENTIALS: ${{ steps.identity.outputs.scoped }}
           # The reviewer is spawned through a wrapper that sets HOME to the
           # ephemeral profile for ITSELF ALONE. Setting HOME on this step
@@ -1323,8 +1446,17 @@ jobs:
           rm -rf julius-learning-store "$render"
           mkdir -p julius-learning-store "$render"
           # THE RUN THIS STORE IS, in the entrypoint's own words: its one `Run ... accepted` line.
-          run_id=$(sed -n 's/^Run \(run:[0-9a-f]\{24\}\) accepted in state READY; driving the Julius run loop\.$/\1/p' live-mission.log | sort -u)
-          [ "$(printf '%s\n' "$run_id" | grep -c .)" = 1 ] || { echo 'learning_store_run_unnamed: not exactly one accepted run in the live log' >&2; exit 1; }
+          # The shared admission parser accepts one canonical wlj_ id or one legacy run: id.
+          # Zero lines, more than one distinct token, or a token that parser refuses are the same failure.
+          accepted_run=$(sed -n 's/^Run \(.*\) accepted in state READY; driving the Julius run loop\.$/\1/p' live-mission.log | sort -u)
+          [ "$(printf '%s\n' "$accepted_run" | grep -c .)" = 1 ] || { echo 'learning_store_run_unnamed: not exactly one accepted run in the live log' >&2; exit 1; }
+          derived=$(JULIUS_RUN_ID="$accepted_run" node scripts/julius-admission-run-id.mjs derive) || { echo 'learning_store_run_unnamed: the accepted run is not an admission id' >&2; exit 1; }
+          run_id=$(printf '%s\n' "$derived" | sed -n 's/^run_id=//p')
+          form=$(printf '%s\n' "$derived" | sed -n 's/^form=//p')
+          case "$form" in
+            wlj|legacy) [ "$run_id" = "$accepted_run" ] || { echo 'learning_store_run_unnamed: the accepted run is not an admission id' >&2; exit 1; } ;;
+            *) echo 'learning_store_run_unnamed: the accepted run is not an admission id' >&2; exit 1 ;;
+          esac
           # THE DATABASE COMMANDS ARE THE STORE SCRIPT'S (.github/julius-learning-store.sh, pinned by its sha256 in the
           # registration; the test that proves the round trip runs the same file): the dump, its rendering kept for the
           # scan below, the WITHOUT record found in it, the digest and the manifest. This step adds what only GitHub knows.

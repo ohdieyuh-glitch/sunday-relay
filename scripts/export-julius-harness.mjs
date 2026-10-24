@@ -443,6 +443,10 @@ const FILE_RULES = [
   ['relay-bridge/julius/live-report-lines.ts', 'MISSION CONTRACT / BOOTSTRAP'],
   ['relay-bridge/julius/mission-contract.ts', 'MISSION CONTRACT / BOOTSTRAP'],
   ['relay-bridge/julius/bootstrap.ts', 'MISSION CONTRACT / BOOTSTRAP'],
+  // The one parser of an admission id. Production imports the .mjs. The .d.mts
+  // is its type declaration and is not in the import closure, so it is not
+  // exported. The module never mints an id.
+  ['scripts/julius-admission-run-id.mjs', 'MISSION CONTRACT / BOOTSTRAP'],
   ['relay-bridge/julius/mission-seed.ts', 'MISSION CONTRACT / BOOTSTRAP'],
   // What one mission verified, inherited by the next: the minimum truthful reuse.
   ['relay-bridge/julius/mission-knowledge.ts', 'DURABLE STATE / PROJECT BRAIN'],

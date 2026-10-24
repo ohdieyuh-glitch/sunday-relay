@@ -163,6 +163,7 @@ dump "SELECT artifact_id,project_id,run_id,task_id,lease_generation,role,kind,co
 # as julius-live-hermes.sh runs its own node entry: the repository boundary scan must be able to read the file node
 # runs, and a path built at run time ("$here/...") is unanalyzable by design.
 node scripts/julius-evidence-bodies.mjs "$out" || echo "julius-evidence-bodies: exited $?" >&2
+cp scripts/julius-admission-run-id.mjs "$out/julius-admission-run-id.mjs" || echo 'julius-evidence-dump: julius-admission-run-id.mjs was not copied' >&2
 cp scripts/julius-evidence-resolve.mjs "$out/resolve-artifacts.mjs" || echo 'julius-evidence-dump: resolve-artifacts.mjs was not copied' >&2
 
 # WHY A TASK FAILED, WITHOUT A RAW LOG.

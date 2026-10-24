@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 
+import { parseJuliusAdmissionRunId } from '../../scripts/julius-admission-run-id.mjs';
 import { JULIUS_BOOTSTRAP_REQUEST_VERSION, type JuliusBootstrapRequest } from '../../src/relay/integration/julius/julius-port';
 import {
   JULIUS_LEARNING_REGISTRATION_DIGEST,
@@ -142,8 +143,12 @@ export interface LiveMissionLearningPairClause extends JuliusLearningRegistratio
 const LEARNING_PAIR_FIELDS: readonly string[] = ['registrationDigest', 'arm', 'rerunKey', 'withoutRunId', 'policy'];
 /** A token, bounded, with no space or line break: it is folded into a run identity and printed. */
 const LEARNING_RERUN_KEY = /^[A-Za-z0-9][A-Za-z0-9:._-]{0,127}$/u;
-/** The run id `createLiveJuliusBootstrapPort` mints: `run:` and 24 hex characters. */
-const BOOTSTRAP_RUN_ID = /^run:[0-9a-f]{24}$/u;
+
+/** A prior run arm WITH may name: a canonical `wlj_` id, or a legacy `run:` id read as a reference. */
+const acceptedWithoutRunId = (value: unknown): value is string => {
+  if (typeof value !== 'string') return false;
+  return parseJuliusAdmissionRunId(value).ok;
+};
 
 /**
  * EVERY FIELD VALIDATED, AND NOTHING ELSE ACCEPTED. A field this build does not
@@ -161,7 +166,7 @@ function parseLearningPairClause(value: unknown): { ok: true; clause: LiveMissio
   }
   if (arm !== 'WITHOUT' && arm !== 'WITH') return { ok: false, reason: 'learning_pair_arm_invalid' };
   if (typeof rerunKey !== 'string' || !LEARNING_RERUN_KEY.test(rerunKey)) return { ok: false, reason: 'learning_pair_rerun_key_invalid' };
-  if (arm === 'WITH' && (typeof withoutRunId !== 'string' || !BOOTSTRAP_RUN_ID.test(withoutRunId))) {
+  if (arm === 'WITH' && !acceptedWithoutRunId(withoutRunId)) {
     return { ok: false, reason: 'learning_pair_without_run_required' };
   }
   if (arm === 'WITHOUT' && withoutRunId !== undefined) return { ok: false, reason: 'learning_pair_without_run_forbidden' };

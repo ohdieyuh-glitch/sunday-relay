@@ -3,8 +3,8 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { juliusBootstrapRunId } from '../relay-bridge/julius/bootstrap';
 import { compileBootstrapRequest, parseLiveMissionContract } from '../relay-bridge/julius/mission-contract';
+import { parseJuliusAdmissionRunId } from './julius-admission-run-id.mjs';
 
 /**
  * DECISION C'S LEARNING PAIR, PINNED BEFORE ANY ARM RUNS (registration design r8.6, section 2 and section 8 item 4).
@@ -14,9 +14,9 @@ import { compileBootstrapRequest, parseLiveMissionContract } from '../relay-brid
  *   1. each contract is Mission 5's body with the pair's three ids, byte for byte, and the four differ ONLY
  *      inside their `learningPair` clause; each seed is Mission 5's, byte for byte (founder c1: "Reuse Mission
  *      5's existing mission body");
- *   2. the four run ids, computed through the parse, `compileBootstrapRequest` and `juliusBootstrapRunId` the
- *      bootstrap names each run with, are the ones the registration and the PREREG addendum record: four
- *      distinct runs, and each WITH arm names its own WITHOUT arm's;
+ *   2. the four run ids the registration and the PREREG addendum record are what the contracts contain, and the
+ *      shared admission parser reads each as a legacy reference: four distinct runs, and each WITH arm names
+ *      its own WITHOUT arm's;
  *   3. every arm carries the digest `learning-validate` prints for the committed registration, so the
  *      evaluator's own-record check (evaluate.py, step 4) reads all four arms under this registration and no
  *      other.
@@ -147,20 +147,21 @@ describe("the bodies are Mission 5's and equal, the clauses are the only differe
   });
 });
 
-describe('the four run ids, by the derivation the bootstrap runs', () => {
-  it('compileBootstrapRequest + juliusBootstrapRunId name each arm its registered run, one objective for all four', () => {
+describe('the four recorded run ids stay legacy references the shared parser accepts', () => {
+  it('each arm keeps one objective, and its registered run id parses as a legacy reference', () => {
     const plain = compiled(bodyText());
-    const computed = new Map<RerunKey, string>();
+    const bootstrap = read(join('relay-bridge', 'julius', 'bootstrap.ts'));
+    expect(bootstrap).not.toContain('juliusBootstrapRunId');
+    expect(bootstrap).not.toContain('`run:${identity}`');
     for (const arm of ARMS) {
       const request = compiled(contractText(arm.dir));
       expect(request.missionBindingDigest, `${arm.dir}: the clause stays outside the binding`).toBe(plain.missionBindingDigest);
       expect(request.idempotencyKey, arm.dir).toBe(plain.idempotencyKey);
       expect([request.rerunIntent, request.rerunKey], `${arm.dir}: an explicit rerun under its own key`).toEqual(['EXPLICIT', arm.rerunKey]);
-      computed.set(arm.rerunKey, juliusBootstrapRunId(request));
+      const recorded = RUN_IDS[arm.rerunKey];
+      expect(parseJuliusAdmissionRunId(recorded), arm.dir).toEqual({ ok: true, form: 'legacy', runId: recorded });
     }
-    expect(Object.fromEntries(computed), 'the run ids the registration and the PREREG addendum record').toEqual(RUN_IDS);
-    expect(new Set(computed.values()).size, 'four distinct runs: WITHOUT-1 != WITHOUT-2, WITH-1 != WITH-2').toBe(4);
-    expect([...computed.values()], 'no arm is the plain contract\'s run, served as its replay').not.toContain(juliusBootstrapRunId(plain));
+    expect(new Set(Object.values(RUN_IDS)).size, 'four distinct runs: WITHOUT-1 != WITHOUT-2, WITH-1 != WITH-2').toBe(4);
     expect(plain.missionBindingDigest, 'the shared body\'s binding').toBe('sha256:6148c551c9fbaf79e85eaca6906fe5ce59afeb71e054dff6ba0955e472532774');
   });
 
@@ -169,8 +170,9 @@ describe('the four run ids, by the derivation the bootstrap runs', () => {
       const without = ARMS.find((entry) => entry.rerunKey === arm.without);
       expect(without?.arm, `${arm.dir} names a WITHOUT arm`).toBe('WITHOUT');
       const contract = JSON.parse(contractText(arm.dir)) as { learningPair: { withoutRunId?: string } };
-      const withoutRun = juliusBootstrapRunId(compiled(contractText(without!.dir)));
+      const withoutRun = RUN_IDS[arm.without!];
       expect(contract.learningPair.withoutRunId, arm.dir).toBe(withoutRun);
+      expect(parseJuliusAdmissionRunId(withoutRun), arm.dir).toEqual({ ok: true, form: 'legacy', runId: withoutRun });
     }
     const registration = JSON.parse(read(REGISTRATION)) as { baselineRuns: string[]; adaptation: { changeRef: string } };
     expect(registration.baselineRuns).toEqual([RUN_IDS['jlp1-without-1'], RUN_IDS['jlp1-without-2']]);

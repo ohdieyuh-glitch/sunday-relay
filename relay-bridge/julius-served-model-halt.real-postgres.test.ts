@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -77,7 +77,7 @@ suite('a served-model halt over a real PostgreSQL', () => {
     await new TransactionalWonderlandDatabase(pool).migrate();
     const bootstrap = composeJuliusMissionBootstrap(pool);
     const ports = { bootstrap, missingConfig: [], reviewerProvider: 'xai', cardRevision: CARD };
-    create = (body) => handleJuliusMissionRoute({ method: 'POST', path: '/julius/missions', operator: true, body }, ports);
+    create = (body) => handleJuliusMissionRoute({ method: 'POST', path: '/julius/missions', operator: true, body, runId: `wlj_${randomUUID()}` }, ports);
   });
   afterAll(async () => pool?.end());
 
