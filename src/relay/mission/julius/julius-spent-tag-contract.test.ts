@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  claimJuliusAdmissionSpend,
   interpretJuliusSpentTags,
   juliusSpentTagRecord,
   parseJuliusSpentTagRecord,
@@ -81,5 +82,52 @@ describe('the spent tag #434 writes is the record #404 counts', () => {
       unverifiableApiSpend: false,
       spendVerified: false,
     }]);
+    const duplicated = interpretJuliusSpentTags({
+      namespace: NAMESPACE,
+      tags: [
+        { ref: `refs/tags/julius-run-spent-${HEX}`, message: WRITTEN },
+        { ref: `refs/tags/julius-run-spent-${HEX}`, message: WRITTEN },
+      ],
+    });
+    expect(duplicated.readable).toBe(true);
+    if (!duplicated.readable) return;
+    expect(duplicated.priorRuns).toHaveLength(1);
+  });
+});
+
+describe('one spent claim per admission run id', () => {
+  const UUID = 'wlj_01234567-89ab-4cde-8fab-0123456789ab';
+
+  it('spends a UUIDv4 once, and a replay does not spend again', () => {
+    const first = claimJuliusAdmissionSpend(new Set(), `  ${UUID}  `);
+    expect(first.decision).toEqual({ ok: true, runId: UUID });
+    const replay = claimJuliusAdmissionSpend(first.spent, UUID);
+    expect(replay.decision).toEqual({ ok: false, reasonCode: 'admission_run_already_spent' });
+    expect(replay.spent).toBe(first.spent);
+    const other = claimJuliusAdmissionSpend(replay.spent, RUN_ID);
+    expect(other.decision).toEqual({ ok: true, runId: RUN_ID });
+    const hexReplay = claimJuliusAdmissionSpend(other.spent, RUN_ID);
+    expect(hexReplay.decision).toEqual({ ok: false, reasonCode: 'admission_run_already_spent' });
+    expect(other.spent.size).toBe(2);
+  });
+
+  it('a malformed or non-UUIDv4 id spends nothing', () => {
+    const spent = new Set<string>([UUID]);
+    for (const runId of [
+      '',
+      'none',
+      '11111111-1111-4111-8111-111111111111',
+      UUID.toUpperCase(),
+      'wlj_01234567-89ab-1cde-8fab-0123456789ab',
+      'wlj_01234567-89ab-4cde-cfab-0123456789ab',
+      `run:${HEX.slice(0, 23)}`,
+      `run:${HEX.toUpperCase()}`,
+      `run:${HEX};touch /tmp/pwn`,
+    ]) {
+      const claim = claimJuliusAdmissionSpend(spent, runId);
+      expect(claim.decision, runId).toEqual({ ok: false, reasonCode: 'admission_run_id_malformed' });
+      expect(claim.spent, runId).toBe(spent);
+      expect(claim.spent.has(UUID)).toBe(true);
+    }
   });
 });

@@ -175,3 +175,33 @@ export function interpretJuliusSpentTags(input: {
   priorRuns.sort((left, right) => (left.runId < right.runId ? -1 : left.runId > right.runId ? 1 : 0));
   return { readable: true, priorRuns, durableRecord: 'PRESENT' };
 }
+
+/**
+ * ONE SPEND PER ADMISSION RUN ID.
+ *
+ * The id is the client-minted `wlj_` UUIDv4 (founder ruling (c)) or the
+ * admission server id `run:` plus 24 lowercase hex. The first claim spends.
+ * A replay of that same id does not. A malformed id spends nothing, and the
+ * set of spent ids is left as it was.
+ */
+const ADMISSION_SPEND_ID = /^(?:run:[0-9a-f]{24}|wlj_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/u;
+
+export type JuliusAdmissionSpend =
+  | { readonly ok: true; readonly runId: string }
+  | { readonly ok: false; readonly reasonCode: 'admission_run_already_spent' | 'admission_run_id_malformed' };
+
+export function claimJuliusAdmissionSpend(
+  spent: ReadonlySet<string>,
+  runId: string,
+): { readonly decision: JuliusAdmissionSpend; readonly spent: ReadonlySet<string> } {
+  const id = runId.trim();
+  if (!ADMISSION_SPEND_ID.test(id)) {
+    return { decision: { ok: false, reasonCode: 'admission_run_id_malformed' }, spent };
+  }
+  if (spent.has(id)) {
+    return { decision: { ok: false, reasonCode: 'admission_run_already_spent' }, spent };
+  }
+  const next = new Set(spent);
+  next.add(id);
+  return { decision: { ok: true, runId: id }, spent: next };
+}

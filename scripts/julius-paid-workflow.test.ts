@@ -747,4 +747,88 @@ describe('a server run id is one spent tag, created before any provider call', (
     expect(job('paid-slot')).not.toMatch(/\n    permissions:\n/u);
     expect(paid).not.toMatch(/\n    permissions:\n/u);
   });
+
+  it('a second dispatch of the same admission run id creates no second tag and no provider call', () => {
+    const bin = mkdtempSync(join(tmpdir(), 'julius-spent-replay-'));
+    const state = join(bin, 'spent');
+    writeFileSync(join(bin, 'curl'), [
+      '#!/usr/bin/env bash',
+      'out=""',
+      'method="GET"',
+      'data=""',
+      'url=""',
+      'prev=""',
+      'for arg in "$@"; do',
+      '  printf \'%s\\n\' "$arg" >> "$CURL_LOG"',
+      '  if [ "$prev" = "-o" ]; then out=$arg; fi',
+      '  if [ "$prev" = "-X" ]; then method=$arg; fi',
+      '  if [ "$prev" = "--data-binary" ]; then data=$arg; fi',
+      '  case "$arg" in https://*) url=$arg ;; esac',
+      '  prev=$arg',
+      'done',
+      'respond() {',
+      '  if [ -n "$out" ]; then printf \'%s\' "$2" > "$out"; fi',
+      '  printf \'%s\' "$1"',
+      '  exit 0',
+      '}',
+      'if [ "$method" = GET ]; then',
+      '  if [ -f "$SPENT_STATE" ]; then respond 200 \'{"object":{"sha":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}}\' ; fi',
+      '  respond 404 \'\'',
+      'fi',
+      'sha=$(printf \'%s\' "$data" | grep -oE \'[0-9a-f]{40}\' | head -1 || true)',
+      'if [ -z "$sha" ]; then sha=$(printf \'%040x\' 1); fi',
+      'case "$url" in',
+      '  */git/refs)',
+      '    printf \'%s\' "$url" > "$SPENT_STATE"',
+      '    respond 201 "{\\"ref\\":\\"refs/tags/julius-run-spent\\",\\"object\\":{\\"sha\\":\\"$sha\\",\\"type\\":\\"tag\\"}}"',
+      '    ;;',
+      '  *) respond 201 "{\\"sha\\":\\"$sha\\"}" ;;',
+      'esac',
+      '',
+    ].join('\n'), { mode: 0o755 });
+    chmodSync(join(bin, 'curl'), 0o755);
+    const invoke = (): { status: number; stderr: string; curlLog: string } => {
+      const curlLog = join(bin, `curl-${Math.random().toString(16).slice(2)}.log`);
+      const output = join(bin, 'github-output.txt');
+      writeFileSync(output, '');
+      try {
+        execFileSync('bash', [...GITHUB_BASH, tagScript], {
+          cwd: ROOT,
+          env: {
+            ...process.env,
+            PATH: `${bin}${delimiter}${process.env.PATH ?? ''}`,
+            CURL_LOG: curlLog,
+            SPENT_STATE: state,
+            GITHUB_RUN_ATTEMPT: '1',
+            GITHUB_OUTPUT: output,
+            GITHUB_RUN_ID: '4242',
+            GITHUB_SHA: 'a'.repeat(40),
+            GITHUB_REPOSITORY: 'ohdieyuh-glitch/sunday-relay',
+            GH_TOKEN: 'ghs_test_not_a_real_token',
+            SERVER_RUN_ID: `run:${HEX}`,
+            MISSION: 'julius-first-live',
+            CONFIRM_LIVE: 'RUN LIVE MISSION',
+          },
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        return { status: 0, stderr: '', curlLog: readFileSync(curlLog, 'utf8') };
+      } catch (error) {
+        const failed = error as { status?: number; stderr?: string };
+        let curlText = '';
+        try { curlText = readFileSync(curlLog, 'utf8'); } catch { curlText = ''; }
+        return { status: failed.status ?? 1, stderr: failed.stderr ?? '', curlLog: curlText };
+      }
+    };
+    const created = invoke();
+    expect(created.status).toBe(0);
+    expect(created.curlLog).toContain('-X\nPOST');
+    expect(created.curlLog).toContain(`/git/refs`);
+    expect(created.curlLog).toContain(`/git/ref/tags/julius-run-spent-${HEX}`);
+    const replay = invoke();
+    expect(replay.status).not.toBe(0);
+    expect(replay.stderr).toContain('RUN_ID_ALREADY_SPENT');
+    expect(replay.curlLog).not.toContain('-X\nPOST');
+    expect(replay.curlLog).toContain(`/git/ref/tags/julius-run-spent-${HEX}`);
+  });
 });
