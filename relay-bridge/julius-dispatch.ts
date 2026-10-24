@@ -668,7 +668,8 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
           try {
             const slot = await runJuliusCompanionSlot({
               plan: text,
-              serverRunId: rec.serverRunId,
+              runId: rec.clientRunId,
+              legacyRunId: rec.serverRunId,
               deadlineMs: binding.deadlineMs,
               port: binding.port,
               clock: binding.clock,

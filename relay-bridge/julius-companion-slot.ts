@@ -1,11 +1,16 @@
 import { createHash } from 'node:crypto';
 
+import { parseJuliusAdmissionRunId } from '../scripts/julius-admission-run-id.mjs';
+
 /**
  * JULIUS COMPANION SLOT.
  *
  * The architect plan may carry at most one `companion_task`: a bounded subtask
- * with acceptance criteria. Julius stamps it with the run's serverRunId and
- * hands it to an injected CompanionPort. This module never calls a provider.
+ * with acceptance criteria. Julius stamps it with the canonical `wlj_` id.
+ * A legacy `run:` id may sit beside it and is read-only. Both forms are
+ * recognized only by `scripts/julius-admission-run-id.mjs`. This module never
+ * mints an id and never calls a provider. A legacy id cannot start, resume,
+ * or claim spend. It hands the task to an injected CompanionPort.
  * BRIDGE's relay is the port that wakes the companion.
  *
  * BYOAI. The companion is the caller's own model. Julius does not call a
@@ -27,7 +32,6 @@ import { createHash } from 'node:crypto';
  * withheld. The task body itself is never stored.
  */
 
-const SERVER_RUN_ID = /^run:[0-9a-f]{24}$/u;
 const SUBTASK_MAX = 400;
 const CRITERION_MAX = 200;
 const CRITERIA_MAX = 6;
@@ -39,7 +43,10 @@ export interface CompanionTaskBody {
 }
 
 export interface CompanionWakeRequest {
-  readonly serverRunId: string;
+  /** Canonical `wlj_` id. This is the only id the wake is keyed on. */
+  readonly runId: string;
+  /** Admitted `run:` id, when the pair has one. Read-only. Never starts the wake. */
+  readonly legacyRunId: string | null;
   readonly subtask: string;
   readonly acceptanceCriteria: readonly string[];
   readonly bodyDigest: string;
@@ -62,16 +69,16 @@ export interface CompanionPort {
 }
 
 export interface CoderIntegrationPort {
-  submit(input: { readonly serverRunId: string; readonly sha256: string; readonly bytes: Uint8Array }): Promise<{ readonly accepted: boolean; readonly reason: string | null }>;
+  submit(input: { readonly runId: string; readonly sha256: string; readonly bytes: Uint8Array }): Promise<{ readonly accepted: boolean; readonly reason: string | null }>;
 }
 
 export interface JuliusValidationPort {
-  validate(input: { readonly serverRunId: string; readonly sha256: string; readonly bytes: Uint8Array }): { readonly ok: boolean; readonly reason: string | null };
+  validate(input: { readonly runId: string; readonly sha256: string; readonly bytes: Uint8Array }): { readonly ok: boolean; readonly reason: string | null };
 }
 
 /** Reviews the integrated change. Not a provider client and not a direct write. */
 export interface ChangeReviewPort {
-  review(input: { readonly serverRunId: string; readonly sha256: string }): Promise<{ readonly verdict: 'approve' | 'reject' }>;
+  review(input: { readonly runId: string; readonly sha256: string }): Promise<{ readonly verdict: 'approve' | 'reject' }>;
 }
 
 export interface CompanionClock {
@@ -81,7 +88,10 @@ export interface CompanionClock {
 export type CompanionDisposition = 'absent' | 'refused' | 'timed_out' | 'failed' | 'missing' | 'integrated' | 'rejected';
 
 export interface CompanionEvidence {
-  readonly serverRunId: string;
+  /** Canonical `wlj_` id. Empty when the caller did not present one. */
+  readonly runId: string;
+  /** Legacy `run:` id, recorded and not used to start, resume, or claim spend. */
+  readonly legacyRunId: string | null;
   readonly wakeId: string | null;
   readonly bodyDigest: string | null;
   readonly artifactHashes: readonly string[];
@@ -130,12 +140,14 @@ const safeReason = (reason: string | null): string | null => {
 const safeWakeId = (wakeId: string): string | null => (credentialShaped(wakeId) ? null : wakeId);
 
 const evidence = (
-  serverRunId: string,
+  runId: string,
+  legacyRunId: string | null,
   disposition: CompanionDisposition,
   reason: string | null,
   extra: { readonly wakeId?: string | null; readonly bodyDigest?: string | null; readonly artifactHashes?: readonly string[] } = {},
 ): CompanionEvidence => ({
-  serverRunId,
+  runId,
+  legacyRunId,
   wakeId: extra.wakeId ?? null,
   bodyDigest: extra.bodyDigest ?? null,
   artifactHashes: extra.artifactHashes ?? [],
@@ -176,12 +188,40 @@ const boundedBody = (raw: unknown): CompanionTaskBody | null => {
     if (criterion.length === 0 || criterion.length > CRITERION_MAX) return null;
     acceptanceCriteria.push(criterion);
   }
-  if (typeof v.serverRunId === 'string' && !SERVER_RUN_ID.test(v.serverRunId)) return null;
   return { subtask, acceptanceCriteria };
 };
 
+interface CompanionIds {
+  readonly runId: string;
+  readonly legacyRunId: string | null;
+}
+
+/** The canonical id is required. A legacy id is accepted only as `legacyRunId`. */
+function resolveCompanionIds(runId: unknown, legacyRunId: unknown):
+  | { readonly ok: true; readonly ids: CompanionIds }
+  | { readonly ok: false; readonly reason: 'companion_run_id_invalid' | 'companion_legacy_read_only'; readonly legacyRunId: string | null } {
+  const canonical = parseJuliusAdmissionRunId(runId);
+  if (!canonical.ok) return { ok: false, reason: 'companion_run_id_invalid', legacyRunId: null };
+  if (canonical.form === 'legacy') return { ok: false, reason: 'companion_legacy_read_only', legacyRunId: canonical.runId };
+  if (legacyRunId === undefined || legacyRunId === null || legacyRunId === '') {
+    return { ok: true, ids: { runId: canonical.runId, legacyRunId: null } };
+  }
+  const legacy = parseJuliusAdmissionRunId(legacyRunId);
+  if (!legacy.ok || legacy.form !== 'legacy') return { ok: false, reason: 'companion_run_id_invalid', legacyRunId: null };
+  return { ok: true, ids: { runId: canonical.runId, legacyRunId: legacy.runId } };
+}
+
+function stampedRunId(raw: unknown): { readonly ok: true; readonly value: string | null } | { readonly ok: false } {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return { ok: true, value: null };
+  const v = raw as Record<string, unknown>;
+  const found = [v.runId, v.serverRunId, v.legacyRunId].filter((item): item is string => typeof item === 'string');
+  if (found.length === 0) return { ok: true, value: null };
+  if (new Set(found).size !== 1) return { ok: false };
+  return { ok: true, value: found[0] ?? null };
+}
+
 /** One optional task, or a refusal. A plan with no companion task is absent, which is valid. */
-export function readCompanionTask(plan: unknown, serverRunId: string): Read {
+export function readCompanionTask(plan: unknown, runId: string, legacyRunId: string | null = null): Read {
   const obj = planObject(plan);
   if (obj === null) return { kind: 'absent' };
   const plural = obj.companion_tasks;
@@ -193,15 +233,20 @@ export function readCompanionTask(plan: unknown, serverRunId: string): Read {
   if (Array.isArray(single)) {
     if (single.length > 1) return { kind: 'refused', reason: 'second_companion_task_refused' };
     if (single.length === 0) return { kind: 'refused', reason: 'companion_task_invalid' };
-    return acceptOne(single[0], serverRunId);
+    return acceptOne(single[0], runId, legacyRunId);
   }
-  return acceptOne(single, serverRunId);
+  return acceptOne(single, runId, legacyRunId);
 }
 
-function acceptOne(raw: unknown, serverRunId: string): Read {
-  if (raw !== null && typeof raw === 'object' && !Array.isArray(raw)) {
-    const stamped = (raw as Record<string, unknown>).serverRunId;
-    if (typeof stamped === 'string' && stamped !== serverRunId) return { kind: 'refused', reason: 'companion_task_run_mismatch' };
+function acceptOne(raw: unknown, runId: string, legacyRunId: string | null): Read {
+  const stamp = stampedRunId(raw);
+  if (!stamp.ok) return { kind: 'refused', reason: 'companion_run_id_invalid' };
+  if (stamp.value !== null) {
+    const parsed = parseJuliusAdmissionRunId(stamp.value);
+    if (!parsed.ok) return { kind: 'refused', reason: 'companion_run_id_invalid' };
+    const matchesCanonical = parsed.form === 'wlj' && parsed.runId === runId;
+    const matchesLegacy = legacyRunId !== null && parsed.form === 'legacy' && parsed.runId === legacyRunId;
+    if (!matchesCanonical && !matchesLegacy) return { kind: 'refused', reason: 'companion_task_run_mismatch' };
   }
   const body = boundedBody(raw);
   if (body === null) return { kind: 'refused', reason: 'companion_task_invalid' };
@@ -210,7 +255,9 @@ function acceptOne(raw: unknown, serverRunId: string): Read {
 
 export async function runJuliusCompanionSlot(input: {
   readonly plan: unknown;
-  readonly serverRunId: string;
+  readonly runId: string;
+  /** Read-only. A legacy id here does not start, resume, or claim spend. */
+  readonly legacyRunId?: string | null;
   readonly deadlineMs: number;
   readonly port: CompanionPort;
   readonly clock: CompanionClock;
@@ -218,15 +265,22 @@ export async function runJuliusCompanionSlot(input: {
   readonly validate: JuliusValidationPort;
   readonly review: ChangeReviewPort;
 }): Promise<CompanionSlotResult> {
-  const { serverRunId } = input;
-  if (!SERVER_RUN_ID.test(serverRunId)) return done(evidence(serverRunId, 'refused', 'companion_task_run_mismatch'), false);
-  if (!Number.isSafeInteger(input.deadlineMs) || input.deadlineMs <= 0) return done(evidence(serverRunId, 'refused', 'companion_deadline_invalid'), false);
-  const read = readCompanionTask(input.plan, serverRunId);
-  if (read.kind === 'absent') return done(evidence(serverRunId, 'absent', null), false);
-  if (read.kind === 'refused') return done(evidence(serverRunId, 'refused', read.reason), false);
+  const resolved = resolveCompanionIds(input.runId, input.legacyRunId);
+  if (!resolved.ok) return done(evidence('', resolved.legacyRunId, 'refused', resolved.reason), false);
+  const ids = resolved.ids;
+  const note = (
+    disposition: CompanionDisposition,
+    reason: string | null,
+    extra: { readonly wakeId?: string | null; readonly bodyDigest?: string | null; readonly artifactHashes?: readonly string[] } = {},
+  ): CompanionSlotResult => done(evidence(ids.runId, ids.legacyRunId, disposition, reason, extra), disposition === 'rejected' && reason === 'review_rejected');
+  if (!Number.isSafeInteger(input.deadlineMs) || input.deadlineMs <= 0) return note('refused', 'companion_deadline_invalid');
+  const read = readCompanionTask(input.plan, ids.runId, ids.legacyRunId);
+  if (read.kind === 'absent') return note('absent', null);
+  if (read.kind === 'refused') return note('refused', read.reason);
 
   const request: CompanionWakeRequest = {
-    serverRunId,
+    runId: ids.runId,
+    legacyRunId: ids.legacyRunId,
     subtask: read.body.subtask,
     acceptanceCriteria: read.body.acceptanceCriteria,
     bodyDigest: read.bodyDigest,
@@ -243,48 +297,48 @@ export async function runJuliusCompanionSlot(input: {
   ]);
   if (winner.kind === 'timed_out' || winner.kind === 'ignored') {
     open = false;
-    return done(evidence(serverRunId, 'timed_out', 'timed_out', { bodyDigest: read.bodyDigest }), false);
+    return done(evidence(ids.runId, ids.legacyRunId, 'timed_out', 'timed_out', { bodyDigest: read.bodyDigest }), false);
   }
-  if (winner.kind === 'failed') return done(evidence(serverRunId, 'failed', 'wake_failed', { bodyDigest: read.bodyDigest }), false);
+  if (winner.kind === 'failed') return done(evidence(ids.runId, ids.legacyRunId, 'failed', 'wake_failed', { bodyDigest: read.bodyDigest }), false);
   open = false;
   const posted = winner.result;
   const wakeId = safeWakeId(posted.wakeId);
   const wakeReason = wakeId === null && posted.wakeId !== '' ? 'wake_id_withheld' : null;
-  if (posted.outcome === 'failed') return done(evidence(serverRunId, 'failed', wakeReason ?? 'wake_failed', { wakeId, bodyDigest: read.bodyDigest }), false);
+  if (posted.outcome === 'failed') return done(evidence(ids.runId, ids.legacyRunId, 'failed', wakeReason ?? 'wake_failed', { wakeId, bodyDigest: read.bodyDigest }), false);
   if (posted.outcome === 'missing' || posted.artifact === null) {
-    return done(evidence(serverRunId, 'missing', wakeReason ?? 'wake_missing', { wakeId, bodyDigest: read.bodyDigest }), false);
+    return done(evidence(ids.runId, ids.legacyRunId, 'missing', wakeReason ?? 'wake_missing', { wakeId, bodyDigest: read.bodyDigest }), false);
   }
   const bytes = posted.artifact.bytes;
   if (bytes.byteLength === 0 || bytes.byteLength > ARTIFACT_MAX_BYTES) {
-    return done(evidence(serverRunId, 'rejected', 'artifact_rejected', { wakeId, bodyDigest: read.bodyDigest }), false);
+    return done(evidence(ids.runId, ids.legacyRunId, 'rejected', 'artifact_rejected', { wakeId, bodyDigest: read.bodyDigest }), false);
   }
   const hash = sha256Bytes(bytes);
   let submitted: { readonly accepted: boolean; readonly reason: string | null };
   try {
-    submitted = await input.integrate.submit({ serverRunId, sha256: hash, bytes });
+    submitted = await input.integrate.submit({ runId: ids.runId, sha256: hash, bytes });
   } catch {
-    return done(evidence(serverRunId, 'rejected', 'integration_rejected', { wakeId, bodyDigest: read.bodyDigest, artifactHashes: [hash] }), false);
+    return done(evidence(ids.runId, ids.legacyRunId, 'rejected', 'integration_rejected', { wakeId, bodyDigest: read.bodyDigest, artifactHashes: [hash] }), false);
   }
   if (!submitted.accepted) {
-    return done(evidence(serverRunId, 'rejected', safeReason(submitted.reason) ?? 'integration_rejected', { wakeId, bodyDigest: read.bodyDigest, artifactHashes: [hash] }), false);
+    return done(evidence(ids.runId, ids.legacyRunId, 'rejected', safeReason(submitted.reason) ?? 'integration_rejected', { wakeId, bodyDigest: read.bodyDigest, artifactHashes: [hash] }), false);
   }
   let validated: { readonly ok: boolean; readonly reason: string | null };
   try {
-    validated = input.validate.validate({ serverRunId, sha256: hash, bytes });
+    validated = input.validate.validate({ runId: ids.runId, sha256: hash, bytes });
   } catch {
-    return done(evidence(serverRunId, 'rejected', 'validation_rejected', { wakeId, bodyDigest: read.bodyDigest, artifactHashes: [hash] }), false);
+    return done(evidence(ids.runId, ids.legacyRunId, 'rejected', 'validation_rejected', { wakeId, bodyDigest: read.bodyDigest, artifactHashes: [hash] }), false);
   }
   if (!validated.ok) {
-    return done(evidence(serverRunId, 'rejected', safeReason(validated.reason) ?? 'validation_rejected', { wakeId, bodyDigest: read.bodyDigest, artifactHashes: [hash] }), false);
+    return done(evidence(ids.runId, ids.legacyRunId, 'rejected', safeReason(validated.reason) ?? 'validation_rejected', { wakeId, bodyDigest: read.bodyDigest, artifactHashes: [hash] }), false);
   }
   let verdict: { readonly verdict: 'approve' | 'reject' };
   try {
-    verdict = await input.review.review({ serverRunId, sha256: hash });
+    verdict = await input.review.review({ runId: ids.runId, sha256: hash });
   } catch {
-    return done(evidence(serverRunId, 'rejected', 'review_failed', { wakeId, bodyDigest: read.bodyDigest, artifactHashes: [hash] }), false);
+    return done(evidence(ids.runId, ids.legacyRunId, 'rejected', 'review_failed', { wakeId, bodyDigest: read.bodyDigest, artifactHashes: [hash] }), false);
   }
   if (verdict.verdict !== 'approve') {
-    return done(evidence(serverRunId, 'rejected', 'review_rejected', { wakeId, bodyDigest: read.bodyDigest, artifactHashes: [hash] }), true);
+    return done(evidence(ids.runId, ids.legacyRunId, 'rejected', 'review_rejected', { wakeId, bodyDigest: read.bodyDigest, artifactHashes: [hash] }), true);
   }
-  return done(evidence(serverRunId, 'integrated', wakeReason, { wakeId, bodyDigest: read.bodyDigest, artifactHashes: [hash] }), true);
+  return done(evidence(ids.runId, ids.legacyRunId, 'integrated', wakeReason, { wakeId, bodyDigest: read.bodyDigest, artifactHashes: [hash] }), true);
 }

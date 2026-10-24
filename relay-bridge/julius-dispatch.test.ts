@@ -1302,7 +1302,7 @@ describe('companion slot beside the chain', () => {
       behave: { architect: () => ({ ok: true, text: planText, responseId: 'resp_a_0011223344', model: 'm' }) },
       companion: {
         deadlineMs: 1_000,
-        port: { async wake(request) { wakes.push(request.serverRunId); return { wakeId: 'wake_01ABCDEF', outcome: 'posted', artifact: { bytes } }; } },
+        port: { async wake(request) { wakes.push(request.runId); expect(request.legacyRunId).toBe(serverRunId); return { wakeId: 'wake_01ABCDEF', outcome: 'posted', artifact: { bytes } }; } },
         clock: { after: laterUnref },
         integrate: { async submit() { return { accepted: true, reason: null }; } },
         validate: { validate: () => ({ ok: true, reason: null }) },
@@ -1312,7 +1312,7 @@ describe('companion slot beside the chain', () => {
     expect(await h.controller.dispatch(input())).toMatchObject({ ok: true, status: 202 });
     await h.controller.whenIdle();
     expect(h.calls.map((call) => call.role)).toEqual(['architect', 'coder', 'reviewer']);
-    expect(wakes).toEqual([serverRunId]);
+    expect(wakes).toEqual([RUN]);
     expect(h.calls[2]?.coderEvidence).toContain(`untrusted_companion_sha256=${artifactSha}`);
     const events = h.controller.events({ projectId: PROJECT, runId: RUN, callerPlayerId: FOUNDER, cursor: 0 });
     const body = events.body as { data: { state: string; events: { type: string; wakeId?: string | null; bodyDigest?: string | null; artifactHashes?: string[]; outcome?: string }[] } };
@@ -1348,7 +1348,9 @@ describe('companion slot beside the chain', () => {
         deadlineMs: 1_000,
         port: {
           async wake(request) {
-            expect(Object.keys(request).sort()).toEqual(['acceptanceCriteria', 'bodyDigest', 'deadlineMs', 'serverRunId', 'subtask']);
+            expect(request.runId).toBe(RUN);
+            expect(request.legacyRunId).toBe(serverRunId);
+            expect(Object.keys(request).sort()).toEqual(['acceptanceCriteria', 'bodyDigest', 'deadlineMs', 'legacyRunId', 'runId', 'subtask']);
             const posted = {
               wakeId,
               outcome: 'posted' as const,

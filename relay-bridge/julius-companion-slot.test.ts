@@ -10,8 +10,9 @@ import {
   type ChangeReviewPort, type CoderIntegrationPort, type CompanionPort, type CompanionWakeResult, type JuliusValidationPort,
 } from './julius-companion-slot';
 
-const SERVER = `run:${'ab'.repeat(12)}`;
-const OTHER = `run:${'cd'.repeat(12)}`;
+const RUN_ID = 'wlj_11111111-1111-4111-8111-111111111111';
+const LEGACY = `run:${'ab'.repeat(12)}`;
+const OTHER = 'wlj_22222222-2222-4222-8222-222222222222';
 const sha256 = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 
 const task = (over: Record<string, unknown> = {}) => ({
@@ -49,7 +50,7 @@ const ports = (over: {
 };
 
 const run = (companion: unknown, built = ports(), deadlineMs = 1_000) => runJuliusCompanionSlot({
-  plan: plan(companion), serverRunId: SERVER, deadlineMs, port: built.port, clock: built.clock,
+  plan: plan(companion), runId: RUN_ID, legacyRunId: LEGACY, deadlineMs, port: built.port, clock: built.clock,
   integrate: built.integrate, validate: built.validate, review: built.review,
 });
 
@@ -76,10 +77,10 @@ const architectPlan = (companion?: unknown) => ({
 describe('companion task on an architect plan', () => {
   it('a plan with no companion task is valid and wakes nothing', async () => {
     expect(validateArchitectPlan(architectPlan()).ok).toBe(true);
-    expect(readCompanionTask(architectPlan(), SERVER)).toEqual({ kind: 'absent' });
+    expect(readCompanionTask(architectPlan(), RUN_ID, LEGACY)).toEqual({ kind: 'absent' });
     const built = ports();
     const result = await runJuliusCompanionSlot({
-      plan: architectPlan(), serverRunId: SERVER, deadlineMs: 1_000, port: built.port, clock: built.clock,
+      plan: architectPlan(), runId: RUN_ID, legacyRunId: LEGACY, deadlineMs: 1_000, port: built.port, clock: built.clock,
       integrate: built.integrate, validate: built.validate, review: built.review,
     });
     expect(result.missionContinues).toBe(true);
@@ -91,9 +92,9 @@ describe('companion task on an architect plan', () => {
   it('refuses a second companion task and does not wake', async () => {
     const two = [task(), task({ subtask: 'A second subtask that must not run.' })];
     expect(validateArchitectPlan(architectPlan(two)).ok).toBe(true);
-    expect(readCompanionTask(plan(two), SERVER)).toMatchObject({ kind: 'refused', reason: 'second_companion_task_refused' });
+    expect(readCompanionTask(plan(two), RUN_ID, LEGACY)).toMatchObject({ kind: 'refused', reason: 'second_companion_task_refused' });
     const bothKeys = { objectiveSummary: 'Plan the fixture.', companion_task: task(), companion_tasks: [task()] };
-    expect(readCompanionTask(bothKeys, SERVER)).toMatchObject({ kind: 'refused', reason: 'second_companion_task_refused' });
+    expect(readCompanionTask(bothKeys, RUN_ID, LEGACY)).toMatchObject({ kind: 'refused', reason: 'second_companion_task_refused' });
     const built = ports();
     const result = await run(two, built);
     expect(result.missionContinues).toBe(true);
@@ -164,7 +165,8 @@ describe('an untrusted companion artifact', () => {
     const bytes = new TextEncoder().encode(`note ${secret}`);
     const built = ports({
       wake: async (request) => {
-        expect(request.serverRunId).toBe(SERVER);
+        expect(request.runId).toBe(RUN_ID);
+        expect(request.legacyRunId).toBe(LEGACY);
         expect(request).not.toHaveProperty('apiKey');
         return { wakeId: 'wake_01ABCDEF', outcome: 'posted', artifact: { bytes } };
       },
@@ -196,12 +198,78 @@ describe('an untrusted companion artifact', () => {
   });
 });
 
+describe('canonical id first, legacy id read-only', () => {
+  it('a stamp of the legacy id is accepted and the wake stays keyed on wlj_', async () => {
+    const built = ports({
+      wake: async (request) => {
+        expect(request.runId).toBe(RUN_ID);
+        expect(request.legacyRunId).toBe(LEGACY);
+        return { wakeId: 'wake_01ABCDEF', outcome: 'posted', artifact: { bytes: new TextEncoder().encode('fixture') } };
+      },
+    });
+    const result = await run(task({ serverRunId: LEGACY }), built);
+    expect(result.evidence).toMatchObject({ disposition: 'integrated', runId: RUN_ID, legacyRunId: LEGACY });
+    expect(result.spendUsdMicros).toBe(0);
+  });
+
+  it('a legacy id cannot start, resume, or claim spend', async () => {
+    const built = ports();
+    const first = await runJuliusCompanionSlot({
+      plan: plan(task()), runId: LEGACY, deadlineMs: 1_000, port: built.port, clock: built.clock,
+      integrate: built.integrate, validate: built.validate, review: built.review,
+    });
+    const second = await runJuliusCompanionSlot({
+      plan: plan(task()), runId: LEGACY, deadlineMs: 1_000, port: built.port, clock: built.clock,
+      integrate: built.integrate, validate: built.validate, review: built.review,
+    });
+    expect(first.evidence).toMatchObject({ disposition: 'refused', reason: 'companion_legacy_read_only', runId: '', legacyRunId: LEGACY });
+    expect(second.evidence.reason).toBe('companion_legacy_read_only');
+    expect(first.spendUsdMicros).toBe(0);
+    expect(second.spendUsdMicros).toBe(0);
+    expect(built.calls).toEqual({ wake: 0, submit: 0, validate: 0, review: 0 });
+  });
+
+  it('an unparseable id, a mismatched id, and an ambiguous legacy id fail closed', async () => {
+    const bad = ['', ' ', RUN_ID.toUpperCase(), 'wlj_11111111-1111-1111-8111-111111111111', 'not-an-id'];
+    for (const runId of bad) {
+      const built = ports();
+      const result = await runJuliusCompanionSlot({
+        plan: plan(task()), runId, deadlineMs: 1_000, port: built.port, clock: built.clock,
+        integrate: built.integrate, validate: built.validate, review: built.review,
+      });
+      expect(result.evidence, runId).toMatchObject({ disposition: 'refused', reason: 'companion_run_id_invalid', runId: '' });
+      expect(JSON.stringify(result.evidence), runId).not.toContain(runId === '' ? 'minted' : runId);
+      expect(built.calls.wake, runId).toBe(0);
+      expect(result.spendUsdMicros).toBe(0);
+    }
+    const mismatched = ports();
+    const mismatch = await run(task({ runId: OTHER }), mismatched);
+    expect(mismatch.evidence).toMatchObject({ disposition: 'refused', reason: 'companion_task_run_mismatch' });
+    expect(mismatched.calls.wake).toBe(0);
+    const ambiguous = ports();
+    const both = await runJuliusCompanionSlot({
+      plan: plan(task()), runId: RUN_ID, legacyRunId: OTHER, deadlineMs: 1_000, port: ambiguous.port, clock: ambiguous.clock,
+      integrate: ambiguous.integrate, validate: ambiguous.validate, review: ambiguous.review,
+    });
+    expect(both.evidence).toMatchObject({ disposition: 'refused', reason: 'companion_run_id_invalid' });
+    expect(ambiguous.calls.wake).toBe(0);
+    const garbageStamp = ports();
+    const stamped = await run(task({ serverRunId: 'run:nope' }), garbageStamp);
+    expect(stamped.evidence).toMatchObject({ disposition: 'refused', reason: 'companion_run_id_invalid' });
+    expect(garbageStamp.calls.wake).toBe(0);
+  });
+});
+
 describe('the companion path imports no provider client', () => {
   const source = readFileSync(join(__dirname, 'julius-companion-slot.ts'), 'utf8');
 
   it('imports only node:crypto and names no provider client, key, or spend table', () => {
-    const imports = [...source.matchAll(/^\s*import\s+[^;]+;/gmu)].map((match) => match[0]);
-    expect(imports).toEqual(["import { createHash } from 'node:crypto';"]);
+    const imports = [...source.matchAll(/^\s*import\s+[^;]+;/gmu)].map((match) => match[0].trim());
+    expect(imports).toEqual([
+      "import { createHash } from 'node:crypto';",
+      "import { parseJuliusAdmissionRunId } from '../scripts/julius-admission-run-id.mjs';",
+    ]);
+    expect(source).not.toMatch(/randomUUID/);
     expect(source).not.toMatch(/openai|@anthropic|anthropic|xai|hermes-reviewer|julius-xai-direct-reviewer|gpt-runner|openai-architect|live-workers|MISSION_LIMITS|spendLedger|authorizeJuliusLiveSpend|julius-dispatch-spend|process\.env|node:fs|writeFile/iu);
   });
 });
