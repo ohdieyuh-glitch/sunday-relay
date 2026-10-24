@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import { juliusMissionSpanId, juliusMissionTraceId } from '../scripts/julius-mission-trace.mjs';
 import { handleJuliusMissionRoute } from './julius-mission-routes';
 import {
   createJuliusMissionEvidenceTestDouble,
@@ -146,10 +147,12 @@ function completionValue(over: Record<string, unknown> = {}): Record<string, unk
     workArtifactRefs: [`artifact:julius-work-artifact.v1:${RUN}:build-1:g1:DIFF`],
     projectBrainRevision: 3,
     phases: [
-      { role: 'PROMPT_ARCHITECT', state: 'IDLE', stage: 'plan', knownUsdMicros: null, costComplete: false },
-      { role: 'CODING_AGENT', state: 'IDLE', stage: 'build', knownUsdMicros: 608861, costComplete: true },
-      { role: 'INDEPENDENT_REVIEWER', state: 'IDLE', stage: null, knownUsdMicros: null, costComplete: false },
+      { role: 'PROMPT_ARCHITECT', state: 'IDLE', stage: 'plan', attempt: 1, knownUsdMicros: null, costComplete: false },
+      { role: 'CODING_AGENT', state: 'IDLE', stage: 'build', attempt: 1, knownUsdMicros: 608861, costComplete: true },
+      { role: 'INDEPENDENT_REVIEWER', state: 'IDLE', stage: null, attempt: 1, knownUsdMicros: null, costComplete: false },
     ],
+    traceId: 'f'.repeat(32),
+    traceparent: `00-${'f'.repeat(32)}-${'a'.repeat(16)}-01`,
     apiKey: SECRET,
     token: 'ghp_FAKETESTNOTREAL', // relay-boundary:allow-fixture — synthetic
     password: 'super-secret-password',
@@ -216,19 +219,20 @@ describe('wonderland mission result and progress', () => {
     try {
       const heldResult = await handleWonderlandMissionReadRoute(readRequest('result', RUN), ports);
       const heldProgress = await handleWonderlandMissionReadRoute(readRequest('progress', RUN), ports);
+      const traceId = juliusMissionTraceId(RUN);
       expect(heldResult?.body).toMatchObject({
-        wljRunId: RUN, serverRunId: RUN, legacyRunId: null, state: 'awaiting_operator', dispatchedAt: null, completion: null,
+        wljRunId: RUN, serverRunId: RUN, legacyRunId: null, traceId, state: 'awaiting_operator', dispatchedAt: null, completion: null,
       });
       expect(heldProgress?.body).toMatchObject({
-        wljRunId: RUN, serverRunId: RUN, legacyRunId: null, state: 'awaiting_operator', phases: null,
+        wljRunId: RUN, serverRunId: RUN, legacyRunId: null, traceId, state: 'awaiting_operator', phases: null,
       });
       expect(JSON.stringify(heldResult?.body)).not.toContain('completed');
       expect(JSON.stringify(heldProgress?.body)).not.toContain('completed');
       recordDispatch(storePath);
       const dispatchedResult = await handleWonderlandMissionReadRoute(readRequest('result', RUN), ports);
       const dispatchedProgress = await handleWonderlandMissionReadRoute(readRequest('progress', RUN), ports);
-      expect(dispatchedResult?.body).toMatchObject({ state: 'dispatched', dispatchedAt: WHEN, completion: null });
-      expect(dispatchedProgress?.body).toMatchObject({ state: 'dispatched', phases: null });
+      expect(dispatchedResult?.body).toMatchObject({ state: 'dispatched', traceId, dispatchedAt: WHEN, completion: null });
+      expect(dispatchedProgress?.body).toMatchObject({ state: 'dispatched', traceId, phases: null });
       expect(JSON.stringify(dispatchedResult?.body)).not.toContain('"completed"');
       expect(JSON.stringify(dispatchedProgress?.body)).not.toContain('"completed"');
       ports.close();
@@ -264,12 +268,21 @@ describe('wonderland mission result and progress', () => {
       });
       expect(progress?.body).toMatchObject({
         state: 'completed',
+        traceId: juliusMissionTraceId(RUN),
         phases: [
-          { role: 'PROMPT_ARCHITECT', state: 'IDLE', stage: 'plan' },
-          { role: 'CODING_AGENT', state: 'IDLE', stage: 'build' },
-          { role: 'INDEPENDENT_REVIEWER', state: 'IDLE', stage: null },
+          { role: 'PROMPT_ARCHITECT', state: 'IDLE', stage: 'plan', attempt: 1, spanId: juliusMissionSpanId(RUN, 'PROMPT_ARCHITECT', 'plan', 1) },
+          { role: 'CODING_AGENT', state: 'IDLE', stage: 'build', attempt: 1, spanId: juliusMissionSpanId(RUN, 'CODING_AGENT', 'build', 1) },
+          { role: 'INDEPENDENT_REVIEWER', state: 'IDLE', stage: null, attempt: 1, spanId: null },
         ],
       });
+      const progressBody = progress?.body as { phases?: { spanId: string | null }[] };
+      const spanIds = (progressBody.phases ?? []).map((phase) => phase.spanId).filter((spanId) => spanId !== null);
+      expect(new Set(spanIds).size).toBe(spanIds.length);
+      expect(result?.body).toMatchObject({
+        traceId: juliusMissionTraceId(RUN),
+        completion: { traceId: juliusMissionTraceId(RUN), traceparent: null },
+      });
+      expect(JSON.stringify(result?.body)).not.toContain('f'.repeat(32));
       const serialized = `${JSON.stringify(result?.body)}${JSON.stringify(progress?.body)}`;
       expect(serialized).not.toContain(SECRET);
       expect(serialized).not.toContain('ghp_FAKETESTNOTREAL');

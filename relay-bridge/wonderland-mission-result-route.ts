@@ -13,6 +13,7 @@
  * that shape. YUJI owns the reader; this route does not match workflow runs.
  */
 
+import { juliusMissionTraceId } from '../scripts/julius-mission-trace.mjs';
 import { parseJuliusAdmissionRunId } from '../src/relay/integration/wonderland-admission/admission-run-id';
 import {
   acceptJuliusMissionEvidence,
@@ -137,6 +138,7 @@ export function handleWonderlandMissionReadRoute(
       wljRunId: textOrNull(admission.wljRunId),
       serverRunId: textOrNull(admission.serverRunId),
       legacyRunId: textOrNull(admission.legacyRunId),
+      traceId: juliusMissionTraceId(parsed.runId),
       state,
       updatedAt: textOrNull(admission.updatedAt),
     };

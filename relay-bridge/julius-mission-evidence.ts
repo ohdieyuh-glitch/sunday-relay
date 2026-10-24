@@ -1,3 +1,9 @@
+import {
+  juliusMissionSpanId,
+  juliusMissionTraceId,
+  juliusMissionTraceparent,
+} from '../scripts/julius-mission-trace.mjs';
+
 /**
  * COMPLETION EVIDENCE FOR A WONDERLAND JULIUS MISSION.
  *
@@ -14,6 +20,9 @@
  * The field list and the commits it was read from are in
  * `docs/JULIUS_MISSION_EVIDENCE_READER.md`. A field that was not found is
  * not on this interface. Unknown values stay null.
+ *
+ * `traceId` and each phase `spanId` are derived from the admitted `wlj_` id
+ * by `scripts/julius-mission-trace.mjs`. They are not read off the payload.
  */
 
 export const JULIUS_SPEND_TAG_SCHEMA = 'julius-run-spent.v1' as const;
@@ -102,11 +111,19 @@ export interface JuliusMissionArchiveEvidence {
   readonly files: readonly JuliusMissionArchiveFile[] | null;
 }
 
-/** One C.A.R.D. peer. Repair is a `stage` on that peer, not a fourth role. */
+/**
+ * One C.A.R.D. peer. Repair is a `stage` on that peer, not a fourth role.
+ * `spanId` and `traceparent` are derived from the admitted `wlj_` id, the
+ * role, the stage, and `attempt`. A value supplied on the reader payload is
+ * not copied.
+ */
 export interface JuliusMissionPhaseEvidence {
   readonly role: JuliusMissionPhaseRole;
   readonly state: JuliusMissionSlotState;
   readonly stage: JuliusMissionPhaseStage | null;
+  readonly attempt: number | null;
+  readonly spanId: string | null;
+  readonly traceparent: string | null;
   readonly knownUsdMicros: number | null;
   readonly costComplete: boolean | null;
 }
@@ -126,6 +143,16 @@ export interface JuliusMissionCompletionEvidence {
   readonly workArtifactRefs: readonly string[] | null;
   readonly projectBrainRevision: number | null;
   readonly phases: readonly JuliusMissionPhaseEvidence[] | null;
+  /**
+   * Derived from the admitted `wlj_` id. A trace id on the reader payload,
+   * and a trace id supplied to dispatch, are not this field.
+   */
+  readonly traceId: string | null;
+  /**
+   * The mission record is not itself a span, so this is null. Each phase
+   * carries the `00-<traceId>-<spanId>-01` header for its own span.
+   */
+  readonly traceparent: null;
 }
 
 /**
@@ -310,8 +337,9 @@ function workArtifactRefs(value: unknown): readonly string[] | null {
   return refs;
 }
 
-function phases(value: unknown): readonly JuliusMissionPhaseEvidence[] | null {
+function phases(wljRunId: string, value: unknown): readonly JuliusMissionPhaseEvidence[] | null {
   if (!Array.isArray(value)) return null;
+  const traceId = juliusMissionTraceId(wljRunId);
   const seen = new Set<string>();
   const rows: JuliusMissionPhaseEvidence[] = [];
   for (const entry of value) {
@@ -321,10 +349,16 @@ function phases(value: unknown): readonly JuliusMissionPhaseEvidence[] | null {
     const state = oneOf(body.state, JULIUS_MISSION_SLOT_STATES);
     if (role === null || state === null || seen.has(role)) continue;
     seen.add(role);
+    const stage = oneOf(body.stage, JULIUS_MISSION_PHASE_STAGES);
+    const attempt = nonNegativeInt(body.attempt);
+    const spanId = juliusMissionSpanId(wljRunId, role, stage, attempt);
     rows.push({
       role,
       state,
-      stage: oneOf(body.stage, JULIUS_MISSION_PHASE_STAGES),
+      stage,
+      attempt,
+      spanId,
+      traceparent: juliusMissionTraceparent(traceId, spanId),
       knownUsdMicros: nonNegativeInt(body.knownUsdMicros),
       costComplete: flag(body.costComplete),
     });
@@ -339,11 +373,14 @@ function phases(value: unknown): readonly JuliusMissionPhaseEvidence[] | null {
  * on that same object. `{ completed: true }` is not that object. Phases are
  * read from the same object when the reader supplied a list, including when
  * the run is not complete.
+ *
+ * `traceId`, `spanId`, and `traceparent` are derived here from the admitted
+ * `wlj_` id. The same fields on the payload are ignored.
  */
 export function acceptJuliusMissionEvidence(wljRunId: string, value: unknown): JuliusMissionEvidenceReading {
   const body = record(value);
   if (body === null) return absent;
-  const phaseRows = phases(body.phases);
+  const phaseRows = phases(wljRunId, body.phases);
   const tag = spendTag(wljRunId, body.spendTag);
   if (tag === null || body.juliusFinalState !== 'COMPLETED') {
     return { completion: null, phases: phaseRows };
@@ -360,6 +397,8 @@ export function acceptJuliusMissionEvidence(wljRunId: string, value: unknown): J
       workArtifactRefs: workArtifactRefs(body.workArtifactRefs),
       projectBrainRevision: nonNegativeInt(body.projectBrainRevision),
       phases: phaseRows,
+      traceId: juliusMissionTraceId(wljRunId),
+      traceparent: null,
     },
     phases: phaseRows,
   };

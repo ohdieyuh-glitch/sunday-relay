@@ -17,6 +17,8 @@ Until that reader is wired, `GET /relay-api/wonderland/julius/missions/{wljRunId
 
 A missing section is null on the completion object. Null is unknown. A missing cost is not zero. `providerMessageId` is not a field: a message id does not make a receipt `CAPTURED`.
 
+`traceId` and `traceparent` are on this shape. The bridge fills them from `scripts/julius-mission-trace.mjs` using the admitted `wlj_` id. A `traceId`, `traceparent`, or `spanId` on the reader payload is ignored. The paid workflow derives the same values from the admitted `JULIUS_RUN_ID` by importing that module. Dispatch does not send a trace id. A trace id supplied by dispatch is never trusted. See `docs/JULIUS_MISSION_TRACE.md`.
+
 | Interface field | Source field | Where it was read |
 |---|---|---|
 | `spendTag.schema` | `julius-run-spent.v1` | `#445` `da345243` `.github/workflows/julius-first-live-mission.yml:274` |
@@ -58,12 +60,19 @@ A missing section is null on the completion object. Null is unknown. A missing c
 | `phases[].knownUsdMicros` | `JuliusSlotView.knownUsdMicros` | `julius-runtime-api.ts:244`. A floor when `costComplete` is false. |
 | `phases[].costComplete` | `JuliusSlotView.costComplete` | same slot view |
 | `juliusFinalState` | `julius_final_state` / `JuliusMissionState` | archive column; `julius-runtime.ts` `JULIUS_MISSION_STATES` includes `COMPLETED` |
+| `traceId` | derived, not stored | `scripts/julius-mission-trace.mjs` `juliusMissionTraceId`. First 32 hex of SHA-256 of `julius-trace.v1:` plus the `wlj_` id. |
+| `traceparent` | `00-<traceId>-<spanId>-01` on a phase | Mission scope is null. Each phase with a role, stage, and attempt carries its own header. |
+| `phases[].attempt` | decimal attempt, no padding | Reader-supplied safe integer `>= 0`. Absent is null, and then `spanId` is null. |
+| `phases[].spanId` | derived, not stored | First 16 hex of SHA-256 of `julius-span.v1:<wlj>:<role>:<stage>:<attempt>`. |
+| `phases[].traceparent` | W3C traceparent | `juliusMissionTraceparent(traceId, spanId)`. |
 
 `#404` `0c2ac2a9` pins the same spent-tag bytes as `#434`. `#440` `e01a1df8` `relay-bridge/julius-companion-evidence.ts` is a different row (companion wire state, untrusted summary, content hash). It is not this completion record, and this route does not read it.
 
-## Not found
+## Trace id
 
-No `traceId`, `trace_id`, or OTEL trace field turned up on the Julius run view, the coder or reviewer receipt, the paid-run archive, or `julius-first-live-mission.yml` at `da345243`. `workflow_run_id` is a GitHub Actions run id. The provider receipt id is `providerRequestId`. This interface has no trace id until a record actually carries one.
+No stored `traceId` turned up on the Julius run view, the coder or reviewer receipt, the paid-run archive, or `julius-first-live-mission.yml` at `da345243`. The id in this interface is derived. YUJI's runtime, the coder receipt, the reviewer receipt, and the paid-run archive should record `traceId` and `spanId` by calling `scripts/julius-mission-trace.mjs` with the admitted `JULIUS_RUN_ID`. The workflow does that derivation itself. Dispatch sends no trace id, and a dispatch-supplied trace id is never trusted.
+
+`workflow_run_id` remains a GitHub Actions run id. The provider receipt id remains `providerRequestId`. `traceId` is a correlation id. It is not a secret and it is not proof of spend. The spend tag stays authoritative.
 
 `JuliusMissionResultView.verified` (`julius-runtime-api.ts:132`) is the runtime's own flag, true only when that runtime has already reached `COMPLETED`. This route does not recompute it. YUJI's reader reports `juliusFinalState`.
 
@@ -73,6 +82,6 @@ No `traceId`, `trace_id`, or OTEL trace field turned up on the Julius run view, 
 
 Both routes are loopback-only and use the shared `wlj_` parser. A legacy `run:` id, a `preflight:` id, a malformed id, and an unknown id are `404 { error: { kind: "not_found", message: "Not found." } }`. Any other peer is `403` `julius_dispatch_not_loopback`.
 
-`/result` returns the status identity plus `completion: null`, or `state: "completed"` and the evidence object when the reader returns the shape above.
+`/result` returns the status identity, the derived `traceId`, and `completion: null`, or `state: "completed"` and the evidence object when the reader returns the shape above. The completion object carries the same derived `traceId`.
 
-`/progress` returns that same ceiling or `completed`, and `phases` from the same object. No phase list from the reader is `phases: null`.
+`/progress` returns that same ceiling or `completed`, the same `traceId`, and `phases` from the same object. Each phase includes `spanId` when role, stage, and attempt are all present. No phase list from the reader is `phases: null`.
