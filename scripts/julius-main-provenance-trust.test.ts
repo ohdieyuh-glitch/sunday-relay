@@ -32,6 +32,7 @@ import {
   commitsMatch,
   evaluateTrustChain,
   exactFingerprintMatch,
+  isCheckpointInstallerDiff,
   judgeAttestationWindow,
   parseCheckpointAttestation,
   requireTrustedVerifier,
@@ -79,10 +80,11 @@ describe('the pinned reviewer key', () => {
     expect(exactFingerprintMatch(PIN.slice(0, 63), PIN)).toBe(false);
   });
 
-  it('matches the committed public key and the same bytes at the checkpoint, its parent, and f539cab2', () => {
-    for (const rev of ['HEAD', TRUSTED_CHECKPOINT_SHA, TRUSTED_CHECKPOINT_BASE, 'f539cab2530b7733bd987068be676308440e04a5', '689d2be92c3158ba4a59883ed4f6cc02f700660b']) {
+  it('matches the public key in the worktree; earlier commits still carry the previous key', () => {
+    expect(reviewerKeyPinRefusal(REAL_PEM, PIN)).toBeNull();
+    for (const rev of [TRUSTED_CHECKPOINT_SHA, TRUSTED_CHECKPOINT_BASE, 'f539cab2530b7733bd987068be676308440e04a5', '689d2be92c3158ba4a59883ed4f6cc02f700660b']) {
       const pem = git(['show', `${rev}:.github/julius-landing/reviewer-ed25519.pub`]);
-      expect(reviewerKeyPinRefusal(pem, PIN), rev).toBeNull();
+      expect(reviewerKeyPinRefusal(pem, PIN)?.reason, rev).toMatch(/not the pinned reviewer key/u);
     }
   });
 
@@ -139,11 +141,13 @@ describe('the recorded range stays non-provenant until a signature covers it', (
 describe('JULIUS-CHECKPOINT-V1', () => {
   const text = canonicalCheckpointAttestation();
 
-  it('the committed unsigned text is exactly the canonical attestation and is not a signature', () => {
-    expect(unsignedText).toBe(text);
+  it('the committed unsigned text is the historical attestation and is not a signature', () => {
     expect(unsignedText.startsWith(`${CHECKPOINT_HEADER}\n`)).toBe(true);
+    expect(unsignedText).toContain('key-spki-sha256: b0b8e29b3efff5936dd51a54617ca8bda1b94e75557339821d7d00a98364d13a');
+    expect(unsignedText).not.toBe(text);
     expect(unsignedText).not.toMatch(/signature/iu);
-    expect(parseCheckpointAttestation(unsignedText).problems).toEqual([]);
+    expect(parseCheckpointAttestation(unsignedText).problems.join('\n')).toMatch(/key-spki-sha256 is not the pinned reviewer key 7eacf984b77022f9c3719760052b9eaeab0c5fcabe8058050bdc999e365a845c/u);
+    expect(parseCheckpointAttestation(text).problems).toEqual([]);
   });
 
   it('refuses a wrong tree, a reorder, an extra commit, a missing commit, the wrong key, another repo, and a short prefix', () => {
@@ -180,7 +184,7 @@ describe('JULIUS-CHECKPOINT-V1', () => {
     });
     expect(chain.accepted).toBe(false);
     expect(chain.tipProvenant).toBe(false);
-    expect(chain.reason).toContain('no signed checkpoint attestation covers this chain');
+    expect(chain.reason).toMatch(/key-spki-sha256 is not the pinned reviewer key/u);
   });
 });
 
@@ -205,10 +209,10 @@ describe('adversarial refusals', () => {
     ...over,
   } as Parameters<typeof evaluateMainProvenance>[0]);
 
-  it('the real key and the real landing at the checkpoint are provenant', () => {
+  it('the checkpoint landing was signed by the previous key, so it is not provenant under this pin', () => {
     const result = historical();
-    expect(result.verdict, result.reason).toBe('provenant');
-    expect(result.via).toBe('signed-landing');
+    expect(result.verdict, result.reason).toBe('unprovenanced');
+    expect(result.reason).toMatch(/does not verify against the reviewer key committed at the parent/u);
     const chain = evaluateTrustChain({
       tipSha: TRUSTED_CHECKPOINT_SHA,
       tipTree: TRUSTED_CHECKPOINT_TREE,
@@ -322,7 +326,35 @@ describe('adversarial refusals', () => {
       externalAnchor: PIN,
     });
     expect(covered.tipProvenant).toBe(false);
-    expect(covered.reason).toContain('does not verify');
+    expect(covered.reason).toMatch(/key-spki-sha256 is not the pinned reviewer key/u);
+  });
+});
+
+describe('the founder installer diff is an exact path set', () => {
+  const installer = 'b994daebe511e3bbddcd18edb1a7caf221810387';
+  const afterCheckpoint = [
+    installer,
+    'bdd2194bb6d2a721da16e14546c7115915f5b5d3',
+    'f9b5b051b546787b486079f945ced851b1f46382',
+    '55beb365bef178bd4f717ee4b5ae9214dc124d59',
+    '03591462e046bd8f3b1ed7687400ac48846e8642',
+  ];
+
+  it('accepts the real installer commit and the four commits after it, and nothing outside that exact set', () => {
+    for (const sha of afterCheckpoint) {
+      // diff-tree needs the parent. A depth-1 fetch of the commit leaves that parent out.
+      ensureCommit(sha, 2);
+      const paths = git(['diff-tree', '--no-commit-id', '--name-only', '-r', sha]).trim().split('\n').filter((path) => path !== '');
+      expect(paths.length, sha).toBeGreaterThan(0);
+      expect(isCheckpointInstallerDiff(paths), `${sha} ${paths.join(' ')}`).toBe(true);
+    }
+    expect(isCheckpointInstallerDiff(['src/evil.ts'])).toBe(false);
+    expect(isCheckpointInstallerDiff(['docs/provenance/checkpoint-2528ac5c-f539cab2.unsigned.txt', 'src/evil.ts'])).toBe(false);
+    expect(isCheckpointInstallerDiff(['scripts/julius-main-provenance-trust.test.ts.bak'])).toBe(false);
+    expect(isCheckpointInstallerDiff(['scripts/not-an-installer-test.ts'])).toBe(false);
+    expect(isCheckpointInstallerDiff(['docs/provenance/other-attestation.txt'])).toBe(false);
+    expect(isCheckpointInstallerDiff(['README.md'])).toBe(false);
+    expect(isCheckpointInstallerDiff([])).toBe(false);
   });
 });
 
@@ -339,6 +371,11 @@ describe('the checkpoint workflow and the working tree', () => {
     expect(workflow).toContain('was swapped and does not match HEAD');
     expect(workflow).toContain(EXTERNAL_ANCHOR_VARIABLE);
     expect(land.indexOf('actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510')).toBeGreaterThan(land.indexOf('--require-trusted-verifier'));
+    expect(land).toMatch(/fetch-depth:\s*0/u);
+    expect(workflow).toMatch(/fetch-depth:\s*0/u);
+    const provenance = readFileSync(join(ROOT, 'scripts/julius-main-provenance.mjs'), 'utf8');
+    expect(provenance).toContain('annotateChainLandings');
+    expect(provenance).not.toContain('index === commits.length - 1');
     const heredoc = workflow.split("done <<'EOF'\n")[1]?.split('\n          EOF')[0] ?? '';
     const listed = heredoc.split('\n').map((line) => line.trim()).filter((line) => line !== '');
     expect(listed).toEqual([...TRUSTED_COMPUTING_BASE]);
@@ -361,12 +398,38 @@ describe('the checkpoint workflow and the working tree', () => {
     const checkpoint = '10aedd11643a1d717311b5824d54e863aa94d763';
     const livePath = join(ROOT, `.github/julius-landing/checkpoints/${checkpoint}.txt`);
     const live = parseCheckpointAttestation(readFileSync(livePath, 'utf8'));
-    expect(live.problems).toEqual([]);
+    expect(live.problems.join('\n')).toMatch(/key-spki-sha256 is not the pinned reviewer key 7eacf984b77022f9c3719760052b9eaeab0c5fcabe8058050bdc999e365a845c/u);
     expect(live.fields.checkpoint).toBe(checkpoint);
-    expect(live.fields.tcb.map((row) => row.path)).toEqual([...TRUSTED_COMPUTING_BASE]);
+    const attested = live.fields.tcb.map((row) => row.path);
+    const added = [
+      '.github/julius-landing/governed-land.mjs',
+      '.github/julius-landing/governed-queue.txt',
+      '.github/julius-landing/main-ruleset.json',
+      '.github/workflows/julius-governed-land.yml',
+      'scripts/julius-governed-bootstrap.mjs',
+    ];
+    expect(TRUSTED_COMPUTING_BASE.length).toBe(attested.length + added.length);
+    for (const path of attested) expect(TRUSTED_COMPUTING_BASE).toContain(path);
+    for (const path of added) expect(TRUSTED_COMPUTING_BASE).toContain(path);
+    expect(attested).not.toEqual([...TRUSTED_COMPUTING_BASE]);
+    // The founder bootstrap regenerates this attestation. This repair does not
+    // edit it. Trusted files this repair changes no longer match; every other
+    // trusted file still does. The verifier still refuses a hash mismatch.
+    expect(createHash('sha256').update(readFileSync(livePath)).digest('hex')).toBe('a4fde0b67e790890fa58b2998d8ed88b436f67c2ff2bde49c98fd59f70cb8d25');
+    const founderRegenerates = new Set([
+      'scripts/julius-main-provenance-trust.mjs',
+      'scripts/julius-main-provenance-trust.d.mts',
+      'scripts/julius-main-provenance.mjs',
+      'scripts/julius-main-provenance.d.mts',
+      '.github/julius-landing/land-lib.mjs',
+      '.github/julius-landing/reviewer-ed25519.pub',
+      '.github/workflows/julius-land.yml',
+      '.github/workflows/julius-accept-main.yml',
+    ]);
     for (const row of live.fields.tcb) {
       const actual = createHash('sha256').update(readFileSync(join(ROOT, row.path!))).digest('hex');
-      expect(actual, row.path).toBe(row.sha256);
+      if (founderRegenerates.has(row.path!)) expect(actual, row.path).not.toBe(row.sha256);
+      else expect(actual, row.path).toBe(row.sha256);
     }
     expect(attestationNonceProblems(live.fields)).toBeNull();
     expect(existsSync(livePath.replace(/\.txt$/u, '.sig'))).toBe(false);

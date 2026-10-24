@@ -15,6 +15,7 @@ export declare const REVIEWER_KEY_INTRODUCED_IN: string;
 export declare const LANDING_REPO: string;
 export declare const CHECKPOINT_HEADER: string;
 export declare const EXTERNAL_ANCHOR_VARIABLE: string;
+export declare const GOVERNED_LANDER_BOT_VARIABLE: string;
 export declare const TRUSTED_COMPUTING_BASE: readonly string[];
 export declare const CHECKPOINT_ATTESTATION_DIR: string;
 export declare const INSTALLER_RECOVERY: string;
@@ -66,7 +67,63 @@ export declare function canonicalCheckpointAttestation(fields?: {
 export declare function attestationNonce(commits: readonly { readonly sha?: string; readonly tree?: string }[], tcb?: readonly { readonly path?: string; readonly sha256?: string }[]): string;
 export declare function attestationNonceProblems(fields: { readonly nonce?: string; readonly commits?: readonly { readonly sha?: string; readonly tree?: string }[]; readonly tcb?: readonly { readonly path?: string; readonly sha256?: string }[] } | undefined): string | null;
 export declare function judgeAttestationWindow(fields: { readonly issued?: string; readonly expires?: string } | undefined, now: number): string | null;
+export declare const CHECKPOINT_INSTALLER_EXACT_PATHS: readonly string[];
 export declare function isCheckpointInstallerDiff(paths: unknown): boolean;
+export declare function landingIdentityProblem(input?: {
+  readonly committerId?: unknown;
+  readonly verificationVerified?: unknown;
+  readonly verificationReason?: unknown;
+  readonly botId?: unknown;
+  readonly verificationReadProblem?: unknown;
+}): string | null;
+export declare function governedLandingShapeProblem(files: unknown, method: unknown): string | null;
+export declare function checkpointPairingRequired(files: unknown): boolean;
+export declare function checkpointAttestationProblems(input?: {
+  readonly text?: unknown;
+  readonly signatureB64?: unknown;
+  readonly pem?: unknown;
+  readonly treeHashes?: unknown;
+  readonly now?: unknown;
+}): string[];
+export declare function judgeClearanceWindow(fields: { readonly issued?: string; readonly expires?: string } | undefined, now: number): string | null;
+
+export interface LandingJudgement {
+  readonly ok: boolean;
+  readonly absent: boolean;
+  readonly reason: string;
+  readonly nonce?: string;
+  readonly pr?: string;
+  readonly head?: string;
+}
+
+export declare function judgeCommitLanding(commit: {
+  readonly message?: unknown;
+  readonly tree?: unknown;
+  readonly parent?: unknown;
+  readonly parentCount?: unknown;
+  readonly headTree?: unknown;
+  readonly headParent?: unknown;
+  readonly headParentCount?: unknown;
+  readonly paths?: unknown;
+  readonly committerId?: unknown;
+  readonly verificationVerified?: unknown;
+  readonly verificationReason?: unknown;
+  readonly verificationReadProblem?: unknown;
+}, options?: {
+  readonly pem?: unknown;
+  readonly anchor?: unknown;
+  readonly now?: unknown;
+  readonly seenNonces?: Set<string>;
+  readonly governedLanderBotId?: unknown;
+  readonly env?: NodeJS.ProcessEnv;
+}): Promise<LandingJudgement>;
+
+export declare function annotateChainLandings<T>(commits: readonly T[], options?: {
+  readonly pem?: unknown;
+  readonly anchor?: unknown;
+  readonly now?: unknown;
+  readonly seenNonces?: Set<string>;
+}): Promise<T[]>;
 
 export interface ParsedCheckpoint {
   readonly problems: string[];
@@ -124,4 +181,14 @@ export declare function applyTrustChain<T extends { readonly verdict?: string; r
 export declare function readCheckpointAttestation(root?: string): { readonly text: string; readonly signatureB64: string | null; readonly fileName: string; readonly path: string } | null;
 export declare function attestedCheckpointFloor(root?: string, env?: NodeJS.ProcessEnv, now?: number): string | null;
 export declare function attestationWorktreeMatchesHead(root?: string): Promise<{ readonly ok: boolean; readonly reason: string }>;
-export declare function requireTrustedVerifier(env?: NodeJS.ProcessEnv, options?: { readonly root?: string; readonly now?: number }): Promise<{ readonly ok: boolean; readonly reason: string }>;
+export declare function requireTrustedVerifier(env?: NodeJS.ProcessEnv, options?: {
+  readonly root?: string;
+  readonly now?: number;
+  readonly identities?: Readonly<Record<string, {
+    readonly committerId?: unknown;
+    readonly verificationVerified?: unknown;
+    readonly verificationReason?: unknown;
+  }>>;
+}): Promise<{ readonly ok: boolean; readonly reason: string }>;
+
+export declare function governedAuditBranchProblem(ref: unknown): string | null;

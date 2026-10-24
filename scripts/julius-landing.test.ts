@@ -1168,7 +1168,7 @@ describe('round 4: required-checks.txt has exactly one reader, the lander (via p
     const candidates = [...listed('.github/workflows'), ...listed('scripts').filter((f) => /\.(mjs|ts|sh|js|cjs|mts)$/u.test(f)), ...listed('.github/julius-landing').filter((f) => /\.mjs$/u.test(f))];
     const readers = candidates.filter((f) => readFileSync(resolve(ROOT, f), 'utf8').includes('required-checks')).map((f) => f.replace(/\\/gu, '/')).sort();
     // the lander, the lander's library (documentation comment) and the two landing test files (which pin or rewrite the file)
-    const expected = ['.github/julius-landing/land-lib.mjs', '.github/julius-landing/land.mjs', 'scripts/julius-landing-attack.test.ts', 'scripts/julius-landing.test.ts'];
+    const expected = ['.github/julius-landing/governed-land.mjs', '.github/julius-landing/land-lib.mjs', '.github/julius-landing/land.mjs', 'scripts/julius-landing-attack.test.ts', 'scripts/julius-landing.test.ts'];
     // These mention the path as data (a governed-path list or the trusted-computing-base list). None of them read the file.
     const dataOnly = [
       'scripts/julius-main-provenance-signed.test.ts',
@@ -1188,6 +1188,9 @@ describe('round 4: required-checks.txt has exactly one reader, the lander (via p
     const land = readFileSync(join(LANDING, 'land.mjs'), 'utf8');
     expect(land).toMatch(/parseRequiredChecks\(readFileSync\(join\(here, 'required-checks\.txt'\)/u);
     expect(land.match(/required-checks\.txt'/gu), 'land.mjs reads the file exactly once').toHaveLength(1);
+    const governed = readFileSync(join(LANDING, 'governed-land.mjs'), 'utf8');
+    expect(governed).toMatch(/parseRequiredChecks\(readFileSync\(join\(here, 'required-checks\.txt'\)/u);
+    expect(governed.match(/required-checks\.txt'/gu), 'governed-land.mjs reads the file exactly once').toHaveLength(1);
   });
 });
 
