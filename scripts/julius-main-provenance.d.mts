@@ -41,6 +41,8 @@ export interface AssociatedPullRequest {
   readonly mergeCommitSha?: unknown;
   readonly authorLogin?: unknown;
   readonly headSha?: unknown;
+  /** The pull request head branch. A governed audit branch is refused. */
+  readonly headRef?: unknown;
   /** The branch the review was rendered against. */
   readonly baseRef?: unknown;
 }
@@ -106,6 +108,8 @@ export type LandingBlock =
   | { readonly state: 'invalid'; readonly reason: string }
   | { readonly state: 'ok'; readonly nonce: string; readonly clearanceB64: string; readonly signatureB64: string };
 
+export declare function pagedCommitFiles(fetchPage: (page: number, perPage: number) => { files?: unknown } | undefined, options?: { perPage?: number }): Array<{ filename?: string; previous_filename?: string }>;
+export declare function readFirstParentChain(gh: (path: string) => unknown, repo: string, tipSha: string, floorSha?: string): Array<Record<string, unknown>> | null;
 export declare function extractLandingBlock(message: unknown): LandingBlock;
 export declare function parseSignedClearance(text: string, queriedRepo?: string): { readonly problems: string[]; readonly fields: Record<string, string> };
 export declare function parseWorkerSquashClearance(text: string, queriedRepo?: string): { readonly problems: string[]; readonly fields: Record<string, string> };

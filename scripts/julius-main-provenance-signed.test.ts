@@ -336,6 +336,12 @@ describe('a tip signed for by the Independent Reviewer', () => {
     expect(SIGNED_LANDING_GOVERNED.HARD_FORBIDDEN.source).toBe(HARD_FORBIDDEN_PATH.source);
     expect(SIGNED_LANDING_GOVERNED.HARD_FORBIDDEN.flags).toBe(HARD_FORBIDDEN_PATH.flags);
     expect([...SIGNED_LANDING_GOVERNED.EXCEPTION_ELIGIBLE]).toEqual(EXCEPTION_ELIGIBLE);
+    const checkpoint = `.github/julius-landing/checkpoints/${'a'.repeat(40)}.txt`;
+    const signature = `.github/julius-landing/checkpoints/${'b'.repeat(40)}.sig`;
+    expect(HARD_FORBIDDEN_PATH.test(checkpoint)).toBe(true);
+    expect(HARD_FORBIDDEN_PATH.test(signature)).toBe(true);
+    expect(SIGNED_LANDING_GOVERNED.HARD_FORBIDDEN.test(checkpoint)).toBe(true);
+    expect(SIGNED_LANDING_GOVERNED.HARD_FORBIDDEN.test(signature)).toBe(true);
   });
 
   it('13. a tip that carries a block is judged by the block ALONE: a legitimate founder approval cannot rescue a bad block', () => {
