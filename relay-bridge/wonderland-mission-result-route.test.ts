@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { juliusMissionSpanId, juliusMissionTraceId } from '../scripts/julius-mission-trace.mjs';
+import { juliusMissionTraceId } from '../scripts/julius-mission-trace.mjs';
 import { handleJuliusMissionRoute } from './julius-mission-routes';
 import {
   createJuliusMissionEvidenceTestDouble,
@@ -29,6 +29,40 @@ const PROJECT = 'project-1';
 const SHA = 'a'.repeat(40);
 const DIGEST = 'b'.repeat(64);
 const SECRET = 'sk-ant-FAKETESTNOTREAL'; // relay-boundary:allow-fixture — synthetic
+
+/** 44a7f1e1 relay-bridge/julius-mission-evidence-reader.test.ts:392-415. */
+const PRESENT_PHASES = [
+  {
+    role: 'PROMPT_ARCHITECT',
+    state: 'NEVER_DISPATCHED',
+    stage: null,
+    attempt: null,
+    spanId: null,
+    traceparent: null,
+    knownUsdMicros: 0,
+    costComplete: true,
+  },
+  {
+    role: 'CODING_AGENT',
+    state: 'IDLE',
+    stage: 'repair:build',
+    attempt: 2,
+    spanId: null,
+    traceparent: null,
+    knownUsdMicros: 1000,
+    costComplete: true,
+  },
+  {
+    role: 'INDEPENDENT_REVIEWER',
+    state: 'NEVER_DISPATCHED',
+    stage: null,
+    attempt: null,
+    spanId: null,
+    traceparent: null,
+    knownUsdMicros: 0,
+    costComplete: true,
+  },
+] as const;
 const NOT_FOUND = { status: 404, body: { error: { kind: 'not_found', message: 'Not found.' } } };
 
 function env(storePath: string): Record<string, string | undefined> {
@@ -321,12 +355,16 @@ describe('wonderland mission result and progress', () => {
       const phasesOnly = createJuliusMissionEvidenceTestDouble({
         [RUN]: {
           juliusFinalState: 'EXECUTING',
+          projectBrainRevision: 0,
           phases: [{
             role: 'CODING_AGENT',
             state: 'ACTIVE',
             stage: 'build',
             attempt: 1,
             spanId: 'a'.repeat(16),
+            traceparent: null,
+            knownUsdMicros: 0,
+            costComplete: true,
           }],
         },
       });
@@ -357,27 +395,76 @@ describe('wonderland mission result and progress', () => {
       expect(JSON.stringify(captured?.body)).not.toContain('msg_does_not_count');
       const moving = await handleWonderlandMissionReadRoute(readRequest('progress', RUN), ports, phasesOnly);
       const still = await handleWonderlandMissionReadRoute(readRequest('result', RUN), ports, phasesOnly);
-      const suppliedSpan = juliusMissionSpanId(RUN, 'CODING_AGENT', 'build', 1);
       expect(moving?.body).toMatchObject({
         state: 'dispatched',
         projectBrainRevision: null,
-        phases: [{
-          role: 'CODING_AGENT',
-          state: 'ACTIVE',
-          stage: 'build',
-          attempt: 1,
-          spanId: suppliedSpan,
-          knownUsdMicros: null,
-          costComplete: null,
-        }],
+        phases: null,
       });
       expect(still?.body).toMatchObject({
         state: 'dispatched',
         projectBrainRevision: null,
         completion: null,
-        phases: [{ role: 'CODING_AGENT', spanId: suppliedSpan }],
+        phases: null,
       });
-      expect(JSON.stringify(moving?.body)).not.toContain(`"spanId":"${'a'.repeat(16)}"`);
+      const unfinished = `${JSON.stringify(moving?.body)}${JSON.stringify(still?.body)}`;
+      expect(unfinished).not.toContain(`"spanId":"${'a'.repeat(16)}"`);
+      expect(unfinished).not.toContain('NEVER_DISPATCHED');
+      expect(unfinished).not.toContain('"projectBrainRevision":0');
+      ports.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('renders a present projection, a revision of 0, and a null phase list', async () => {
+    const { dir, storePath, ports } = await admitted();
+    try {
+      recordDispatch(storePath);
+      const present = createJuliusMissionEvidenceTestDouble({
+        [RUN]: completionValue({ projectBrainRevision: 0, phases: PRESENT_PHASES, spendAccounting: null }),
+      });
+      const progress = await handleWonderlandMissionReadRoute(readRequest('progress', RUN), ports, present);
+      const result = await handleWonderlandMissionReadRoute(readRequest('result', RUN), ports, present);
+      expect(progress?.body).toMatchObject({
+        state: 'completed',
+        projectBrainRevision: 0,
+        phases: PRESENT_PHASES,
+      });
+      expect(result?.body).toMatchObject({
+        state: 'completed',
+        projectBrainRevision: 0,
+        phases: PRESENT_PHASES,
+        completion: { projectBrainRevision: 0, phases: PRESENT_PHASES, spendAccounting: null, traceparent: null },
+      });
+      const rendered = `${JSON.stringify(progress?.body)}${JSON.stringify(result?.body)}`;
+      expect(rendered).toContain('"projectBrainRevision":0');
+      expect(rendered).toContain('"knownUsdMicros":0');
+      expect(rendered).toContain('"spanId":null');
+      expect(rendered).not.toContain('"spanId":"');
+      const absentPhases = createJuliusMissionEvidenceTestDouble({
+        [RUN]: completionValue({ projectBrainRevision: 4, phases: null, spendAccounting: null }),
+      });
+      const quiet = await handleWonderlandMissionReadRoute(readRequest('progress', RUN), ports, absentPhases);
+      expect(quiet?.body).toMatchObject({
+        state: 'completed',
+        projectBrainRevision: 4,
+        phases: null,
+      });
+      expect(JSON.stringify(quiet?.body)).not.toContain('NEVER_DISPATCHED');
+      const broken = createJuliusMissionEvidenceTestDouble({
+        [RUN]: completionValue({
+          projectBrainRevision: 4,
+          phases: [{ ...PRESENT_PHASES[1], spanId: 'a'.repeat(16) }],
+        }),
+      });
+      const dropped = await handleWonderlandMissionReadRoute(readRequest('result', RUN), ports, broken);
+      expect(dropped?.body).toMatchObject({
+        state: 'completed',
+        projectBrainRevision: 4,
+        phases: null,
+        completion: { phases: null, projectBrainRevision: 4 },
+      });
+      expect(JSON.stringify(dropped?.body)).not.toContain(`"spanId":"${'a'.repeat(16)}"`);
       ports.close();
     } finally {
       rmSync(dir, { recursive: true, force: true });

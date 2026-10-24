@@ -1,8 +1,4 @@
-import {
-  juliusMissionSpanId,
-  juliusMissionTraceId,
-  juliusMissionTraceparent,
-} from '../scripts/julius-mission-trace.mjs';
+import { juliusMissionTraceId } from '../scripts/julius-mission-trace.mjs';
 
 /**
  * COMPLETION EVIDENCE FOR A WONDERLAND JULIUS MISSION.
@@ -21,8 +17,9 @@ import {
  * `docs/JULIUS_MISSION_EVIDENCE_READER.md`. A field that was not found is
  * not on this interface. Unknown values stay null.
  *
- * `traceId` and each phase `spanId` are derived from the admitted `wlj_` id
- * by `scripts/julius-mission-trace.mjs`. They are not read off the payload.
+ * `traceId` is derived from the admitted `wlj_` id by
+ * `scripts/julius-mission-trace.mjs`. It is not read off the payload.
+ * A phase `spanId` and `traceparent` stay null, as the reader assigns them.
  */
 
 export const JULIUS_SPEND_TAG_SCHEMA = 'julius-run-spent.v1' as const;
@@ -113,10 +110,10 @@ export interface JuliusMissionArchiveEvidence {
 }
 
 /**
- * One C.A.R.D. peer. Repair is a `stage` on that peer, not a fourth role.
- * `spanId` and `traceparent` are derived from the admitted `wlj_` id, the
- * role, the stage, and `attempt`. A value supplied on the reader payload is
- * not copied.
+ * One C.A.R.D. peer, in the order `projectJuliusSlotViews` returns.
+ * Repair is a `stage` on that peer, not a fourth role.
+ * `spanId` and `traceparent` are null. A supplied id is not copied and is
+ * not replaced with a derived one.
  */
 export interface JuliusMissionPhaseEvidence {
   readonly role: JuliusMissionPhaseRole;
@@ -150,8 +147,8 @@ export interface JuliusMissionCompletionEvidence {
    */
   readonly traceId: string | null;
   /**
-   * The mission record is not itself a span, so this is null. Each phase
-   * carries the `00-<traceId>-<spanId>-01` header for its own span.
+   * The mission record is not itself a span, so this is null. A phase
+   * `traceparent` is null as well: the reader does not attach a span.
    */
   readonly traceparent: null;
 }
@@ -170,7 +167,7 @@ export interface JuliusMissionEvidenceReader {
 
 export interface JuliusMissionEvidenceReading {
   readonly completion: JuliusMissionCompletionEvidence | null;
-  /** Null when the reader did not supply a phase list. An empty list is a supplied list. */
+  /** Null when the reader did not supply the three-phase projection, or the value was not that shape. */
   readonly phases: readonly JuliusMissionPhaseEvidence[] | null;
 }
 
@@ -341,33 +338,48 @@ function workArtifactRefs(value: unknown): readonly string[] | null {
   return refs;
 }
 
-function phases(wljRunId: string, value: unknown): readonly JuliusMissionPhaseEvidence[] | null {
-  if (!Array.isArray(value)) return null;
-  const traceId = juliusMissionTraceId(wljRunId);
-  const seen = new Set<string>();
+/**
+ * The slot projection: the three peers, in order, or null.
+ * A missing list is null. A list that is not that shape is null.
+ * `knownUsdMicros: 0` is kept. A supplied `spanId` or `traceparent` is not
+ * rewritten into a derived id; the list is null instead.
+ */
+function phases(value: unknown): readonly JuliusMissionPhaseEvidence[] | null {
+  if (!Array.isArray(value) || value.length !== JULIUS_MISSION_PHASE_ROLES.length) return null;
   const rows: JuliusMissionPhaseEvidence[] = [];
-  for (const entry of value) {
-    const body = record(entry);
-    if (body === null) continue;
-    const role = oneOf(body.role, JULIUS_MISSION_PHASE_ROLES);
-    const state = oneOf(body.state, JULIUS_MISSION_SLOT_STATES);
-    if (role === null || state === null || seen.has(role)) continue;
-    seen.add(role);
-    const stage = oneOf(body.stage, JULIUS_MISSION_PHASE_STAGES);
-    const attempt = nonNegativeInt(body.attempt);
-    const spanId = juliusMissionSpanId(wljRunId, role, stage, attempt);
-    rows.push({
-      role,
-      state,
-      stage,
-      attempt,
-      spanId,
-      traceparent: juliusMissionTraceparent(traceId, spanId),
-      knownUsdMicros: nonNegativeInt(body.knownUsdMicros),
-      costComplete: flag(body.costComplete),
-    });
+  for (let index = 0; index < JULIUS_MISSION_PHASE_ROLES.length; index += 1) {
+    const parsed = phaseProjection(value[index], JULIUS_MISSION_PHASE_ROLES[index]!);
+    if (parsed === null) return null;
+    rows.push(parsed);
   }
   return rows;
+}
+
+function phaseProjection(value: unknown, role: JuliusMissionPhaseRole): JuliusMissionPhaseEvidence | null {
+  const body = record(value);
+  if (body === null || body.role !== role) return null;
+  const state = oneOf(body.state, JULIUS_MISSION_SLOT_STATES);
+  if (state === null) return null;
+  for (const key of ['stage', 'attempt', 'spanId', 'traceparent', 'knownUsdMicros', 'costComplete'] as const) {
+    if (!Object.hasOwn(body, key)) return null;
+  }
+  const stage = body.stage === null ? null : oneOf(body.stage, JULIUS_MISSION_PHASE_STAGES);
+  if (body.stage !== null && stage === null) return null;
+  const attempt = body.attempt === null ? null : nonNegativeInt(body.attempt);
+  if (body.attempt !== null && attempt === null) return null;
+  if (body.spanId !== null || body.traceparent !== null) return null;
+  const knownUsdMicros = nonNegativeInt(body.knownUsdMicros);
+  if (knownUsdMicros === null || typeof body.costComplete !== 'boolean') return null;
+  return {
+    role,
+    state,
+    stage,
+    attempt,
+    spanId: null,
+    traceparent: null,
+    knownUsdMicros,
+    costComplete: body.costComplete,
+  };
 }
 
 /**
@@ -378,22 +390,26 @@ function phases(wljRunId: string, value: unknown): readonly JuliusMissionPhaseEv
  * reader result is not that object: the route stays on the status ceiling.
  *
  * YUJI's reader at `041d2599` returns `phases: null`, `spendAccounting: null`,
- * and `projectBrainRevision: null` until a real source exists. Those nulls
- * stay null. They are not replaced with an empty list, zero, or a guessed
- * phase. A phase list is read only when the reader supplied one.
+ * and `projectBrainRevision: null`. At `44a7f1e1` a present phase list is the
+ * three-slot projection, `projectBrainRevision` is a non-negative integer
+ * (`0` included), and `spendAccounting` stays null. A null section stays
+ * null. It is not replaced with an empty list, a guessed phase, or a
+ * coerced zero. A value that is not the projection is null.
  *
- * `traceId`, `spanId`, and `traceparent` are derived here from the admitted
- * `wlj_` id. The same fields on the payload are ignored. `responseId` is
- * kept as its own field and is never copied from `providerRequestId`.
+ * Phases are published only on a verified completion. An in-progress or
+ * failed read does not carry a phase list.
+ *
+ * `traceId` is derived here from the admitted `wlj_` id. A `traceId` on the
+ * payload is ignored. Phase `spanId` and `traceparent` stay null.
+ * `responseId` is kept as its own field and is never copied from
+ * `providerRequestId`.
  */
 export function acceptJuliusMissionEvidence(wljRunId: string, value: unknown): JuliusMissionEvidenceReading {
   const body = record(value);
   if (body === null) return absent;
-  const phaseRows = phases(wljRunId, body.phases);
+  const phaseRows = phases(body.phases);
   const tag = spendTag(wljRunId, body.spendTag);
-  if (tag === null || body.juliusFinalState !== 'COMPLETED') {
-    return { completion: null, phases: phaseRows };
-  }
+  if (tag === null || body.juliusFinalState !== 'COMPLETED') return absent;
   return {
     completion: {
       juliusFinalState: 'COMPLETED',

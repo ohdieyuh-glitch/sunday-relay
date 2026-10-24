@@ -33,12 +33,26 @@ A missing section is null on the completion object. Null is unknown. A missing c
 | `providerReceipt` | The single `CODING_AGENT` receipt (line 529). `providerRequestId` is the `provider_request_id` column. `responseId` is the `response_id` column (`receiptFromRow`, lines 341–364, assigned at lines 348–349). The response id is kept only when the request was captured and the response string is plain. It is a different field. It is never copied from `providerRequestId`. |
 | `archive` | `archiveFrom` of the `julius-live-evidence` artifact (line 530). |
 | `workArtifactRefs` | `workRefsFrom` of `evidence.tsv` (line 531). |
-| `projectBrainRevision` | `null` (line 532). No source is wired yet. |
-| `phases` | `null` (line 533). No source is wired yet. |
+| `projectBrainRevision` | `null` (line 532). `#454` `44a7f1e1` reads `runs.tsv` `project_brain_revision` instead. |
+| `phases` | `null` (line 533). `#454` `44a7f1e1` reads `slot-events.tsv` instead. |
 | `traceId` | `juliusMissionTraceId` of the admitted id (line 534). `acceptJuliusMissionEvidence` ignores this value and derives the id again. |
 | `traceparent` | `null` (line 535). The mission is not a span. |
 
 A completion object with those three nulls is still completion. A null `read()` is not. After a recorded dispatch the route stays `dispatched`.
+
+## What PR 454 returns
+
+`44a7f1e1` is stacked on `#446` at `b46ea104`. This branch does not import that stack. `read(wljRunId: string): Promise<unknown>` is unchanged. A non-null return still requires the same verified completion: the spend tag, a succeeded Actions run, the completion marker, one `RESULT: COMPLETED` line, and `runs.tsv` absent or in agreement. An in-progress or failed run is still a null `read()`, and these routes do not invent phases for it.
+
+`spendAccounting` stays `null` (`julius-mission-evidence-reader.ts:623`). Phase `spanId` and `traceparent` stay `null` (`:546-547` and the mission `traceparent` at `:632`).
+
+`phases` is `projectJuliusSlotViews` of `slot-events.tsv` (`phasesFrom`, assigned at `:630`). A missing file, the word `unavailable`, or a malformed table is `null`. A header and no rows is three phases, `PROMPT_ARCHITECT`, `CODING_AGENT`, `INDEPENDENT_REVIEWER`, each `NEVER_DISPATCHED`, `knownUsdMicros: 0`, `costComplete: true`, `stage: null`, `attempt: null`. Those zeros are the projection. They are not a stand-in for a missing list.
+
+`projectBrainRevision` is the integer in `runs.tsv` column `project_brain_revision` (`brainRevision`, assigned at `:629`). `0` is the stored counter. An empty cell or a non-integer is `null`. `0` is not written when the cell is missing.
+
+The objects those tests expect are copied in `relay-bridge/julius-mission-evidence.conformance.test.ts` from `44a7f1e1` `relay-bridge/julius-mission-evidence-reader.test.ts:382-415` (a present projection and revision `0`), `:417` (revision `4`), `:434-438` (header-only), `:446-452` and `:486-488` (missing or malformed slots, phases `null`), and `:503-508` (revision `null`).
+
+`acceptJuliusMissionEvidence` keeps a phase list only when it is that three-phase shape, including `spanId: null` and `traceparent: null`. Any other list is `null`. It does not derive a span id to fill the gap. `projectBrainRevision` is kept when it is a non-negative safe integer, and `0` stays `0`. A string, a fraction, or a negative number is `null`. Phases and the revision are published only when the spend tag and `juliusFinalState: "COMPLETED"` both hold.
 
 `/result` and `/progress` both include `phases` and `projectBrainRevision`. Null stays null in the JSON. That is absent. It is not `[]`, not `0`, and not a phase list built from the trace module. The website's word for a null is Unknown. These routes return the null.
 
@@ -80,7 +94,7 @@ The table below is the field inventory those names were read from. `#446` does n
 | `archive.files[].sha256` | `paid_runs.files.sha256` | same schema |
 | `archive.files[].kind` | `table` \| `text` | same schema |
 | `workArtifactRefs` | `artifact:` + `julius-work-artifact.v1` | `#445` `da345243` `src/relay/mission/julius/julius-work-artifact.ts:94` `juliusWorkArtifactRef`. Kinds at line 34: `PLAN`, `GUIDANCE`, `DIFF`, `TEST_OUTPUT`, `BASE_REVISION`, `REVIEW_PACKET`, `RESEARCH`. |
-| `projectBrainRevision` | `projectBrainRevision` | Named on `#445` `da345243` `src/relay/mission/julius/julius-runtime-api.ts:93` `JuliusRunView`. `#446` `041d2599` returns null (line 532) until a real source is read. |
+| `projectBrainRevision` | `runs.tsv` `project_brain_revision` | `#454` `44a7f1e1` `relay-bridge/julius-mission-evidence-reader.ts:629`. A non-negative integer. `0` is a real counter. Missing or not an integer is null. |
 | `phases[].role` | `PROMPT_ARCHITECT` \| `CODING_AGENT` \| `INDEPENDENT_REVIEWER` | `JuliusSlotView.role`, `julius-runtime-api.ts` `JULIUS_DEFAULT_ROLES` |
 | `phases[].state` | `NEVER_DISPATCHED` \| `ACTIVE` \| `IDLE` \| `FAILED` | `julius-runtime-api.ts:239` |
 | `phases[].stage` | `plan` \| `build` \| `repair:plan` \| `repair:build` | `julius-router.ts:224`. Repair is a stage on the parent role. |
@@ -88,10 +102,10 @@ The table below is the field inventory those names were read from. `#446` does n
 | `phases[].costComplete` | `JuliusSlotView.costComplete` | same slot view |
 | `juliusFinalState` | `julius_final_state` / `JuliusMissionState` | archive column; `julius-runtime.ts` `JULIUS_MISSION_STATES` includes `COMPLETED` |
 | `traceId` | derived, not stored | `scripts/julius-mission-trace.mjs` `juliusMissionTraceId`. First 32 hex of SHA-256 of `julius-trace.v1:` plus the `wlj_` id. |
-| `traceparent` | `00-<traceId>-<spanId>-01` on a phase | Mission scope is null. Each phase with a role, stage, and attempt carries its own header. |
-| `phases[].attempt` | decimal attempt, no padding | Reader-supplied safe integer `>= 0`. Absent is null, and then `spanId` is null. |
-| `phases[].spanId` | derived, not stored | First 16 hex of SHA-256 of `julius-span.v1:<wlj>:<role>:<stage>:<attempt>`. |
-| `phases[].traceparent` | W3C traceparent | `juliusMissionTraceparent(traceId, spanId)`. |
+| `traceparent` | null | Mission scope is null. `#454` `44a7f1e1` also leaves each phase `traceparent` null. |
+| `phases[].attempt` | decimal attempt, no padding | The last attempt the slot ledger recorded, or null. |
+| `phases[].spanId` | null | `#454` `44a7f1e1` `julius-mission-evidence-reader.ts:546`. Not derived onto the projection. |
+| `phases[].traceparent` | null | `#454` `44a7f1e1` `julius-mission-evidence-reader.ts:547`. |
 
 `#404` `0c2ac2a9` pins the same spent-tag bytes as `#434`. `#440` `e01a1df8` `relay-bridge/julius-companion-evidence.ts` is a different row (companion wire state, untrusted summary, content hash). It is not this completion record, and this route does not read it.
 
@@ -111,4 +125,4 @@ Both routes are loopback-only and use the shared `wlj_` parser. A legacy `run:` 
 
 `/result` returns the status identity, the derived `traceId`, `phases`, `projectBrainRevision`, and `completion: null`, or `state: "completed"` and the evidence object when the reader returns the shape above. The completion object carries the same derived `traceId`. Its `traceparent` is null.
 
-`/progress` returns that same ceiling or `completed`, the same `traceId`, the same `phases`, and the same `projectBrainRevision`. A phase list is rendered only when the reader supplied one. Each supplied phase includes `spanId` when role, stage, and attempt are all present. `#446` supplies `phases: null` and `projectBrainRevision: null`, and both routes return those nulls. A null `read()` leaves `state` on the status ceiling.
+`/progress` returns that same ceiling or `completed`, the same `traceId`, the same `phases`, and the same `projectBrainRevision`. A phase list is rendered only when the verified completion carries the three-phase projection. `spanId` and `traceparent` on those phases stay null. `projectBrainRevision: 0` is rendered as `0`. A null revision stays null and is not rendered as `0`. `#446` supplies `phases: null` and `projectBrainRevision: null`, and both routes return those nulls. A null `read()`, and a read that is not a verified completion, leaves `state` on the status ceiling and both fields null.

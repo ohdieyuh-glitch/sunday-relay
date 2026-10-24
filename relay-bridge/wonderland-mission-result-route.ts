@@ -11,9 +11,12 @@
  * that status route can show. Neither route reports `completed` unless YUJI's
  * reader returns the completion evidence shape. A null read stays on that
  * ceiling. `phases: null` and `projectBrainRevision: null` are returned as
- * null on both routes: absent, not an empty list and not 0. A dispatch
- * record is not that shape. YUJI owns the reader; this route does not match
- * workflow runs.
+ * null on both routes: absent, not an empty list and not a substituted 0.
+ * A reader `projectBrainRevision` of 0 is that integer and is rendered as 0.
+ * A phase list is the three-slot projection, or null. An in-progress or
+ * failed read does not gain a fabricated phase list. A dispatch record is
+ * not completion. YUJI owns the reader; this route does not match workflow
+ * runs.
  */
 
 import { juliusMissionTraceId } from '../scripts/julius-mission-trace.mjs';
@@ -137,8 +140,8 @@ export function handleWonderlandMissionReadRoute(
     if (admission === null) return { status: 500, body: {} };
     const evidence = await readEvidence(evidenceReader, parsed.runId);
     const state = evidence.completion === null ? ceilingState(admission.state) : 'completed';
-    // Null from the reader is the ceiling. A null phase list and a null
-    // project-brain revision stay null: absent, not an empty list and not 0.
+    // Null from the reader is the ceiling. A null phase list stays null.
+    // A revision of 0 is kept; only a missing revision is null.
     const projectBrainRevision = evidence.completion === null ? null : evidence.completion.projectBrainRevision;
     const shared = {
       wljRunId: textOrNull(admission.wljRunId),

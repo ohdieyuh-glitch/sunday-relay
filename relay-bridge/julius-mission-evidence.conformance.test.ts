@@ -228,3 +228,162 @@ describe('acceptJuliusMissionEvidence accepts the #446 object', () => {
     expect(JSON.stringify(accepted)).not.toContain('f'.repeat(32));
   });
 });
+
+/**
+ * 44a7f1e1 relay-bridge/julius-mission-evidence-reader.test.ts:382-400.
+ * The reader assigns these on a present slot ledger. `spanId` and
+ * `traceparent` are null at julius-mission-evidence-reader.ts:546-547.
+ */
+const CODER_PHASE = {
+  role: 'CODING_AGENT',
+  state: 'IDLE',
+  stage: 'repair:build',
+  attempt: 2,
+  spanId: null,
+  traceparent: null,
+  knownUsdMicros: 1000,
+  costComplete: true,
+} as const;
+
+const ABSENT_PHASE = {
+  state: 'NEVER_DISPATCHED',
+  stage: null,
+  attempt: null,
+  spanId: null,
+  traceparent: null,
+  knownUsdMicros: 0,
+  costComplete: true,
+} as const;
+
+/** 44a7f1e1 relay-bridge/julius-mission-evidence-reader.test.ts:411-415. */
+const PRESENT_PHASES = [
+  { role: 'PROMPT_ARCHITECT', ...ABSENT_PHASE },
+  CODER_PHASE,
+  { role: 'INDEPENDENT_REVIEWER', ...ABSENT_PHASE },
+] as const;
+
+/**
+ * 44a7f1e1 relay-bridge/julius-mission-evidence-reader.test.ts:436-438.
+ * The reader also sets spanId and traceparent null (reader.ts:546-547).
+ */
+const HEADER_ONLY_PHASES = [
+  { role: 'PROMPT_ARCHITECT', state: 'NEVER_DISPATCHED', knownUsdMicros: 0, costComplete: true, stage: null, attempt: null, spanId: null, traceparent: null },
+  { role: 'CODING_AGENT', state: 'NEVER_DISPATCHED', knownUsdMicros: 0, costComplete: true, stage: null, attempt: null, spanId: null, traceparent: null },
+  { role: 'INDEPENDENT_REVIEWER', state: 'NEVER_DISPATCHED', knownUsdMicros: 0, costComplete: true, stage: null, attempt: null, spanId: null, traceparent: null },
+] as const;
+
+describe('acceptJuliusMissionEvidence accepts the #454 projection', () => {
+  it('keeps a present phase projection and a projectBrainRevision of 0', () => {
+    // 44a7f1e1 reader.test.ts:407-416.
+    const accepted = acceptJuliusMissionEvidence(WLJ, {
+      ...readerOutput(),
+      spendAccounting: null,
+      projectBrainRevision: 0,
+      phases: PRESENT_PHASES,
+    });
+    expect(accepted.completion?.juliusFinalState).toBe('COMPLETED');
+    expect(accepted.completion?.spendAccounting).toBeNull();
+    expect(accepted.completion?.projectBrainRevision).toBe(0);
+    expect(accepted.phases).toEqual(PRESENT_PHASES);
+    expect(accepted.completion?.phases).toEqual(PRESENT_PHASES);
+    expect(accepted.completion?.traceId).toBe(DERIVED_TRACE);
+    const json = JSON.stringify(accepted);
+    expect(json).toContain('"projectBrainRevision":0');
+    expect(json).toContain('"knownUsdMicros":0');
+    expect(json).toContain('"spanId":null');
+    expect(json).not.toContain('"spanId":"');
+    expect(json).not.toContain('spendVerified');
+    expect(json).not.toContain('unverifiableApiSpend');
+  });
+
+  it('keeps a positive projectBrainRevision on that same projection', () => {
+    // 44a7f1e1 reader.test.ts:417.
+    const accepted = acceptJuliusMissionEvidence(WLJ, {
+      ...readerOutput(),
+      spendAccounting: null,
+      projectBrainRevision: 4,
+      phases: PRESENT_PHASES,
+    });
+    expect(accepted.completion?.projectBrainRevision).toBe(4);
+    expect(accepted.completion?.spendAccounting).toBeNull();
+    expect(accepted.phases).toEqual(PRESENT_PHASES);
+  });
+
+  it('keeps three NEVER_DISPATCHED phases from a header-only ledger', () => {
+    // 44a7f1e1 reader.test.ts:434-438.
+    const accepted = acceptJuliusMissionEvidence(WLJ, {
+      ...readerOutput(),
+      projectBrainRevision: 0,
+      phases: HEADER_ONLY_PHASES,
+    });
+    expect(accepted.completion?.projectBrainRevision).toBe(0);
+    expect(accepted.phases).toEqual(HEADER_ONLY_PHASES);
+    expect(JSON.stringify(accepted)).toContain('"knownUsdMicros":0');
+    expect(JSON.stringify(accepted)).not.toContain('"phases":[]');
+  });
+
+  it('keeps a null phase list when the slot file is missing or unusable, and a positive revision', () => {
+    // 44a7f1e1 reader.test.ts:446-452 and :486-488.
+    for (const phases of [null, undefined]) {
+      const accepted = acceptJuliusMissionEvidence(WLJ, {
+        ...readerOutput(),
+        spendAccounting: null,
+        projectBrainRevision: 4,
+        phases,
+      });
+      expect(accepted.completion?.juliusFinalState).toBe('COMPLETED');
+      expect(accepted.completion?.projectBrainRevision).toBe(4);
+      expect(accepted.completion?.spendAccounting).toBeNull();
+      expect(accepted.phases).toBeNull();
+      expect(accepted.completion?.phases).toBeNull();
+    }
+  });
+
+  it('keeps the header-only phases when the run counter is null', () => {
+    // 44a7f1e1 reader.test.ts:503-508. An empty or non-integer cell is null.
+    for (const projectBrainRevision of [null, '', 'nope', -1, 1.5, false]) {
+      const accepted = acceptJuliusMissionEvidence(WLJ, {
+        ...readerOutput(),
+        spendAccounting: null,
+        projectBrainRevision,
+        phases: HEADER_ONLY_PHASES,
+      });
+      expect(accepted.completion?.projectBrainRevision).toBeNull();
+      expect(accepted.phases).toEqual(HEADER_ONLY_PHASES);
+      expect(JSON.stringify(accepted.completion)).not.toContain('"projectBrainRevision":0');
+    }
+  });
+
+  it('drops a phase list that is not the projection and does not invent one', () => {
+    const malformed = [
+      [{ role: 'CODING_AGENT', ...ABSENT_PHASE, state: 'ACTIVE' }],
+      [],
+      PRESENT_PHASES.map((phase) => ({ ...phase, spanId: 'a'.repeat(16) })),
+      PRESENT_PHASES.map((phase) => ({ ...phase, knownUsdMicros: null })),
+      PRESENT_PHASES.map((phase, index) => index === 1 ? { ...phase, stage: 'checkpoint' } : phase),
+    ];
+    for (const phases of malformed) {
+      const accepted = acceptJuliusMissionEvidence(WLJ, {
+        ...readerOutput(),
+        projectBrainRevision: 4,
+        phases,
+      });
+      expect(accepted.completion?.juliusFinalState).toBe('COMPLETED');
+      expect(accepted.completion?.projectBrainRevision).toBe(4);
+      expect(accepted.phases).toBeNull();
+      const json = JSON.stringify(accepted);
+      expect(json).not.toContain('"spanId":"');
+      expect(json).not.toContain('NEVER_DISPATCHED');
+      expect(json).not.toContain('"phases":[]');
+    }
+  });
+
+  it('does not publish phases from a read that is not a verified completion', () => {
+    const accepted = acceptJuliusMissionEvidence(WLJ, {
+      juliusFinalState: 'EXECUTING',
+      projectBrainRevision: 0,
+      phases: PRESENT_PHASES,
+    });
+    expect(accepted).toEqual({ completion: null, phases: null });
+  });
+});
