@@ -450,6 +450,11 @@ export async function runRemoteHermesReview(input: {
         costMicros: null,
         currency: null,
         source: servedModel === null ? 'unavailable' : 'harness_reported',
+        // This wire forwards tokens and the served model. It does not carry a
+        // provider request id, so none is invented from the review text.
+        providerRequestId: null,
+        providerRequestAvailability: 'UNAVAILABLE',
+        providerRequestUnavailableReason: 'provider_request_id_not_reported',
       },
     };
   }

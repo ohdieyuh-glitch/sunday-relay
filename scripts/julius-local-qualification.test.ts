@@ -113,7 +113,7 @@ describe('the local launch mirrors the workflow job, and names every difference'
     }
   });
 
-  it('adds exactly two variables of its own; the workflow draft uses the API key and sets none of the rig-only switches', () => {
+  it('adds exactly two variables of its own; the launcher stays on the subscription while the hosted workflow bills the Anthropic API key', () => {
     const begin = launcher.indexOf('# BEGIN JOB ENV');
     const end = launcher.indexOf('# END JOB ENV');
     const outside = (launcher.slice(0, begin) + launcher.slice(end)).split('\n')
@@ -126,11 +126,12 @@ describe('the local launch mirrors the workflow job, and names every difference'
     const port = outside[1]![2]!;
     expect(port).toMatch(/^[0-9]+$/u);
     expect(port, '127.0.0.1:5432 inside WSL2 is the live store\'s forward').not.toBe('5432');
-    // PENDING FOUNDER RULING. The paid workflow draft authenticates the Coding
-    // Agent with ANTHROPIC_API on the two steps that start it. The local
-    // launcher still exports CLAUDE_SUBSCRIPTION and is not this draft's path.
+    // The hosted workflow bills the API key. The launcher keeps the subscription
+    // and still refuses any ANTHROPIC_* route. The two steps that start the
+    // coder set ANTHROPIC_API, and they do not copy the launcher's mode.
     const modes = [...workflow.matchAll(/^\s+JULIUS_CLAUDE_AUTH: (.+)$/gmu)].map((match) => match[1]!.trim());
     expect(modes, 'the roles preflight and the LIVE step, and no other').toEqual(['ANTHROPIC_API', 'ANTHROPIC_API']);
+    expect(modes).not.toContain(auth);
     // CI UNCHANGED for the rest: every other switch added for the local rig defaults to the old
     // behaviour, and the workflow sets none of them.
     for (const name of ['JULIUS_LIVE_PG_PORT', 'HERMES_PHASE', 'HERMES_PYTHON', 'HERMES_VENV_DIR', 'HERMES_SRC_DIR']) {

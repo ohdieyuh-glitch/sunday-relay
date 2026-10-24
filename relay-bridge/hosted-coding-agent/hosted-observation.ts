@@ -139,6 +139,22 @@ export interface HostedObservation {
    */
   readonly sessionId: string | null;
   /**
+   * The Anthropic API request id from an assistant message's `request_id`.
+   *
+   * The runtime session id above is not this value. A credential-shaped or
+   * unusable id is not stored; the rejection says why, and a later safe id
+   * replaces only an earlier safe id. Absent until an assistant message
+   * reports one.
+   */
+  readonly anthropicRequestId?: string | null;
+  readonly anthropicRequestRejection?: 'provider_request_id_credential_shaped' | 'provider_request_id_unusable' | null;
+  /**
+   * The Anthropic message id (`message.id`). It never overwrites a captured
+   * request id, and it is not used when the request id was present but refused.
+   */
+  readonly anthropicMessageId?: string | null;
+  readonly anthropicMessageRejection?: 'provider_request_id_credential_shaped' | 'provider_request_id_unusable' | null;
+  /**
    * The model the RUNTIME named in `init`. Never the requested one, and never
    * proof of serving: it was announced before any turn existed. What served is
    * {@link hostedServedModel}'s answer.
@@ -308,6 +324,58 @@ const readModelUsage = (raw: unknown): readonly HostedResultModelUsage[] | null 
   return entries.sort((a, b) => (b.outputTokens ?? -1) - (a.outputTokens ?? -1) || (a.model < b.model ? -1 : a.model > b.model ? 1 : 0));
 };
 
+const CREDENTIAL_SHAPED = /(^(sk|xai|ghp|gho|ghu|ghs|ghr|pk|api)[-_])|bearer|authorization|private[-_ ]?key|begin [a-z ]*private/i;
+const SAFE_PROVIDER_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+
+type AnthropicIdRejection = 'provider_request_id_credential_shaped' | 'provider_request_id_unusable';
+
+/** A provider id the durable record can keep, or the reason it cannot. An empty value is absent. */
+function classifyAnthropicId(value: unknown): { readonly id: string | null; readonly rejection: AnthropicIdRejection | null } {
+  if (typeof value !== 'string' || value.trim() === '') return { id: null, rejection: null };
+  if (CREDENTIAL_SHAPED.test(value)) return { id: null, rejection: 'provider_request_id_credential_shaped' };
+  if (!SAFE_PROVIDER_ID.test(value)) return { id: null, rejection: 'provider_request_id_unusable' };
+  return { id: value, rejection: null };
+}
+
+/**
+ * Keep the last SAFE Anthropic request id, and the last safe message id beside it.
+ *
+ * A later message id does not replace a request id. An unsafe request id does not
+ * fall through to the message id, and it does not erase a request id already kept.
+ * The runtime session id is never read here.
+ */
+function foldAnthropicAttribution(
+  state: HostedObservation,
+  message: Record<string, unknown>,
+  inner: Record<string, unknown> | undefined,
+): HostedObservation {
+  const request = classifyAnthropicId(message.request_id);
+  const messageId = classifyAnthropicId(inner?.id);
+  let anthropicRequestId = state.anthropicRequestId ?? null;
+  let anthropicRequestRejection = state.anthropicRequestRejection ?? null;
+  if (request.id !== null) {
+    anthropicRequestId = request.id;
+    anthropicRequestRejection = null;
+  } else if (request.rejection !== null && anthropicRequestId === null) {
+    anthropicRequestRejection = request.rejection;
+  }
+  let anthropicMessageId = state.anthropicMessageId ?? null;
+  let anthropicMessageRejection = state.anthropicMessageRejection ?? null;
+  if (messageId.id !== null) {
+    anthropicMessageId = messageId.id;
+    anthropicMessageRejection = null;
+  } else if (messageId.rejection !== null && anthropicMessageId === null) {
+    anthropicMessageRejection = messageId.rejection;
+  }
+  return {
+    ...state,
+    anthropicRequestId,
+    anthropicRequestRejection,
+    anthropicMessageId,
+    anthropicMessageRejection,
+  };
+}
+
 /**
  * Fold one SDK message into the running observation. Written as a reducer over
  * `unknown` rather than against the SDK's types on purpose: a hosted runtime
@@ -354,6 +422,9 @@ export function foldHostedMessage(
      * assistant turn beside it already reported.
      */
     let next = m.type === 'assistant' ? foldTurnModel(foldStreamUsage(state, m, inner), m, inner) : state;
+    if (m.type === 'assistant' && (m.parent_tool_use_id === null || m.parent_tool_use_id === undefined)) {
+      next = foldAnthropicAttribution(next, m, inner);
+    }
     if (!Array.isArray(content)) return next;
     for (const raw of content) {
       if (raw === null || typeof raw !== 'object') continue;
