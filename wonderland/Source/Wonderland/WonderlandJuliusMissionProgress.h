@@ -51,12 +51,17 @@
 //      FMissionProgressTracker when a person starts the mission, with that trigger's single pair, and never a second
 //      one for the same trigger. Before an answer only the identical pair is resent (r2), so one tracker sees exactly
 //      one pair. After Refused, a fresh pair needs a fresh person action and so a fresh tracker; nothing here mints.
-//   P2 THE SERVER RUN ID IS PINNED at the first Accepted answer. It must match ^run:[0-9a-f]{24}$ and data.runId must
-//      be this client's wlj_ run id, or the state is AnswerInvalid. Every later answer that names a run must name the
+//   P2 THE SERVER RUN ID IS PINNED at the first Accepted answer. It must be either this client's OWN wlj_ run id
+//      (RunIdPrefix + canonical lowercase UUIDv4, byte for byte: the proposed contract, where #407 validates and
+//      persists the client's id and Julius #432 adopts it unchanged) or the legacy ^run:[0-9a-f]{24}$ that #407
+//      mints today, and data.runId must be this client's wlj_ run id, or the state is AnswerInvalid. A well-formed
+//      wlj_ serverRunId that is not this client's is RunIdMismatch. Every later answer that names a run must name the
 //      same two ids; a different serverRunId (or data.runId) is RunIdMismatch. Both are fail-closed terminals.
 //      KEYED ONLY ON serverRunId: a status is applied only when the run id it names is the pinned serverRunId,
-//      byte for byte. There is no fallback to any other id (Julius's own run:<idempotencyKey> name included): a
-//      status naming any other id is never applied and ends the watch as RunIdMismatch.
+//      byte for byte, or (bAcceptOwnRunIdAsServerRunId) this client's own wlj_ run id, the id Julius carries once it
+//      adopts the client's id while the admission pin is still the legacy run: form. There is no other fallback
+//      (Julius's own run:<idempotencyKey> name and any other wlj_ id included): a status naming any other id is never
+//      applied and ends the watch as RunIdMismatch. With bAcceptOwnRunIdAsServerRunId false, P2 is the legacy rule.
 //   P3 TERMINALS ARE STICKY. Succeeded, Failed, Refused, DispatchFailed, NotStarted, RunIdMismatch, AnswerInvalid
 //      and PollLimitReached never change again; every later answer is traced as ignored and changes nothing.
 //   P4 POLLING NEVER DISPATCHES. A poll that fails (no answer, a bare 5xx, an error object, no data, no run id) is
@@ -118,8 +123,24 @@
 
 namespace WonderlandJuliusMissionLogic
 {
-	/** ^run:[0-9a-f]{24}$, JULIUS_BOOTSTRAP_RUN_ID in #407's admission-contract.ts. */
+	/** ^run:[0-9a-f]{24}$, JULIUS_BOOTSTRAP_RUN_ID in #407's admission-contract.ts (the legacy server run id form). */
 	bool IsServerRunId(std::string_view ServerRunId);
+
+	/**
+	 * THE ONE SETTING for the wlj_ contract (P2): Wonderland mints wlj_<UUIDv4>, #407 validates and persists it, Julius
+	 * (#432) adopts it unchanged. True: this client's own wlj_ run id is accepted as the server/Julius run id, and the
+	 * legacy run:<24 hex> from #407 still is. False: the legacy rule only (run:<24 hex>, nothing else).
+	 */
+	inline constexpr bool bAcceptOwnRunIdAsServerRunId = true;
+
+	/** RunIdPrefix + a canonical lowercase UUIDv4: ^wlj_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ */
+	bool IsClientMintedRunId(std::string_view RunId);
+
+	/**
+	 * Whether ServerRunId may be pinned by the tracker created for ClientRunId: the legacy run:<24 hex> form, or (when
+	 * bAcceptOwnRunIdAsServerRunId) exactly ClientRunId, byte for byte, when that is a well-formed client-minted id.
+	 */
+	bool IsAcceptedServerRunId(std::string_view ServerRunId, std::string_view ClientRunId);
 
 	/* ---------------------------------------------------------------- BRIDGE's status route words (re-pin, see top) */
 
@@ -385,6 +406,8 @@ namespace WonderlandJuliusMissionLogic
 		 * dispatch, logged after (P8, P9); "dispatched" and the operator-window cause are handled here (P9).
 		 */
 		EMissionProgress ApplyAdmission(EProgressEvent Event, const FStatusAnswer& Fields);
+		/** P2: an answer's run id names the pinned run: the pin itself, or (when enabled) this client's own wlj_ id. */
+		bool NamesPinnedRun(std::string_view NamedServerRunId) const;
 
 		std::string ClientRunId;
 		std::string ServerRunId;

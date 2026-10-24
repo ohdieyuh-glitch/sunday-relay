@@ -98,6 +98,21 @@ namespace WonderlandJuliusMissionLogic
 		return true;
 	}
 
+	bool IsClientMintedRunId(std::string_view RunId)
+	{
+		return RunId.size() > RunIdPrefix.size() && RunId.substr(0, RunIdPrefix.size()) == RunIdPrefix
+			&& IsCanonicalUuidV4(RunId.substr(RunIdPrefix.size()));
+	}
+
+	bool IsAcceptedServerRunId(std::string_view ServerRunId, std::string_view ClientRunId)
+	{
+		if (IsServerRunId(ServerRunId))
+		{
+			return true;
+		}
+		return bAcceptOwnRunIdAsServerRunId && IsClientMintedRunId(ServerRunId) && ServerRunId == ClientRunId;
+	}
+
 	bool ParseBridgeUtcTimestampMs(std::string_view Text, std::uint64_t& OutMs)
 	{
 		// "YYYY-MM-DDTHH:MM:SSZ" (20) or "YYYY-MM-DDTHH:MM:SS.sssZ" (24), nothing else.
@@ -276,7 +291,13 @@ namespace WonderlandJuliusMissionLogic
 				return Move(EProgressEvent::DispatchRefused, EMissionProgress::Refused, &Fields);
 			}
 			// Accepted: the pair is spent from here on, whatever the body says (P1). Pin or fail closed (P2).
-			if (!Fields.bHasData || !IsServerRunId(Fields.ServerRunId) || Fields.ClientRunId.empty())
+			if (Fields.bHasData && bAcceptOwnRunIdAsServerRunId && IsClientMintedRunId(Fields.ServerRunId)
+				&& Fields.ServerRunId != ClientRunId)
+			{
+				// A well-formed wlj_ id that is not ours: another client's run. Fail closed.
+				return Move(EProgressEvent::RunIdMismatched, EMissionProgress::RunIdMismatch, &Fields);
+			}
+			if (!Fields.bHasData || !IsAcceptedServerRunId(Fields.ServerRunId, ClientRunId) || Fields.ClientRunId.empty())
 			{
 				return Move(EProgressEvent::AnswerRejected, EMissionProgress::AnswerInvalid, &Fields);
 			}
@@ -293,7 +314,7 @@ namespace WonderlandJuliusMissionLogic
 		{
 			return Move(EProgressEvent::LateDispatchAnswerIgnored, State, &Fields);
 		}
-		if ((!Fields.ServerRunId.empty() && Fields.ServerRunId != ServerRunId)
+		if ((!Fields.ServerRunId.empty() && !NamesPinnedRun(Fields.ServerRunId))
 			|| (!Fields.ClientRunId.empty() && Fields.ClientRunId != ClientRunId))
 		{
 			return Move(EProgressEvent::RunIdMismatched, EMissionProgress::RunIdMismatch, &Fields);
@@ -303,6 +324,16 @@ namespace WonderlandJuliusMissionLogic
 			return Move(EProgressEvent::LateDispatchAnswerIgnored, State, &Fields);
 		}
 		return ApplyAdmission(EProgressEvent::DispatchReplayed, Fields);
+	}
+
+	bool FMissionProgressTracker::NamesPinnedRun(std::string_view NamedServerRunId) const
+	{
+		if (NamedServerRunId == ServerRunId)
+		{
+			return true;
+		}
+		return bAcceptOwnRunIdAsServerRunId && !ServerRunId.empty() && IsClientMintedRunId(ClientRunId)
+			&& NamedServerRunId == ClientRunId;
 	}
 
 	EMissionProgress FMissionProgressTracker::ApplyAdmission(EProgressEvent Event, const FStatusAnswer& Fields)
@@ -354,7 +385,7 @@ namespace WonderlandJuliusMissionLogic
 		{
 			return Move(EProgressEvent::PollFailed, State, &Fields);
 		}
-		if ((!Fields.ServerRunId.empty() && Fields.ServerRunId != ServerRunId)
+		if ((!Fields.ServerRunId.empty() && !NamesPinnedRun(Fields.ServerRunId))
 			|| (!Fields.ClientRunId.empty() && Fields.ClientRunId != ClientRunId))
 		{
 			return Move(EProgressEvent::RunIdMismatched, EMissionProgress::RunIdMismatch, &Fields);

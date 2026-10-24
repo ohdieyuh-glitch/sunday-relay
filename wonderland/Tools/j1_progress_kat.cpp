@@ -65,6 +65,15 @@ namespace
 	const char* const ServerShort = "run:0123";
 	// What Julius bootstrap names a run today (run:${idempotencyKey}, relay-bridge/julius/bootstrap.ts): NOT serverRunId.
 	const char* const ServerJuliusKey = "run:6c2d9e1f-3a4b-4c5d-9e6f-7a8b9c0d1e2f";
+	// The wlj_ contract (P2, bAcceptOwnRunIdAsServerRunId): the client's own id as the server/Julius run id, and
+	// malformed look-alikes of it that must never pin or match.
+	const char* const WljUpper = "wlj_0B1F3C2A-5D4E-4F60-8A71-92B3C4D5E6F7";
+	const char* const WljPrefixUpper = "WLJ_0b1f3c2a-5d4e-4f60-8a71-92b3c4d5e6f7";
+	const char* const WljVersion3 = "wlj_0b1f3c2a-5d4e-3f60-8a71-92b3c4d5e6f7";
+	const char* const WljVariantC = "wlj_0b1f3c2a-5d4e-4f60-ca71-92b3c4d5e6f7";
+	const char* const WljLong = "wlj_0b1f3c2a-5d4e-4f60-8a71-92b3c4d5e6f70";
+	const char* const WljShort = "wlj_0b1f3c2a-5d4e-4f60-8a71-92b3c4d5e6f";
+	const char* const WljBare = "0b1f3c2a-5d4e-4f60-8a71-92b3c4d5e6f7";
 
 	struct FStatusRow { const char* Label; EStatusVocabulary Vocabulary; const char* Status; EMissionProgress Expected; };
 	const FStatusRow StatusRows[] = {
@@ -741,6 +750,38 @@ namespace
 	{ "sticky_not_started_cause_then_dispatched", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,awaiting_operator,-,operator_window_expired,- P,200,-,A,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778400000 D,200,-,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778400000", EMissionProgress::NotStarted, "ignored_after_terminal", "S1", 0 },
 	{ "sticky_not_started_then_completed", "D,202,-,ok,S1,ADMISSION_HELD N,10800000 P,200,-,J,none,S1,COMPLETED", EMissionProgress::NotStarted, "ignored_after_terminal", "S1", 0 },
 	{ "sticky_not_started_then_other_run", "D,202,-,ok,S1,ADMISSION_HELD N,10800000 P,200,-,J,none,S2,FAILED", EMissionProgress::NotStarted, "ignored_after_terminal", "S1", 0 },
+	// The wlj_ contract (P2): the client's own wlj_ id is accepted as the server/Julius run id; legacy run: still is.
+	{ "wlj_accepted_own_id_pins", "D,202,-,ok,own,ADMISSION_HELD", EMissionProgress::AdmittedHeld, "admitted", "own", 0 },
+	{ "wlj_own_pin_held_admission", "D,202,-,ok,own,ADMISSION_HELD P,200,-,A,ok,own,ADMISSION_HELD", EMissionProgress::AdmittedHeld, "status_applied", "own", 0 },
+	{ "wlj_own_pin_dispatched", "D,202,-,ok,own,ADMISSION_HELD P,200,-,A,ok,own,dispatched,2026-10-23T18:00:00.000Z,-,1792778400000", EMissionProgress::OperatorStarted, "status_applied", "own", 0 },
+	{ "wlj_own_pin_julius_running", "D,202,-,ok,own,ADMISSION_HELD P,200,-,J,none,own,EXECUTING", EMissionProgress::Running, "status_applied", "own", 0 },
+	{ "wlj_own_pin_julius_completed", "D,202,-,ok,own,ADMISSION_HELD P,200,-,A,ok,own,dispatched,2026-10-23T18:00:00.000Z,-,1792778400000 P,200,-,J,none,own,EXECUTING P,200,-,J,none,own,COMPLETED", EMissionProgress::Succeeded, "status_applied", "own", 0 },
+	{ "wlj_own_pin_late_replay", "D,202,-,ok,own,ADMISSION_HELD D,200,-,ok,own,RESERVED", EMissionProgress::AdmittedHeld, "dispatch_replayed", "own", 0 },
+	{ "wlj_legacy_pin_still_accepted", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,J,none,S1,EXECUTING", EMissionProgress::Running, "status_applied", "S1", 0 },
+	{ "wlj_legacy_pin_julius_names_own_id", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,J,none,own,EXECUTING", EMissionProgress::Running, "status_applied", "S1", 0 },
+	{ "wlj_legacy_pin_admission_names_own_id", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,own,RESERVED", EMissionProgress::AdmittedHeld, "status_applied", "S1", 0 },
+	{ "wlj_legacy_pin_then_own_then_completed", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,J,none,own,EXECUTING P,200,-,J,none,S1,COMPLETED", EMissionProgress::Succeeded, "status_applied", "S1", 0 },
+	// A DIFFERENT id still fails closed, whatever its form.
+	{ "wlj_accepted_other_wlj_server", "D,202,-,ok,wother,ADMISSION_HELD", EMissionProgress::RunIdMismatch, "run_id_mismatched", "none", 0 },
+	{ "wlj_own_pin_julius_names_other_wlj", "D,202,-,ok,own,ADMISSION_HELD P,200,-,J,none,wother,EXECUTING", EMissionProgress::RunIdMismatch, "run_id_mismatched", "own", 0 },
+	{ "wlj_own_pin_admission_names_other_wlj", "D,202,-,ok,own,ADMISSION_HELD P,200,-,A,ok,wother,RESERVED", EMissionProgress::RunIdMismatch, "run_id_mismatched", "own", 0 },
+	{ "wlj_legacy_pin_julius_names_other_wlj", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,J,none,wother,EXECUTING", EMissionProgress::RunIdMismatch, "run_id_mismatched", "S1", 0 },
+	{ "wlj_own_pin_julius_names_legacy", "D,202,-,ok,own,ADMISSION_HELD P,200,-,J,none,S1,EXECUTING", EMissionProgress::RunIdMismatch, "run_id_mismatched", "own", 0 },
+	{ "wlj_own_pin_julius_names_key_run", "D,202,-,ok,own,ADMISSION_HELD P,200,-,J,none,jkey,EXECUTING", EMissionProgress::RunIdMismatch, "run_id_mismatched", "own", 0 },
+	{ "wlj_own_pin_late_replay_other_wlj", "D,202,-,ok,own,ADMISSION_HELD D,200,-,ok,wother,RESERVED", EMissionProgress::RunIdMismatch, "run_id_mismatched", "own", 0 },
+	{ "wlj_own_pin_julius_running_then_other", "D,202,-,ok,own,ADMISSION_HELD P,200,-,J,none,own,EXECUTING P,200,-,J,none,wother,COMPLETED", EMissionProgress::RunIdMismatch, "run_id_mismatched", "own", 0 },
+	// Malformed look-alikes of the own id never pin (AnswerInvalid) and never match a pin (RunIdMismatch).
+	{ "wlj_accepted_uppercase_hex", "D,202,-,ok,wupper,ADMISSION_HELD", EMissionProgress::AnswerInvalid, "answer_rejected", "none", 0 },
+	{ "wlj_accepted_uppercase_prefix", "D,202,-,ok,WLJ,ADMISSION_HELD", EMissionProgress::AnswerInvalid, "answer_rejected", "none", 0 },
+	{ "wlj_accepted_version_3", "D,202,-,ok,wv3,ADMISSION_HELD", EMissionProgress::AnswerInvalid, "answer_rejected", "none", 0 },
+	{ "wlj_accepted_variant_c", "D,202,-,ok,wvarc,ADMISSION_HELD", EMissionProgress::AnswerInvalid, "answer_rejected", "none", 0 },
+	{ "wlj_accepted_too_long", "D,202,-,ok,wlong,ADMISSION_HELD", EMissionProgress::AnswerInvalid, "answer_rejected", "none", 0 },
+	{ "wlj_accepted_too_short", "D,202,-,ok,wshort,ADMISSION_HELD", EMissionProgress::AnswerInvalid, "answer_rejected", "none", 0 },
+	{ "wlj_accepted_bare_uuid", "D,202,-,ok,wbare,ADMISSION_HELD", EMissionProgress::AnswerInvalid, "answer_rejected", "none", 0 },
+	{ "wlj_own_pin_julius_names_uppercase", "D,202,-,ok,own,ADMISSION_HELD P,200,-,J,none,wupper,EXECUTING", EMissionProgress::RunIdMismatch, "run_id_mismatched", "own", 0 },
+	{ "wlj_own_pin_julius_names_version_3", "D,202,-,ok,own,ADMISSION_HELD P,200,-,J,none,wv3,EXECUTING", EMissionProgress::RunIdMismatch, "run_id_mismatched", "own", 0 },
+	{ "wlj_own_pin_julius_names_too_long", "D,202,-,ok,own,ADMISSION_HELD P,200,-,J,none,wlong,EXECUTING", EMissionProgress::RunIdMismatch, "run_id_mismatched", "own", 0 },
+	{ "wlj_legacy_pin_julius_names_uppercase", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,J,none,wupper,EXECUTING", EMissionProgress::RunIdMismatch, "run_id_mismatched", "S1", 0 },
 	// KAT-PROGRESS-SCRIPT-END
 	};
 
@@ -781,6 +822,15 @@ namespace
 		if (Tag == "bad") { return ServerBad; }
 		if (Tag == "short") { return ServerShort; }
 		if (Tag == "jkey") { return ServerJuliusKey; }
+		if (Tag == "own") { return ClientOk; }
+		if (Tag == "wother") { return ClientOther; }
+		if (Tag == "wupper") { return WljUpper; }
+		if (Tag == "WLJ") { return WljPrefixUpper; }
+		if (Tag == "wv3") { return WljVersion3; }
+		if (Tag == "wvarc") { return WljVariantC; }
+		if (Tag == "wlong") { return WljLong; }
+		if (Tag == "wshort") { return WljShort; }
+		if (Tag == "wbare") { return WljBare; }
 		return "";
 	}
 
@@ -921,6 +971,45 @@ int main()
 		&& !IsServerRunId("RUN:0123456789abcdef01234567") && !IsServerRunId("run:0123456789abcdef012345678")
 		&& !IsServerRunId("run_0123456789abcdef01234567") && !IsServerRunId(" run:0123456789abcdef0123456")
 		&& !IsServerRunId("run:0123456789abcdef0123456g") && !IsServerRunId(ClientOk), "server run id: malformed");
+
+	// The wlj_ contract (P2): the one setting, the client-minted form, and what may be pinned.
+	Expect(bAcceptOwnRunIdAsServerRunId, "wlj contract: own run id accepted as server run id");
+	Expect(IsClientMintedRunId(ClientOk) && IsClientMintedRunId(ClientOther), "wlj id: well-formed");
+	for (const char* Bad : {WljUpper, WljPrefixUpper, WljVersion3, WljVariantC, WljLong, WljShort, WljBare, "wlj_", "",
+		ServerS1, ServerJuliusKey, "wlj_0b1f3c2a-5d4e-4f60-8a71-92b3c4d5e6f7 ", " wlj_0b1f3c2a-5d4e-4f60-8a71-92b3c4d5e6f7",
+		"wlj_0b1f3c2a-5d4e-4f60-8a71-92b3c4d5e6f7\n", "wlj-0b1f3c2a-5d4e-4f60-8a71-92b3c4d5e6f7", "wlj_0b1f3c2a5d4e4f608a7192b3c4d5e6f7"})
+	{
+		Expect(!IsClientMintedRunId(Bad), std::string("wlj id: malformed ") + Bad);
+		Expect(!IsAcceptedServerRunId(Bad, Bad) || IsServerRunId(Bad), std::string("wlj pin: malformed never pins as own ") + Bad);
+	}
+	Expect(IsAcceptedServerRunId(ClientOk, ClientOk), "wlj pin: own id");
+	Expect(IsAcceptedServerRunId(ServerS1, ClientOk) && IsAcceptedServerRunId(ServerS2, ClientOk), "wlj pin: legacy run: still accepted");
+	Expect(!IsAcceptedServerRunId(ClientOther, ClientOk) && !IsAcceptedServerRunId(ClientOk, ClientOther), "wlj pin: another client's wlj_ id");
+	Expect(!IsAcceptedServerRunId(WljUpper, WljUpper) && !IsAcceptedServerRunId(WljVersion3, WljVersion3)
+		&& !IsAcceptedServerRunId(WljLong, WljLong) && !IsAcceptedServerRunId(WljShort, WljShort), "wlj pin: malformed own id never pins");
+	Expect(!IsAcceptedServerRunId(ServerBad, ClientOk) && !IsAcceptedServerRunId(ServerJuliusKey, ClientOk)
+		&& !IsAcceptedServerRunId("", ClientOk) && !IsAcceptedServerRunId("", ""), "wlj pin: legacy malformed still refused");
+	// A tracker created with a malformed client id can never use the own-id path.
+	{
+		FMissionProgressTracker Tracker(WljUpper);
+		FStatusAnswer Answer = HeldPoll();
+		Answer.HttpStatus = 202;
+		Answer.ClientRunId = WljUpper;
+		Answer.ServerRunId = WljUpper;
+		Tracker.RecordDispatchAnswer(EDispatchAnswer::Accepted, Answer);
+		Expect(Tracker.Current() == EMissionProgress::AnswerInvalid && Tracker.PinnedServerRunId().empty(), "wlj pin: malformed client id never pins itself");
+	}
+	{
+		FMissionProgressTracker Tracker(WljUpper);
+		FStatusAnswer Answer = HeldPoll();
+		Answer.HttpStatus = 202;
+		Answer.ClientRunId = WljUpper;
+		Tracker.RecordDispatchAnswer(EDispatchAnswer::Accepted, Answer);
+		FStatusAnswer Running = RunningPoll();
+		Running.ServerRunId = WljUpper;
+		Tracker.RecordPollAnswer(Running);
+		Expect(Tracker.Current() == EMissionProgress::RunIdMismatch, "wlj alias: malformed client id is never an alias of the pin");
+	}
 
 	// Status: exact bytes, inside its own vocabulary.
 	for (const FStatusRow& Row : StatusRows)
