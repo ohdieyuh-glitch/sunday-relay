@@ -105,7 +105,7 @@ test('a boolean that is neither is UNREADABLE', () => {
 /* ------------------------------------------------------------- free text */
 
 test('free text that is present reads as its value', () => {
-  const cell = readTextCell('claude-fable-5');
+  const cell = readTextCell('claude-opus-5-5');
   assert.equal(KIND(cell), 'VALUE');
 });
 
@@ -150,7 +150,7 @@ const COLUMNS: readonly JuliusBundleColumn[] = [
 test('a row reads every declared column, and reports what it could not read', () => {
   const reading = readBundleRow({
     cost_usd_micros: '1390954', cost_basis: 'PROVIDER_REPORTED',
-    timed_out: 'f', served_model: 'claude-fable-5',
+    timed_out: 'f', served_model: 'claude-opus-5-5',
   }, COLUMNS);
   assert.equal(reading.version, JULIUS_BUNDLE_CELL_VERSION);
   assert.deepEqual(reading.unreadable, []);

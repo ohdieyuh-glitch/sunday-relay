@@ -1039,6 +1039,8 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
             body: method === 'POST' ? await readRawBody(req) : undefined,
             rerun: headerValue(req.headers['x-relay-julius-rerun']),
             rerunKey: headerValue(req.headers['x-relay-julius-rerun-key']),
+            // Not trimmed: a padded id is malformed, and the value is never logged.
+            runId: typeof req.headers['x-relay-julius-run-id'] === 'string' ? req.headers['x-relay-julius-run-id'] : undefined,
           }, juliusMissionPorts());
           if (missionResult !== null) {
             send(res, missionResult.status, missionResult.body, cors);

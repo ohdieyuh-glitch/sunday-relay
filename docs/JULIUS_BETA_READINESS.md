@@ -634,13 +634,16 @@ architect and a coding agent. The entrypoint is then run without
 `--confirm-live` and must exit **5** — which is what proves all three roles
 resolved into real adapters — and the configured models are pinned to
 `gpt-5.6-sol`, `claude-opus-5-5` and `xai/grok-build-0.1`. The coder was
-`claude-fable-5` until the founder's decision of 2026-09-30: Claude Opus 5.5 on
-the Max subscription, with no automatic downgrade. The model a provider
-actually serves is a separate fact, observed during the run as
+`claude-fable-5` until the founder's decision of 2026-09-30. The hosted
+workflow bills the Coding Agent to `ANTHROPIC_API_KEY` with
+`JULIUS_CLAUDE_AUTH=ANTHROPIC_API` and requests `claude-opus-5-5`. The model a
+provider actually serves is a separate fact, observed during the run as
 `actualModel` / `servedModel`; no preflight can know it. For the coder it is
 also enforced: a session whose attested model is not the requested one (or
-its dated build), or cannot be attested, stops the dispatch, never retried,
-and the subscription smoke refuses the same.
+its dated build), or cannot be attested, stops the dispatch and is never
+retried. Before that spend, readiness compares `anthropic-organization-id`
+with `JULIUS_EXPECTED_ANTHROPIC_ORG_ID` and halts with
+`ORG_ATTRIBUTION_UNVERIFIED` when they differ or the expected id is unset.
 
 **The mission is disposable by construction.** `workspacePath` is a 4 MiB tmpfs
 holding a four-file throwaway git repository, never this checkout —

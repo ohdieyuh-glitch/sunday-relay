@@ -26,7 +26,7 @@ recorded further down, which is kept as history:
 | Role | Provider | Billing path |
 |---|---|---|
 | Architect | OpenAI | `API_BILLED` |
-| Coding Agent | Anthropic, `JULIUS_CLAUDE_AUTH` absent, so `ANTHROPIC_API` | `API_BILLED` |
+| Coding Agent | Anthropic, `JULIUS_CLAUDE_AUTH=ANTHROPIC_API` | `API_BILLED` |
 | Independent Reviewer | Hermes → xAI | `API_BILLED` |
 
 - The run is the hosted workflow `julius-first-live-mission.yml`, dispatched from the landed
@@ -37,6 +37,12 @@ recorded further down, which is kept as history:
   and there is no self-hosted runner.
 - The expected preflight line is `billing paths: architect=API_BILLED coder=API_BILLED
   reviewer=API_BILLED`, beside `CLAUDE AUTH: API KEY`.
+- Before any qualifying spend, hosted provider readiness makes one spend-free
+  Anthropic models GET, keeps only the non-secret `anthropic-organization-id`
+  header, and compares it with `JULIUS_EXPECTED_ANTHROPIC_ORG_ID`. A missing or
+  different id is `ORG_ATTRIBUTION_UNVERIFIED` and the attempt marker is not
+  written. The local launcher does not run that check; it stays on
+  `CLAUDE_SUBSCRIPTION`.
 
 **What landed, and how.**
 

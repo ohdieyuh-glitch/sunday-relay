@@ -22,7 +22,7 @@ const clock = () => {
   return () => new Date(Date.UTC(2026, 8, 13, 5, 7, n++)).toISOString();
 };
 const init = () => ({
-  type: 'system', subtype: 'init', model: 'claude-fable-5',
+  type: 'system', subtype: 'init', model: 'claude-opus-5-5',
   claude_code_version: '2.1.220', apiKeySource: 'ANTHROPIC_API_KEY',
   cwd: WS, tools: ['Read', 'Glob', 'Grep', 'Edit'],
 });
@@ -40,7 +40,7 @@ const runWith = (messages: readonly unknown[], thenThrow: string | null) => runH
     if (thenThrow !== null) throw new Error(thenThrow);
   })(),
   prompt: 'implement the trust core', workspacePath: WS, apiKey: 'sk-ant-SECRET-VALUE',
-  requestedModel: 'claude-fable-5', limits: THIRTY_CENTS, now: clock(),
+  requestedModel: 'claude-opus-5-5', limits: THIRTY_CENTS, now: clock(),
 });
 
 describe('the runtime stopped itself at the ceiling Julius granted', () => {

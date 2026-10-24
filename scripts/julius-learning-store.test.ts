@@ -126,6 +126,14 @@ describe('the learning store script, without a database', () => {
   it('checks every value that reaches SQL for its shape before it connects anywhere', () => {
     const env = { PGUSER: 'u', PGDATABASE: 'd' };
     expect(store(['dump', join(scratch, 'x'), 'run:not-a-run'], env).out).toContain("julius_store_run_invalid: 'run:not-a-run'");
+    const wlj = 'wlj_01234567-89ab-4cde-8fab-0123456789ab';
+    const admitted = store(['dump', join(scratch, 'wlj-out'), wlj], env);
+    expect(admitted.out, 'a canonical wlj_ id passes the parser and fails only for want of a client').not.toContain('julius_store_run_invalid');
+    expect(admitted.out).toContain('julius_store_no_client');
+    const legacy = store(['dump', join(scratch, 'legacy-out'), RUN], env);
+    expect(legacy.out, 'a legacy run: id stays readable').not.toContain('julius_store_run_invalid');
+    expect(legacy.out).toContain('julius_store_no_client');
+    expect(store(['dump', join(scratch, 'probe'), 'preflight:julius-abcd1234'], env).out).toContain("julius_store_run_invalid: 'preflight:julius-abcd1234'");
     const dump = join(scratch, 'a.pgdump');
     writeFileSync(dump, 'not an archive');
     const injected = store(['restore', dump, "run:0123456789abcdef01234567' OR '1'='1", 'a'.repeat(64)], env);

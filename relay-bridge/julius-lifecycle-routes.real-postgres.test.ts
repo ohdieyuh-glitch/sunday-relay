@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -68,7 +68,7 @@ suite('the operator lifecycle channel over a real PostgreSQL', () => {
     ports = { api: composeJuliusStateApi(pool), missingConfig: [] };
     runs = new JuliusPostgresRepository(pool);
     const missionPorts = { bootstrap, missingConfig: [], reviewerProvider: 'xai', cardRevision: 'card:lifecycle:1' };
-    create = (body) => handleJuliusMissionRoute({ method: 'POST', path: '/julius/missions', operator: true, body }, missionPorts);
+    create = (body) => handleJuliusMissionRoute({ method: 'POST', path: '/julius/missions', operator: true, body, runId: `wlj_${randomUUID()}` }, missionPorts);
   });
   afterAll(async () => pool?.end());
 

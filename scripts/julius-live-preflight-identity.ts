@@ -128,7 +128,7 @@ export const preflightIdentityFor = (input: { tenantId: string; nonce: string; p
   tenantId: input.tenantId,
   projectId: `${PREFLIGHT_PROJECT_PREFIX}${input.nonce}`,
   missionId: `mission:julius-preflight-${input.nonce}`,
-  runId: `run:julius-preflight-${input.nonce}`,
+  runId: `preflight:julius-${input.nonce}`,
   taskId: `task:julius-preflight-${input.nonce}`,
   workerId: 'julius-live-preflight',
   leaseGeneration: 1,
@@ -147,7 +147,7 @@ export const preflightIdentityFor = (input: { tenantId: string; nonce: string; p
 const assertOwned = (identity: PreflightIdentity): void => {
   const owned = identity.projectId === `${PREFLIGHT_PROJECT_PREFIX}${identity.nonce}`
     && identity.missionId === `mission:julius-preflight-${identity.nonce}`
-    && identity.runId === `run:julius-preflight-${identity.nonce}`
+    && identity.runId === `preflight:julius-${identity.nonce}`
     && identity.taskId === `task:julius-preflight-${identity.nonce}`
     && identity.executionId === `execution:julius-preflight-${identity.nonce}`
     && identity.agentId === `agent:julius-preflight-${identity.nonce}`

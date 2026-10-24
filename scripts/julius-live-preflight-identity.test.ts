@@ -977,6 +977,7 @@ describe('the preflight identity module reaches PostgreSQL and nothing else', ()
     expect(source).not.toMatch(/openai|anthropic|hermes|claude-agent-sdk|EXECUTOR_SIGNING_KEY_PATH|EXECUTOR_RECEIPT_ROOT|docker/iu);
     // Every identifier is scoped by the nonce, so no two preflights can collide and cleanup has a boundary.
     expect(source).toContain("projectId: `${PREFLIGHT_PROJECT_PREFIX}${input.nonce}`");
-    expect(source).toMatch(/runId: `run:julius-preflight-\$\{input\.nonce\}`/u);
+    expect(source).toMatch(/runId: `preflight:julius-\$\{input\.nonce\}`/u);
+    expect(source, 'a probe id must not wear the legacy run: prefix').not.toContain('run:julius-preflight-');
   });
 });

@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -439,7 +439,7 @@ describe('F — two arms of one contract, through the real bootstrap and the rea
     };
     const policy = { dimensions: ['dispatches', 'repairs'] as JuliusLearningDimension[], minimumRelativeImprovement: 0.1, minimumImprovedDimensions: 1 };
 
-    const arm = async (clause: Record<string, unknown>, coder: Parameters<typeof scriptedAdapter>[1] = [{ kind: 'succeed', evidence: BUILD, usdMicros: 1_000 }]) => {
+    const arm = async (clause: Record<string, unknown>, coder: Parameters<typeof scriptedAdapter>[1] = [{ kind: 'succeed', evidence: BUILD, usdMicros: 1_000 }], admittedRunId = `wlj_${randomUUID()}`) => {
       const parsed = parseLiveMissionContract(JSON.stringify({ ...base, learningPair: clause }));
       if (!parsed.ok) throw new Error(parsed.problem);
       const entries = [
@@ -454,7 +454,7 @@ describe('F — two arms of one contract, through the real bootstrap and the rea
       })), 'card:learning:1');
       expect(request.rerunIntent).toBe('EXPLICIT');
       const submitted = await createLiveJuliusBootstrapPort({
-        runs: runsOn(memory), seeds: seedsOn(memory), tenantId: base.tenantId, executionId: 'execution:learning',
+        runs: runsOn(memory), seeds: seedsOn(memory), tenantId: base.tenantId, executionId: 'execution:learning', admittedRunId,
       }).submit(request);
       if (!submitted.accepted) throw new Error(`${submitted.reasonCode}: ${submitted.safeMessage}`);
       const handoffs = createContextAndClaimHandoffs(memory as unknown as JuliusRuntimeStore & JuliusRecoveryDriver);
