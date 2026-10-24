@@ -1,0 +1,160 @@
+g++ (Debian 14.2.0-19) 14.2.0
+[g++ -O2]
+J1 COMPANION KAT PASS json=27 sse=27 chat=43 session=102 key=35 status=143 pin=51 history=33 result=25 route=91 answers=151 mint=17
+[g++ ASan+UBSan]
+J1 COMPANION KAT PASS json=27 sse=27 chat=43 session=102 key=35 status=143 pin=51 history=33 result=25 route=91 answers=151 mint=17
+Debian clang version 19.1.7 (3+b1)
+[clang++ -O2]
+J1 COMPANION KAT PASS json=27 sse=27 chat=43 session=102 key=35 status=143 pin=51 history=33 result=25 route=91 answers=151 mint=17
+[clang++ ASan+UBSan]
+J1 COMPANION KAT PASS json=27 sse=27 chat=43 session=102 key=35 status=143 pin=51 history=33 result=25 route=91 answers=151 mint=17
+ALL BUILDS PASS
+SABOTAGE CAUGHT crlf_split_counts_twice: 3 failing checks, first: FAIL [sse] line 174: ParseAll(Crlf) == Want
+SABOTAGE CAUGHT multiline_data_joined_without_lf: 5 failing checks, first: FAIL [sse] line 166: ParseAll(Canon) == Want
+SABOTAGE CAUGHT no_line_cap: 4 failing checks, first: FAIL [sse] line 202: !P.Feed(std::string("data: ") + std::string(11, 'a') + "\n\n", Out) && P.GetFault() == ESseFault::LineTooLong
+SABOTAGE CAUGHT comment_parsed_as_field: 6 failing checks, first: FAIL [sse] line 166: ParseAll(Canon) == Want
+SABOTAGE CAUGHT bom_not_stripped: 1 failing checks, first: FAIL [sse] line 184: ParseAll("\xEF\xBB\xBF" "data: bom\n\n") == "[message|bom|]#c0"
+SABOTAGE CAUGHT event_cap_off: 1 failing checks, first: FAIL [sse] line 210: !P.Feed("data: 1234\ndata: 1234\n\n", Out) && P.GetFault() == ESseFault::EventTooLarge && Out.size() == 2
+SABOTAGE CAUGHT dup_json_keys_allowed: 3 failing checks, first: FAIL [json] line 131: !ParseJson("{\"a\":1,\"a\":2}", V)
+SABOTAGE CAUGHT bidi_not_stripped: 6 failing checks, first: FAIL [json] line 154: SanitizeUntrustedText("x\xE2\x80\xAEy\xE2\x81\xA6z") == "xyz"
+SABOTAGE CAUGHT unknown_event_ignored: 2 failing checks, first: FAIL [chat] line 262: RunChat(Meta() + Ev("tool_call", "{}")).Fault == EChatProtocolFault::UnknownEvent
+SABOTAGE CAUGHT truncated_stream_accepted: 10 failing checks, first: FAIL [chat] line 265: Cut.Outcome == EChatStreamOutcome::ProtocolError && Cut.Fault == EChatProtocolFault::Truncated && Cut.Reply.empty()
+SABOTAGE CAUGHT wrong_provider_accepted: 1 failing checks, first: FAIL [chat] line 250: RunChat(WrongProvider + Done()).Fault == EChatProtocolFault::MetaWrongProvider
+SABOTAGE CAUGHT reply_cap_off_by_one: 1 failing checks, first: FAIL [chat] line 299: D.Outcome() == EChatStreamOutcome::Done && D.ReplyBytes() == ChatMaxReplyBytes
+SABOTAGE CAUGHT simulated_flag_ignored: 2 failing checks, first: FAIL [chat] line 256: RunChat(Meta(Conv, ",\"simulated\":\"yes\"") + Done()).Fault == EChatProtocolFault::MetaBadSimulated
+SABOTAGE CAUGHT simulated_banner_hidden: 7 failing checks, first: FAIL [session] line 462: S.View().bShowSimulatedBanner && !S.View().bCanSend && !S.View().bCanConnect && S.View().ProviderLabel.empty()
+SABOTAGE CAUGHT label_hardcoded: 12 failing checks, first: FAIL [session] line 462: S.View().bShowSimulatedBanner && !S.View().bCanSend && !S.View().bCanConnect && S.View().ProviderLabel.empty()
+SABOTAGE CAUGHT key_in_trace: 1 failing checks, first: FAIL [key] line 410: !Contains(Everything(S), Sentinel) && !Contains(Everything(S), "SENTINEL")
+SABOTAGE CAUGHT key_field_not_wiped: 10 failing checks, first: FAIL [key] line 396: F.IsEmpty() && F.MaskText().empty()
+SABOTAGE CAUGHT handoff_not_wiped: 1 failing checks, first: FAIL [key] line 404: Moved.Body().empty()
+SABOTAGE CAUGHT key_echo_accepted: 1 failing checks, first: FAIL [key] line 425: S.View().State == ECompanionState::Offline && S.View().StatusLine == "Could not connect the key"
+SABOTAGE CAUGHT localhost_origin_accepted: 5 failing checks, first: FAIL [key] line 372: !IsLoopbackRelayOrigin("http://localhost:8080") && !IsLoopbackRelayOrigin("https://127.0.0.1:8080")
+SABOTAGE CAUGHT model_sent_by_client: 2 failing checks, first: FAIL [session] line 503: R.Body == "{\"conversationId\":null,\"wljRunId\":\"" + Wlj + "\",\"message\":\"Hello there\"}"
+SABOTAGE CAUGHT idempotency_key_reuse: 2 failing checks, first: FAIL [session] line 522: !Send(S, "reuse", 10)
+SABOTAGE CAUGHT message_cap_8001: 4 failing checks, first: FAIL [session] line 528: !Send(S, std::string(8001, 'a'), 17)
+SABOTAGE CAUGHT legacy_run_id_sent: 2 failing checks, first: FAIL [session] line 524: !Send(S, "x", 13, 0, "run:0123456789abcdef01234567")
+SABOTAGE CAUGHT auth_failed_stays_ready: 10 failing checks, first: FAIL [session] line 558: S.View().State == Row.State && S.View().StatusLine == Row.Line
+SABOTAGE CAUGHT retry_after_ignored: 8 failing checks, first: FAIL [session] line 587: !Send(S, "q", 31, 16999) && Send(S, "q", 32, 17000)
+SABOTAGE CAUGHT delete_history_not_retried: 2 failing checks, first: FAIL [history] line 971: D.Method == "DELETE" && Contains(D.Url, Conv)
+SABOTAGE CAUGHT history_cap_21: 4 failing checks, first: FAIL [history] line 949: H.Size() == HistoryMaxTurns && HistoryMaxTurns == 20
+SABOTAGE CAUGHT status_prefers_server_no_check: 2 failing checks, first: FAIL [status] line 668: ParseS(StatusBody(LegacyField(Q(Legacy)) + "," + ServerField(Q(Legacy2))), St) == EStatusParse::RunIdsDisagree && St.WljRunId.empty()
+SABOTAGE CAUGHT status_null_legacy_server_unchecked: 3 failing checks, first: FAIL [status] line 670: ParseS(StatusBody(LegacyField("null") + "," + ServerField(Q(Legacy))), St) == EStatusParse::RunIdsDisagree
+SABOTAGE CAUGHT status_interim_also_when_legacy_null: 1 failing checks, first: FAIL [status] line 670: ParseS(StatusBody(LegacyField("null") + "," + ServerField(Q(Legacy))), St) == EStatusParse::RunIdsDisagree
+SABOTAGE CAUGHT status_server_shape_unchecked: 1 failing checks, first: FAIL [status] line 675: ParseS(StatusBody(ServerField(Q("run:0123456789ABCDEF01234567"))), St) == EStatusParse::BadServerRunId
+SABOTAGE CAUGHT status_data_wrapper_accepted: 2 failing checks, first: FAIL [status] line 712: ParseS(Wrapped, St) == EStatusParse::BadPhase
+SABOTAGE CAUGHT status_phase_key_accepted: 1 failing checks, first: FAIL [status] line 714: ParseS(StatusBody(NewRun(), "held", ",\"phase\":\"held\""), St) == EStatusParse::BadPhase
+SABOTAGE CAUGHT status_running_accepted: 1 failing checks, first: FAIL [status] line 724: ParseS(StatusBody(NewRun(), Word), St) == EStatusParse::BadPhase
+SABOTAGE CAUGHT status_expired_accepted: 1 failing checks, first: FAIL [status] line 724: ParseS(StatusBody(NewRun(), Word), St) == EStatusParse::BadPhase
+SABOTAGE CAUGHT status_old_cause_spelling_accepted: 1 failing checks, first: FAIL [status] line 743: ParseS(StatusBody(NewRun(), "failed", ",\"cause\":\"operator_window_expired\""), St) == EStatusParse::BadCause
+SABOTAGE CAUGHT status_expiry_cause_on_any_state: 2 failing checks, first: FAIL [status] line 747: ParseS(StatusBody(NewRun(), "awaiting_operator", ",\"cause\":\"AWAITING_OPERATOR_EXPIRED\""), St) == EStatusParse::BadCause
+SABOTAGE CAUGHT status_dispatched_at_unchecked: 14 failing checks, first: FAIL [status] line 772: bParses && !St.bHasDispatchedAt && St.bDispatchedAtUnconfirmed && St.DispatchedAtMs == 0 && StatusMeaning(St) == EStatusMeaning::DispatchUnconfirmed
+SABOTAGE CAUGHT dispatched_at_fraction_faults: 23 failing checks, first: FAIL [status] line 772: bParses && !St.bHasDispatchedAt && St.bDispatchedAtUnconfirmed && St.DispatchedAtMs == 0 && StatusMeaning(St) == EStatusMeaning::DispatchUnconfirmed
+SABOTAGE CAUGHT dispatched_at_nonstring_accepted: 3 failing checks, first: FAIL [status] line 778: ParseS(StatusBody(NewRun(), "dispatched", ",\"dispatchedAt\":true"), St) == EStatusParse::BadDispatchedAt
+SABOTAGE CAUGHT dispatched_at_unconfirmed_flag_dropped: 10 failing checks, first: FAIL [status] line 772: bParses && !St.bHasDispatchedAt && St.bDispatchedAtUnconfirmed && St.DispatchedAtMs == 0 && StatusMeaning(St) == EStatusMeaning::DispatchUnconfirmed
+SABOTAGE CAUGHT dispatched_at_unconfirmed_not_copied: 10 failing checks, first: FAIL [status] line 772: bParses && !St.bHasDispatchedAt && St.bDispatchedAtUnconfirmed && St.DispatchedAtMs == 0 && StatusMeaning(St) == EStatusMeaning::DispatchUnconfirmed
+SABOTAGE CAUGHT dispatched_at_unconfirmed_meaning_ignored: 16 failing checks, first: FAIL [status] line 756: ParseS(StatusBody(NewRun(), "dispatched", ",\"dispatchedAt\":null"), St) == EStatusParse::Ok && !St.bHasDispatchedAt && !St.bDispatchedAtUnconfirmed && StatusMeaning(St) == EStatusMeaning::DispatchUnconfirmed
+SABOTAGE CAUGHT dispatched_absent_reads_confirmed: 6 failing checks, first: FAIL [status] line 756: ParseS(StatusBody(NewRun(), "dispatched", ",\"dispatchedAt\":null"), St) == EStatusParse::Ok && !St.bHasDispatchedAt && !St.bDispatchedAtUnconfirmed && StatusMeaning(St) == EStatusMeaning::DispatchUnconfirmed
+SABOTAGE CAUGHT dispatched_meaning_inverted: 23 failing checks, first: FAIL [status] line 756: ParseS(StatusBody(NewRun(), "dispatched", ",\"dispatchedAt\":null"), St) == EStatusParse::Ok && !St.bHasDispatchedAt && !St.bDispatchedAtUnconfirmed && StatusMeaning(St) == EStatusMeaning::DispatchUnconfirmed
+SABOTAGE CAUGHT dispatched_at_null_faults: 8 failing checks, first: FAIL [status] line 756: ParseS(StatusBody(NewRun(), "dispatched", ",\"dispatchedAt\":null"), St) == EStatusParse::Ok && !St.bHasDispatchedAt && !St.bDispatchedAtUnconfirmed && StatusMeaning(St) == EStatusMeaning::DispatchUnconfirmed
+SABOTAGE CAUGHT pin_missing_becomes_confirmed: 16 failing checks, first: FAIL [pin] line 851: P.Apply(Parsed(StatusBody(NewRun(), "dispatched", ",\"dispatchedAt\":\"" + T2 + "\"", "2026-10-24T12:00:00.000Z"))) == EPinVerdict::Stale
+SABOTAGE CAUGHT pin_good_time_never_confirms: 8 failing checks, first: FAIL [pin] line 873: P.Applied().bHasDispatchedAt && P.Applied().DispatchedAtMs == 1792818063000ull
+SABOTAGE CAUGHT dispatched_at_unconfirmed_label_claims_run: 2 failing checks, first: FAIL [status] line 758: std::string(StatusMeaningLabel(StatusMeaning(St))) == "Can't confirm when the run was started \xE2\x80\x94 still checking with the bridge"
+SABOTAGE CAUGHT pin_unconfirmed_flag_kept: 1 failing checks, first: FAIL [pin] line 881: P.Applied().bHasDispatchedAt && P.Applied().DispatchedAtMs == 1792818063000ull && !P.Applied().bDispatchedAtUnconfirmed
+SABOTAGE CAUGHT pin_unconfirmed_moves_dispatched_at: 3 failing checks, first: FAIL [pin] line 881: P.Applied().bHasDispatchedAt && P.Applied().DispatchedAtMs == 1792818063000ull && !P.Applied().bDispatchedAtUnconfirmed
+SABOTAGE CAUGHT terminal_missing_ledger_unwritten: 1 failing checks, first: FAIL [status] line 737: IsTerminalState(EStatusState::LedgerUnwritten) && IsTerminalState(EStatusState::Interrupted) && IsTerminalState(EStatusState::Failed)
+SABOTAGE CAUGHT terminal_includes_unknown: 18 failing checks, first: FAIL [status] line 739: !IsTerminalState(EStatusState::Held) && !IsTerminalState(EStatusState::AwaitingOperator) && !IsTerminalState(EStatusState::Reserved)
+SABOTAGE CAUGHT meaning_expiry_shown_as_failure: 3 failing checks, first: FAIL [status] line 661: StatusMeaning(St) == EStatusMeaning::NotStartedOperatorWindowExpired && IsTerminalState(St.State)
+SABOTAGE CAUGHT status_request_any_origin: 1 failing checks, first: FAIL [status] line 826: MissionStatusRequest("https://relay.example.com", Wlj, "project-1").Method.empty()
+SABOTAGE CAUGHT pin_any_wlj_accepted: 3 failing checks, first: FAIL [pin] line 914: P.Apply(Parsed(StatusBody(NewRun()))) == EPinVerdict::Mismatch
+SABOTAGE CAUGHT pin_legacy_change_ok: 4 failing checks, first: FAIL [pin] line 853: P.Apply(Parsed(StatusBody(LegacyField(Q(Legacy)), "held", "", T2))) == EPinVerdict::Mismatch && P.IsMismatched()
+SABOTAGE CAUGHT pin_stale_applied: 1 failing checks, first: FAIL [pin] line 845: P.Apply(Parsed(StatusBody(NewRun(), "reserved", "", T0))) == EPinVerdict::Stale && P.PinnedState() == EStatusState::Held
+SABOTAGE CAUGHT pin_equal_instant_dropped: 6 failing checks, first: FAIL [pin] line 844: P.Apply(Parsed(StatusBody(NewRun(), "held", "", T1))) == EPinVerdict::Applied
+SABOTAGE CAUGHT pin_terminal_not_sticky: 4 failing checks, first: FAIL [pin] line 851: P.Apply(Parsed(StatusBody(NewRun(), "dispatched", ",\"dispatchedAt\":\"" + T2 + "\"", "2026-10-24T12:00:00.000Z"))) == EPinVerdict::Stale
+SABOTAGE CAUGHT pin_unknown_overwrites: 1 failing checks, first: FAIL [pin] line 847: P.Apply(Parsed(StatusBody(NewRun(), "unknown", "", T2))) == EPinVerdict::Stale && P.PinnedState() == EStatusState::AwaitingOperator
+SABOTAGE CAUGHT pin_admission_after_dispatch: 6 failing checks, first: FAIL [pin] line 875: P.Apply(Parsed(StatusBody(NewRun(), "awaiting_operator", "", T2))) == EPinVerdict::Stale
+SABOTAGE CAUGHT pin_dispatched_at_moves: 1 failing checks, first: FAIL [pin] line 883: P.Apply(Parsed(StatusBody(NewRun(), "dispatched", ",\"dispatchedAt\":\"" + T2 + "\"", T2))) == EPinVerdict::Mismatch && P.IsMismatched()
+SABOTAGE CAUGHT pin_dispatched_at_erased: 5 failing checks, first: FAIL [pin] line 879: P.Apply(Parsed(StatusBody(NewRun(), "dispatched", "", T2))) == EPinVerdict::Applied && P.Applied().bHasDispatchedAt
+SABOTAGE CAUGHT companion_non200_shown: 16 failing checks, first: FAIL [route] line 1059: ParseCompanionMission(Code, MissionBody("result_received", CompanionResult(), RealProvenance), Wlj, V) == ECompanionMissionParse::NotOk
+SABOTAGE CAUGHT companion_legacy_id_route: 3 failing checks, first: FAIL [route] line 1048: CompanionMissionRequest(Origin, Legacy, "project-1").Method.empty()
+SABOTAGE CAUGHT companion_project_id_unescaped: 1 failing checks, first: FAIL [route] line 1051: CompanionMissionRequest(Origin, Wlj, "a b").Method.empty() && CompanionMissionRequest(Origin, Wlj, std::string(65, 'p')).Method.empty()
+SABOTAGE CAUGHT companion_other_run_shown: 3 failing checks, first: FAIL [route] line 1098: ParseCompanionMission(200, MissionBody("delivered", "null", "null", OtherWlj), Wlj, V) == ECompanionMissionParse::RunIdMismatch
+SABOTAGE CAUGHT companion_verified_without_round_trip: 1 failing checks, first: FAIL [route] line 1075: V.bHasProvenance && !V.bShowVerified
+SABOTAGE CAUGHT companion_verified_when_simulated: 2 failing checks, first: FAIL [route] line 1075: V.bHasProvenance && !V.bShowVerified
+SABOTAGE CAUGHT companion_untrusted_flag_ignored: 2 failing checks, first: FAIL [route] line 1088: ParseCompanionMission(200, MissionBody("result_received", CompanionResult("s", ArtifactOk, "false")), Wlj, V) == ECompanionMissionParse::BadResult
+SABOTAGE CAUGHT companion_content_accepted: 1 failing checks, first: FAIL [route] line 1095: ParseCompanionMission(200, MissionBody("result_received", CompanionResult("s", "{\"kind\":\"text\",\"sha256\":\"" + std::string(64, 'b') + "\",\"byteLength\":1,\"content\":\"rm -rf /\"}")), Wlj, V) == ECompanionMissionParse::BadResult
+SABOTAGE CAUGHT companion_result_before_received: 14 failing checks, first: FAIL [route] line 1084: ParseCompanionMission(200, MissionBody(Early, CompanionResult()), Wlj, V) == ECompanionMissionParse::ResultTooEarly && !V.bHasAnswer
+SABOTAGE CAUGHT companion_summary_cap_off: 1 failing checks, first: FAIL [route] line 1091: ParseCompanionMission(200, MissionBody("result_received", CompanionResult(std::string(CompanionSummaryMaxBytes + 1, 's'))), Wlj, V) == ECompanionMissionParse::BadResult
+SABOTAGE CAUGHT companion_no_result_missing: 3 failing checks, first: FAIL [route] line 1066: ParseCompanionMission(200, MissionBody("no_result"), Wlj, V) == ECompanionMissionParse::Ok && V.State == ECompanionTaskState::NoResult
+SABOTAGE CAUGHT companion_no_result_not_terminal: 1 failing checks, first: FAIL [route] line 1123: IsTerminalCompanionState(S)
+SABOTAGE CAUGHT grok_cap_off_by_one: 1 failing checks, first: FAIL [result] line 994: Exact.size() == CompanionResultMaxBytes && ParseCompanionResultV0(Exact, Wlj, V) == EResultParse::Ok
+SABOTAGE CAUGHT grok_other_run_accepted: 2 failing checks, first: FAIL [result] line 998: ParseCompanionResultV0(ResultBody("x", OtherWlj), Wlj, V) == EResultParse::RunIdMismatch
+SABOTAGE CAUGHT simulated_verified_allowed: 3 failing checks, first: FAIL [result] line 1015: ParseCompanionProvenanceV0("{\"source\":\"simulated\",\"simulated\":true,\"verifiedBy\":\"task_token_round_trip\"}", P) == EProvenanceParse::SimulatedVerified && P.bSimulated
+SABOTAGE CAUGHT status_legacy_switch_ignored: 3 failing checks, first: FAIL [status] line 682: ParseMissionStatus(Today, St, true) == EStatusParse::BadLegacyRunId && St.WljRunId.empty()
+SABOTAGE CAUGHT status_legacy_switch_forced_on: 12 failing checks, first: FAIL [status] line 658: ParseS(Today, St) == EStatusParse::Ok && St.LegacyRunId == Legacy && St.bLegacyFromServerRunIdOnly && St.State == EStatusState::AwaitingOperator
+SABOTAGE CAUGHT status_legacy_switch_flipped_shared: 12 failing checks, first: FAIL [status] line 658: ParseS(Today, St) == EStatusParse::Ok && St.LegacyRunId == Legacy && St.bLegacyFromServerRunIdOnly && St.State == EStatusState::AwaitingOperator
+SABOTAGE CAUGHT status_two_arg_ignores_switch: 11 failing checks, first: FAIL [status] line 658: ParseS(Today, St) == EStatusParse::Ok && St.LegacyRunId == Legacy && St.bLegacyFromServerRunIdOnly && St.State == EStatusState::AwaitingOperator
+SABOTAGE CAUGHT workflow_check_off: 9 failing checks, first: FAIL [status] line 706: ParseS(StatusBody(NewRun(), "held", Bad), St) == EStatusParse::BadWorkflowRunId && St.WljRunId.empty()
+SABOTAGE CAUGHT workflow_cap_plus_one: 1 failing checks, first: FAIL [status] line 706: ParseS(StatusBody(NewRun(), "held", Bad), St) == EStatusParse::BadWorkflowRunId && St.WljRunId.empty()
+SABOTAGE CAUGHT workflow_cap_minus_one: 1 failing checks, first: FAIL [status] line 695: ParseS(StatusBody(NewRun(), "held", Good), St) == EStatusParse::Ok && St.State == EStatusState::Held
+SABOTAGE CAUGHT workflow_space_allowed: 1 failing checks, first: FAIL [status] line 706: ParseS(StatusBody(NewRun(), "held", Bad), St) == EStatusParse::BadWorkflowRunId && St.WljRunId.empty()
+SABOTAGE CAUGHT workflow_non_ascii_allowed: 1 failing checks, first: FAIL [status] line 706: ParseS(StatusBody(NewRun(), "held", Bad), St) == EStatusParse::BadWorkflowRunId && St.WljRunId.empty()
+SABOTAGE CAUGHT workflow_empty_allowed: 1 failing checks, first: FAIL [status] line 706: ParseS(StatusBody(NewRun(), "held", Bad), St) == EStatusParse::BadWorkflowRunId && St.WljRunId.empty()
+SABOTAGE CAUGHT workflow_number_allowed: 4 failing checks, first: FAIL [status] line 706: ParseS(StatusBody(NewRun(), "held", Bad), St) == EStatusParse::BadWorkflowRunId && St.WljRunId.empty()
+SABOTAGE CAUGHT workflow_present_is_fault: 6 failing checks, first: FAIL [status] line 695: ParseS(StatusBody(NewRun(), "held", Good), St) == EStatusParse::Ok && St.State == EStatusState::Held
+SABOTAGE CAUGHT workflow_null_is_fault: 1 failing checks, first: FAIL [status] line 695: ParseS(StatusBody(NewRun(), "held", Good), St) == EStatusParse::Ok && St.State == EStatusState::Held
+SABOTAGE CAUGHT q1_message_id_opaque_ok: 4 failing checks, first: FAIL [answers] line 1159: !IsMessageId("msg_1") && !IsMessageId("msg_") && !IsMessageId("cnv_" + U1) && !IsMessageId(U1)
+SABOTAGE CAUGHT q1_replay_message_id_unpinned: 3 failing checks, first: FAIL [answers] line 1164: RunChat(Replayed(Conv, Msg2) + Delta("x") + Done(Msg2), Conv, true, std::string::npos, Msg1).Fault == EChatProtocolFault::ReplayMessageMismatch
+SABOTAGE CAUGHT q1_resend_conv_from_request_only: 1 failing checks, first: FAIL [answers] line 1189: S.History().Size() == 0 && TraceHas(S, "chat_fault_conversation_mismatch")
+SABOTAGE CAUGHT q1_resend_message_id_dropped: 2 failing checks, first: FAIL [answers] line 1176: S.History().Size() == 0 && TraceHas(S, "chat_fault_replay_message_mismatch")
+SABOTAGE CAUGHT q2_sse_field_in_event_allowed: 4 failing checks, first: FAIL [answers] line 1200: RunChat(Meta() + "id: 5\n" + Delta("x") + Done()).Fault == EChatProtocolFault::ForbiddenSseField
+SABOTAGE CAUGHT q2_sse_field_count_ignored: 2 failing checks, first: FAIL [answers] line 1203: RunChat(Meta() + Delta("x") + "retry: 5\n").Fault == EChatProtocolFault::ForbiddenSseField
+SABOTAGE CAUGHT q2_retry_field_unflagged: 3 failing checks, first: FAIL [answers] line 1197: Out.size() == 3 && Out[0].bHadIdOrRetry && Out[1].bHadIdOrRetry && !Out[2].bHadIdOrRetry
+SABOTAGE CAUGHT q2_id_field_unflagged: 3 failing checks, first: FAIL [answers] line 1197: Out.size() == 3 && Out[0].bHadIdOrRetry && Out[1].bHadIdOrRetry && !Out[2].bHadIdOrRetry
+SABOTAGE CAUGHT q3_meta_optional: 1 failing checks, first: FAIL [answers] line 1217: RunChat(Delta("x") + Done(), Conv, true).Fault == EChatProtocolFault::MetaMissing
+SABOTAGE CAUGHT q3_replayed_on_fresh_ok: 1 failing checks, first: FAIL [answers] line 1220: RunChat(Replayed() + Delta("x") + Done()).Fault == EChatProtocolFault::MetaBadReplayed
+SABOTAGE CAUGHT q3_replayed_non_bool_ok: 2 failing checks, first: FAIL [answers] line 1221: RunChat(Meta(Conv, ",\"replayed\":\"yes\"") + Delta("x") + Done(), Conv, true).Fault == EChatProtocolFault::MetaBadReplayed
+SABOTAGE CAUGHT q3_replay_two_deltas_ok: 1 failing checks, first: FAIL [answers] line 1226: RunChat(Replayed() + Delta("a") + Delta("b"), Conv, true).Fault == EChatProtocolFault::ReplaySequence
+SABOTAGE CAUGHT q3_replay_no_delta_ok: 1 failing checks, first: FAIL [answers] line 1225: RunChat(Replayed() + Done(), Conv, true).Fault == EChatProtocolFault::ReplaySequence
+SABOTAGE CAUGHT q3_replay_delta_then_error_ok: 1 failing checks, first: FAIL [answers] line 1227: RunChat(Replayed() + Delta("a") + Err("provider_unavailable", "x"), Conv, true).Fault == EChatProtocolFault::ReplaySequence
+SABOTAGE CAUGHT q4_in_progress_no_backoff: 1 failing checks, first: FAIL [session] line 597: S.View().RetryNotBeforeMs == 82000 && !S.BeginResend(81999, Re)
+SABOTAGE CAUGHT q5_max_length_line_dropped: 1 failing checks, first: FAIL [answers] line 1253: S.View().State == ECompanionState::Ready && S.View().StatusLine == "The reply reached the length limit"
+SABOTAGE CAUGHT q5_max_length_word_wrong: 4 failing checks, first: FAIL [answers] line 1246: D.Outcome() == EChatStreamOutcome::Done && D.HitLengthLimit() && D.FinishReason() == "max_length"
+SABOTAGE CAUGHT q6_too_large_generic: 1 failing checks, first: FAIL [answers] line 1267: S.View().State == ECompanionState::Error && S.View().StatusLine == "Message too long" && TraceHas(S, "chat_too_large")
+SABOTAGE CAUGHT q6_body_invalid_untraced: 1 failing checks, first: FAIL [answers] line 1270: S.View().State == ECompanionState::Error && S.View().StatusLine == "Companion error" && TraceHas(S, "chat_body_invalid")
+SABOTAGE CAUGHT q6_request_cap_shrunk: 2 failing checks, first: FAIL [answers] line 1272: Send(S, std::string(ChatMaxMessageUtf16Units, '\x01'), 1062, 0, Wlj, &R) && R.Body.size() <= ChatMaxRequestBodyBytes
+SABOTAGE CAUGHT q7_delete_409_treated_as_done: 1 failing checks, first: FAIL [answers] line 1290: D.Method == "DELETE" && Contains(D.Url, Conv)
+SABOTAGE CAUGHT q8_retry_after_zero_ok: 2 failing checks, first: FAIL [answers] line 1306: S.View().State == ECompanionState::SlowDown && S.View().RetryNotBeforeMs == Now + Row.second
+SABOTAGE CAUGHT q8_rate_limited_no_default_wait: 1 failing checks, first: FAIL [answers] line 1315: S.View().State == ECompanionState::RetryLater && S.View().RetryNotBeforeMs == 5000 + DefaultRetryWaitMs
+SABOTAGE CAUGHT q8_retry_after_ms_null_ok: 1 failing checks, first: FAIL [answers] line 1321: RunChat(Meta() + Err("provider_rate_limited", "x", ",\"retryAfterMs\":null")).Fault == EChatProtocolFault::ErrorBadFields
+SABOTAGE CAUGHT q9_endpoint_unchecked: 3 failing checks, first: FAIL [answers] line 1328: RelayOriginFromJ1Endpoint("http://127.0.0.1:47123//").empty() && RelayOriginFromJ1Endpoint("http://127.0.0.1:47123/relay-api").empty()
+SABOTAGE CAUGHT q9_trailing_slash_kept: 2 failing checks, first: FAIL [answers] line 1326: RelayOriginFromJ1Endpoint("http://127.0.0.1:47123/") == Origin
+SABOTAGE CAUGHT q10_deprecated_label_read: 6 failing checks, first: FAIL [session] line 468: S.View().ProviderLabel == OddLabel && S.LabelFor("grok_bot", "agent_webhook") == "Bot label B"
+SABOTAGE CAUGHT q10_missing_mode_label_skipped: 2 failing checks, first: FAIL [answers] line 1369: bRefused
+SABOTAGE CAUGHT q10_duplicate_mode_ok: 1 failing checks, first: FAIL [answers] line 1369: bRefused
+SABOTAGE CAUGHT q10_label_wrong_mode: 4 failing checks, first: FAIL [session] line 468: S.View().ProviderLabel == OddLabel && S.LabelFor("grok_bot", "agent_webhook") == "Bot label B"
+SABOTAGE CAUGHT q11_simulated_true_accepted: 3 failing checks, first: FAIL [answers] line 1375: RunChat(Meta(Conv, ",\"simulated\":true") + Delta("fake") + Done()).Fault == EChatProtocolFault::MetaSimulatedTrue
+SABOTAGE CAUGHT q12_rejection_cleared_by_disconnect: 3 failing checks, first: FAIL [answers] line 1394: S.View().Offline == EOfflineReason::KeyRejected && S.View().StatusLine == "Your key was rejected" && S.View().bShowSimulatedBanner
+SABOTAGE CAUGHT q12_rejection_not_cleared_by_put: 2 failing checks, first: FAIL [session] line 573: S.View().State == ECompanionState::Ready
+SABOTAGE CAUGHT q13_disconnect_sends_key: 1 failing checks, first: FAIL [answers] line 1408: D.Method == "DELETE" && D.IdempotencyKey.empty() && D.Body.empty()
+SABOTAGE CAUGHT q14_credential_rejected_generic: 2 failing checks, first: FAIL [answers] line 1416: S.View().State == ECompanionState::Ready && S.View().StatusLine == "Your key was rejected" && S.View().bCanSend
+SABOTAGE CAUGHT q14_credential_rejected_drops_connection: 4 failing checks, first: FAIL [answers] line 1416: S.View().State == ECompanionState::Ready && S.View().StatusLine == "Your key was rejected" && S.View().bCanSend
+SABOTAGE CAUGHT q14_notice_hidden_when_ready: 1 failing checks, first: FAIL [answers] line 1416: S.View().State == ECompanionState::Ready && S.View().StatusLine == "Your key was rejected" && S.View().bCanSend
+SABOTAGE CAUGHT q14_notice_kept_after_message: 1 failing checks, first: FAIL [answers] line 1420: S.View().State == ECompanionState::Ready && S.View().StatusLine.empty() && S.History().Size() == 1
+SABOTAGE CAUGHT q14_verified_at_unchecked: 5 failing checks, first: FAIL [answers] line 1452: bRefused
+SABOTAGE CAUGHT q14_connected_at_unchecked: 3 failing checks, first: FAIL [answers] line 1452: bRefused
+SABOTAGE CAUGHT q15_unknown_word_shown: 4 failing checks, first: FAIL [answers] line 1489: bQuiet
+SABOTAGE CAUGHT q15_last_error_ignored: 7 failing checks, first: FAIL [answers] line 1480: bOk
+SABOTAGE CAUGHT q15_quota_line_wrong: 1 failing checks, first: FAIL [answers] line 1480: bOk
+SABOTAGE CAUGHT q15_delivery_failed_unmapped: 1 failing checks, first: FAIL [answers] line 1480: bOk
+SABOTAGE CAUGHT q15_unknown_word_faults: 5 failing checks, first: FAIL [answers] line 1489: bQuiet
+SABOTAGE CAUGHT q15_not_cleared_by_disconnect: 1 failing checks, first: FAIL [answers] line 1503: S.View().LastErrorLine.empty()
+SABOTAGE CAUGHT mint_fill_failure_ignored: 1 failing checks, first: FAIL [mint] line 1571: M.Mint(Src, K) == EKeyMint::RandomUnavailable && K.empty() && M.IssuedCount() == 3
+SABOTAGE CAUGHT mint_repeat_allowed: 1 failing checks, first: FAIL [mint] line 1567: M.Mint(Src, K) == EKeyMint::RandomRepeated && K.empty() && M.IssuedCount() == 3
+SABOTAGE CAUGHT mint_stale_key_kept: 2 failing checks, first: FAIL [mint] line 1567: M.Mint(Src, K) == EKeyMint::RandomRepeated && K.empty() && M.IssuedCount() == 3
+SABOTAGE CAUGHT mint_version_nibble_broken: 7 failing checks, first: FAIL [mint] line 1560: M.Mint(Src, K) == EKeyMint::Minted && K == "00010203-0405-4607-8809-0a0b0c0d0e0f" && Src.Calls == 1
+SABOTAGE CAUGHT mint_variant_nibble_broken: 7 failing checks, first: FAIL [mint] line 1560: M.Mint(Src, K) == EKeyMint::Minted && K == "00010203-0405-4607-8809-0a0b0c0d0e0f" && Src.Calls == 1
+SABOTAGE CAUGHT mint_uppercase: 5 failing checks, first: FAIL [mint] line 1560: M.Mint(Src, K) == EKeyMint::Minted && K == "00010203-0405-4607-8809-0a0b0c0d0e0f" && Src.Calls == 1
+SABOTAGE CAUGHT mint_double_fill: 2 failing checks, first: FAIL [mint] line 1560: M.Mint(Src, K) == EKeyMint::Minted && K == "00010203-0405-4607-8809-0a0b0c0d0e0f" && Src.Calls == 1
+SABOTAGE CAUGHT mint_failure_not_shown: 1 failing checks, first: FAIL [mint] line 1613: S.View().State == ECompanionState::Error && S.View().StatusLine == "Secure random unavailable; try again"
+SABOTAGE CAUGHT v4_version_nibble_dropped: 10 failing checks, first: FAIL [mint] line 1560: M.Mint(Src, K) == EKeyMint::Minted && K == "00010203-0405-4607-8809-0a0b0c0d0e0f" && Src.Calls == 1
+SABOTAGE RESULT PASS caught=148/148
