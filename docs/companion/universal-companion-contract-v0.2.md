@@ -4,7 +4,7 @@
 
 `GET /relay-api/wonderland/julius/missions/{wljRunId}/companion`
 
-at `05870e5311edc416e20c7e64ef92869e24b32f9c`. v0.2 keeps every v0.1 field, with the same meaning, and adds `agents`. A client that ignores a field it does not know keeps working.
+at `05870e5311edc416e20c7e64ef92869e24b32f9c`. v0.2 keeps every v0.1 field, with the same meaning, and adds `agents` and a derived `traceId`. A client that ignores a field it does not know keeps working.
 
 **What this is.** The one companion interface Wonderland draws. Wonderland is BYOAI. Grok Bot, ChatGPT, Claude, Gemini, and any later agent are integrations. They enter through an adapter. The route, the store, and these types do not name a provider, do not enumerate one, and do not prefer one.
 
@@ -12,9 +12,9 @@ at `05870e5311edc416e20c7e64ef92869e24b32f9c`. v0.2 keeps every v0.1 field, with
 
 The bridge strips `/relay-api` before the handler. The matched path is `/wonderland/...`. Neither form contains a provider id.
 
-## v0.1 status object, unchanged
+## v0.1 status object
 
-A 200 is this object. `verified` is the literal `false`. The row is not consulted for it, and an adapter session cannot set it. It stays `false` until a real provider verification exists.
+The v0.1 fields below are unchanged. A 200 is this object, plus `agents` and `traceId`. `verified` is the literal `false`. The row is not consulted for it, and an adapter session cannot set it. It stays `false` until a real provider verification exists.
 
 | Field | Meaning |
 |---|---|
@@ -26,8 +26,16 @@ A 200 is this object. `verified` is the literal `false`. The row is not consulte
 | `provenance` | `null`, or `{ source, wakeId, bodyDigest, contentSha256 }`. `source` is `companion_port` or `simulated`. A provenance object that carries `verified` or `verifiedBy` is not a row. |
 | `updatedAt` | UTC ISO timestamp from the row. |
 | `verified` | `false`. |
+| `traceId` | Derived from the path's `wlj_` id. Not read from the query, the body, or the row. |
 
-A body that is not 200 has no result and no `agents` array. The uniform 404 is `{ error: { kind: 'not_found', message: 'Not found.' } }`. It is the answer for an unknown `wlj_` id, a legacy `run:` id, a probe such as `preflight:`, and any other malformed id. The parser is `scripts/julius-admission-run-id.mjs`, the same one admission uses.
+A body that is not 200 has no result, no `agents` array, and no `traceId`. The uniform 404 is `{ error: { kind: 'not_found', message: 'Not found.' } }`. It is the answer for an unknown `wlj_` id, a legacy `run:` id, a probe such as `preflight:`, and any other malformed id. The parser is `scripts/julius-admission-run-id.mjs`, the same one admission uses.
+
+`traceId` is the mission correlation id from `scripts/julius-mission-trace.mjs`. That file imports only `node:crypto`. For a lowercase `wlj_` UUIDv4, the id is the first 32 hex characters of SHA-256 of the UTF-8 string `julius-trace.v1:` concatenated with the `wlj_` id. When that window is 32 zeros, the same walk uses the last 32 hex characters, then SHA-256 of the same label with one trailing U+0000. When that digest is also all zeros, `traceId` is 31 zeros and a final `1`. A legacy `run:` id and a `preflight:` id derive null, and those requests stay the 404 above. The route never copies a `traceId` a client sent.
+
+| `wlj_` id | `traceId` |
+|---|---|
+| `wlj_01234567-89ab-4cde-8fab-0123456789ab` | `192b1fbb866790da0ba590b4a8f45144` |
+| `wlj_0b7a1c2e-4f3d-4a6b-8c2d-3e4f5a6b7c8d` | `0ef34f0df7cf2cf89b844dcfa5fe084f` |
 
 The peer guard is the status route's guard. A forwarded header, or a peer that is not loopback, is `403` with `error.kind` `julius_dispatch_not_loopback`. POST on this path is `405`. It is not an ingest. The route does not call out.
 
@@ -39,7 +47,7 @@ These are the only companion paths:
 
 | Path | This version |
 |---|---|
-| `GET /relay-api/wonderland/julius/missions/{wljRunId}/companion` | Served. v0.1 fields, plus `agents`. |
+| `GET /relay-api/wonderland/julius/missions/{wljRunId}/companion` | Served. v0.1 fields, plus `agents` and a derived `traceId`. |
 | `POST /relay-api/wonderland/companions/agents` | Served. Creates one slot. |
 | `GET /relay-api/wonderland/companions/agents/{agentId}` | Served. Returns that slot's `AgentDescriptor`. |
 | `DELETE /relay-api/wonderland/companions/agents/{agentId}` | Served. Marks that slot `disconnected`. |
@@ -104,7 +112,7 @@ BYOAI credentials are always user-owned. There is no i.Wonder-funded fallback, n
 
 ## One mission, many agents
 
-A `wlj_` mission holds zero or more slots. Two slots may name different `providerId` strings, or the same string twice with different `agentId`s. Each slot is described on its own. The status object's v0.1 fields are the mission's local result row; they are not rewritten per agent.
+A `wlj_` mission holds zero or more slots. Two slots may name different `providerId` strings, or the same string twice with different `agentId`s. Each slot is described on its own. The status object's v0.1 fields are the mission's local result row; they are not rewritten per agent. `traceId` is the mission id's derivation, not a field of any slot.
 
 The registry may be empty. The GET still returns the v0.1 object and `agents: []`. No adapter is required to start the route, and the server registers none.
 
@@ -126,7 +134,7 @@ No credential is accepted in this body. A field named `apiKey`, `token`, or `pas
 
 The same loopback guard applies. A non-loopback peer is `403 julius_dispatch_not_loopback` and nothing is stored.
 
-When `wljRunId` is a canonical id, the new slot is one of that mission's `agents` on the existing companion GET. `verified` on that GET stays `false`.
+When `wljRunId` is a canonical id, the new slot is one of that mission's `agents` on the existing companion GET. `verified` on that GET stays `false`. A `traceId` in the create body is not stored and is not the mission `traceId`.
 
 Slots are written into the same local companion store as result rows (`JULIUS_WONDERLAND_COMPANION_STORE`, or memory when that path is unset).
 

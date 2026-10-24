@@ -122,6 +122,7 @@ describe('companion agent routes', () => {
           wljRunId: RUN,
           displayName: 'Desk label',
           agentId: 'caller-picked',
+          traceId: 'f'.repeat(32),
         }),
       }), ports);
       expect(created?.status).toBe(201);
@@ -136,6 +137,7 @@ describe('companion agent routes', () => {
       };
       expect(body.agentId).toMatch(/^agt_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u);
       expect(body.agentId).not.toBe('caller-picked');
+      expect(body).not.toHaveProperty('traceId');
       expect(body).toMatchObject({
         providerId: 'no-such-provider',
         displayName: 'Desk label',
@@ -146,8 +148,10 @@ describe('companion agent routes', () => {
       });
       const mission = await handleWonderlandCompanionRoute(request(missionPath(RUN)), ports);
       expect(mission?.status).toBe(200);
-      const missionBody = mission?.body as { verified?: boolean; agents?: Array<{ agentId: string }> };
+      const missionBody = mission?.body as { verified?: boolean; traceId?: string; agents?: Array<{ agentId: string }> };
       expect(missionBody.verified).toBe(false);
+      expect(missionBody.traceId).toBe('0ef34f0df7cf2cf89b844dcfa5fe084f');
+      expect(JSON.stringify(mission?.body)).not.toContain('f'.repeat(32));
       expect(missionBody.agents?.map((agent) => agent.agentId)).toEqual([body.agentId]);
     } finally {
       ports.close();

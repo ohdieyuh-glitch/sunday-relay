@@ -11,6 +11,10 @@
  * does not call out. A body that is not 200 has no result. A 200 hard-codes
  * `verified: false`. Nothing in the store can turn that into true.
  *
+ * The same 200 adds `traceId`, derived from the admitted `wlj_` id by
+ * `scripts/julius-mission-trace.mjs`. The route does not read a trace id
+ * from the query, the body, or the row.
+ *
  * The same 200 adds `agents`, from the injected registry. An empty registry
  * is the normal case and yields an empty array. The provider id is not part
  * of this path.
@@ -33,6 +37,7 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 
+import { juliusMissionTraceId } from '../scripts/julius-mission-trace.mjs';
 import { parseJuliusAdmissionRunId } from '../src/relay/integration/wonderland-admission/admission-run-id';
 import { isLocalStorePath } from '../src/relay/integration/wonderland-admission/admission-file';
 import {
@@ -208,6 +213,8 @@ function readAgents(ports: WonderlandCompanionRoutePorts, wljRunId: string): rea
 
 /**
  * `verified` is a literal. The row is not consulted for it.
+ * `traceId` is derived from `row.wljRunId`. A `traceId` property on the row
+ * is not read.
  */
 export function companionBody(row: CompanionResultRecord, agents: readonly AgentDescriptor[] = []): {
   readonly wljRunId: string;
@@ -223,6 +230,7 @@ export function companionBody(row: CompanionResultRecord, agents: readonly Agent
   readonly updatedAt: string;
   readonly agents: readonly AgentDescriptor[];
   readonly verified: false;
+  readonly traceId: string | null;
 } {
   const showResult = RESULT_STATES.has(row.state)
     && row.summary !== null
@@ -247,6 +255,7 @@ export function companionBody(row: CompanionResultRecord, agents: readonly Agent
     updatedAt: row.updatedAt,
     agents,
     verified: false,
+    traceId: juliusMissionTraceId(row.wljRunId),
   };
 }
 

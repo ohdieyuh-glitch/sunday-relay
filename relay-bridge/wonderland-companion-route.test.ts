@@ -25,6 +25,7 @@ import {
 } from './wonderland-companion-registry';
 
 const RUN = 'wlj_0b7a1c2e-4f3d-4a6b-8c2d-3e4f5a6b7c8d';
+const TRACE_ID = '0ef34f0df7cf2cf89b844dcfa5fe084f';
 const AGENT_A = 'agt_0b7a1c2e-4f3d-4a6b-8c2d-3e4f5a6b7c8d';
 const AGENT_B = 'agt_aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
 const AGENT_C = 'agt_11111111-2222-4333-8444-555555555555';
@@ -131,13 +132,16 @@ describe('wonderland companion read', () => {
   it('returns a stored result with verified hard-coded false', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'wlj-companion-'));
     const open = ports(join(dir, 'admission.json'), {
-      read: () => ({ ...storedRow(), verified: true }) as CompanionResultRecord,
+      read: () => ({ ...storedRow(), verified: true, traceId: 'f'.repeat(32) }) as CompanionResultRecord,
     });
     try {
-      const result = await handleWonderlandCompanionRoute(request(RUN), open);
+      const result = await handleWonderlandCompanionRoute(request(RUN, {
+        url: `${companionPath(RUN)}?projectId=${PROJECT}&traceId=${'a'.repeat(32)}`,
+      }), open);
       expect(result?.status).toBe(200);
-      const body = result?.body as { verified?: boolean; agents?: unknown[]; result?: { summary?: string; untrusted?: boolean } };
+      const body = result?.body as { verified?: boolean; agents?: unknown[]; traceId?: string; result?: { summary?: string; untrusted?: boolean } };
       expect(body.verified).toBe(false);
+      expect(body.traceId).toBe(TRACE_ID);
       expect(body.agents).toEqual([]);
       expect(body.result).toEqual({
         untrusted: true,
@@ -145,6 +149,8 @@ describe('wonderland companion read', () => {
         artifact: { kind: 'text', sha256: SHA, byteLength: 12 },
       });
       expect(JSON.stringify(result?.body)).not.toContain('"verified":true');
+      expect(JSON.stringify(result?.body)).not.toContain('f'.repeat(32));
+      expect(JSON.stringify(result?.body)).not.toContain('a'.repeat(32));
     } finally {
       open.close();
       rmSync(dir, { recursive: true, force: true });
@@ -159,6 +165,7 @@ describe('wonderland companion read', () => {
       expect(await handleWonderlandCompanionRoute(request(UNKNOWN), open)).toEqual(NOT_FOUND);
       expect(await handleWonderlandCompanionRoute(request(LEGACY), open)).toEqual(NOT_FOUND);
       expect(await handleWonderlandCompanionRoute(request('preflight:probe'), open)).toEqual(NOT_FOUND);
+      expect(JSON.stringify(NOT_FOUND)).not.toContain('traceId');
       expect(await handleWonderlandCompanionRoute(request('not-a-run'), open)).toEqual(NOT_FOUND);
       expect(await handleWonderlandCompanionRoute(request(RUN.toUpperCase()), open)).toEqual(NOT_FOUND);
       open.close();
