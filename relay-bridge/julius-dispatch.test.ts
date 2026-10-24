@@ -1445,7 +1445,23 @@ describe('companion slot beside the chain', () => {
       behave: { architect: () => ({ ok: true, text: planText, responseId: 'resp_a_0011223344', model: 'm' }) },
       companion: {
         deadlineMs: 1_000,
-        port: { async wake() { return { wakeId: 'wake_01ABCDEF', outcome: 'missing', artifact: null }; } },
+        port: {
+          async wake() {
+            return {
+              wakeId: 'wake_01ABCDEF',
+              outcome: 'missing' as const,
+              artifact: null,
+              model: 'generic-model-name',
+              declaration: {
+                agentId: 'agent-from-caller',
+                providerId: 'provider.example.unknown',
+                capabilities: ['note'],
+                session: 'sess-ref',
+                authorization: null,
+              },
+            };
+          },
+        },
         clock: { after: laterUnref },
         integrate: { async submit() { return { accepted: true, reason: null }; } },
         validate: { validate: () => ({ ok: true, reason: null }) },
@@ -1456,11 +1472,30 @@ describe('companion slot beside the chain', () => {
     await h.controller.whenIdle();
     expect(evidence.read(RUN)).toMatchObject({
       ok: true,
-      result: { wljRunId: RUN, legacyRunId: serverRunId, companion: { state: 'no_result' }, result: null, provenance: null },
+      result: {
+        wljRunId: RUN,
+        legacyRunId: serverRunId,
+        companion: { state: 'no_result' },
+        result: null,
+        provenance: null,
+        identity: {
+          agentId: 'agent-from-caller',
+          providerId: 'provider.example.unknown',
+          capabilities: ['note'],
+          session: 'sess-ref',
+          authorization: null,
+        },
+      },
     });
     expect(evidence.read(serverRunId)).toEqual({ ok: false, reason: 'companion_legacy_read_only' });
     const served = evidence.read(RUN);
     expect(JSON.stringify(served)).not.toContain('verified');
+    expect(JSON.stringify(served)).not.toContain('generic-model-name');
+    const events = h.controller.events({ projectId: PROJECT, runId: RUN, callerPlayerId: FOUNDER, cursor: 0 });
+    const wire = JSON.stringify(events);
+    expect(wire).not.toContain('provider.example.unknown');
+    expect(wire).not.toContain('generic-model-name');
+    expect(wire).not.toContain('agent-from-caller');
   });
 });
 

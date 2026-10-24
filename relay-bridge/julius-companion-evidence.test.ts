@@ -89,4 +89,82 @@ describe('companion evidence store', () => {
     expect(store.record(draft({ summary: 'x'.repeat(4097) }))).toEqual({ ok: false, reason: 'companion_evidence_invalid' });
     expect(store.read(WLJ)).toEqual({ ok: true, result: null });
   });
+
+  it('stores an unknown provider id as opaque data and keeps the summary untrusted', () => {
+    const store = createMemoryCompanionEvidenceStore();
+    const model = 'generic-model-name';
+    const identity = {
+      agentId: 'agent-from-caller',
+      providerId: 'openai',
+      capabilities: ['draft'],
+      session: 'sess-ref-1',
+      authorization: null,
+      model,
+    };
+    expect(store.record(draft({ identity }))).toEqual({ ok: true });
+    const view = viewOf(store, WLJ);
+    expect(view?.identity).toEqual({
+      agentId: 'agent-from-caller',
+      providerId: 'openai',
+      capabilities: ['draft'],
+      session: 'sess-ref-1',
+      authorization: null,
+    });
+    expect(view?.result).toMatchObject({ untrusted: true, summary: 'the companion wrote a note' });
+    expect(view?.result).not.toHaveProperty('verified');
+    expect(view?.provenance).toEqual({ source: 'companion_port', wakeId: 'wake_01', bodyDigest: 'b'.repeat(64), contentSha256: HASH });
+    expect(JSON.stringify(view)).not.toContain(model);
+    const namedSource = { source: 'openai', wakeId: null, bodyDigest: null, contentSha256: HASH };
+    expect(store.record(draft({
+      wljRunId: OTHER,
+      provenance: namedSource as CompanionEvidenceDraft['provenance'],
+    }))).toEqual({ ok: false, reason: 'companion_evidence_invalid' });
+    expect(store.read(OTHER)).toEqual({ ok: true, result: null });
+  });
+
+  it('keeps two providers at the same time', async () => {
+    const store = createMemoryCompanionEvidenceStore();
+    const alpha = { agentId: 'agent-a', providerId: 'openai', capabilities: ['draft'], session: null, authorization: null };
+    const beta = { agentId: 'agent-b', providerId: 'provider.example.unknown', capabilities: ['note'], session: 'sess-b', authorization: 'grant-b' };
+    const writes = await Promise.all([
+      Promise.resolve(store.record(draft({ identity: alpha }))),
+      Promise.resolve(store.record(draft({ wljRunId: OTHER, legacyRunId: null, identity: beta }))),
+    ]);
+    expect(writes).toEqual([{ ok: true }, { ok: true }]);
+    expect(viewOf(store, WLJ)?.identity).toEqual(alpha);
+    expect(viewOf(store, OTHER)?.identity).toEqual(beta);
+    expect(viewOf(store, WLJ)?.result).toMatchObject({ untrusted: true });
+    expect(viewOf(store, OTHER)?.result).toMatchObject({ untrusted: true });
+  });
+
+  it('withholds a credential-shaped session and still stores the provider', () => {
+    const secret = `sk-${'LIVEKEYVALUE123456'}`;
+    const store = createMemoryCompanionEvidenceStore();
+    expect(store.record(draft({
+      disposition: 'failed',
+      summary: null,
+      contentSha256: null,
+      artifactKind: null,
+      byteLength: null,
+      provenance: null,
+      identity: {
+        agentId: 'agent-a',
+        providerId: 'provider.offline.example',
+        capabilities: [],
+        session: secret,
+        authorization: null,
+      },
+    }))).toEqual({ ok: true });
+    const view = viewOf(store, WLJ);
+    expect(view?.companion).toEqual({ state: 'delivery_failed' });
+    expect(view?.result).toBeNull();
+    expect(view?.identity).toEqual({
+      agentId: 'agent-a',
+      providerId: 'provider.offline.example',
+      capabilities: [],
+      session: null,
+      authorization: null,
+    });
+    expect(JSON.stringify(view)).not.toContain(secret);
+  });
 });

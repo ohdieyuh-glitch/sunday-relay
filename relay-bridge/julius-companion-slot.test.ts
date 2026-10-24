@@ -260,6 +260,126 @@ describe('canonical id first, legacy id read-only', () => {
   });
 });
 
+describe('a companion is recorded by its declaration', () => {
+  const model = 'generic-model-name';
+
+  it('keeps an unknown provider and does not treat a model as the agent', async () => {
+    const built = ports({
+      wake: async () => ({
+        wakeId: 'wake_01ABCDEF',
+        outcome: 'posted',
+        artifact: { bytes: new TextEncoder().encode('fixture') },
+        model,
+        provider: 'should-not-be-read',
+        role: 'CODING_AGENT',
+        declaration: {
+          agentId: 'agent-from-caller',
+          providerId: 'openai',
+          capabilities: ['draft'],
+          session: 'sess-ref-1',
+          authorization: 'grant-ref-1',
+        },
+      }),
+    });
+    const result = await run(task(), built);
+    expect(result.missionContinues).toBe(true);
+    expect(result.spendUsdMicros).toBe(0);
+    expect(result.evidence.disposition).toBe('integrated');
+    expect(result.evidence.identity).toEqual({
+      agentId: 'agent-from-caller',
+      providerId: 'openai',
+      capabilities: ['draft'],
+      session: 'sess-ref-1',
+      authorization: 'grant-ref-1',
+    });
+    const recorded = JSON.stringify(result.evidence);
+    expect(recorded).not.toContain(model);
+    expect(recorded).not.toContain('should-not-be-read');
+    expect(recorded).not.toContain('CODING_AGENT');
+  });
+
+  it('a declaration that only names a model records no agent', async () => {
+    const built = ports({
+      wake: async () => ({
+        wakeId: 'wake_01ABCDEF',
+        outcome: 'posted',
+        artifact: { bytes: new TextEncoder().encode('fixture') },
+        declaration: { model },
+      }),
+    });
+    const result = await run(task(), built);
+    expect(result.missionContinues).toBe(true);
+    expect(result.evidence.disposition).toBe('integrated');
+    expect(result.evidence.identity).toBeNull();
+    expect(JSON.stringify(result.evidence)).not.toContain(model);
+  });
+
+  it('a disconnected provider does not break the mission', async () => {
+    const secret = `sk-${'LIVEKEYVALUE123456'}`;
+    const built = ports({
+      wake: async () => ({
+        wakeId: 'wake_down',
+        outcome: 'failed',
+        artifact: null,
+        model,
+        declaration: {
+          agentId: 'agent-from-caller',
+          providerId: 'provider.offline.example',
+          capabilities: ['draft'],
+          session: secret,
+          authorization: null,
+        },
+      }),
+    });
+    const result = await run(task(), built);
+    expect(result.missionContinues).toBe(true);
+    expect(result.spendUsdMicros).toBe(0);
+    expect(result.evidence).toMatchObject({ disposition: 'failed', reason: 'wake_failed' });
+    expect(result.evidence.identity).toEqual({
+      agentId: 'agent-from-caller',
+      providerId: 'provider.offline.example',
+      capabilities: ['draft'],
+      session: null,
+      authorization: null,
+    });
+    const recorded = JSON.stringify(result.evidence);
+    expect(recorded).not.toContain(secret);
+    expect(recorded).not.toContain(model);
+    expect(built.calls.submit).toBe(0);
+  });
+
+  it('records two providers at once', async () => {
+    const wakeFor = (providerId: string, agentId: string): CompanionPort['wake'] => async () => ({
+      wakeId: `wake_${agentId}`,
+      outcome: 'posted',
+      artifact: { bytes: new TextEncoder().encode('fixture') },
+      declaration: { agentId, providerId, capabilities: ['draft'], session: null, authorization: null },
+    });
+    const left = ports({ wake: wakeFor('openai', 'agent-a') });
+    const right = ports({ wake: wakeFor('provider.example.unknown', 'agent-b') });
+    const [a, b] = await Promise.all([
+      runJuliusCompanionSlot({
+        plan: plan(task()), runId: RUN_ID, legacyRunId: LEGACY, deadlineMs: 1_000,
+        port: left.port, clock: left.clock, integrate: left.integrate, validate: left.validate, review: left.review,
+      }),
+      runJuliusCompanionSlot({
+        plan: plan(task()), runId: OTHER, legacyRunId: null, deadlineMs: 1_000,
+        port: right.port, clock: right.clock, integrate: right.integrate, validate: right.validate, review: right.review,
+      }),
+    ]);
+    expect(a.missionContinues).toBe(true);
+    expect(b.missionContinues).toBe(true);
+    expect(a.evidence.identity).toMatchObject({ agentId: 'agent-a', providerId: 'openai' });
+    expect(b.evidence.identity).toMatchObject({ agentId: 'agent-b', providerId: 'provider.example.unknown' });
+    expect(a.evidence.runId).toBe(RUN_ID);
+    expect(b.evidence.runId).toBe(OTHER);
+    expect(a.spendUsdMicros).toBe(0);
+    expect(b.spendUsdMicros).toBe(0);
+    expect(left.calls.wake).toBe(1);
+    expect(right.calls.wake).toBe(1);
+  });
+});
+
 describe('the companion path imports no provider client', () => {
   const source = readFileSync(join(__dirname, 'julius-companion-slot.ts'), 'utf8');
 

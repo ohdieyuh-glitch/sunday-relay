@@ -13,10 +13,15 @@ import { parseJuliusAdmissionRunId } from '../scripts/julius-admission-run-id.mj
  * or claim spend. It hands the task to an injected CompanionPort.
  * BRIDGE's relay is the port that wakes the companion.
  *
- * BYOAI. The companion is the caller's own model. Julius does not call a
+ * BYOAI. The companion is the caller's own agent. Julius does not call a
  * provider for it, does not host it, and does not relabel it as a Julius role.
- * Companion spend stays out of the run ledger and out of reconciliation.
- * Companion evidence stays off the spend ledger.
+ * A wake may declare an agent id, a provider id, capabilities, and a session
+ * or authorization context. Those values are opaque. An unknown or
+ * disconnected provider is recorded when it declared itself and is not a
+ * mission failure. A model name is not an agent id. This module does not
+ * branch on a provider. Provider-specific handling belongs in an adapter
+ * outside this path. Companion spend stays out of the run ledger and out of
+ * reconciliation. Companion evidence stays off the spend ledger.
  *
  * Julius does not block on the wake. The deadline comes from config. A timeout,
  * a failure, or a missing result lets the mission continue. There is no retry.
@@ -27,10 +32,15 @@ import { parseJuliusAdmissionRunId } from '../scripts/julius-admission-run-id.mj
  * client. Nothing here is charged to a spend ledger, and the request carries
  * no provider key.
  *
- * Evidence keeps the wake id, the body digest, the artifact hashes, and whether
- * the artifact was integrated or rejected and why. A credential-shaped value is
- * withheld. The task body itself is never stored.
+ * Evidence keeps the wake id, the body digest, the artifact hashes, the
+ * declared identity, and whether the artifact was integrated or rejected and
+ * why. A credential-shaped value is withheld. The task body itself is never
+ * stored.
  */
+
+const IDENTITY_MAX = 200;
+const CAPABILITY_MAX = 80;
+const CAPABILITIES_MAX = 8;
 
 const SUBTASK_MAX = 400;
 const CRITERION_MAX = 200;
@@ -57,10 +67,28 @@ export interface CompanionArtifact {
   readonly bytes: Uint8Array;
 }
 
+/**
+ * Identity the companion declared about itself. Every field is opaque.
+ * `providerId` is not matched against a catalog. `session` and `authorization`
+ * are references, and a credential-shaped value is withheld rather than stored.
+ */
+export interface CompanionIdentity {
+  readonly agentId: string | null;
+  readonly providerId: string | null;
+  readonly capabilities: readonly string[];
+  readonly session: string | null;
+  readonly authorization: string | null;
+}
+
 export interface CompanionWakeResult {
   readonly wakeId: string;
   readonly outcome: 'posted' | 'failed' | 'missing';
   readonly artifact: CompanionArtifact | null;
+  /**
+   * Present only when the companion declared itself. A missing declaration is
+   * not an error. A `model` field on this result is not read.
+   */
+  readonly declaration?: unknown;
 }
 
 /** The bridge relay. Julius calls `wake` once and never a provider. */
@@ -97,6 +125,8 @@ export interface CompanionEvidence {
   readonly artifactHashes: readonly string[];
   readonly disposition: CompanionDisposition;
   readonly reason: string | null;
+  /** Null when the companion did not declare itself. Never copied from a model name. */
+  readonly identity: CompanionIdentity | null;
 }
 
 export interface CompanionSlotResult {
@@ -139,12 +169,45 @@ const safeReason = (reason: string | null): string | null => {
 
 const safeWakeId = (wakeId: string): string | null => (credentialShaped(wakeId) ? null : wakeId);
 
+const opaqueToken = (value: unknown, max: number): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (trimmed.length === 0 || trimmed.length > max) return null;
+  if (credentialShaped(trimmed)) return null;
+  return trimmed;
+};
+
+/** Reads the declaration only. A sibling `model` field is never an agent id. */
+const acceptDeclaration = (raw: unknown): CompanionIdentity | null => {
+  if (raw === null || raw === undefined || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const v = raw as Record<string, unknown>;
+  const agentId = opaqueToken(v.agentId, IDENTITY_MAX);
+  const providerId = opaqueToken(v.providerId, IDENTITY_MAX);
+  const session = opaqueToken(v.session, IDENTITY_MAX);
+  const authorization = opaqueToken(v.authorization, IDENTITY_MAX);
+  const capabilities: string[] = [];
+  if (Array.isArray(v.capabilities)) {
+    for (const item of v.capabilities) {
+      if (capabilities.length >= CAPABILITIES_MAX) break;
+      const token = opaqueToken(item, CAPABILITY_MAX);
+      if (token !== null) capabilities.push(token);
+    }
+  }
+  if (agentId === null && providerId === null && session === null && authorization === null && capabilities.length === 0) return null;
+  return { agentId, providerId, capabilities, session, authorization };
+};
+
 const evidence = (
   runId: string,
   legacyRunId: string | null,
   disposition: CompanionDisposition,
   reason: string | null,
-  extra: { readonly wakeId?: string | null; readonly bodyDigest?: string | null; readonly artifactHashes?: readonly string[] } = {},
+  extra: {
+    readonly wakeId?: string | null;
+    readonly bodyDigest?: string | null;
+    readonly artifactHashes?: readonly string[];
+    readonly identity?: CompanionIdentity | null;
+  } = {},
 ): CompanionEvidence => ({
   runId,
   legacyRunId,
@@ -153,6 +216,7 @@ const evidence = (
   artifactHashes: extra.artifactHashes ?? [],
   disposition,
   reason: safeReason(reason),
+  identity: extra.identity ?? null,
 });
 
 const done = (row: CompanionEvidence, reviewed: boolean): CompanionSlotResult => ({
@@ -302,43 +366,46 @@ export async function runJuliusCompanionSlot(input: {
   if (winner.kind === 'failed') return done(evidence(ids.runId, ids.legacyRunId, 'failed', 'wake_failed', { bodyDigest: read.bodyDigest }), false);
   open = false;
   const posted = winner.result;
+  const identity = acceptDeclaration(posted.declaration);
   const wakeId = safeWakeId(posted.wakeId);
   const wakeReason = wakeId === null && posted.wakeId !== '' ? 'wake_id_withheld' : null;
-  if (posted.outcome === 'failed') return done(evidence(ids.runId, ids.legacyRunId, 'failed', wakeReason ?? 'wake_failed', { wakeId, bodyDigest: read.bodyDigest }), false);
+  const base = { wakeId, bodyDigest: read.bodyDigest, identity };
+  if (posted.outcome === 'failed') return done(evidence(ids.runId, ids.legacyRunId, 'failed', wakeReason ?? 'wake_failed', base), false);
   if (posted.outcome === 'missing' || posted.artifact === null) {
-    return done(evidence(ids.runId, ids.legacyRunId, 'missing', wakeReason ?? 'wake_missing', { wakeId, bodyDigest: read.bodyDigest }), false);
+    return done(evidence(ids.runId, ids.legacyRunId, 'missing', wakeReason ?? 'wake_missing', base), false);
   }
   const bytes = posted.artifact.bytes;
   if (bytes.byteLength === 0 || bytes.byteLength > ARTIFACT_MAX_BYTES) {
-    return done(evidence(ids.runId, ids.legacyRunId, 'rejected', 'artifact_rejected', { wakeId, bodyDigest: read.bodyDigest }), false);
+    return done(evidence(ids.runId, ids.legacyRunId, 'rejected', 'artifact_rejected', base), false);
   }
   const hash = sha256Bytes(bytes);
+  const hashed = { ...base, artifactHashes: [hash] };
   let submitted: { readonly accepted: boolean; readonly reason: string | null };
   try {
     submitted = await input.integrate.submit({ runId: ids.runId, sha256: hash, bytes });
   } catch {
-    return done(evidence(ids.runId, ids.legacyRunId, 'rejected', 'integration_rejected', { wakeId, bodyDigest: read.bodyDigest, artifactHashes: [hash] }), false);
+    return done(evidence(ids.runId, ids.legacyRunId, 'rejected', 'integration_rejected', hashed), false);
   }
   if (!submitted.accepted) {
-    return done(evidence(ids.runId, ids.legacyRunId, 'rejected', safeReason(submitted.reason) ?? 'integration_rejected', { wakeId, bodyDigest: read.bodyDigest, artifactHashes: [hash] }), false);
+    return done(evidence(ids.runId, ids.legacyRunId, 'rejected', safeReason(submitted.reason) ?? 'integration_rejected', hashed), false);
   }
   let validated: { readonly ok: boolean; readonly reason: string | null };
   try {
     validated = input.validate.validate({ runId: ids.runId, sha256: hash, bytes });
   } catch {
-    return done(evidence(ids.runId, ids.legacyRunId, 'rejected', 'validation_rejected', { wakeId, bodyDigest: read.bodyDigest, artifactHashes: [hash] }), false);
+    return done(evidence(ids.runId, ids.legacyRunId, 'rejected', 'validation_rejected', hashed), false);
   }
   if (!validated.ok) {
-    return done(evidence(ids.runId, ids.legacyRunId, 'rejected', safeReason(validated.reason) ?? 'validation_rejected', { wakeId, bodyDigest: read.bodyDigest, artifactHashes: [hash] }), false);
+    return done(evidence(ids.runId, ids.legacyRunId, 'rejected', safeReason(validated.reason) ?? 'validation_rejected', hashed), false);
   }
   let verdict: { readonly verdict: 'approve' | 'reject' };
   try {
     verdict = await input.review.review({ runId: ids.runId, sha256: hash });
   } catch {
-    return done(evidence(ids.runId, ids.legacyRunId, 'rejected', 'review_failed', { wakeId, bodyDigest: read.bodyDigest, artifactHashes: [hash] }), false);
+    return done(evidence(ids.runId, ids.legacyRunId, 'rejected', 'review_failed', hashed), false);
   }
   if (verdict.verdict !== 'approve') {
-    return done(evidence(ids.runId, ids.legacyRunId, 'rejected', 'review_rejected', { wakeId, bodyDigest: read.bodyDigest, artifactHashes: [hash] }), true);
+    return done(evidence(ids.runId, ids.legacyRunId, 'rejected', 'review_rejected', hashed), true);
   }
-  return done(evidence(ids.runId, ids.legacyRunId, 'integrated', wakeReason, { wakeId, bodyDigest: read.bodyDigest, artifactHashes: [hash] }), true);
+  return done(evidence(ids.runId, ids.legacyRunId, 'integrated', wakeReason, hashed), true);
 }
