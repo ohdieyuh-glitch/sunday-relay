@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import type { AdmissionState } from '../src/relay/integration/wonderland-admission/admission-store';
-import { readAdmissionDocument, type DispatchError, type OperatorClaimState, type WorkflowHalt } from '../src/relay/integration/wonderland-admission/admission-file';
+import { noteAwaitingOperatorExpiry, readAdmissionDocument, type DispatchError, type OperatorClaimState, type WorkflowHalt } from '../src/relay/integration/wonderland-admission/admission-file';
 import {
   AWAITING_OPERATOR_WINDOW_MS,
   WONDERLAND_STATUS_CAUSES,
@@ -57,7 +57,7 @@ function service(storePath: string) {
   });
 }
 
-function admitRequest(): WonderlandAdmissionRouteRequest {
+function admitRequest(extra: Record<string, unknown> = {}): WonderlandAdmissionRouteRequest {
   return {
     method: 'POST',
     path: WONDERLAND_ADMISSION_PATH,
@@ -69,6 +69,7 @@ function admitRequest(): WonderlandAdmissionRouteRequest {
       clientTriggerId: 'trigger_01',
       clientLogSha256: LOG,
       clientUiActionUtc: WHEN,
+      ...extra,
     }),
     idempotencyKey: KEY,
     remoteAddress: '127.0.0.1',
@@ -222,6 +223,101 @@ describe('wonderland status', () => {
       expect(JSON.parse(readFileSync(journalPath, 'utf8')).progress).toHaveLength(1);
       expect(readFileSync(storePath, 'utf8')).toBe(before);
       ports.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('a planted expiry note is failed while the row stays held and the clock is still open', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wlj-status-'));
+    const storePath = join(dir, 'admission.json');
+    const notedAt = '2026-10-23T17:18:01.000Z';
+    try {
+      const admitted = service(storePath);
+      await handleWonderlandAdmissionRoute(admitRequest(), admitted);
+      admitted.close();
+      const before = readFileSync(storePath, 'utf8');
+      expect(JSON.parse(before).rows[0].state).toBe('ADMISSION_HELD');
+      noteAwaitingOperatorExpiry(storePath, SERVER, notedAt);
+      const journalPath = `${storePath}.operator.json`;
+      const journal = JSON.parse(readFileSync(journalPath, 'utf8')) as { revision: number; progress: unknown[] };
+      journal.progress.push({
+        serverRunId: SERVER,
+        state: 'held',
+        cause: 'still_open',
+        updatedAt: '2026-10-23T17:19:00.000Z',
+      });
+      journal.revision += 1;
+      writeFileSync(journalPath, `${JSON.stringify(journal)}\n`);
+      const ports = service(storePath);
+      const status = await handleWonderlandStatusRoute(statusRequest(SERVER, { nowMs: Date.parse(WHEN) }), ports);
+      expect(status?.status).toBe(200);
+      expect(status?.body).toMatchObject({
+        state: 'failed',
+        cause: 'AWAITING_OPERATOR_EXPIRED',
+        updatedAt: notedAt,
+        serverRunId: SERVER,
+      });
+      expect(readFileSync(storePath, 'utf8')).toBe(before);
+      expect(JSON.parse(before).rows[0].state).toBe('ADMISSION_HELD');
+      ports.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('HTTP dispatch refuses a replay once the expiry note is stored', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wlj-status-'));
+    const storePath = join(dir, 'admission.json');
+    const notedAt = '2026-10-23T17:18:01.000Z';
+    try {
+      const admitted = service(storePath);
+      const created = await handleWonderlandAdmissionRoute(admitRequest(), admitted);
+      expect(created?.status).toBe(202);
+      admitted.close();
+      const before = readFileSync(storePath, 'utf8');
+      expect(JSON.parse(before).rows[0].state).toBe('ADMISSION_HELD');
+      noteAwaitingOperatorExpiry(storePath, SERVER, notedAt);
+      const journalBefore = readFileSync(`${storePath}.operator.json`, 'utf8');
+      const ports = service(storePath);
+      const replay = await handleWonderlandAdmissionRoute(admitRequest({
+        workflowRunId: '4242424242',
+        nowIso: WHEN,
+      }), ports);
+      expect(replay?.status).toBe(409);
+      expect(replay?.body).toEqual({
+        error: {
+          kind: 'AWAITING_OPERATOR_EXPIRED',
+          message: 'The held phase expired. The admission was not dispatched.',
+        },
+      });
+      expect(JSON.stringify(replay?.body)).not.toContain('4242424242');
+      expect(readFileSync(storePath, 'utf8')).toBe(before);
+      expect(readFileSync(`${storePath}.operator.json`, 'utf8')).toBe(journalBefore);
+      expect(JSON.parse(before).rows[0].state).toBe('ADMISSION_HELD');
+      ports.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('a caller workflowRunId on the dispatch body is not stored', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wlj-status-'));
+    const storePath = join(dir, 'admission.json');
+    try {
+      const admitted = service(storePath);
+      const created = await handleWonderlandAdmissionRoute(admitRequest({ workflowRunId: '4242424242' }), admitted);
+      expect(created?.status).toBe(202);
+      expect(JSON.stringify(created?.body)).not.toContain('4242424242');
+      expect(JSON.stringify(created?.body)).not.toContain('workflowRunId');
+      const admission = readFileSync(storePath, 'utf8');
+      const journal = readFileSync(`${storePath}.operator.json`, 'utf8');
+      expect(admission).not.toContain('4242424242');
+      expect(admission).not.toContain('workflowRunId');
+      expect(journal).not.toContain('4242424242');
+      expect(journal).not.toContain('workflowRunId');
+      expect(readAdmissionDocument(storePath).claims).toEqual([]);
+      admitted.close();
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

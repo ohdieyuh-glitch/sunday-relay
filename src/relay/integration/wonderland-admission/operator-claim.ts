@@ -47,7 +47,13 @@ import type {
   StoredProgress,
   WorkflowHalt,
 } from './admission-file';
-import { isStoredWorkflowRunId, noteAwaitingOperatorExpiry, openAdmissionFile, readAdmissionDocument } from './admission-file';
+import {
+  awaitingOperatorExpiryNote,
+  isStoredWorkflowRunId,
+  noteAwaitingOperatorExpiry,
+  openAdmissionFile,
+  readAdmissionDocument,
+} from './admission-file';
 
 /** The workflow input the paid run must gain before this tool will dispatch. */
 export const SERVER_RUN_ID_INPUT = 'server_run_id';
@@ -195,7 +201,19 @@ export function workflowDispatchArgs(input: {
   readonly lane: string;
   readonly dispatchKey: string;
   readonly serverRunId: string;
+  /**
+   * Journal progress already loaded for this store. Checked before the
+   * on-disk re-read so a note the caller has already seen cannot be skipped.
+   */
+  readonly progress?: readonly StoredProgress[];
+  /** When set, the on-disk journal is read before any dispatch argument is built. */
+  readonly storePath?: string;
 }): readonly string[] {
+  const onDisk = input.storePath === undefined ? [] : readAdmissionDocument(input.storePath).progress;
+  if (awaitingOperatorExpiryNote(onDisk, input.serverRunId) !== null
+    || awaitingOperatorExpiryNote(input.progress ?? [], input.serverRunId) !== null) {
+    throw new Error('AWAITING_OPERATOR_EXPIRED');
+  }
   if (derivedRun(input.serverRunId).form !== 'wlj') throw new Error('run_id_invalid');
   return [
     'workflow', 'run', PAID_WORKFLOW_FILE,
@@ -372,6 +390,7 @@ function claimInside(
       toView(admission, located.claim),
     );
   }
+  if (sealedExpiry(storePath, document, admission.serverRunId) !== null) return expiredRefusal(admission);
   if (located.claim !== null) return replay(toView(admission, located.claim));
   if (admission.admissionState !== 'ADMISSION_HELD') {
     return fail('not_admitted', `The record is ${admission.admissionState} and is not admitted.`, toView(admission, null));
@@ -403,13 +422,17 @@ function claimInside(
       SERVER_RUN_ID_INPUT_YAML,
     );
   }
-  const command = formatGhCommand(workflowDispatchArgs({
+  const dispatchArgs = guardedDispatchArgs({
     repo: input.repo,
     mission: admission.missionId,
     lane: input.lane,
     dispatchKey: admission.keyHash,
     serverRunId: admission.serverRunId,
-  }));
+    progress: document.progress,
+    storePath,
+  });
+  if (dispatchArgs === null) return expiredRefusal(admission);
+  const command = formatGhCommand(dispatchArgs);
   if (!input.dispatch) {
     if (sealedExpiry(storePath, document, admission.serverRunId) !== null) return expiredRefusal(admission);
     const event = baseEvent(admission, nowIso, {
@@ -474,13 +497,17 @@ function claimInside(
   const claimedDoc = appendClaim(document, reserved);
   io.write(claimedDoc);
   if (!claimWasRecorded(storePath, reserved)) return expiredRefusal(admission);
-  const ran = spawn.run(workflowDispatchArgs({
+  const liveArgs = guardedDispatchArgs({
     repo: input.repo,
     mission: admission.missionId,
     lane: input.lane,
     dispatchKey: admission.keyHash,
     serverRunId: admission.serverRunId,
-  }));
+    progress: document.progress,
+    storePath,
+  });
+  if (liveArgs === null) return expiredRefusal(admission);
+  const ran = spawn.run(liveArgs);
   const halt = interpretWorkflowHalt(ran);
   const workflowRunId = learnWorkflowRunId(ran, input.repo);
   if (halt === 'RUN_ID_ALREADY_SPENT') {
@@ -556,6 +583,22 @@ function statusInside(
   if (located.kind === 'wonderland_run_mismatch') {
     return { ok: false, kind: 'wonderland_run_mismatch', message: 'The wlj_ run id does not match the admitted record.' };
   }
+  const expired = sealedExpiry(storePath, document, serverRunId);
+  if (expired !== null) {
+    const record = located.admission !== null
+      ? toView(located.admission, null)
+      : located.claim === null ? null : viewFromClaim(located.claim);
+    if (record !== null) {
+      return {
+        ok: true,
+        record,
+        phase: {
+          projection: { state: 'failed', cause: 'AWAITING_OPERATOR_EXPIRED' },
+          updatedAt: expired.updatedAt,
+        },
+      };
+    }
+  }
   if (located.admission === null) {
     if (located.claim === null) return { ok: false, kind: 'admission_not_found', message: 'No admitted record matches that pair.' };
     return { ok: true, record: viewFromClaim(located.claim), phase: null };
@@ -620,15 +663,27 @@ function isExpiryProjection(projection: WonderlandStatusProjection): boolean {
   return projection.state === 'failed' && projection.cause === 'AWAITING_OPERATOR_EXPIRED';
 }
 
-function expiryNote(progress: readonly StoredProgress[], serverRunId: string): StoredProgress | null {
-  return progress.find((note) =>
-    note.serverRunId === serverRunId
-    && note.state === 'failed'
-    && note.cause === 'AWAITING_OPERATOR_EXPIRED') ?? null;
+function sealedExpiry(storePath: string, memory: OperatorDocument, serverRunId: string): StoredProgress | null {
+  return awaitingOperatorExpiryNote(memory.progress, serverRunId)
+    ?? awaitingOperatorExpiryNote(readAdmissionDocument(storePath).progress, serverRunId);
 }
 
-function sealedExpiry(storePath: string, memory: OperatorDocument, serverRunId: string): StoredProgress | null {
-  return expiryNote(memory.progress, serverRunId) ?? expiryNote(readAdmissionDocument(storePath).progress, serverRunId);
+/** Journal note first. A throw here means the child must not be spawned. */
+function guardedDispatchArgs(input: {
+  readonly repo: string;
+  readonly mission: string;
+  readonly lane: string;
+  readonly dispatchKey: string;
+  readonly serverRunId: string;
+  readonly progress: readonly StoredProgress[];
+  readonly storePath: string;
+}): readonly string[] | null {
+  try {
+    return workflowDispatchArgs(input);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'AWAITING_OPERATOR_EXPIRED') return null;
+    throw error;
+  }
 }
 
 function claimWasRecorded(storePath: string, reserved: ClaimEvent): boolean {

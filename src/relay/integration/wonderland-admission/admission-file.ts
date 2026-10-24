@@ -427,7 +427,13 @@ export interface ClaimEvent {
   readonly dispatchError: DispatchError | null;
   /** Workflow halt, when one was visible. Terminal. Never returns the record to admitted. */
   readonly halt: WorkflowHalt | null;
-  /** GitHub `workflow_run_id` once dispatch has learned it. Null until then. */
+  /**
+   * Hint only. The authoritative id is `workflow_run_id` in the spend tag's
+   * `julius-run-spent.v1` message. This copy is the id `gh workflow run`
+   * printed for the child this process spawned, or null until that print.
+   * A request body, query, header, CLI flag, environment variable, or a
+   * caller-supplied journal field does not set it on a new claim.
+   */
   readonly workflowRunId: string | null;
 }
 
@@ -739,6 +745,18 @@ export function noteAwaitingOperatorExpiry(storePath: string, serverRunId: strin
 
 function isOperatorExpiry(note: StoredProgress): boolean {
   return note.state === 'failed' && note.cause === 'AWAITING_OPERATOR_EXPIRED';
+}
+
+/**
+ * The terminal held-phase note for this server run, if the journal has one.
+ * The admission row stays `ADMISSION_HELD` after that note is written, so a
+ * reader that sees only the row still has to call this before it acts.
+ */
+export function awaitingOperatorExpiryNote(
+  progress: readonly StoredProgress[],
+  serverRunId: string,
+): StoredProgress | null {
+  return progress.find((note) => note.serverRunId === serverRunId && isOperatorExpiry(note)) ?? null;
 }
 
 function writeJournal(path: string, document: OperatorDocument): void {

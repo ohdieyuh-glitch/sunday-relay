@@ -321,9 +321,12 @@ A query is parsed by the PR #434 module. Either form selects the row whose
 `runId` or `serverRunId` is that id. An unknown id of either form is the
 same `404` `not_found` body. `dispatchedAt` is the
 ISO timestamp of the first recorded operator dispatch, or `null` when that
-dispatch has not been recorded. `workflowRunId` is the GitHub Actions run id
-the operator dispatch learned from the workflow run URL, or `null` until that
-URL is known. The status route only reads it. `state` and `cause` are closed. The route checks the stored
+dispatch has not been recorded. `workflowRunId` is a hint only. The
+authoritative id is `workflow_run_id` in the spend tag's `julius-run-spent.v1`
+message. This field is the GitHub Actions run id the operator dispatch learned
+from the workflow run URL its own `gh workflow run` child printed, or `null`
+until that URL is known. A request body, query, header, CLI flag, or
+environment variable cannot set it. The status route only reads it. `state` and `cause` are closed. The route checks the stored
 value against those unions. A stored state outside the union, or a stored
 cause outside the union, is returned as `state: "unknown"` with no cause.
 The stored token is not copied into the answer. `unknown` is never terminal.
@@ -332,7 +335,13 @@ a credential, and does not spawn a process. The status clock is the server
 clock (`Date.now()` at the bridge). A query, a header, and a body do not
 set it. When the held phase has elapsed and no claim is stored, that read
 records one operator-journal note, `failed` / `AWAITING_OPERATOR_EXPIRED`,
-at the first expired instant. The admission document is not rewritten.
+at the first expired instant. The admission document is not rewritten. The
+row stays `ADMISSION_HELD`. Dispatch (the operator `workflowDispatchArgs`
+builder and `POST /wonderland/julius/dispatch`), the operator claim, and
+status (this route and the operator CLI) read that journal note before they
+treat the row as still open. A note already stored is `failed` /
+`AWAITING_OPERATOR_EXPIRED` even when the server clock is still inside the
+held window and the only admission bytes read are the held row.
 
 `WonderlandStatusState`:
 

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { AWAITING_OPERATOR_WINDOW_MS, PAID_WORKFLOW_FILE } from './admission-contract';
-import { openAdmissionFile, readAdmissionDocument, AdmissionFileClosedError, isAdmissionFileClosed } from './admission-file';
+import { openAdmissionFile, readAdmissionDocument, noteAwaitingOperatorExpiry, AdmissionFileClosedError, isAdmissionFileClosed } from './admission-file';
 import { createWonderlandAdmissionStore, type AdmissionRequest } from './admission-store';
 import { runOperatorClaimCli } from './operator-claim-cli';
 import {
@@ -706,6 +706,100 @@ describe('operator claim', () => {
   });
 });
 
+describe('an expiry note is terminal while the row stays held', () => {
+  const NOTED_AT = '2026-10-23T17:18:01.000Z';
+
+  function plantExpiredRow(path: string): string {
+    const before = readFileSync(path);
+    noteAwaitingOperatorExpiry(path, SERVER, NOTED_AT);
+    const journalPath = `${path}.operator.json`;
+    const journal = JSON.parse(readFileSync(journalPath, 'utf8')) as { revision: number; progress: unknown[] };
+    journal.progress.push({
+      serverRunId: SERVER,
+      state: 'held',
+      cause: 'still_open',
+      updatedAt: '2026-10-23T17:19:00.000Z',
+    });
+    journal.revision += 1;
+    writeFileSync(journalPath, `${JSON.stringify(journal)}\n`);
+    const row = JSON.parse(before.toString()) as { rows: { state: string }[] };
+    expect(row.rows[0]?.state).toBe('ADMISSION_HELD');
+    expect(readFileSync(path).equals(before)).toBe(true);
+    return before.toString();
+  }
+
+  it('workflowDispatchArgs refuses when the journal note is present and the row is still held', async () => {
+    await withStore(async (path) => {
+      await admit(path);
+      const before = plantExpiredRow(path);
+      const input = {
+        repo: REPO,
+        mission: MISSION,
+        lane: LANE,
+        dispatchKey: KEY,
+        serverRunId: SERVER,
+      };
+      expect(() => workflowDispatchArgs({ ...input, storePath: path })).toThrow('AWAITING_OPERATOR_EXPIRED');
+      expect(() => workflowDispatchArgs({
+        ...input,
+        progress: readAdmissionDocument(path).progress,
+      })).toThrow('AWAITING_OPERATOR_EXPIRED');
+      expect(readFileSync(path, 'utf8')).toBe(before);
+      expect(JSON.parse(before).rows[0].state).toBe('ADMISSION_HELD');
+    });
+  });
+
+  it('the operator claim refuses while the clock is still inside the window', async () => {
+    await withStore(async (path) => {
+      await admit(path);
+      const before = plantExpiredRow(path);
+      const fake = scripted(ABSENT, WORKFLOW_OK);
+      const claims = claimTool(path, fake.spawn, () => WHEN);
+      const dry = await claims.claim(claimInput());
+      expect(dry.ok).toBe(false);
+      if (dry.ok) return;
+      expect(dry.kind).toBe('AWAITING_OPERATOR_EXPIRED');
+      const live = await claims.claim(claimInput({
+        dispatch: true,
+        confirmation: OPERATOR_DISPATCH_CONFIRMATION,
+      }));
+      expect(live.ok).toBe(false);
+      if (live.ok) return;
+      expect(live.kind).toBe('AWAITING_OPERATOR_EXPIRED');
+      expect(fake.calls).toEqual([]);
+      expect(readAdmissionDocument(path).claims).toEqual([]);
+      expect(readFileSync(path, 'utf8')).toBe(before);
+      expect(JSON.parse(before).rows[0].state).toBe('ADMISSION_HELD');
+    });
+  });
+
+  it('CLI status reports the note as failed while the clock is still inside the window', async () => {
+    await withStore(async (path) => {
+      await admit(path);
+      const before = plantExpiredRow(path);
+      const out: string[] = [];
+      const code = await runOperatorClaimCli([
+        'status', '--store', path, '--wonderland-run', RUN, '--server-run', SERVER,
+      ], {
+        out: (line) => { out.push(line); },
+        err: () => {},
+      }, {
+        spawn: { run() { throw new Error('spawned'); } },
+        nowIso: () => WHEN,
+        readWorkflow: () => { throw new Error('status reads no workflow'); },
+      });
+      expect(code).toBe(0);
+      const body = JSON.parse(out[0] ?? '{}') as { state: string; cause: string; updatedAt: string; retry: boolean };
+      expect(body.state).toBe('failed');
+      expect(body.cause).toBe('AWAITING_OPERATOR_EXPIRED');
+      expect(body.updatedAt).toBe(NOTED_AT);
+      expect(body.retry).toBe(false);
+      expect(readFileSync(path, 'utf8')).toBe(before);
+      expect(JSON.parse(before).rows[0].state).toBe('ADMISSION_HELD');
+    });
+  });
+});
+
 describe('workflow run id', () => {
   const WORKFLOW_RUN = '36568129865';
 
@@ -766,6 +860,32 @@ describe('workflow run id', () => {
       expect(status.ok && status.record.workflowRunId).toBe(WORKFLOW_RUN);
       expect(fake.calls[0]).toEqual(spentTagApiArgs(REPO, SERVER));
     });
+  });
+
+  it('a caller env value does not replace the id printed by the spawned workflow run', async () => {
+    const previousRun = process.env.GITHUB_RUN_ID;
+    const previousWorkflow = process.env.WORKFLOW_RUN_ID;
+    process.env.GITHUB_RUN_ID = '111';
+    process.env.WORKFLOW_RUN_ID = '222';
+    try {
+      await withStore(async (path) => {
+        await admit(path);
+        const fake = scripted(ABSENT, printed(WORKFLOW_RUN));
+        const result = await claimTool(path, fake.spawn).claim(claimInput({
+          dispatch: true,
+          confirmation: OPERATOR_DISPATCH_CONFIRMATION,
+        }));
+        expect(result.ok && result.record.workflowRunId).toBe(WORKFLOW_RUN);
+        expect(readAdmissionDocument(path).claims.at(-1)?.workflowRunId).toBe(WORKFLOW_RUN);
+        expect(JSON.stringify(readAdmissionDocument(path).claims)).not.toContain('111');
+        expect(JSON.stringify(readAdmissionDocument(path).claims)).not.toContain('222');
+      });
+    } finally {
+      if (previousRun === undefined) delete process.env.GITHUB_RUN_ID;
+      else process.env.GITHUB_RUN_ID = previousRun;
+      if (previousWorkflow === undefined) delete process.env.WORKFLOW_RUN_ID;
+      else process.env.WORKFLOW_RUN_ID = previousWorkflow;
+    }
   });
 });
 
@@ -940,6 +1060,33 @@ describe('operator claim cli', () => {
       expect(laterBody.cause).toBe('AWAITING_OPERATOR_EXPIRED');
       expect(laterBody.updatedAt).toBe(expiredAt);
       expect(laterBody.retry).toBe(false);
+    });
+  });
+
+  it('a workflow run id flag is rejected before the store is opened', async () => {
+    await withStore(async (path) => {
+      await admit(path);
+      const before = readFileSync(path, 'utf8');
+      let clockReads = 0;
+      const err: string[] = [];
+      const code = await runOperatorClaimCli([
+        'claim', '--store', path,
+        '--wonderland-run', RUN, '--server-run', SERVER,
+        '--repo', REPO, '--lane', LANE,
+        '--workflow-run-id', '36568129865',
+      ], {
+        out: () => {},
+        err: (line) => { err.push(line); },
+      }, {
+        spawn: { run() { throw new Error('spawned'); } },
+        nowIso: () => { clockReads += 1; return WHEN; },
+        readWorkflow: () => WORKFLOW_WITH_INPUT,
+      });
+      expect(code).toBe(2);
+      expect(clockReads).toBe(0);
+      expect(err[0]).toBe('usage');
+      expect(readFileSync(path, 'utf8')).toBe(before);
+      expect(readAdmissionDocument(path).claims).toEqual([]);
     });
   });
 

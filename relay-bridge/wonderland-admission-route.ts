@@ -44,6 +44,7 @@ import {
 import { identifyAdmissionRun, parseJuliusAdmissionRunId } from '../src/relay/integration/wonderland-admission/admission-run-id';
 import {
   AdmissionFileClosedError,
+  awaitingOperatorExpiryNote,
   createFileAdmissionLedger,
   isAdmissionFileClosed,
   isLocalStorePath,
@@ -352,6 +353,8 @@ export function handleWonderlandAdmissionRoute(
     ownerPlayerId: guarded.native.playerId,
   }).then((outcome) => {
     if (outcome.ok) {
+      const refused = heldExpiryRefusal(ports.env.JULIUS_WONDERLAND_ADMISSION_STORE, outcome.run.serverRunId);
+      if (refused !== null) return refused;
       recordAdmissionOwner(ports.env.JULIUS_WONDERLAND_ADMISSION_STORE, outcome.run.serverRunId, guarded.native.playerId);
     }
     return toHttp(outcome);
@@ -430,6 +433,17 @@ function statusView(
     && (event.state === 'dispatched' || event.dispatchAttempted));
   const dispatchedAt = recordedDispatchAt(document, serverRunId, admission.runId);
   const workflowRunId = recordedWorkflowRunId(document, serverRunId, admission.runId);
+  const expired = awaitingOperatorExpiryNote(document.progress ?? [], serverRunId);
+  if (expired !== null) {
+    return statusBody(
+      admission.runId,
+      serverRunId,
+      projectWonderlandStatus({ state: 'failed', cause: 'AWAITING_OPERATOR_EXPIRED' }),
+      expired.updatedAt,
+      dispatchedAt,
+      workflowRunId,
+    );
+  }
   const progress = [...(document.progress ?? [])].reverse().find((note) => note.serverRunId === serverRunId) ?? null;
   if (progress !== null) {
     const decision = applyWonderlandStatusTransition({
@@ -466,6 +480,29 @@ function statusView(
     dispatchedAt,
     workflowRunId,
   );
+}
+
+/**
+ * A held row whose journal already has the terminal expiry note. The row
+ * itself stays `ADMISSION_HELD`. This is checked before the route returns
+ * that row as an open admission.
+ */
+function heldExpiryRefusal(
+  storePath: string | undefined,
+  serverRunId: string,
+): { status: number; body: unknown } | null {
+  if (!isLocalStorePath(storePath ?? '')) return null;
+  let document: OperatorDocument;
+  try {
+    document = readAdmissionDocument(storePath ?? '');
+  } catch (error) {
+    if (isAdmissionFileClosed(error)) {
+      return err(503, 'julius_dispatch_unavailable', 'Wonderland admission store is not available. Nothing was reserved.');
+    }
+    return { status: 500, body: {} };
+  }
+  if (awaitingOperatorExpiryNote(document.progress, serverRunId) === null) return null;
+  return err(409, 'AWAITING_OPERATOR_EXPIRED', 'The held phase expired. The admission was not dispatched.');
 }
 
 /** The first recorded operator dispatch. A claim that never dispatched stays null. */
