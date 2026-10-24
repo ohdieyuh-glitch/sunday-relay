@@ -204,6 +204,79 @@ describe('JuliusMissionEvidenceReader', () => {
     expect(TRACE).toBe('192b1fbb866790da0ba590b4a8f45144');
   });
 
+  it('does not promote the dump tables into slot state, a verified spend cap, or the run brain revision', async () => {
+    // Column order is the psql -A -F tab header of .github/julius-live-evidence-dump.sh
+    // at da345243: tasks.tsv (line 146), project-brain.tsv (line 341), runs.tsv (line 145),
+    // budget.tsv (line 212), cost-accounting.tsv (line 241), and the stage/attempt columns
+    // of worker-diagnostics.tsv (line 325). Task state ACTIVE is a JuliusTaskState.
+    // Brain `revision` is the entry's revision. Neither is the field this reader leaves null.
+    const tasks = [
+      'task_id\ttask_type\trole\tstate\tordinal\tparent_task_id\trun_id\tlease_generation',
+      `plan:${WLJ}\tplan\tPROMPT_ARCHITECT\tSUCCEEDED\t0\t\t${WLJ}\t1`,
+      `build:${WLJ}\tbuild\tCODING_AGENT\tACTIVE\t1\tplan:${WLJ}\t${WLJ}\t1`,
+      `repair:${WLJ}\trepair:build\tCODING_AGENT\tRUNNABLE\t2\tbuild:${WLJ}\t${WLJ}\t2`,
+      `review:${WLJ}\treview:build\tINDEPENDENT_REVIEWER\tBLOCKED\t3\tbuild:${WLJ}\t${WLJ}\t1`,
+      '(4 rows)',
+      '',
+    ].join('\n');
+    const brain = [
+      'entry_id\tentry_kind\tworker_id\ttask_id\trevision\tcreated_at\trun_id',
+      `entry-1\tDECISION\tarchitect\tplan:${WLJ}\t1\t2026-10-24 13:00:00+00\t${WLJ}`,
+      `entry-2\tHANDOFF\tcoder\tbuild:${WLJ}\t7\t2026-10-24 13:01:00+00\t${WLJ}`,
+      '(2 rows)',
+      '',
+    ].join('\n');
+    const runs = [
+      'run_id\tmission_id\tstate\tcard_revision\tcreated_at\tupdated_at',
+      `${WLJ}\tmission:julius-continuous-1\tCOMPLETED\tcard-r1\t2026-10-24 12:00:00+00\t2026-10-24 13:00:00+00`,
+      '(1 row)',
+      '',
+    ].join('\n');
+    const budget = [
+      'run_id\tsequence\ttask_id\tevent_type\trole\tallocated_usd_micros\tallocation_basis\tshare_usd_micros\tremaining_usd_micros\tallocation_policy\tsettled_usd_micros\tcost_basis\testimated_usd_micros\tbilling_path\texecution_usd_micros\treason\tslot_refusal\treservation_id\toccurred_at',
+      `${WLJ}\t4\tbuild:${WLJ}\tjulius.budget.settled\tCODING_AGENT\t\t\t\t\t\t1200\tPROVIDER_REPORTED\t\tAPI_BILLED\t\t\t\tres-1\t2026-10-24 13:00:00+00`,
+      '(1 row)',
+      '',
+    ].join('\n');
+    const costs = [
+      'run_id\trole\tcomponents\tknown_usd_micros\testimated_usd_micros\tunknown_components\testimated_components\tunsettled_components',
+      `${WLJ}\tCODING_AGENT\t1\t1200\t0\t0\t0\t0`,
+      '(1 row)',
+      '',
+    ].join('\n');
+    const diagnostics = [
+      'run_id\trole\tstage\tdispatch_attempt\tevent_type',
+      `${WLJ}\tPROMPT_ARCHITECT\tplan\t1\tjulius.worker.completed`,
+      `${WLJ}\tCODING_AGENT\tbuild\t1\tjulius.worker.completed`,
+      `${WLJ}\tCODING_AGENT\trepair:build\t2\tjulius.task.failed`,
+      `${WLJ}\tINDEPENDENT_REVIEWER\trepair:plan\t1\tjulius.worker.completed`,
+      '(4 rows)',
+      '',
+    ].join('\n');
+    const reading = await createJuliusMissionEvidenceReader(github(tagMessage(WLJ), withProof([
+      { path: 'live-mission.evidence.txt', text: RESULT },
+      { path: 'tasks.tsv', text: tasks },
+      { path: 'project-brain.tsv', text: brain },
+      { path: 'runs.tsv', text: runs },
+      { path: 'budget.tsv', text: budget },
+      { path: 'cost-accounting.tsv', text: costs },
+      { path: 'worker-diagnostics.tsv', text: diagnostics },
+    ]))).read(WLJ);
+    expect(reading).toMatchObject({
+      juliusFinalState: 'COMPLETED',
+      spendAccounting: null,
+      missionCost: { knownUsdMicros: 1200, unknownComponents: 0, complete: true },
+      projectBrainRevision: null,
+      phases: null,
+    });
+    const json = JSON.stringify(reading);
+    expect(json).not.toContain('NEVER_DISPATCHED');
+    expect(json).not.toContain('spendVerified');
+    expect(json).not.toContain('unverifiableApiSpend');
+    expect(json).not.toContain('"projectBrainRevision":7');
+    expect(json).not.toContain('"state":"ACTIVE"');
+  });
+
   it('does not invent a cost or a phase list the bundle does not carry', async () => {
     const reading = await createJuliusMissionEvidenceReader(github(tagMessage(WLJ), withProof([
       { path: 'live-mission.evidence.txt', text: RESULT },
