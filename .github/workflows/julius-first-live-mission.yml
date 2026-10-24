@@ -183,6 +183,14 @@ jobs:
             echo "run_id=${run_id}"
             echo "concurrency_group=${group}"
           } >> "${GITHUB_OUTPUT:?}"
+          # CORRELATION ONLY. Derived from the admitted run id. Not a workflow
+          # input, not a dispatch field, and not part of the spent-tag message.
+          trace_id=$(JULIUS_RUN_ID="$run_id" node --input-type=module -e 'import { juliusMissionTraceId } from "./scripts/julius-mission-trace.mjs"; const id = juliusMissionTraceId(process.env.JULIUS_RUN_ID); process.stdout.write(id ?? "null");')
+          if ! printf '%s' "$trace_id" | grep -Eqx '[0-9a-f]{32}|null'; then
+            echo 'mission_trace_unverified' >&2
+            exit 1
+          fi
+          echo "trace_id=${trace_id}" >> "${GITHUB_OUTPUT:?}"
           # A preflight creates no tag. The id was already required above.
           if [ "$CONFIRM_LIVE" != 'RUN LIVE MISSION' ]; then
             exit 0
@@ -1545,6 +1553,9 @@ jobs:
         if: always()
         env:
           PGPASSWORD: ${{ steps.identity.outputs.database_password }}
+          # The admitted run id. The dump derives traceId and spanId from it.
+          # This is not a trace id, and dispatch does not send one.
+          JULIUS_RUN_ID: ${{ needs.spend-tag.outputs.run_id }}
         run: |
           set -uo pipefail
           mkdir -p julius-live-evidence

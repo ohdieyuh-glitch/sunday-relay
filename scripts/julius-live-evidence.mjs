@@ -73,6 +73,8 @@ const ALLOWED = [
   /^    [a-z_]+\/[a-z_]+: [a-z_]+( — retrieval will be refused)?$/u,
   /^Run [\w:.-]+ accepted in state [A-Z_]+; driving the Julius run loop\.$/u,
   /^  run: [\w:.-]+$/u,
+  // Correlation only, derived by JuliusMissionEvidenceReader. The run is not a span.
+  /^  mission trace: traceId=([0-9a-f]{32}|null) spanId=null traceparent=null$/u,
   /^  task [\w:.-]+ \[[\w:.-]+\/[\w:.-]+\] → [A-Z_]+$/u,
   /^  evidence [\w:.-]+ \[[A-Z_]+\/[A-Z_]+\] .*$/u,
   /^  finding [\w:.-]+ blocking=(true|false) status=[A-Z_]+ — .*$/u,

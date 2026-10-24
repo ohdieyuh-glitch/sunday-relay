@@ -1,3 +1,4 @@
+import { juliusMissionSpanId, juliusMissionTraceId, juliusMissionTraceparent } from '../../../../scripts/julius-mission-trace.mjs';
 import type { JuliusCardPolicy } from './julius-policy';
 import { flattenDiagnostics, JuliusDispatchError, JuliusProviderRouter, safeReviewDiagnostics, type JuliusDispatchAllocation, type JuliusDispatchReads, type JuliusDispatchWorkspace, type JuliusProviderResult } from './julius-router';
 import type { JuliusEvidence, JuliusTask, JuliusWorker, JuliusWorkerRole } from './julius-runtime';
@@ -60,10 +61,25 @@ const settlementProvenance=(result:JuliusProviderResult|null,diagnostics:Readonl
  * and the evidence dump keys on `diag_transport` precisely so that a worker
  * with no lifecycle to report produces no row instead of an empty one.
  */
+/**
+ * CORRELATION ONLY, derived from the admitted run id. An adapter-supplied
+ * trace id is not an input: `safeReviewDiagnostics` never copies one, and
+ * these three fields are written after it so they win. A legacy or preflight
+ * id derives null. The spend tag stays the spend record.
+ */
+const missionTraceDiagnostics=(request:JuliusExecutionRequest,stage:unknown):{readonly traceId:string|null;readonly spanId:string|null;readonly traceparent:string|null}=>{
+ const traceId=juliusMissionTraceId(request.claim.runId);
+ const spanId=juliusMissionSpanId(request.claim.runId,request.role,stage,request.attempt);
+ return {traceId,spanId,traceparent:juliusMissionTraceparent(traceId,spanId)};
+};
+const withMissionTrace=(request:JuliusExecutionRequest,diagnostics:Parameters<typeof flattenDiagnostics>[0]):Record<string,string|number|boolean|null>=>{
+ const stage=diagnostics===null?null:diagnostics.stage;
+ return {...flattenDiagnostics(diagnostics),...flattenDiagnostics(missionTraceDiagnostics(request,stage))};
+};
 const successDiagnostics=(request:JuliusExecutionRequest,result:JuliusProviderResult):Record<string,string|number|boolean|null>=>{
  const reported=result.diagnostics;
  if(reported===undefined||reported===null||typeof reported!=='object'||Array.isArray(reported))return{};
- return flattenDiagnostics(safeReviewDiagnostics({
+ const safe=safeReviewDiagnostics({
   ...reported as Record<string,unknown>,
   outcome:'succeeded',
   /* ALWAYS BOTH, EVEN WHEN THERE IS NO CONTRACT. Spreading them only when one
@@ -73,7 +89,8 @@ const successDiagnostics=(request:JuliusExecutionRequest,result:JuliusProviderRe
    * answer: this dispatch was bound to nothing. */
   contractRevision:request.contract===undefined?null:request.contract.binding.contractRevision,
   contractBindingDigest:request.contract===undefined?null:request.contract.binding.bindingDigest,
- }));
+ });
+ return withMissionTrace(request,safe);
 };
 /**
  * THE DECLARED DEADLINE, ENFORCED — by Julius, not by the adapter it describes.
@@ -692,8 +709,8 @@ export class JuliusExecutionCoordinator {
     /* WHAT THE FAILED ATTEMPT CHANGED travels on both endings too: a retry is
      * exactly where an unrecorded change set becomes the next attempt's. */
     const carriedImplementation=failure.implementation===undefined?{}:{implementation:failure.implementation};
-    if(failure.retryable&&request.policy.automaticRetry){await this.bookkeeping(()=>this.event(request,'retry.scheduled',{code:failure.code,errorRetryable:true,failureClass:failure.failureClass,...flattenDiagnostics(failure.diagnostics)}));return{status:'RETRY',code:failure.code,failureClass:failure.failureClass,...carriedDiagnostics(failure),...carriedImplementation};}
-    await this.bookkeeping(()=>this.event(request,'task.failed',{code:failure.code,errorRetryable:failure.retryable,failureClass:failure.failureClass,...haltingReason(failure.failureClass),...flattenDiagnostics(failure.diagnostics)}));
+    if(failure.retryable&&request.policy.automaticRetry){await this.bookkeeping(()=>this.event(request,'retry.scheduled',{code:failure.code,errorRetryable:true,failureClass:failure.failureClass,...withMissionTrace(request,failure.diagnostics)}));return{status:'RETRY',code:failure.code,failureClass:failure.failureClass,...carriedDiagnostics(failure),...carriedImplementation};}
+    await this.bookkeeping(()=>this.event(request,'task.failed',{code:failure.code,errorRetryable:failure.retryable,failureClass:failure.failureClass,...haltingReason(failure.failureClass),...withMissionTrace(request,failure.diagnostics)}));
     return{status:'FAILED',code:failure.code,failureClass:failure.failureClass,...carriedDiagnostics(failure),...carriedImplementation};
    }catch(error){
     throw new JuliusPersistenceUnavailable(!handed?'persist_before_dispatch':answered===null?'persist_during_dispatch':'persist_after_answer',handed,juliusStoreErrorClass(error));

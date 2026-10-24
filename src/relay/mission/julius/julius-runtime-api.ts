@@ -28,6 +28,7 @@
  * that will eventually forget to catch.
  */
 
+import { juliusMissionTraceId } from '../../../../scripts/julius-mission-trace.mjs';
 import { JULIUS_DEFAULT_ROLES, type JuliusDefaultRole, type JuliusEvidence, type JuliusMissionState, type JuliusTask, type JuliusVerificationDecision } from './julius-runtime';
 import type { JuliusReviewerFinding } from './julius-verification-runtime';
 import type { JuliusSubagentRecord, JuliusSubagentStore } from './julius-subagent-runtime';
@@ -94,6 +95,15 @@ export interface JuliusRunView {
   readonly taskCounts: Readonly<Record<JuliusTask['state'], number>>;
   readonly activeTasks: number;
   readonly pendingApprovals: number;
+  /**
+   * CORRELATION ONLY, derived from `runId` when it is an admitted `wlj_` id.
+   * A legacy `run:` id and a `preflight:` id are null. This view is not a span,
+   * so `spanId` and `traceparent` are null. Phase span ids live on the coder
+   * and reviewer receipts. The spend tag stays the spend record.
+   */
+  readonly traceId: string | null;
+  readonly spanId: null;
+  readonly traceparent: null;
 }
 
 /**
@@ -338,6 +348,7 @@ export class JuliusRuntimeApi {
       missionContractRevision: run.value.missionContractRevision,
       projectBrainRevision: run.value.projectBrainRevision,
       taskCounts, activeTasks: active, pendingApprovals: approvals.length,
+      traceId: juliusMissionTraceId(run.value.runId), spanId: null, traceparent: null,
     });
   }
 

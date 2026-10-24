@@ -449,6 +449,10 @@ const FILE_RULES = [
   // is its type declaration and is not in the import closure, so it is not
   // exported. The module never mints an id.
   ['scripts/julius-admission-run-id.mjs', 'MISSION CONTRACT / BOOTSTRAP'],
+  // Derived mission trace ids. Production imports the .mjs. Correlation only;
+  // the spent tag stays the spend record. The .d.mts is its type declaration.
+  ['scripts/julius-mission-trace.mjs', 'MISSION CONTRACT / BOOTSTRAP'],
+  ['relay-bridge/julius-mission-evidence-reader.ts', 'MISSION CONTRACT / BOOTSTRAP'],
   ['relay-bridge/julius/mission-seed.ts', 'MISSION CONTRACT / BOOTSTRAP'],
   // What one mission verified, inherited by the next: the minimum truthful reuse.
   ['relay-bridge/julius/mission-knowledge.ts', 'DURABLE STATE / PROJECT BRAIN'],
