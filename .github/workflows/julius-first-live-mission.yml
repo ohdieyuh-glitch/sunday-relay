@@ -756,9 +756,20 @@ jobs:
         run: |
           set -euo pipefail
           LEARNING_WITHOUT_RUN="${LEARNING_WITHOUT_RUN:-}"
-          declared=$(node -e 'const p=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).learningPair;if(p===undefined){process.stdout.write("none - -");process.exit(0)}const ok=(v,r)=>typeof v==="string"&&r.test(v);if(!p||(p.arm!=="WITHOUT"&&p.arm!=="WITH")||!ok(p.registrationDigest,/^[0-9a-f]{64}$/)||(p.arm==="WITH"&&!ok(p.withoutRunId,/^run:[0-9a-f]{24}$/))){console.error("learning_pair_unreadable");process.exit(1)}process.stdout.write(p.arm+" "+(p.arm==="WITH"?p.withoutRunId:"-")+" "+p.registrationDigest)' "$CONTRACT")
+          # withoutRunId is one token here. The shared admission parser, below, is what accepts it.
+          declared=$(node -e 'const p=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).learningPair;if(p===undefined){process.stdout.write("none - -");process.exit(0)}const ok=(v,r)=>typeof v==="string"&&r.test(v);if(!p||(p.arm!=="WITHOUT"&&p.arm!=="WITH")||!ok(p.registrationDigest,/^[0-9a-f]{64}$/)||(p.arm==="WITH"&&(typeof p.withoutRunId!=="string"||p.withoutRunId.length===0||/\s/.test(p.withoutRunId)))){console.error("learning_pair_unreadable");process.exit(1)}process.stdout.write(p.arm+" "+(p.arm==="WITH"?p.withoutRunId:"-")+" "+p.registrationDigest)' "$CONTRACT")
           read -r arm without_julius_run registration_digest <<< "$declared"
           if [ "$arm" = WITH ]; then
+            # THE SHARED PARSER. One wlj_ id, or one legacy run: id read as a reference. Anything else fails closed.
+            derived=$(JULIUS_RUN_ID="$without_julius_run" node scripts/julius-admission-run-id.mjs derive) || { echo 'learning_pair_unreadable' >&2; exit 1; }
+            parsed_id=$(printf '%s\n' "$derived" | sed -n 's/^run_id=//p')
+            form=$(printf '%s\n' "$derived" | sed -n 's/^form=//p')
+            [ "$(printf '%s\n' "$derived" | grep -c '^form=')" = 1 ] || { echo 'learning_pair_unreadable' >&2; exit 1; }
+            [ "$(printf '%s\n' "$derived" | grep -c '^run_id=')" = 1 ] || { echo 'learning_pair_unreadable' >&2; exit 1; }
+            case "$form" in
+              wlj|legacy) [ "$parsed_id" = "$without_julius_run" ] || { echo 'learning_pair_unreadable' >&2; exit 1; } ;;
+              *) echo 'learning_pair_unreadable' >&2; exit 1 ;;
+            esac
             case "$LEARNING_WITHOUT_RUN" in
               ''|*[!0-9]*) echo 'learning_without_run_required: arm WITH restores the store of its WITHOUT arm; name that workflow run id' >&2; exit 1;;
             esac

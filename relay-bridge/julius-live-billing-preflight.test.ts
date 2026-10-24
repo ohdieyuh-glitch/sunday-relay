@@ -74,6 +74,8 @@ const READY_RIG: Record<string, string> = Object.freeze({
   EXECUTOR_KEY_ID: 'preflight-test-key',
   JULIUS_PUBLIC_KEY_PATH: '/nonexistent/public.pem',
   JULIUS_CALLER_ID: 'preflight-test',
+  JULIUS_RUN_ID: 'wlj_01234567-89ab-4cde-8fab-0123456789ab',
+  JULIUS_SERVER_RUN_ID: 'wlj_01234567-89ab-4cde-8fab-0123456789ab',
 });
 
 /** Run the preflight (no --confirm-live) and return its exit code and output. */
@@ -90,6 +92,14 @@ function preflight(env: Record<string, string>): { readonly code: number; readon
 }
 
 describe('the preflight states every role\'s billing path before any dispatch', () => {
+  it('a missing admission id blocks before preflight and creates nothing', () => {
+    const { JULIUS_RUN_ID: _run, JULIUS_SERVER_RUN_ID: _server, ...without } = READY_RIG;
+    const run = preflight({ ...without, RELAY_HERMES_BILLING_MODE: 'api_billed' });
+    expect(run.code).toBe(1);
+    expect(run.output).toContain('RESULT: BLOCKED — admission_run_id_required. Nothing was submitted and no provider was contacted.');
+    expect(run.output).not.toContain('JULIUS LIVE MISSION — preflight');
+  });
+
   it('API mode with the reviewer declared: API_BILLED three times, and ready (exit 5)', () => {
     const run = preflight({ ...READY_RIG, RELAY_HERMES_BILLING_MODE: 'api_billed' });
     expect(run.output).toContain('  billing paths: architect=API_BILLED coder=API_BILLED reviewer=API_BILLED');

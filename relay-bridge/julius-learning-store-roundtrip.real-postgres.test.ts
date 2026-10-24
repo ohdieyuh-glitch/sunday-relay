@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
@@ -273,7 +273,7 @@ suite('a learning pair across two databases: dumped and restored as Option D doe
         seeds: createPostgresMissionSeedStore(pool),
         knowledge: createPostgresMissionKnowledgeStore(pool),
         ...(input.carry === undefined ? {} : { carry: input.carry }),
-        tenantId: base.tenantId, executionId: `execution:julius-live:${base.missionId}`,
+        tenantId: base.tenantId, executionId: `execution:julius-live:${base.missionId}`, admittedRunId: `wlj_${randomUUID()}`,
       }).submit(request);
       const drive = async () => {
         if (!submitted.accepted) throw new Error(`${submitted.reasonCode}: ${submitted.safeMessage}`);

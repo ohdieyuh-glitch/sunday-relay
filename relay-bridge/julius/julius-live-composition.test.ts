@@ -591,7 +591,7 @@ describe('the production JuliusBootstrapPort', () => {
     const runCalls: Array<Record<string, unknown>> = [];
     const port = createLiveJuliusBootstrapPort({
       runs: fakeRuns(runCalls) as never, seeds: fakeSeeds(seedCalls),
-      tenantId: 'tenant-live', executionId: 'execution-live',
+      tenantId: 'tenant-live', executionId: 'execution-live', admittedRunId: 'wlj_01234567-89ab-4cde-8fab-0123456789ab',
     });
     const outcome = await port.submit(BOOTSTRAP_REQUEST());
     expect(outcome.accepted).toBe(true);
@@ -607,7 +607,7 @@ describe('the production JuliusBootstrapPort', () => {
   it('refuses a mission with no criteria, no blocking criterion, or a missing role', async () => {
     const port = createLiveJuliusBootstrapPort({
       runs: fakeRuns([]) as never, seeds: fakeSeeds([]),
-      tenantId: 'tenant-live', executionId: 'execution-live',
+      tenantId: 'tenant-live', executionId: 'execution-live', admittedRunId: 'wlj_01234567-89ab-4cde-8fab-0123456789ab',
     });
     const base = BOOTSTRAP_REQUEST();
     const noCriteria = await port.submit({ ...base, acceptanceCriteria: [] });
@@ -632,7 +632,7 @@ describe('the production JuliusBootstrapPort', () => {
       const runCalls: Record<string, unknown>[] = [];
       const port = createLiveJuliusBootstrapPort({
         runs: fakeRuns(runCalls) as never, seeds: fakeSeeds([]),
-        tenantId: 'tenant-live', executionId: 'execution-live',
+        tenantId: 'tenant-live', executionId: 'execution-live', admittedRunId: 'wlj_01234567-89ab-4cde-8fab-0123456789ab',
       });
       const outcome = await port.submit({ ...BOOTSTRAP_REQUEST(), deterministicCheck: { declared } });
       expect(outcome.accepted).toBe(true);
@@ -645,7 +645,7 @@ describe('the production JuliusBootstrapPort', () => {
     }
     // ABSENT MEANS DECLARED, so every existing compiler of the request is unchanged.
     const runCalls: Record<string, unknown>[] = [];
-    const port = createLiveJuliusBootstrapPort({ runs: fakeRuns(runCalls) as never, seeds: fakeSeeds([]), tenantId: 'tenant-live', executionId: 'execution-live' });
+    const port = createLiveJuliusBootstrapPort({ runs: fakeRuns(runCalls) as never, seeds: fakeSeeds([]), tenantId: 'tenant-live', executionId: 'execution-live', admittedRunId: 'wlj_01234567-89ab-4cde-8fab-0123456789ab' });
     const { deterministicCheck: _dropped, ...withoutField } = BOOTSTRAP_REQUEST();
     void _dropped;
     await port.submit(withoutField as never);

@@ -2,7 +2,7 @@
 /**
  * THE EVIDENCE BUNDLE'S OWN RESOLVER (founder decision A, 2026-10-03). The dump copies it into every bundle as
  * `resolve-artifacts.mjs`, so a bundle downloaded anywhere resolves itself: it reads ONLY the bundle's files (no
- * database, no network, no import), and needs nothing but Node.
+ * database, no network). The one import is the admission parser copied beside it, and it needs nothing but Node.
  *
  * For every work artifact the bundle names it answers whether the body it carries is the one the run recorded,
  * by BOTH hashes:
@@ -48,13 +48,13 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { parseJuliusAdmissionRunId } from './julius-admission-run-id.mjs';
+
 /** The stored-body cap, in UTF-16 code units (relay-bridge/julius/artifact-exchange.ts ARTIFACT_TEXT_CAP). */
 export const BODY_CAP_UNITS = 256 * 1024;
 const HEX64 = /^[0-9a-f]{64}$/u;
 const ARTIFACT_REF = /^artifact:(\S+)$/u;
 const PASSING = new Set(['RESOLVED', 'DROPPED_BY_SCAN', 'HASH_ONLY', 'PRIOR_RUN']);
-/** The shape of a Julius run id (`juliusBootstrapRunId`), the only shape a declared prior run may take. */
-const DECLARED_RUN = /^run:[0-9a-f]{24}$/u;
 /** A manifest token for "no run": the dump writes `none` when the live log named no accepted run. */
 const NO_RUN = new Set(['', 'none', 'unknown']);
 /** The kinds migration 024 allows; any other value read from the bundle is printed only as a digest. */
@@ -128,14 +128,16 @@ const keyValue = (path, key) => {
 
 /**
  * WHICH RUN THIS BUNDLE IS, AND WHICH ONE IT DECLARES IT RESTORED (audit F1). `own` is the manifest's `julius_run_id`
- * (null when it names none); `prior` is `learning-restore.txt`'s `without_julius_run_id`, only in the run-id shape and
- * never equal to `own` (null otherwise). Both are read from the bundle's own files, like everything else here.
+ * (null when it names none); `prior` is `learning-restore.txt`'s `without_julius_run_id`, only when the shared
+ * admission parser accepts it (`wlj_` or a legacy `run:` reference) and it is never equal to `own` (null otherwise).
+ * Both are read from the bundle's own files, like everything else here.
  */
 export function readRunScope(bundleDir) {
   const ownValue = keyValue(join(bundleDir, 'bundle-manifest.txt'), 'julius_run_id');
   const own = ownValue === null || NO_RUN.has(ownValue) ? null : ownValue;
   const priorValue = keyValue(join(bundleDir, 'learning-restore.txt'), 'without_julius_run_id');
-  const prior = priorValue !== null && DECLARED_RUN.test(priorValue) && priorValue !== own ? priorValue : null;
+  const parsedPrior = priorValue === null ? null : parseJuliusAdmissionRunId(priorValue);
+  const prior = parsedPrior !== null && parsedPrior.ok && parsedPrior.runId !== own ? parsedPrior.runId : null;
   return { own, prior };
 }
 

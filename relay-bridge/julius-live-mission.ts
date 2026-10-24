@@ -649,12 +649,12 @@ async function main(argv: readonly string[]): Promise<number> {
   const env = process.env as Record<string, string | undefined>;
   const cardRevision = env.RELAY_JULIUS_CARD_REVISION?.trim() || 'card:julius-live:1';
   /**
-   * BEFORE PREFLIGHT. A confirmed start with no admitted `wlj_` id must not
-   * observe a login, open a database, or submit a run. Preflight without
-   * `--confirm-live` does not start a mission and does not require the id.
+   * BEFORE PREFLIGHT. A run with no admitted `wlj_` id must not observe a login,
+   * open a database, or submit a run. Dry-run preflight is the same gate: a
+   * missing, malformed, or legacy id fails closed here, and nothing is created.
    */
-  const admittedRun = flag('confirm-live') ? admitLiveJuliusRunId(env) : null;
-  if (admittedRun !== null && !admittedRun.ok) {
+  const admittedRun = admitLiveJuliusRunId(env);
+  if (!admittedRun.ok) {
     out(`RESULT: BLOCKED — ${admittedRun.reason}. Nothing was submitted and no provider was contacted.`);
     return 1;
   }
@@ -976,10 +976,6 @@ async function main(argv: readonly string[]): Promise<number> {
      */
     const bootstrapRuns = new JuliusPostgresRepository(pool);
     const bootstrapContracts = new JuliusContractPostgresRepository(pool);
-    if (admittedRun === null || !admittedRun.ok) {
-      out('RESULT: BLOCKED — admission_run_id_required. Nothing was submitted and no provider was contacted.');
-      return 1;
-    }
     const bootstrap = createLiveJuliusBootstrapPort({
       runs: {
         loadRun: bootstrapRuns.loadRun.bind(bootstrapRuns),

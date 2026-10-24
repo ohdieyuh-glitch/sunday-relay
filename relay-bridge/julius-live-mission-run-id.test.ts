@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { admitLiveJuliusRunId } from './julius-live-mission';
-import { juliusBootstrapRunId, createLiveJuliusBootstrapPort, planTaskId } from './julius/bootstrap';
+import { createLiveJuliusBootstrapPort, planTaskId } from './julius/bootstrap';
 import { compileBootstrapRequest } from './julius/mission-contract';
 
 const WLJ = 'wlj_01234567-89ab-4cde-8fab-0123456789ab';
@@ -23,7 +23,7 @@ const request = () => compileBootstrapRequest({
   { role: 'INDEPENDENT_REVIEWER', integrationId: 'c', adapterId: 'hermes-local-live', independenceGroup: 'xai', requiredCapabilities: ['review'] },
 ], 'card-test-1');
 
-function portFor(calls: Array<Record<string, unknown>>, admittedRunId?: string) {
+function portFor(calls: Array<Record<string, unknown>>, admittedRunId: string) {
   let version = 0;
   return createLiveJuliusBootstrapPort({
     runs: {
@@ -41,13 +41,13 @@ function portFor(calls: Array<Record<string, unknown>>, admittedRunId?: string) 
       async putTaskContract() { return true; },
     } as never,
     seeds: {
-      async ensureBase() {},
+      async ensureBase() { calls.push({ ensureBase: true }); },
       async insertCriteria() {},
       async insertBrainEntries() {},
     },
     tenantId: 'tenant-live',
     executionId: 'execution-live',
-    ...(admittedRunId === undefined ? {} : { admittedRunId }),
+    admittedRunId,
   });
 }
 
@@ -95,7 +95,7 @@ describe('the live bootstrap keys the run row on the admitted wlj_ id', () => {
     expect(outcome.accepted).toBe(true);
     if (!outcome.accepted) return;
     expect(outcome.runId).toBe(WLJ);
-    expect(outcome.runId).not.toBe(juliusBootstrapRunId(request()));
+    expect(outcome.runId).not.toMatch(/^run:/u);
     const created = calls.find((call) => 'createRun' in call)?.createRun as { runId: string } | undefined;
     expect(created?.runId).toBe(WLJ);
     expect(planTaskId(WLJ)).toBe(`${WLJ}:plan`);
@@ -115,13 +115,12 @@ describe('the live bootstrap keys the run row on the admitted wlj_ id', () => {
     }
   });
 
-  it('keeps the existing run: identity when no admission id is presented', async () => {
+  it('refuses a missing admission id before creating a run', async () => {
     const calls: Array<Record<string, unknown>> = [];
-    const outcome = await portFor(calls).submit(request());
-    expect(outcome.accepted).toBe(true);
-    if (!outcome.accepted) return;
-    expect(outcome.runId).toBe(juliusBootstrapRunId(request()));
-    expect(outcome.runId).toMatch(/^run:[0-9a-f]{24}$/u);
+    const outcome = await portFor(calls, '').submit(request());
+    expect(outcome.accepted).toBe(false);
+    if (!outcome.accepted) expect(outcome.reasonCode).toBe('admission_run_id_required');
+    expect(calls).toEqual([]);
   });
 });
 
@@ -129,15 +128,16 @@ describe('the live entry refuses a start that is not an admitted wlj_ id', () =>
   const entry = readFileSync(join(process.cwd(), 'relay-bridge/julius-live-mission.ts'), 'utf8');
 
   it('admits the env id before preflight and passes that id into bootstrap before submit', () => {
-    const admit = entry.indexOf("const admittedRun = flag('confirm-live') ? admitLiveJuliusRunId(env) : null;");
+    const admit = entry.indexOf('const admittedRun = admitLiveJuliusRunId(env);');
     const preflight = entry.indexOf('const preflight = resolveLiveWorkers({');
-    const guard = entry.indexOf('if (admittedRun === null || !admittedRun.ok)');
+    const banner = entry.indexOf("out('JULIUS LIVE MISSION — preflight');");
     const submit = entry.indexOf('const submitted = await bootstrap.submit(request);');
     expect(admit).toBeGreaterThan(0);
     expect(admit).toBeLessThan(preflight);
-    expect(guard).toBeGreaterThan(preflight);
-    expect(entry.indexOf('admittedRunId: admittedRun.runId')).toBeGreaterThan(guard);
+    expect(admit).toBeLessThan(banner);
+    expect(entry.indexOf('admittedRunId: admittedRun.runId')).toBeGreaterThan(banner);
     expect(entry.indexOf('admittedRunId: admittedRun.runId')).toBeLessThan(submit);
-    expect(entry).not.toMatch(/randomUUID|juliusBootstrapRunId\(/u);
+    expect(entry).not.toMatch(/randomUUID|juliusBootstrapRunId\(|`run:\$\{identity\}`/u);
+    expect(readFileSync(join(process.cwd(), 'relay-bridge/julius/bootstrap.ts'), 'utf8')).not.toMatch(/juliusBootstrapRunId|`run:\$\{identity\}`/u);
   });
 });

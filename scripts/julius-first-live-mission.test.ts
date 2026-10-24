@@ -3970,9 +3970,20 @@ describe('a learning pair is two jobs on one store: arm WITHOUT exports it, arm 
     expect(gate(without, '')).toEqual({ status: 0, output: `arm=WITHOUT\nwithout_julius_run=-\nregistration_digest=${DIGEST}\n` });
     expect(gate(without, '5').status).not.toBe(0);
     const withArm = { arm: 'WITH', registrationDigest: DIGEST, rerunKey: 'c1', withoutRunId: WITHOUT };
+    const wlj = 'wlj_01234567-89ab-4cde-8fab-0123456789ab';
     expect(gate(withArm, '4242')).toEqual({ status: 0, output: `arm=WITH\nwithout_julius_run=${WITHOUT}\nregistration_digest=${DIGEST}\n` });
+    expect(gate({ ...withArm, withoutRunId: wlj }, '4242')).toEqual({ status: 0, output: `arm=WITH\nwithout_julius_run=${wlj}\nregistration_digest=${DIGEST}\n` });
     for (const input of ['', '12a', '999', '1'.repeat(21)]) expect(gate(withArm, input).status, `input '${input}'`).not.toBe(0);
-    for (const clause of [{ ...withArm, arm: 'BOTH' }, { ...withArm, withoutRunId: undefined }, { ...without, registrationDigest: `sha256:${DIGEST}` }]) {
+    for (const clause of [
+      { ...withArm, arm: 'BOTH' },
+      { ...withArm, withoutRunId: undefined },
+      { ...withArm, withoutRunId: '' },
+      { ...withArm, withoutRunId: 'run:not-hex' },
+      { ...withArm, withoutRunId: WITHOUT.toUpperCase() },
+      { ...withArm, withoutRunId: 'wlj_not-a-uuid' },
+      { ...withArm, withoutRunId: `${wlj} ${wlj}` },
+      { ...without, registrationDigest: `sha256:${DIGEST}` },
+    ]) {
       expect(gate(clause, '4242').status, JSON.stringify(clause)).not.toBe(0);
     }
   }, 30_000);
