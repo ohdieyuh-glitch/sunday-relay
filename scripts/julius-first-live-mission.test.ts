@@ -380,9 +380,11 @@ describe('no credential is committed, and none can leave the runner', () => {
     const step = rest.slice(0, rest.indexOf('\n      - ', 1));
     expect(step).toContain('\n        id: subscription_smoke\n');
     expect(step).toContain("\n        if: success() && inputs.subscription_smoke == 'RUN SUBSCRIPTION SMOKE' && inputs.confirm_live != 'RUN LIVE MISSION'\n");
-    expect(step).toContain('coder_auth_subscription_refused');
+    expect(step).toContain('coder_auth_subscription_refused: hosted CI does not substitute a consumer Claude login. Nothing was contacted.');
     expect(step).not.toMatch(/claude|curl|api\.anthropic/u);
     expect(step).not.toContain('secrets.CLAUDE_CODE_OAUTH_TOKEN');
+    expect(workflow).not.toContain('pending founder ruling');
+    expect(workflow).toContain('coder_auth_api_key_required: refusing before any provider call. Hosted CI authenticates with ANTHROPIC_API_KEY. CLAUDE_CODE_OAUTH_TOKEN is not a substitute.');
   });
 
   /**
@@ -394,7 +396,7 @@ describe('no credential is committed, and none can leave the runner', () => {
    * by id.
    */
   it('no paid step runs unless the coder API-key gate and provider readiness PASSED in the same job', () => {
-    const gate = workflow.indexOf("- name: 'Gate: coder uses the user-owned Anthropic API key (pending founder ruling)'");
+    const gate = workflow.indexOf("- name: 'Gate: coder uses the Anthropic API key'");
     const readinessAt = workflow.indexOf("- name: 'Preflight: each provider accepts its credential and serves the pinned model, nothing generated'");
     const attempt = workflow.indexOf("- name: 'Record that a paid mission was attempted (before any provider can be reached)'");
     const live = workflow.indexOf("- name: 'LIVE: run the first real Julius mission'");
