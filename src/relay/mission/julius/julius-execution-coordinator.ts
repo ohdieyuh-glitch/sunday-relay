@@ -73,7 +73,11 @@ const missionTraceDiagnostics=(request:JuliusExecutionRequest,stage:unknown):{re
  return {traceId,spanId,traceparent:juliusMissionTraceparent(traceId,spanId)};
 };
 const withMissionTrace=(request:JuliusExecutionRequest,diagnostics:Parameters<typeof flattenDiagnostics>[0]):Record<string,string|number|boolean|null>=>{
- const stage=diagnostics===null?null:diagnostics.stage;
+ // A failure that reported no diagnostics writes no diag_ columns. Trace ids
+ // are correlation, not a measurement, and the evidence dump keys on
+ // diag_transport so an empty row would never be read.
+ if(diagnostics===null)return{};
+ const stage=diagnostics.stage;
  return {...flattenDiagnostics(diagnostics),...flattenDiagnostics(missionTraceDiagnostics(request,stage))};
 };
 const successDiagnostics=(request:JuliusExecutionRequest,result:JuliusProviderResult):Record<string,string|number|boolean|null>=>{
