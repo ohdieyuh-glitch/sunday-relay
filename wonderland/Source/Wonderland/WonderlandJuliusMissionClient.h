@@ -15,18 +15,22 @@
 // kind is Refused (503 julius_dispatch_disabled is a refusal). Bare 5xx, transport, and unparsed
 // bodies are NoAnswer.
 //
-// serverRunId (BRIDGE, additive, the name for now). The 202 and the 200 may carry data.serverRunId. Read it when
-// it is a non-empty string. JSON null or a missing field is ignored, not an error and not a fabricated id.
+// serverRunId (BRIDGE). The dispatch 202 and 200 carry it inside data. A new row's id is this client's wlj_; a
+// legacy row's id is run:<24 lowercase hex>. Read it when it is a non-empty string. JSON null or a missing field
+// is ignored, not an error and not a fabricated id.
 // Persist it with the open pair. After the first admission response for the pair, every trace event includes
 // server_run_id (the string, or null when the server omitted it). wl.Julius.J1.Status prints it. A later admission
 // response for the SAME pair that carries a different serverRunId is an error: the attempt fails closed, the
 // trace records error, and nothing is minted.
 //
-// STATUS POLL (PROPOSED path, not mounted by the admission adapter yet):
-//   GET {base}/relay-api/wonderland/julius/status?runId=&projectId=
+// STATUS POLL. GET {base}/relay-api/wonderland/julius/status?runId=&projectId=
+// The mounted status route (contract v0.1) is a top-level object: wljRunId, serverRunId, legacyRunId (null or
+// run:<24 hex>), dispatchedAt (ISO or null), workflowRunId (string or null), state, and cause only when one exists.
+// state is the lowercase status-route word. serverRunId is this client's wlj_ on a new row, or the legacy run: id.
+// AWAITING_OPERATOR_EXPIRED is a cause only beside state "failed". A body wrapped in data is the older proposed
+// poll (providersRunning and the fields below), not this route.
 // Only a status body with JSON boolean providersRunning true moves the UI to running. A dispatch 202 never does,
-// even if that body also says dispatched true or state RUNNING. YUJI owns the real status field names; the names
-// below are PROPOSED.
+// even if that body also says dispatched true or state RUNNING.
 //
 // PROPOSED J1 RESPONSE FIELDS (YUJI has not agreed these; do not treat them as a frozen contract):
 //   providersRunning    JSON boolean. Only true means providers are running.
@@ -76,7 +80,7 @@ namespace WonderlandJuliusMissionClient
 {
 	inline constexpr const char* DefaultBridgeBaseUrl = "http://127.0.0.1:8790";
 	inline constexpr const char* DispatchRelativePath = "/relay-api/wonderland/julius/dispatch";
-	/** PROPOSED. The admission adapter does not mount this path yet. */
+	/** GET status. The body is the top-level status route, not a data wrapper. */
 	inline constexpr const char* StatusRelativePath = "/relay-api/wonderland/julius/status";
 	inline constexpr std::uint64_t HeartbeatPeriodMs = 5000;
 	inline constexpr std::uint64_t StatusPollPeriodMs = 5000;
@@ -298,10 +302,20 @@ namespace WonderlandJuliusMissionClient
 			std::string DataMode;
 			std::string DataRunId;
 			std::string ServerRunId;
-			/** Status route `dispatchedAt`. Empty when the field is absent. */
+			/** Status route `dispatchedAt`. Empty when the field is absent or null. */
 			std::string DispatchedAt;
-			/** Status route `cause`. Empty when the field is absent. */
+			/** Status route `cause`. Empty when the field is absent or null. */
 			std::string Cause;
+			/** True when the body is the top-level status route, not a data-wrapped proposed poll. */
+			bool bStatusRoute = false;
+			/** Status route `wljRunId`. */
+			std::string WljRunId;
+			WonderlandJuliusMissionLogic::EJsonSlot LegacyRunIdSlot = WonderlandJuliusMissionLogic::EJsonSlot::Absent;
+			std::string LegacyRunId;
+			WonderlandJuliusMissionLogic::EJsonSlot WorkflowRunIdSlot = WonderlandJuliusMissionLogic::EJsonSlot::Absent;
+			std::string WorkflowRunId;
+			/** A known status-route field had a JSON type this route does not accept. */
+			bool bStatusWrongFieldType = false;
 			std::string ResultText;
 			std::string ResultSha256;
 			bool bHasResult = false;

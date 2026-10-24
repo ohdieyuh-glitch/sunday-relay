@@ -1464,6 +1464,52 @@ namespace WonderlandJuliusMissionClient
 
 	namespace
 	{
+		bool IsStatusRouteBody(const FJson& Root)
+		{
+			if (Root.Find("wljRunId") != nullptr) { return true; }
+			if (Root.Find("data") != nullptr) { return false; }
+			const FJson* State = Root.Find("state");
+			return State != nullptr && State->Kind == FJson::EKind::String;
+		}
+
+		void ReadIdSlot(const FJson& Object, const char* Key, std::string& Text, WonderlandJuliusMissionLogic::EJsonSlot& Slot, bool& bWrongType)
+		{
+			using WonderlandJuliusMissionLogic::EJsonSlot;
+			Text.clear();
+			const FJson* Field = Object.Find(Key);
+			if (Field == nullptr) { Slot = EJsonSlot::Absent; return; }
+			if (Field->Kind == FJson::EKind::Null) { Slot = EJsonSlot::Null; return; }
+			if (Field->Kind == FJson::EKind::String) { Slot = EJsonSlot::String; Text = Field->StringValue; return; }
+			Slot = EJsonSlot::Absent;
+			bWrongType = true;
+		}
+
+		void ReadRouteString(const FJson& Object, const char* Key, std::string& Text, bool bNullAllowed, bool& bWrongType)
+		{
+			Text.clear();
+			const FJson* Field = Object.Find(Key);
+			if (Field == nullptr) { return; }
+			if (Field->Kind == FJson::EKind::Null)
+			{
+				if (!bNullAllowed) { bWrongType = true; }
+				return;
+			}
+			if (Field->Kind == FJson::EKind::String) { Text = Field->StringValue; return; }
+			bWrongType = true;
+		}
+
+		void ReadStatusRoute(const FJson& Root, FJuliusMissionSession::FStatusView& Out)
+		{
+			Out.bStatusRoute = true;
+			ReadRouteString(Root, "wljRunId", Out.WljRunId, false, Out.bStatusWrongFieldType);
+			ReadRouteString(Root, "serverRunId", Out.ServerRunId, false, Out.bStatusWrongFieldType);
+			ReadRouteString(Root, "state", Out.DataState, false, Out.bStatusWrongFieldType);
+			ReadRouteString(Root, "cause", Out.Cause, true, Out.bStatusWrongFieldType);
+			ReadRouteString(Root, "dispatchedAt", Out.DispatchedAt, true, Out.bStatusWrongFieldType);
+			ReadIdSlot(Root, "legacyRunId", Out.LegacyRunId, Out.LegacyRunIdSlot, Out.bStatusWrongFieldType);
+			ReadIdSlot(Root, "workflowRunId", Out.WorkflowRunId, Out.WorkflowRunIdSlot, Out.bStatusWrongFieldType);
+		}
+
 		void ReadProposed(const FJson& Data, FJuliusMissionSession::FStatusView& Out)
 		{
 			const FJson* Running = Data.Find("providersRunning");
@@ -1743,15 +1789,33 @@ namespace WonderlandJuliusMissionClient
 		Fields.HttpStatus = Http.bTransportError ? 0 : Http.Status;
 		Fields.bHasError = Status.bHasError;
 		Fields.ErrorKind = Status.ErrorKind;
-		Fields.bHasData = !Status.DataState.empty() || !Status.ServerRunId.empty() || !Status.DispatchedAt.empty() || !Status.Cause.empty() || !Status.DataRunId.empty();
-		if (Status.DataMode == "julius" || Status.DataMode == "julius_run") { Fields.Vocabulary = EStatusVocabulary::JuliusRun; }
-		else if (Status.DataMode.empty() || Status.DataMode == "admission") { Fields.Vocabulary = EStatusVocabulary::Admission; }
-		else { Fields.Vocabulary = EStatusVocabulary::Unknown; }
-		Fields.ClientRunId = Status.DataRunId;
-		Fields.ServerRunId = Status.ServerRunId;
-		Fields.Status = Status.DataState;
-		Fields.DispatchedAt = Status.DispatchedAt;
-		Fields.Cause = Status.Cause;
+		if (Status.bStatusRoute)
+		{
+			Fields.bHasData = true;
+			Fields.Vocabulary = EStatusVocabulary::StatusRoute;
+			Fields.ClientRunId = Status.WljRunId;
+			Fields.ServerRunId = Status.ServerRunId;
+			Fields.Status = Status.DataState;
+			Fields.DispatchedAt = Status.DispatchedAt;
+			Fields.Cause = Status.Cause;
+			Fields.LegacyRunIdSlot = Status.LegacyRunIdSlot;
+			Fields.LegacyRunId = Status.LegacyRunId;
+			Fields.WorkflowRunIdSlot = Status.WorkflowRunIdSlot;
+			Fields.WorkflowRunId = Status.WorkflowRunId;
+			Fields.bWrongFieldType = Status.bStatusWrongFieldType;
+		}
+		else
+		{
+			Fields.bHasData = !Status.DataState.empty() || !Status.ServerRunId.empty() || !Status.DispatchedAt.empty() || !Status.Cause.empty() || !Status.DataRunId.empty();
+			if (Status.DataMode == "julius" || Status.DataMode == "julius_run") { Fields.Vocabulary = EStatusVocabulary::JuliusRun; }
+			else if (Status.DataMode.empty() || Status.DataMode == "admission") { Fields.Vocabulary = EStatusVocabulary::Admission; }
+			else { Fields.Vocabulary = EStatusVocabulary::Unknown; }
+			Fields.ClientRunId = Status.DataRunId;
+			Fields.ServerRunId = Status.ServerRunId;
+			Fields.Status = Status.DataState;
+			Fields.DispatchedAt = Status.DispatchedAt;
+			Fields.Cause = Status.Cause;
+		}
 		Fields.ReceivedUtcMs = Clock.NowUtcMs();
 		const std::size_t Before = Progress->Trace().size();
 		Progress->RecordPollAnswer(Fields);
@@ -1781,12 +1845,19 @@ namespace WonderlandJuliusMissionClient
 						if (Kind != nullptr && Kind->Kind == FJson::EKind::String) { Status.ErrorKind = Kind->StringValue; }
 					}
 				}
-				const FJson* Data = Root.Find("data");
-				if (Data != nullptr && Data->Kind == FJson::EKind::Object)
+				if (IsStatusRouteBody(Root))
 				{
-					ReadProposed(*Data, Status);
-					const FJson* Pct = Data->Find("progressPct");
-					if (Pct != nullptr && Pct->Kind == FJson::EKind::Number) { ProgressToken = Pct->NumberToken; }
+					ReadStatusRoute(Root, Status);
+				}
+				else
+				{
+					const FJson* Data = Root.Find("data");
+					if (Data != nullptr && Data->Kind == FJson::EKind::Object)
+					{
+						ReadProposed(*Data, Status);
+						const FJson* Pct = Data->Find("progressPct");
+						if (Pct != nullptr && Pct->Kind == FJson::EKind::Number) { ProgressToken = Pct->NumberToken; }
+					}
 				}
 			}
 		}
