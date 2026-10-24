@@ -41,6 +41,8 @@ export interface AssociatedPullRequest {
   readonly mergeCommitSha?: unknown;
   readonly authorLogin?: unknown;
   readonly headSha?: unknown;
+  /** The pull request head branch. A governed audit branch is refused. */
+  readonly headRef?: unknown;
   /** The branch the review was rendered against. */
   readonly baseRef?: unknown;
 }

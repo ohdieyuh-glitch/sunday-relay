@@ -338,8 +338,9 @@ describe('the founder installer diff is an exact path set', () => {
   ];
 
   it('accepts the real installer commit and the four commits after it, and nothing outside that exact set', () => {
-    ensureCommit(installer, 1);
     for (const sha of afterCheckpoint) {
+      // diff-tree needs the parent. A depth-1 fetch of the commit leaves that parent out.
+      ensureCommit(sha, 2);
       const paths = git(['diff-tree', '--no-commit-id', '--name-only', '-r', sha]).trim().split('\n').filter((path) => path !== '');
       expect(paths.length, sha).toBeGreaterThan(0);
       expect(isCheckpointInstallerDiff(paths), `${sha} ${paths.join(' ')}`).toBe(true);
@@ -396,7 +397,18 @@ describe('the checkpoint workflow and the working tree', () => {
     const live = parseCheckpointAttestation(readFileSync(livePath, 'utf8'));
     expect(live.problems).toEqual([]);
     expect(live.fields.checkpoint).toBe(checkpoint);
-    expect(live.fields.tcb.map((row) => row.path)).toEqual([...TRUSTED_COMPUTING_BASE]);
+    const attested = live.fields.tcb.map((row) => row.path);
+    const added = [
+      '.github/julius-landing/governed-land.mjs',
+      '.github/julius-landing/governed-queue.txt',
+      '.github/julius-landing/main-ruleset.json',
+      '.github/workflows/julius-governed-land.yml',
+      'scripts/julius-governed-bootstrap.mjs',
+    ];
+    expect(TRUSTED_COMPUTING_BASE.length).toBe(attested.length + added.length);
+    for (const path of attested) expect(TRUSTED_COMPUTING_BASE).toContain(path);
+    for (const path of added) expect(TRUSTED_COMPUTING_BASE).toContain(path);
+    expect(attested).not.toEqual([...TRUSTED_COMPUTING_BASE]);
     // The founder bootstrap regenerates this attestation. This repair does not
     // edit it. Trusted files this repair changes no longer match; every other
     // trusted file still does. The verifier still refuses a hash mismatch.
@@ -406,6 +418,7 @@ describe('the checkpoint workflow and the working tree', () => {
       'scripts/julius-main-provenance-trust.d.mts',
       'scripts/julius-main-provenance.mjs',
       'scripts/julius-main-provenance.d.mts',
+      '.github/julius-landing/land-lib.mjs',
       '.github/workflows/julius-land.yml',
       '.github/workflows/julius-accept-main.yml',
     ]);

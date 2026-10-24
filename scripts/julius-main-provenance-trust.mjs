@@ -88,6 +88,8 @@ export const REVIEWER_KEY_INTRODUCED_IN = 'e56b6bd9d6cd082af897df9bab8475c2323d3
 export const LANDING_REPO = 'ohdieyuh-glitch/sunday-relay';
 export const CHECKPOINT_HEADER = 'JULIUS-CHECKPOINT-V1';
 export const EXTERNAL_ANCHOR_VARIABLE = 'JULIUS_REVIEWER_KEY_SHA256';
+/** Numeric GitHub user id of the governed-landing App bot. Never a login name. */
+export const GOVERNED_LANDER_BOT_VARIABLE = 'JULIUS_GOVERNED_LANDER_BOT_ID';
 
 /**
  * Files whose bytes are the trust root. Workflows execute the verifier from
@@ -98,16 +100,21 @@ export const TRUSTED_COMPUTING_BASE = Object.freeze([
   '.github/julius-landing/reviewer-ed25519.pub',
   '.github/julius-landing/land-lib.mjs',
   '.github/julius-landing/land.mjs',
+  '.github/julius-landing/governed-land.mjs',
+  '.github/julius-landing/governed-queue.txt',
+  '.github/julius-landing/main-ruleset.json',
   '.github/julius-landing/reviewer-tools.mjs',
   '.github/julius-landing/allowed-branches.txt',
   '.github/julius-landing/required-checks.txt',
   '.github/workflows/julius-accept-main.yml',
   '.github/workflows/julius-land.yml',
+  '.github/workflows/julius-governed-land.yml',
   'scripts/julius-main-provenance.mjs',
   'scripts/julius-main-provenance.d.mts',
   'scripts/julius-main-provenance-trust.mjs',
   'scripts/julius-main-provenance-trust.d.mts',
   'scripts/julius-review-currency.mjs',
+  'scripts/julius-governed-bootstrap.mjs',
 ]);
 
 /** Governed directory. HARD_FORBIDDEN_PATH already matches this prefix. No App PR can add or swap a file here. */
@@ -396,6 +403,32 @@ export function attestationCoversCommits(parsed, commits, prior) {
   return parsed.fields.checkpoint === commits[commits.length - 1]?.sha;
 }
 
+/**
+ * The attestation signature must verify against the pinned key, and every
+ * trusted-file hash in it must be the post-landing tree. Presence of the file
+ * is not that proof. Any failure is a refusal; the caller says the attestation
+ * was not verified.
+ */
+export function checkpointAttestationProblems({ text, signatureB64, pem, treeHashes, now } = {}) {
+  if (typeof text !== 'string' || text === '' || typeof signatureB64 !== 'string' || signatureB64 === '') {
+    return ['the checkpoint attestation was not verified'];
+  }
+  const parsed = parseCheckpointAttestation(text);
+  if (parsed.problems.length > 0) return ['the checkpoint attestation was not verified'];
+  const material = reviewerKeyMaterial(pem);
+  if (!material.key || !signatureVerifies(text, signatureB64, material)) return ['the checkpoint attestation was not verified'];
+  const listed = parsed.fields.tcb ?? [];
+  if (listed.length !== TRUSTED_COMPUTING_BASE.length || listed.some((row, index) => row.path !== TRUSTED_COMPUTING_BASE[index])) {
+    return ['the checkpoint attestation was not verified'];
+  }
+  if (!treeHashes || typeof treeHashes !== 'object') return ['the checkpoint attestation was not verified'];
+  for (const row of listed) {
+    if (treeHashes[row.path] !== row.sha256) return ['the checkpoint attestation was not verified'];
+  }
+  if (judgeAttestationWindow(parsed.fields, now)) return ['the checkpoint attestation was not verified'];
+  return [];
+}
+
 function signatureVerifies(text, signatureB64, material) {
   try {
     if (typeof signatureB64 !== 'string' || signatureB64 === '') return false;
@@ -412,6 +445,49 @@ export function isCheckpointInstallerDiff(paths) {
   if (!Array.isArray(paths) || paths.length === 0) return false;
   const allowed = new Set([...TRUSTED_COMPUTING_BASE, ...CHECKPOINT_INSTALLER_EXACT_PATHS]);
   return paths.every((path) => typeof path === 'string' && path !== '' && !/[*?[\]{}]/u.test(path) && (allowed.has(path) || ATTESTATION_FILE.test(path)));
+}
+
+/**
+ * A protected-path or trusted-file landing is the governed lander's only when
+ * GitHub's commits API says the committer user id is the pinned bot and the
+ * signature is verified. A matching name is not that proof. `botId` is the
+ * repository variable JULIUS_GOVERNED_LANDER_BOT_ID.
+ */
+/** A governed audit branch is not a pull request head or base. `ref` may be `refs/heads/...` or the branch name. */
+export function governedAuditBranchProblem(ref) {
+  if (typeof ref !== 'string' || ref === '') return null;
+  const name = ref.startsWith('refs/heads/') ? ref.slice('refs/heads/'.length) : ref;
+  if (name === 'julius-governed-audit' || name.startsWith('julius-governed-audit/')) {
+    return `${ref} is a governed audit branch and cannot be a pull request head or base`;
+  }
+  return null;
+}
+
+export function landingIdentityProblem({ committerId, verificationVerified, verificationReason, botId, verificationReadProblem } = {}) {
+  if (typeof verificationReadProblem === 'string' && verificationReadProblem !== '') return verificationReadProblem;
+  const id = typeof botId === 'string' ? botId.trim() : '';
+  if (!/^[1-9][0-9]{0,16}$/u.test(id)) return `${GOVERNED_LANDER_BOT_VARIABLE} is unset`;
+  if (String(committerId ?? '') !== id) return `the landing committer id is not the governed lander bot ${id}`;
+  if (verificationVerified !== true || verificationReason !== 'valid') return 'the landing commit has no GitHub-verified signature';
+  return null;
+}
+
+/** Trusted files, including the governed lander, move only together with a checkpoint attestation. Fast-forward is that bootstrap shape only. */
+export function governedLandingShapeProblem(files, method) {
+  const list = Array.isArray(files) ? files.filter((path) => typeof path === 'string') : [];
+  const trusted = list.some((path) => TRUSTED_COMPUTING_BASE.includes(path));
+  const paired = list.some((path) => ATTESTATION_FILE.test(path));
+  if (trusted && !paired) return 'a landing that changes a trusted file must be paired with a checkpoint attestation';
+  if (method === 'fast-forward' && (!paired || isCheckpointInstallerDiff(list) !== true)) {
+    return 'fast-forward is only for a checkpoint or bootstrap landing';
+  }
+  return null;
+}
+
+/** A trusted file or a checkpoint attestation file in the diff has to be signature-checked before main moves. */
+export function checkpointPairingRequired(files) {
+  const list = Array.isArray(files) ? files : [];
+  return list.some((path) => typeof path === 'string' && (TRUSTED_COMPUTING_BASE.includes(path) || ATTESTATION_FILE.test(path)));
 }
 
 function introducesAttestationSignature(commit) {
@@ -662,7 +738,7 @@ export async function judgeCommitLanding(commit, options = {}) {
   if (typeof message !== 'string' || !message.includes('BEGIN JULIUS LANDING')) {
     return { ok: false, absent: true, reason: 'no landing block' };
   }
-  const { parseLandingCommitMessage, HARD_FORBIDDEN_PATH, EXCEPTION_ELIGIBLE, MAX_CLEARANCE_AGE_MS } = await landingLib();
+  const { parseLandingCommitMessage, MAX_CLEARANCE_AGE_MS, unauthorizedGovernedPaths, unusedProtectedPaths } = await landingLib();
   const parsed = parseLandingCommitMessage(withSingleTrailingNewline(message));
   const clearance = parsed.fields?.clearance;
   if (parsed.problems.length > 0 || !clearance) {
@@ -718,10 +794,11 @@ export async function judgeCommitLanding(commit, options = {}) {
       reason: `the cleared head ${clearance.head} carries tree ${commit.headTree}, not the signed tree ${clearance.tree}`,
     };
   }
-  if (commit?.headParentCount !== undefined && commit.headParentCount !== 1) {
+  const governedHead = clearance['landing-method'] === 'squash' || clearance['landing-method'] === 'fast-forward';
+  if (!governedHead && commit?.headParentCount !== undefined && commit.headParentCount !== 1) {
     return { ok: false, absent: false, nonce, reason: `the cleared head ${clearance.head} is not one commit on the signed base` };
   }
-  if (typeof commit?.headParent === 'string' && commit.headParent !== clearance.base) {
+  if (!governedHead && typeof commit?.headParent === 'string' && commit.headParent !== clearance.base) {
     return {
       ok: false,
       absent: false,
@@ -733,11 +810,26 @@ export async function judgeCommitLanding(commit, options = {}) {
   if (!Array.isArray(paths) || paths.length === 0 || !paths.every((path) => typeof path === 'string' && path !== '')) {
     return { ok: false, absent: false, nonce, reason: 'the paths this landing changes could not be read completely' };
   }
-  const exceptions = clearance['governed-exceptions'] === '-' ? [] : String(clearance['governed-exceptions']).split(',');
-  const governed = paths.filter((path) => HARD_FORBIDDEN_PATH.test(path)
-    || (EXCEPTION_ELIGIBLE.some((file) => file.toLowerCase() === path.toLowerCase()) && !exceptions.includes(path)));
+  const governed = unauthorizedGovernedPaths(paths, clearance);
   if (governed.length > 0) {
     return { ok: false, absent: false, nonce, reason: `a signed landing may not change founder-governed paths: ${governed.slice(0, 5).join(', ')}` };
+  }
+  const unused = unusedProtectedPaths(paths, clearance);
+  if (unused.length > 0) {
+    return { ok: false, absent: false, nonce, reason: `the signed clearance lists protected paths this landing does not change: ${unused.slice(0, 5).join(', ')}` };
+  }
+  const { HARD_FORBIDDEN_PATH } = await landingLib();
+  const needsLander = paths.some((path) => HARD_FORBIDDEN_PATH.test(path) || TRUSTED_COMPUTING_BASE.includes(path));
+  if (needsLander) {
+    const botId = options.governedLanderBotId ?? options.env?.[GOVERNED_LANDER_BOT_VARIABLE] ?? process.env[GOVERNED_LANDER_BOT_VARIABLE];
+    const identity = landingIdentityProblem({
+      committerId: commit?.committerId,
+      verificationVerified: commit?.verificationVerified,
+      verificationReason: commit?.verificationReason,
+      verificationReadProblem: commit?.verificationReadProblem,
+      botId,
+    });
+    if (identity) return { ok: false, absent: false, nonce, reason: identity };
   }
   return {
     ok: true,
@@ -878,12 +970,54 @@ async function attachHeadBinding(commit, root) {
   }
 }
 
-async function classifyWalkedCommit(commit, pem, anchor, now, seen) {
+async function fetchGithubCommitIdentity(sha, env) {
+  const token = typeof env?.GITHUB_TOKEN === 'string' && env.GITHUB_TOKEN !== ''
+    ? env.GITHUB_TOKEN
+    : (typeof env?.GH_TOKEN === 'string' && env.GH_TOKEN !== '' ? env.GH_TOKEN : '');
+  if (token === '' || typeof sha !== 'string' || !SHA.test(sha)) return { problem: 'the GitHub commit verification could not be read' };
+  let response;
+  try {
+    response = await fetch(`https://api.github.com/repos/${LANDING_REPO}/commits/${sha}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+      signal: AbortSignal.timeout(30_000),
+    });
+  } catch {
+    return { problem: 'the GitHub commit verification could not be read' };
+  }
+  if (!response.ok) return { problem: 'the GitHub commit verification could not be read' };
+  let body;
+  try { body = await response.json(); } catch { return { problem: 'the GitHub commit verification could not be read' }; }
+  return {
+    committerId: body?.committer?.id,
+    verificationVerified: body?.commit?.verification?.verified === true,
+    verificationReason: typeof body?.commit?.verification?.reason === 'string' ? body.commit.verification.reason : '',
+  };
+}
+
+async function attachLanderIdentity(commit, env, identities) {
+  const message = typeof commit?.message === 'string' ? commit.message : '';
+  const paths = Array.isArray(commit?.paths) ? commit.paths : [];
+  if (!message.includes('BEGIN JULIUS LANDING')) return commit;
+  const { HARD_FORBIDDEN_PATH } = await landingLib();
+  const needs = paths.some((path) => HARD_FORBIDDEN_PATH.test(path) || TRUSTED_COMPUTING_BASE.includes(path));
+  if (!needs) return commit;
+  const preset = identities && typeof commit?.sha === 'string' ? identities[commit.sha] : undefined;
+  if (preset && typeof preset === 'object') return { ...commit, ...preset };
+  const identity = await fetchGithubCommitIdentity(commit.sha, env);
+  if (identity.problem) return { ...commit, verificationReadProblem: identity.problem };
+  return { ...commit, ...identity };
+}
+
+async function classifyWalkedCommit(commit, pem, anchor, now, seen, env) {
   if (commit.installerLineage === true) {
-    await judgeCommitLanding(commit, { pem, anchor, now, seenNonces: seen });
+    await judgeCommitLanding(commit, { pem, anchor, now, seenNonces: seen, env });
     return { ...commit, classification: 'installer', reason: 'installer commit in the signed checkpoint lineage' };
   }
-  const judged = await judgeCommitLanding(commit, { pem, anchor, now, seenNonces: seen });
+  const judged = await judgeCommitLanding(commit, { pem, anchor, now, seenNonces: seen, env });
   if (judged.ok) return { ...commit, classification: 'signed-landing', reason: judged.reason, nonce: judged.nonce };
   if (!judged.absent) return { ...commit, classification: 'unprovenanced', reason: judged.reason };
   const recorded = classifyCommit(commit);
@@ -998,7 +1132,8 @@ export async function requireTrustedVerifier(env = process.env, options = {}) {
     const classified = [];
     for (const commit of markInstallerLineage(walked.slice().reverse(), true)) {
       const bound = await attachHeadBinding(commit, root);
-      classified.push(await classifyWalkedCommit(bound, pem, env[EXTERNAL_ANCHOR_VARIABLE], now, seen));
+      const identified = await attachLanderIdentity(bound, env, options.identities);
+      classified.push(await classifyWalkedCommit(identified, pem, env[EXTERNAL_ANCHOR_VARIABLE], now, seen, env));
     }
     const unjustified = classified.filter((row) => row.classification !== 'installer' && row.classification !== 'signed-landing' && row.classification !== 'signed-g6');
     if (unjustified.length > 0) {
