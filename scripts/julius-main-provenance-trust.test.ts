@@ -338,8 +338,9 @@ describe('the founder installer diff is an exact path set', () => {
   ];
 
   it('accepts the real installer commit and the four commits after it, and nothing outside that exact set', () => {
-    ensureCommit(installer, 1);
     for (const sha of afterCheckpoint) {
+      // diff-tree needs the parent. A depth-1 fetch of the commit leaves that parent out.
+      ensureCommit(sha, 2);
       const paths = git(['diff-tree', '--no-commit-id', '--name-only', '-r', sha]).trim().split('\n').filter((path) => path !== '');
       expect(paths.length, sha).toBeGreaterThan(0);
       expect(isCheckpointInstallerDiff(paths), `${sha} ${paths.join(' ')}`).toBe(true);
