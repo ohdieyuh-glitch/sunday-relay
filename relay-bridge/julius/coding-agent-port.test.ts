@@ -258,12 +258,12 @@ describe('C3 — a failure is classified by the provider and disposed of by the 
 
 describe('C4 — the Claude Code provider translates its runtime into the taxonomy', () => {
   const observed = (over: Record<string, unknown> = {}) => ({
-    initSeen: true, sessionId: 'sess', actualModel: 'claude-x', runtimeVersion: 't', apiKeySource: 'env', reportedCwd: '/workspace/mission',
+    initSeen: true, sessionId: 'sess', actualModel: 'claude-opus-5-5', runtimeVersion: 't', apiKeySource: 'env', reportedCwd: '/workspace/mission',
     reportedTools: ['Read', 'Edit'], toolTargets: [], toolsUsed: ['Edit'], toolInvocations: 5, permissionDenials: 0, numTurns: 4, durationMs: 1,
     usage: { inputTokens: 900, outputTokens: 300, totalCostUsd: 0.31, source: 'runtime_reported' },
     streamUsage: { messages: 4, abortedMessages: 0, inputTokens: 880, outputTokens: 290, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 },
-    turnModels: [{ model: 'claude-x', turns: 4, outputTokens: 290 }],
-    resultModelUsage: [{ model: 'claude-x', canonicalModel: null, inputTokens: 900, outputTokens: 300 }],
+    turnModels: [{ model: 'claude-opus-5-5', turns: 4, outputTokens: 290 }],
+    resultModelUsage: [{ model: 'claude-opus-5-5', canonicalModel: null, inputTokens: 900, outputTokens: 300 }],
     resultSubtype: 'error_during_execution', isError: true, finalText: null, thinkingBlocksOmitted: 0, unknownMessageCount: 0,
     ...over,
   });
@@ -298,7 +298,7 @@ describe('C4 — the Claude Code provider translates its runtime into the taxono
       runs.push(runInput);
       return refused('coder_provider_error_after_init', 'API Error: 429 {"type":"rate_limit_error"}');
     };
-    const provider = createClaudeCodeCodingAgentProvider({ apiKey: 'FAKETESTNOTREAL', requestedModel: 'claude-x', run: run as never, queryLoader: async () => (() => (async function* () { /* none */ })()) as HostedQueryFn });
+    const provider = createClaudeCodeCodingAgentProvider({ apiKey: 'FAKETESTNOTREAL', requestedModel: 'claude-opus-5-5', run: run as never, queryLoader: async () => (() => (async function* () { /* none */ })()) as HostedQueryFn });
     const { adapter } = adapterWith(provider);
     const refusal = await refusalOf(adapter.dispatch(DISPATCH));
     expect(refusal!.code).toBe('RATE_LIMIT');
@@ -313,7 +313,7 @@ describe('C4 — the Claude Code provider translates its runtime into the taxono
   it('credit exhaustion needs an operator, and is never retried as if it were transient', async () => {
     const run = async (): Promise<HostedRunOutcome> =>
       refused('coder_result_untrusted', 'API Error: 400 {"message":"Your credit balance is too low to access the Anthropic API."}');
-    const provider = createClaudeCodeCodingAgentProvider({ apiKey: 'FAKETESTNOTREAL', requestedModel: 'claude-x', run: run as never, queryLoader: async () => (() => (async function* () { /* none */ })()) as HostedQueryFn });
+    const provider = createClaudeCodeCodingAgentProvider({ apiKey: 'FAKETESTNOTREAL', requestedModel: 'claude-opus-5-5', run: run as never, queryLoader: async () => (() => (async function* () { /* none */ })()) as HostedQueryFn });
     const { adapter } = adapterWith(provider);
     const refusal = await refusalOf(adapter.dispatch(DISPATCH));
     expect(refusal!.retryable).toBe(false);
@@ -327,19 +327,19 @@ describe('C5 — swap the provider, keep the semantics', () => {
   const completedHosted = async (input: HostedRunInput): Promise<HostedRunOutcome> => ({
     kind: 'completed',
     observation: {
-      initSeen: true, sessionId: 'sess', actualModel: 'claude-x', runtimeVersion: 't', apiKeySource: 'env', reportedCwd: input.workspacePath,
+      initSeen: true, sessionId: 'sess', actualModel: 'claude-opus-5-5', runtimeVersion: 't', apiKeySource: 'env', reportedCwd: input.workspacePath,
       reportedTools: ['Read', 'Edit'], toolTargets: [], toolsUsed: ['Edit'], toolInvocations: 4, permissionDenials: 0, numTurns: 3, durationMs: 1,
       usage: { inputTokens: 500, outputTokens: 200, totalCostUsd: 0.02, source: 'runtime_reported' },
       streamUsage: { messages: 3, abortedMessages: 0, inputTokens: 480, outputTokens: 190, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 },
-      turnModels: [{ model: 'claude-x', turns: 3, outputTokens: 190 }],
-      resultModelUsage: [{ model: 'claude-x', canonicalModel: null, inputTokens: 500, outputTokens: 200 }],
+      turnModels: [{ model: 'claude-opus-5-5', turns: 3, outputTokens: 190 }],
+      resultModelUsage: [{ model: 'claude-opus-5-5', canonicalModel: null, inputTokens: 500, outputTokens: 200 }],
       resultSubtype: 'success', isError: false, terminalReason: null, finalText: 'Implemented the slug.', thinkingBlocksOmitted: 0, unknownMessageCount: 0,
     },
     envelope: compileHostedEnvelope({ workspacePath: input.workspacePath }), startedAt: 't', completedAt: 't',
   }) as never;
 
   const providers = () => ({
-    'claude-code': createClaudeCodeCodingAgentProvider({ apiKey: 'FAKETESTNOTREAL', requestedModel: 'claude-x', run: completedHosted as never, queryLoader: async () => (() => (async function* () { /* none */ })()) as HostedQueryFn }),
+    'claude-code': createClaudeCodeCodingAgentProvider({ apiKey: 'FAKETESTNOTREAL', requestedModel: 'claude-opus-5-5', run: completedHosted as never, queryLoader: async () => (() => (async function* () { /* none */ })()) as HostedQueryFn }),
     'codex-shaped': createCodexShapedCodingAgentProvider({
       renderPrompt: (request) => renderJuliusCodingAgentPrompt(request, JULIUS_CODING_AGENT_CHARTER),
       respond: (): CodexShapedResponse => ({ status: 'completed', output_text: 'Implemented the slug.', model: 'codex-x', usage: { input_tokens: 500, output_tokens: 200, cost_usd: 0.02 } }),
@@ -373,7 +373,7 @@ describe('C5 — swap the provider, keep the semantics', () => {
       respond: () => ({ status: 'failed', error: { code: 'rate_limit_exceeded' }, usage: { input_tokens: 10, output_tokens: 0 } }),
     });
     const claude = createClaudeCodeCodingAgentProvider({
-      apiKey: 'FAKETESTNOTREAL', requestedModel: 'claude-x',
+      apiKey: 'FAKETESTNOTREAL', requestedModel: 'claude-opus-5-5',
       run: (async (input: HostedRunInput) => ({ ...(await completedHosted(input)), kind: 'refused', refusalCode: 'coder_provider_error_after_init', safeMessage: 'x', failureReason: 'rate_limited' })) as never,
       queryLoader: async () => (() => (async function* () { /* none */ })()) as HostedQueryFn,
     });

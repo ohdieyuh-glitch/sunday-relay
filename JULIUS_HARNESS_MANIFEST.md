@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **231 production files** across 20/20 subsystems (2 roots, 199 traced, 8 not composed by the live root, 22 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **237 production files** across 20/20 subsystems (2 roots, 204 traced, 8 not composed by the live root, 23 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -28,7 +28,7 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | bridge provider stacks (hosted Claude, Hermes, redaction) | connectors (gpt-architect, prompt-architect contracts) | 2 | 0 |
 | bridge provider stacks (hosted Claude, Hermes, redaction) | kernel (src/relay/mission/julius/) | 10 | 3 |
 | bridge provider stacks (hosted Claude, Hermes, redaction) | live composition (relay-bridge/julius/) | 6 | 0 |
-| bridge provider stacks (hosted Claude, Hermes, redaction) | other | 5 | 0 |
+| bridge provider stacks (hosted Claude, Hermes, redaction) | other | 6 | 0 |
 | bridge provider stacks (hosted Claude, Hermes, redaction) | persistence (src/relay/persistence/) | 4 | 0 |
 | bridge provider stacks (hosted Claude, Hermes, redaction) | Relay↔Julius port (src/relay/integration/julius/) | 1 | 1 |
 | C.A.R.D. record (src/relay/integration/compound-agent/, entitlement) | kernel (src/relay/mission/julius/) | 1 | 0 |
@@ -38,8 +38,8 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | entrypoint (relay-bridge/julius-live-mission.ts) | connectors (gpt-architect, prompt-architect contracts) | 1 | 0 |
 | entrypoint (relay-bridge/julius-live-mission.ts) | executor + tool substrate (src/relay/workspace/julius-tools/) | 3 | 1 |
 | entrypoint (relay-bridge/julius-live-mission.ts) | kernel (src/relay/mission/julius/) | 1 | 0 |
-| entrypoint (relay-bridge/julius-live-mission.ts) | live composition (relay-bridge/julius/) | 11 | 0 |
-| entrypoint (relay-bridge/julius-live-mission.ts) | other | 1 | 0 |
+| entrypoint (relay-bridge/julius-live-mission.ts) | live composition (relay-bridge/julius/) | 13 | 0 |
+| entrypoint (relay-bridge/julius-live-mission.ts) | other | 2 | 0 |
 | entrypoint (relay-bridge/julius-live-mission.ts) | persistence (src/relay/persistence/) | 8 | 0 |
 | entrypoint (relay-bridge/julius-live-mission.ts) | Relay↔Julius port (src/relay/integration/julius/) | 1 | 1 |
 | executor + tool substrate (src/relay/workspace/julius-tools/) | kernel (src/relay/mission/julius/) | 10 | 8 |
@@ -48,8 +48,8 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | live composition (relay-bridge/julius/) | bridge provider stacks (hosted Claude, Hermes, redaction) | 21 | 6 |
 | live composition (relay-bridge/julius/) | connectors (gpt-architect, prompt-architect contracts) | 10 | 1 |
 | live composition (relay-bridge/julius/) | executor + tool substrate (src/relay/workspace/julius-tools/) | 3 | 0 |
-| live composition (relay-bridge/julius/) | kernel (src/relay/mission/julius/) | 33 | 10 |
-| live composition (relay-bridge/julius/) | other | 6 | 4 |
+| live composition (relay-bridge/julius/) | kernel (src/relay/mission/julius/) | 34 | 10 |
+| live composition (relay-bridge/julius/) | other | 8 | 4 |
 | live composition (relay-bridge/julius/) | persistence (src/relay/persistence/) | 16 | 2 |
 | live composition (relay-bridge/julius/) | Relay↔Julius port (src/relay/integration/julius/) | 2 | 0 |
 | other | Relay vocabulary (mission/contracts.ts, protocol/enums.ts) | 2 | 2 |
@@ -89,6 +89,7 @@ How an authorized Mission Contract becomes a durable Julius run: the contract sh
 | `relay-bridge/julius/live-report-lines.ts` | traced | `relay-bridge/julius-live-mission.ts` |
 | `relay-bridge/julius/mission-contract.ts` | traced | `relay-bridge/julius-live-mission.ts` |
 | `relay-bridge/julius/mission-seed.ts` | traced | `relay-bridge/julius/bootstrap.ts` |
+| `scripts/julius-admission-run-id.mjs` | traced | `relay-bridge/julius-live-mission.ts` |
 | `src/relay/integration/julius/index.ts` | not composed by the live root | — |
 | `src/relay/integration/julius/julius-port.ts` | traced | `relay-bridge/julius-live-mission.ts` |
 | `src/relay/integration/julius/mission-bootstrap-adapter.ts` | not composed by the live root | — |
@@ -196,9 +197,11 @@ The implementation role: one hosted Claude Agent SDK execution behind a pure saf
 | `relay-bridge/hosted-coding-agent/hosted-readiness.ts` | traced | `relay-bridge/julius-live-mission.ts` |
 | `relay-bridge/hosted-coding-agent/hosted-runner.ts` | traced | `relay-bridge/julius/live-workers.ts` |
 | `relay-bridge/hosted-coding-agent/hosted-tool-authority.ts` | traced | `relay-bridge/hosted-coding-agent/hosted-runner.ts` |
+| `relay-bridge/julius/anthropic-org-attribution.ts` | traced | `relay-bridge/julius-live-mission.ts` |
 | `relay-bridge/julius/claude-code-coding-provider.ts` | traced | `relay-bridge/julius/live-workers.ts` |
 | `relay-bridge/julius/coder-self-test.ts` | traced | `relay-bridge/julius/live-workers.ts` |
 | `relay-bridge/julius/coder-workspace.ts` | traced | `relay-bridge/julius/coder-self-test.ts` |
+| `scripts/julius-org-attribution.mjs` | asset (path-loaded) | `relay-bridge/julius/anthropic-org-attribution.ts` |
 | `scripts/julius-usage-limit.mjs` | traced | `relay-bridge/hosted-coding-agent/hosted-failure-reason.ts` |
 | `src/relay/connectors/claude-code/result-classification.ts` | traced | `relay-bridge/hosted-coding-agent/hosted-observation.ts` |
 | `src/relay/mission/julius/julius-coding-agent.ts` | traced | `src/relay/mission/julius/julius-router.ts` |
@@ -350,6 +353,8 @@ The durable lease protocol (generation fencing, heartbeat, expiry, admission), a
 | `src/relay/mission/julius/julius-slot-effort.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
 | `src/relay/mission/julius/julius-slot-envelope.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
 | `src/relay/mission/julius/julius-slot-ledger.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
+| `src/relay/mission/julius/julius-spend-ceiling.ts` | traced | `src/relay/mission/julius/index.ts` |
+| `src/relay/mission/julius/julius-spent-tag-record.ts` | traced | `src/relay/mission/julius/julius-spend-ceiling.ts` |
 | `src/relay/mission/julius/julius-worker-authority.ts` | traced | `src/relay/mission/julius/julius-execution-coordinator.ts` |
 
 ### 17 EVENTS / TRAJECTORIES
@@ -432,6 +437,7 @@ C.A.R.D. roles resolved to live adapters — fail closed, naming every missing v
 
 | production source | role | reached from |
 | --- | --- | --- |
+| `relay-bridge/julius/julius-prior-spend.ts` | traced | `relay-bridge/julius-live-mission.ts` |
 | `relay-bridge/julius/live-composition.ts` | traced | `relay-bridge/julius/live-report-lines.ts` |
 | `relay-bridge/julius/live-workers.ts` | traced | `relay-bridge/julius/executor-effects.ts` |
 | `relay-bridge/julius/research-mediator.ts` | traced | `relay-bridge/julius/live-composition.ts` |
@@ -511,6 +517,7 @@ Production Julius modules that implement a Julius port but are not reached from 
 | `node:module` | node |
 | `node:os` | node |
 | `node:path` | node |
+| `node:url` | node |
 | `openai` | package |
 | `pg` | package |
 

@@ -695,10 +695,14 @@ jobs:
           arm="$RUNNER_TEMP/learning-arm-without"
           saved="$RUNNER_TEMP/learning-saved"
           rm -rf "$arm" "$saved"
-          mkdir -p "$arm/.github" "$saved"
-          # The arm runs the store script from its checkout: this one, byte for byte.
+          mkdir -p "$arm/.github" "$arm/scripts" "$saved"
+          # The arm runs the store script from its checkout, and the dump step
+          # asks the shared admission parser to name the run. Both files, byte
+          # for byte; the parser is what accepts a wlj_ id and a legacy run: id.
           cp .github/julius-learning-store.sh "$arm/.github/julius-learning-store.sh"
+          cp scripts/julius-admission-run-id.mjs "$arm/scripts/julius-admission-run-id.mjs"
           cmp .github/julius-learning-store.sh "$arm/.github/julius-learning-store.sh"
+          cmp scripts/julius-admission-run-id.mjs "$arm/scripts/julius-admission-run-id.mjs"
           # SYNTHETIC: the one line of LIVE's log the dump step reads, naming this job's WITHOUT run.
           printf 'Run %s accepted in state READY; driving the Julius run loop.\n' "$SYN_WITHOUT_JULIUS_RUN" > "$arm/live-mission.log"
           ( cd "$arm" && GITHUB_RUN_ID="$SYN_WITHOUT_RUN" GITHUB_STEP_SUMMARY="$arm/summary.md" \
@@ -778,8 +782,9 @@ jobs:
           restore_with() {
             local label=$1 database=$2 dir="$RUNNER_TEMP/learning-arm-with-$1"
             rm -rf "$dir"
-            mkdir -p "$dir/.github"
+            mkdir -p "$dir/.github" "$dir/scripts"
             cp .github/julius-learning-store.sh "$dir/.github/julius-learning-store.sh"
+            cp scripts/julius-admission-run-id.mjs "$dir/scripts/julius-admission-run-id.mjs"
             restored=0
             ( cd "$dir" && PATH="$LS_SHIM/bin:$PATH" PGDATABASE="$database" GITHUB_STEP_SUMMARY="$dir/summary.md" \
                 WITHOUT_RUN="$SYN_WITHOUT_RUN" WITHOUT_JULIUS_RUN="$SYN_WITHOUT_JULIUS_RUN" REGISTRATION_DIGEST="$SYN_REGISTRATION" \

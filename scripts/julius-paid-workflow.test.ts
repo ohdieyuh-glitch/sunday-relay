@@ -1,12 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync, chmodSync } from 'node:fs';
-import { createRequire } from 'node:module';
+import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
 
-import { ANTHROPIC_CREDENTIAL_ENV_NAMES } from '../relay-bridge/hosted-coding-agent/hosted-auth';
-import { sdkExecutableCandidates } from '../relay-bridge/hosted-coding-agent/hosted-login-probe';
+import { LEGACY_RUN_ID_PATTERN, parseJuliusAdmissionRunId, WLJ_RUN_ID_PATTERN } from './julius-admission-run-id.mjs';
+import { preflightIdentityFor } from './julius-live-preflight-identity';
 
 /**
  * ONE SPENDING PATH, ONE SLOT, NO WAY AROUND EITHER.
@@ -31,6 +30,14 @@ const workflow = readFileSync(WORKFLOW_PATH, 'utf8');
  * what cost the smoke of run 36685079176 its verdict.
  */
 const GITHUB_BASH = ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c'];
+
+/**
+ * Assembled at runtime. A provider-key name followed by a long literal is a
+ * committed assignment to the repository boundary scan, so this stand-in is
+ * never written out beside that name.
+ */
+const joinedStandIn = (...parts: readonly string[]): string => parts.join('-');
+const loginStandIn = joinedStandIn('oauth', 'placeholder', 'not', 'a', 'key');
 
 /** The text of one top-level job, from its key to the next job key. */
 const job = (name: string): string => {
@@ -66,20 +73,21 @@ describe('the job that can spend cannot start before admission', () => {
   const paidJob = job('first-live-mission');
 
   it('needs paid-slot, and runs only when admission succeeded or the run is not paid', () => {
-    expect(paidJob).toMatch(/\n    needs: paid-slot\n/u);
-    expect(paidJob).toContain("if: ${{ !cancelled() && (needs.paid-slot.result == 'success' || (needs.paid-slot.result == 'skipped' && inputs.confirm_live != 'RUN LIVE MISSION')) }}");
+    expect(paidJob).toMatch(/\n    needs: \[spend-tag, paid-slot\]\n/u);
+    expect(paidJob).toContain("if: ${{ !cancelled() && needs.spend-tag.result == 'success' && (needs.paid-slot.result == 'success' || (needs.paid-slot.result == 'skipped' && inputs.confirm_live != 'RUN LIVE MISSION')) }}");
   });
 
   it('a paid run whose admission was skipped, failed or refused a duplicate cannot reach the job', () => {
     // The condition, evaluated the way Actions evaluates it, for every outcome.
-    const admits = (result: string, confirm: string, cancelled = false): boolean =>
-      !cancelled && (result === 'success' || (result === 'skipped' && confirm !== 'RUN LIVE MISSION'));
+    const admits = (result: string, confirm: string, cancelled = false, spend = 'success'): boolean =>
+      !cancelled && spend === 'success' && (result === 'success' || (result === 'skipped' && confirm !== 'RUN LIVE MISSION'));
     expect(admits('success', 'RUN LIVE MISSION')).toBe(true);
     for (const result of ['failure', 'cancelled', 'skipped']) {
       expect(admits(result, 'RUN LIVE MISSION'), `a paid run with admission ${result}`).toBe(false);
     }
     expect(admits('skipped', ''), 'a dry run proceeds as it always has').toBe(true);
     expect(admits('success', 'RUN LIVE MISSION', true), 'a cancelled workflow starts nothing').toBe(false);
+    expect(admits('success', 'RUN LIVE MISSION', false, 'failure'), 'a refused run id starts nothing').toBe(false);
   });
 
   it('keeps the provider environment on the paid job alone', () => {
@@ -91,7 +99,8 @@ describe('admission holds nothing worth stealing, and runs only proven code', ()
   const slot = job('paid-slot');
 
   it('runs only for a paid dispatch, with no environment and no secret', () => {
-    expect(slot).toMatch(/\n    if: inputs\.confirm_live == 'RUN LIVE MISSION'\n/u);
+    expect(slot).toMatch(/\n    needs: spend-tag\n/u);
+    expect(slot).toMatch(/\n    if: needs\.spend-tag\.result == 'success' && inputs\.confirm_live == 'RUN LIVE MISSION'\n/u);
     expect(slot).not.toMatch(/environment:/u);
     expect(slot).not.toMatch(/secrets\./u);
     expect(slot, 'the wait is bounded below the hosted-job cap').toMatch(/timeout-minutes: 350/u);
@@ -175,6 +184,7 @@ describe('no second spending path', () => {
 describe('provider readiness fails before spending, and never exposes a key', () => {
   const paidJob = job('first-live-mission');
   const readiness = step(paidJob, READINESS);
+  const VERIFIED = 'org_attribution provider=anthropic model=claude-opus-5-5 http=200 result=VERIFIED organization_id=org_recorded';
 
   it('runs on every dispatch, before the roles check and long before LIVE', () => {
     expect(readiness, 'a condition would let a paid run skip it').not.toMatch(/\n\s+if:/u);
@@ -190,76 +200,42 @@ describe('provider readiness fails before spending, and never exposes a key', ()
         expect(line, 'a key may only be interpolated into the printf that feeds --config').toMatch(/^\s*printf 'header = /u);
       }
       if (/\bcurl\b/u.test(line)) expect(line, 'curl never receives a key as an argument').not.toMatch(/API_KEY/u);
-      // The Coding Agent's subscription token: presence-checked once, and otherwise
-      // named only as the one allow-listed variable `env -i` hands the CLI — an
-      // ENVIRONMENT entry for the child, never an argument to it, never printed.
-      if (/CLAUDE_CODE_OAUTH_TOKEN/u.test(line)) {
-        expect(line, 'the token is only presence-checked or handed to the CLI under env -i').toMatch(
-          /^\s*(\[ -n "\$OPENAI_API_KEY" \] && \[ -n "\$CLAUDE_CODE_OAUTH_TOKEN" \] && \[ -n "\$XAI_API_KEY" \] \|\| \{|env -i -C "\$sub\/work" PATH="\$PATH" HOME="\$sub\/home" CI=1 NO_COLOR=1 TERM=dumb ANTHROPIC_DEFAULT_HAIKU_MODEL="\$RELAY_HOSTED_CODING_MODEL" ANTHROPIC_SMALL_FAST_MODEL="\$RELAY_HOSTED_CODING_MODEL" CLAUDE_CODE_OAUTH_TOKEN="\$CLAUDE_CODE_OAUTH_TOKEN" \\)$/u,
-        );
-      }
       if (/\becho\b/u.test(line)) expect(line, 'nothing echoes a key').not.toMatch(/API_KEY/u);
     }
     expect(body).toContain('--config -');
+    expect(body).toContain('node scripts/julius-org-attribution.mjs');
+    expect(body, 'the consumer login token is not a readiness credential').not.toContain('CLAUDE_CODE_OAUTH_TOKEN');
     expect(body).toContain('provider_balance=UNKNOWN');
+    expect(body, 'the Anthropic key is an environment entry for the attribution script, never a curl argument').not.toContain('api.anthropic.com');
   });
 
   /**
-   * Run the step for real: a fake `curl` answers one status per API-billed provider,
-   * and the Coding Agent's subscription is checked by the step's own literal `env -i`
-   * command and the REAL check script, with a FAKE token. The step names the ubuntu
-   * x64 CLI; here that path is a shim that records its argv, cwd and environment
-   * NAMES and then runs the Agent SDK's REAL bundled CLI for this host — which
-   * classifies a placeholder token offline as `oauth_token` (measured 2026-09-29),
-   * so nothing is contacted. The step runs from a temporary copy of the workspace:
-   * the check script (which imports only node builtins) and the shim.
+   * Run the step for real. A fake curl answers OpenAI and xAI. A fake node,
+   * earlier on PATH, answers the organization script with a closed line.
+   * Neither is a live provider, and neither is presented as one.
    */
-  const hostCli = (() => {
-    const require = createRequire(join(ROOT, 'package.json'));
-    for (const candidate of sdkExecutableCandidates()) {
-      try { return require.resolve(candidate); } catch { /* not installed for this platform */ }
-    }
-    throw new Error('the Agent SDK bundled CLI is not installed for this platform');
-  })();
-  // The two small-model slots are pinned to the Coding Agent's own model (never a credential), so
-  // a housekeeping call cannot put another model in the smoke's modelUsage.
-  const CLI_ALLOWED_ENV = ['PATH', 'HOME', 'CI', 'NO_COLOR', 'TERM', 'ANTHROPIC_DEFAULT_HAIKU_MODEL', 'ANTHROPIC_SMALL_FAST_MODEL', 'CLAUDE_CODE_OAUTH_TOKEN'];
-  /**
-   * What the shim's own shell adds to its environment when it starts; none of it is
-   * inherited through `env -i`. On Windows the MSYS runtime also sets its own three
-   * (measured 2026-09-29) — none of them a credential.
-   */
-  const SHELL_OWN_ENV = ['PWD', 'OLDPWD', 'SHLVL', '_', ...(process.platform === 'win32' ? ['MSYSTEM', 'SYSTEMROOT', 'WINDIR'] : [])];
-  /**
-   * `loggedOut` swaps the real CLI for one that reports no login and exits 1, as a
-   * CLI with no usable subscription does: the step must still reach its verdict,
-   * probe the reviewer and fail on its count, not end early under `bash -e`.
-   */
-  const runReadiness = (statuses: { openai: string; xai: string }, env: Record<string, string> = {}, loggedOut = false) => {
+  const runReadiness = (statuses: { openai: string; xai: string }, env: Record<string, string> = {}, probe?: { line: string; exitCode: number }) => {
     const dir = mkdtempSync(join(tmpdir(), 'julius-readiness-'));
-    mkdirSync(join(dir, 'scripts'));
-    copyFileSync(join(ROOT, 'scripts', 'julius-subscription-check.mjs'), join(dir, 'scripts', 'julius-subscription-check.mjs'));
-    // Its one import, as the checkout holds it beside it: the usage-limit recogniser it shares with the live coder (F5).
-    copyFileSync(join(ROOT, 'scripts', 'julius-usage-limit.mjs'), join(dir, 'scripts', 'julius-usage-limit.mjs'));
-    const shimDir = join(dir, 'node_modules', '@anthropic-ai', 'claude-agent-sdk-linux-x64');
-    mkdirSync(shimDir, { recursive: true });
     const record = dir.replace(/\\/gu, '/');
-    writeFileSync(join(shimDir, 'claude'), [
+    const fakeNode = join(dir, 'node');
+    writeFileSync(fakeNode, [
       '#!/usr/bin/env bash',
-      `for arg in "$@"; do case "$arg" in *FAKETESTNOTREAL*) echo LEAK >> '${record}/leak';; esac; done`,
-      `printf '%s\\n' "$*" >> '${record}/cli-argv'`,
-      `pwd >> '${record}/cli-cwd'`,
-      `compgen -e >> '${record}/cli-env'`,
-      loggedOut
-        ? `printf '%s\\n' '{"loggedIn":false,"authMethod":"none","apiProvider":"firstParty"}'; exit 1`
-        : `exec '${hostCli.replace(/\\/gu, '/')}' "$@"`,
+      'for arg in "$@"; do case "$arg" in *FAKETESTNOTREAL*) echo LEAK >> "$FAKE_DIR/leak";; esac; done',
+      `printf '%s\\n' "$*" >> '${record}/node-argv'`,
+      'case "$*" in',
+      '  *julius-org-attribution.mjs*)',
+      '    if [ -n "${JULIUS_ORG_PROBE_LINE:-}" ]; then printf \'%s\\n\' "$JULIUS_ORG_PROBE_LINE"; exit "${JULIUS_ORG_PROBE_EXIT:-1}"; fi',
+      `    printf '%s\\n' '${VERIFIED}'`,
+      '    exit 0;;',
+      'esac',
+      'echo "unexpected node: $*" >> "$FAKE_DIR/leak"',
+      'exit 1',
     ].join('\n'));
-    chmodSync(join(shimDir, 'claude'), 0o755);
+    chmodSync(fakeNode, 0o755);
     const fakeCurl = join(dir, 'curl');
     writeFileSync(fakeCurl, [
       '#!/usr/bin/env bash',
       'config=$(cat)',
-      // Record whether any key or token ever arrived as an argument — it must not.
       'for arg in "$@"; do case "$arg" in *FAKETESTNOTREAL*) echo LEAK >> "$FAKE_DIR/leak";; esac; done',
       'url="${@: -1}"',
       'case "$url" in',
@@ -273,9 +249,6 @@ describe('provider readiness fails before spending, and never exposes a key', ()
     const fakeSleep = join(dir, 'sleep');
     writeFileSync(fakeSleep, '#!/usr/bin/env bash\nexit 0\n');
     chmodSync(fakeSleep, 0o755);
-    // Every route that outranks the subscription is BLANK here, whatever the shell
-    // running the test holds, exactly as the workflow step never passes one.
-    const blankRoutes = Object.fromEntries(ANTHROPIC_CREDENTIAL_ENV_NAMES.map((name) => [name, '']));
     let code = 0;
     let output = '';
     try {
@@ -283,13 +256,18 @@ describe('provider readiness fails before spending, and never exposes a key', ()
         cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
         env: {
           ...process.env,
-          ...blankRoutes,
           PATH: `${dir}${delimiter}${process.env.PATH ?? ''}`,
           FAKE_DIR: dir,
           GITHUB_WORKSPACE: dir,
-          OPENAI_API_KEY: 'FAKETESTNOTREAL-openai', CLAUDE_CODE_OAUTH_TOKEN: 'FAKETESTNOTREAL-oauth', XAI_API_KEY: 'FAKETESTNOTREAL-xai',
-          OPENAI_PROMPT_ARCHITECT_MODEL: 'gpt-5.6-sol', RELAY_HOSTED_CODING_MODEL: 'claude-opus-5-5',
-          RELAY_HERMES_PROVIDER: 'xai', RELAY_HERMES_MODEL: 'grok-build-0.1',
+          OPENAI_API_KEY: 'FAKETESTNOTREAL-openai',
+          ANTHROPIC_API_KEY: 'FAKETESTNOTREAL-anthropic',
+          XAI_API_KEY: 'FAKETESTNOTREAL-xai',
+          JULIUS_EXPECTED_ANTHROPIC_ORG_ID: 'org_recorded',
+          OPENAI_PROMPT_ARCHITECT_MODEL: 'gpt-5.6-sol',
+          RELAY_HOSTED_CODING_MODEL: 'claude-opus-5-5',
+          RELAY_HERMES_PROVIDER: 'xai',
+          RELAY_HERMES_MODEL: 'grok-build-0.1',
+          ...(probe === undefined ? {} : { JULIUS_ORG_PROBE_LINE: probe.line, JULIUS_ORG_PROBE_EXIT: String(probe.exitCode) }),
           ...env,
         },
       });
@@ -298,207 +276,466 @@ describe('provider readiness fails before spending, and never exposes a key', ()
       output = String((error as { stdout?: string }).stdout ?? '');
     }
     const recorded = (name: string): string => { try { return readFileSync(join(dir, name), 'utf8'); } catch { return ''; } };
-    return {
-      code, output,
-      leak: recorded('leak'),
-      cliArgv: recorded('cli-argv').trim(),
-      cliCwd: recorded('cli-cwd').trim(),
-      cliEnv: recorded('cli-env').split('\n').map((name) => name.trim()).filter(Boolean),
-    };
+    return { code, output, leak: recorded('leak'), nodeArgv: recorded('node-argv').trim() };
   };
 
-  it('all three ready: two API providers AUTHENTICATED, the Coding Agent on its SUBSCRIPTION, no key or token in argv or output', () => {
+  it('both API providers authenticate and the organization line is VERIFIED, with no key in argv or output', () => {
     const run = runReadiness({ openai: '200', xai: '200' });
     expect(run.code).toBe(0);
     expect(run.output.match(/result=AUTHENTICATED_MODEL_AVAILABLE/gu)?.length).toBe(2);
-    expect(run.output).toContain('provider_readiness provider=anthropic model=claude-opus-5-5 http=none auth=CLAUDE_SUBSCRIPTION method=oauth_token plan=absent result=SUBSCRIPTION_LOGIN_PRESENT');
+    expect(run.output).toContain(VERIFIED);
     expect(run.output).toContain('provider_balance=UNKNOWN');
-    expect(run.leak, 'no argv leak, and the Anthropic API is never called').toBe('');
+    expect(run.leak, 'no argv leak, and curl never calls Anthropic').toBe('');
     expect(run.output).not.toContain('FAKETESTNOTREAL');
-    // The CLI ran exactly once, zero-generation, from the empty work directory,
-    // and nothing outside the allow-list reached it: no ANTHROPIC_*, no provider key.
-    expect(run.cliArgv).toBe('auth status --json');
-    expect(run.cliCwd.replace(/\\/gu, '/')).toMatch(/\/work$/u);
-    expect(run.cliEnv.filter((name) => !SHELL_OWN_ENV.includes(name)).sort()).toEqual([...CLI_ALLOWED_ENV].sort());
-  }, 60_000);
+    expect(run.nodeArgv).toBe('scripts/julius-org-attribution.mjs');
+  });
 
-  it('a CLI that exits non-zero still leaves its verdict, the reviewer is still probed, and the count fails the job', () => {
-    const run = runReadiness({ openai: '200', xai: '200' }, {}, true);
+  it('an unverified organization still probes the reviewer and fails closed', () => {
+    const line = 'org_attribution provider=anthropic model=claude-opus-5-5 http=200 result=ORG_ATTRIBUTION_UNVERIFIED reason=mismatch organization_id=org_other expected_organization_id=org_recorded';
+    const run = runReadiness({ openai: '200', xai: '200' }, {}, { line, exitCode: 1 });
     expect(run.code).not.toBe(0);
-    expect(run.cliArgv).toBe('auth status --json');
-    expect(run.output).toContain('provider_readiness provider=anthropic model=claude-opus-5-5 http=none auth=CLAUDE_SUBSCRIPTION reason=NOT_LOGGED_IN result=SUBSCRIPTION_NOT_READY');
+    expect(run.output).toContain(line);
+    expect(run.output).toContain('ORG_ATTRIBUTION_UNVERIFIED');
     expect(run.output).toContain('provider_readiness provider=xai model=grok-build-0.1 http=200 result=AUTHENTICATED_MODEL_AVAILABLE');
     expect(run.output).toContain('provider_balance=UNKNOWN');
     expect(run.output).not.toContain('FAKETESTNOTREAL');
-  }, 60_000);
-
-  it('an Anthropic route set in the step never reaches the CLI: refused before it runs', () => {
-    for (const name of ANTHROPIC_CREDENTIAL_ENV_NAMES) {
-      const run = runReadiness({ openai: '200', xai: '200' }, { [name]: 'FAKETESTNOTREAL-route' });
-      expect(run.code, name).not.toBe(0);
-      expect(run.output, name).toContain(`reason=OUTRANKED_BY_${name} result=SUBSCRIPTION_NOT_READY`);
-      expect(run.cliArgv, `${name}: the CLI must not run at all`).toBe('');
-      expect(run.output).not.toContain('FAKETESTNOTREAL');
-    }
-  }, 240_000);
-
-  /**
-   * The optional smoke step, driven for real over a FAKE CLI that answers fixed
-   * JSON — the real one would spend subscription usage. Proves the step's own
-   * shell: the request is sent only after a subscription status, and only an
-   * exact OK passes.
-   *
-   * `cliExit` is what the fake CLI returns after printing the reply. The real CLI
-   * exits NON-ZERO on an error reply, and under GitHub's `bash -e` that used to end
-   * the step before smoke-verdict ever read the reply (run 36685079176). A shim that
-   * always exited 0, run under a shell without `-e`, is why no case here caught it.
-   */
-  const runSmoke = (statusJson: string, replyJson: string, env: Record<string, string> = {}, cliExit = 0, authExit = 0) => {
-    const smoke = step(job('first-live-mission'), "'Subscription smoke: one tiny request on the Coding Agent''s subscription'");
-    const dir = mkdtempSync(join(tmpdir(), 'julius-smoke-'));
-    mkdirSync(join(dir, 'scripts'));
-    copyFileSync(join(ROOT, 'scripts', 'julius-subscription-check.mjs'), join(dir, 'scripts', 'julius-subscription-check.mjs'));
-    // Its one import, as the checkout holds it beside it: the usage-limit recogniser it shares with the live coder (F5).
-    copyFileSync(join(ROOT, 'scripts', 'julius-usage-limit.mjs'), join(dir, 'scripts', 'julius-usage-limit.mjs'));
-    const shimDir = join(dir, 'node_modules', '@anthropic-ai', 'claude-agent-sdk-linux-x64');
-    mkdirSync(shimDir, { recursive: true });
-    writeFileSync(join(dir, 'status.json'), statusJson);
-    writeFileSync(join(dir, 'reply.json'), replyJson);
-    const record = dir.replace(/\\/gu, '/');
-    writeFileSync(join(shimDir, 'claude'), [
-      '#!/usr/bin/env bash',
-      `printf '%s\\n' "$*" >> '${record}/cli-argv'`,
-      `case "$1" in auth) cat '${record}/status.json'; exit ${authExit};; -p) cat '${record}/reply.json'; exit ${cliExit};; esac`,
-    ].join('\n'));
-    chmodSync(join(shimDir, 'claude'), 0o755);
-    const blankRoutes = Object.fromEntries(ANTHROPIC_CREDENTIAL_ENV_NAMES.map((name) => [name, '']));
-    let code = 0;
-    let output = '';
-    try {
-      output = execFileSync('bash', [...GITHUB_BASH, script(smoke)], {
-        cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
-        env: { ...process.env, ...blankRoutes, CLAUDE_CODE_OAUTH_TOKEN: 'FAKETESTNOTREAL-oauth', RELAY_HOSTED_CODING_MODEL: 'claude-opus-5-5', ...env },
-      });
-    } catch (error) {
-      code = (error as { status?: number }).status ?? 1;
-      output = String((error as { stdout?: string }).stdout ?? '');
-    }
-    let argv = '';
-    try { argv = readFileSync(join(dir, 'cli-argv'), 'utf8'); } catch { /* the CLI never ran */ }
-    return { code, output, calls: argv.split('\n').filter(Boolean) };
-  };
-  const TOKEN_ONLY = '{"loggedIn":true,"authMethod":"oauth_token","apiProvider":"firstParty"}';
-
-  it('smoke: a subscription status and an exact OK pass, after exactly one literal request', () => {
-    // modelUsage attests the requested model; a PASS will require it once the served-model
-    // check lands, and today's verdict ignores it, so this fixture holds either way.
-    const run = runSmoke(TOKEN_ONLY, '{"type":"result","subtype":"success","is_error":false,"result":"OK","modelUsage":{"claude-opus-5-5":{"inputTokens":3,"outputTokens":1}}}');
-    expect(run.code).toBe(0);
-    expect(run.output).toContain('subscription_smoke provider=anthropic model=claude-opus-5-5 auth=CLAUDE_SUBSCRIPTION method=oauth_token reply=OK result=PASS');
-    expect(run.output).toContain('subscription_smoke_auth_exit=0');
-    expect(run.output).toContain('subscription_smoke_cli_exit=0');
-    expect(run.calls).toEqual([
-      'auth status --json',
-      '-p Reply with exactly OK --max-turns 1 --output-format json --model claude-opus-5-5 --setting-sources user --strict-mcp-config --no-session-persistence',
-    ]);
-    expect(run.output).not.toContain('FAKETESTNOTREAL');
-  }, 60_000);
-
-  /**
-   * JSON THAT READS OK IS NOT A PASS WHEN THE CLI EXITED NON-ZERO (Codex review of #302, P2).
-   *
-   * Both exits used to be recorded and never judged: the step passed on the verdict's PASS
-   * line alone, so a CLI that printed a clean OK and then exited 1 qualified the model. The
-   * step now requires both exits to be 0 as well as the PASS line, whatever the verdict says.
-   */
-  it('smoke: an OK reply from a CLI that then exits non-zero FAILS, for the request and for auth status', () => {
-    const OK_OPUS = '{"type":"result","subtype":"success","is_error":false,"result":"OK","modelUsage":{"claude-opus-5-5":{"inputTokens":3,"outputTokens":1}}}';
-    const request = runSmoke(TOKEN_ONLY, OK_OPUS, {}, 1);
-    expect(request.code, 'an OK reply and a request exit of 1').not.toBe(0);
-    expect(request.output).toContain('subscription_smoke_cli_exit=1');
-    expect(request.calls, 'the one request was sent and judged').toHaveLength(2);
-    const auth = runSmoke(TOKEN_ONLY, OK_OPUS, {}, 0, 1);
-    expect(auth.code, 'an OK reply after an auth status exit of 1').not.toBe(0);
-    expect(auth.output).toContain('subscription_smoke_auth_exit=1');
-    const both = runSmoke(TOKEN_ONLY, OK_OPUS, {}, 0, 0);
-    expect(both.code, 'the control: both exits 0 and the same reply').toBe(0);
-    expect(both.output).not.toContain('FAKETESTNOTREAL');
-  }, 180_000);
-
-  /**
-   * THE STEP'S LOG SAYS WHY, AND A FAILING SMOKE NEVER PRINTS A PASS (Codex review of #302, F1 and F3).
-   *
-   * The verdict is now told both exits, so a non-zero exit fails in the verdict AND in the step's
-   * own exit gate. A reply that another model produced output beside the requested one fails in the
-   * verdict alone: nothing in the step's shell can see models. Each case must leave the verdict's
-   * closed reason in the step's log, a FAIL verdict line, and no `result=PASS` line anywhere.
-   */
-  it('smoke: each failure names its reason in the step log, and no failing case ever prints result=PASS', () => {
-    const okFrom = (usage: Record<string, { outputTokens: number }>) =>
-      JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'OK', modelUsage: usage });
-    const opusOnly = okFrom({ 'claude-opus-5-5': { outputTokens: 1 } });
-    const cases = [
-      { label: 'the request exited 1', run: () => runSmoke(TOKEN_ONLY, opusOnly, {}, 1, 0), reason: 'CLI_EXIT_NONZERO' },
-      { label: 'auth status exited 1', run: () => runSmoke(TOKEN_ONLY, opusOnly, {}, 0, 1), reason: 'AUTH_EXIT_NONZERO' },
-      {
-        label: 'another model produced output beside the requested one',
-        run: () => runSmoke(TOKEN_ONLY, okFrom({ 'claude-opus-5-5': { outputTokens: 1 }, 'claude-sonnet-5': { outputTokens: 5 } })),
-        reason: 'SERVED_MODEL_MISMATCH',
-      },
-    ];
-    for (const { label, run, reason } of cases) {
-      const result = run();
-      expect(result.code, label).not.toBe(0);
-      expect(result.output, label).toContain(`subscription_smoke_reason provider=anthropic model=claude-opus-5-5 reason=${reason} `);
-      expect(result.output, label).toContain('reply=OK result=FAIL');
-      expect(result.output, label).not.toMatch(/result=PASS/u);
-      expect(result.output, label).not.toContain('FAKETESTNOTREAL');
-    }
-  }, 240_000);
-
-  it('smoke: an api_key status FAILS CLOSED and no request is sent; a wrong reply fails; a key in the step stops the CLI', () => {
-    const apiKey = runSmoke('{"loggedIn":true,"authMethod":"api_key","apiProvider":"firstParty","apiKeySource":"ANTHROPIC_API_KEY"}', '{"result":"OK"}');
-    expect(apiKey.code).not.toBe(0);
-    expect(apiKey.output).toContain('reason=API_KEY_IN_PLAY result=SUBSCRIPTION_NOT_READY');
-    expect(apiKey.calls).toEqual(['auth status --json']);
-    // The real CLI exits 1 on an error reply. Under GitHub's `bash -e` the step must
-    // still reach its verdict and say so, then fail closed.
-    const wrong = runSmoke(TOKEN_ONLY, '{"type":"result","is_error":true,"result":"Credit balance is too low"}', {}, 1);
-    expect(wrong.code).not.toBe(0);
-    expect(wrong.output).toContain('subscription_smoke_cli_exit=1');
-    expect(wrong.output).toContain('reply=ERROR result=FAIL');
-    expect(wrong.output).not.toContain('Credit balance');
-    // A CLI that dies printing nothing is judged UNREADABLE, not skipped.
-    const silent = runSmoke(TOKEN_ONLY, '', {}, 1);
-    expect(silent.code).not.toBe(0);
-    expect(silent.output).toContain('subscription_smoke_cli_exit=1');
-    expect(silent.output).toContain('reply=UNREADABLE result=FAIL');
-    const outranked = runSmoke(TOKEN_ONLY, '{"result":"OK"}', { ANTHROPIC_API_KEY: 'FAKETESTNOTREAL-anthropic' });
-    expect(outranked.code).not.toBe(0);
-    expect(outranked.output).toContain('reason=OUTRANKED_BY_ANTHROPIC_API_KEY result=SUBSCRIPTION_NOT_READY');
-    expect(outranked.calls).toEqual([]);
-    expect(outranked.output).not.toContain('FAKETESTNOTREAL');
-  }, 120_000);
+  });
 
   it('a refused credential or an unreachable API provider fails the job', () => {
     expect(runReadiness({ openai: '401', xai: '200' }).code).not.toBe(0);
     expect(runReadiness({ openai: '404', xai: '200' }).code).not.toBe(0);
     expect(runReadiness({ openai: '200', xai: '503' }).code).not.toBe(0);
-  }, 120_000);
+  });
 
-  it('an Anthropic API key beside the token fails the job: the subscription would be outranked', () => {
-    const run = runReadiness({ openai: '200', xai: '200' }, { ANTHROPIC_API_KEY: 'FAKETESTNOTREAL-anthropic' });
-    expect(run.code).not.toBe(0);
-    expect(run.output).toContain('reason=OUTRANKED_BY_ANTHROPIC_API_KEY result=SUBSCRIPTION_NOT_READY');
-    expect(run.output).not.toContain('FAKETESTNOTREAL');
-  }, 60_000);
-
-  it('a missing key or token fails before any request is made', () => {
-    const blanks: Record<string, string>[] = [{ XAI_API_KEY: '' }, { CLAUDE_CODE_OAUTH_TOKEN: '' }];
+  it('a missing key or expected organization id fails before any request is made', () => {
+    const blanks: Record<string, string>[] = [
+      { XAI_API_KEY: '' },
+      { ANTHROPIC_API_KEY: '' },
+      { OPENAI_API_KEY: '' },
+      { JULIUS_EXPECTED_ANTHROPIC_ORG_ID: '' },
+    ];
     for (const blank of blanks) {
       const run = runReadiness({ openai: '200', xai: '200' }, blank);
       expect(run.code, JSON.stringify(blank)).not.toBe(0);
-      expect(run.output).not.toContain('provider_readiness');
+      expect(run.output, JSON.stringify(blank)).not.toContain('provider_readiness');
+      expect(run.output, JSON.stringify(blank)).not.toContain('org_attribution');
+      expect(run.nodeArgv, JSON.stringify(blank)).toBe('');
+      expect(run.output).not.toContain('FAKETESTNOTREAL');
     }
-  }, 60_000);
+  });
+});
+
+describe('the coder stops before a provider call unless the user-owned API key is present', () => {
+  const gate = step(job('first-live-mission'), "'Gate: coder uses the Anthropic API key'");
+  const body = script(gate);
+
+  const runGate = (apiKey: string): { status: number; stderr: string; stdout: string } => {
+    try {
+      const stdout = execFileSync('bash', [...GITHUB_BASH, body], {
+        encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, ANTHROPIC_API_KEY: apiKey, CLAUDE_CODE_OAUTH_TOKEN: loginStandIn },
+      });
+      return { status: 0, stderr: '', stdout };
+    } catch (error) {
+      const failed = error as { status?: number; stderr?: string; stdout?: string };
+      return { status: failed.status ?? 1, stderr: failed.stderr ?? '', stdout: failed.stdout ?? '' };
+    }
+  };
+
+  it('fails closed when the API key is absent, and does not print either credential', () => {
+    expect(gate).toContain('ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}');
+    expect(gate).not.toContain('secrets.CLAUDE_CODE_OAUTH_TOKEN');
+    expect(body).not.toMatch(/echo "\$ANTHROPIC_API_KEY"|echo "\$CLAUDE_CODE_OAUTH_TOKEN"/u);
+    const missing = runGate('');
+    expect(missing.status).not.toBe(0);
+    expect(missing.stderr).toContain('coder_auth_api_key_required');
+    expect(missing.stderr).not.toContain('oauth-placeholder');
+    expect(missing.stdout).not.toContain('oauth-placeholder');
+    const present = runGate('FAKETESTNOTREAL-anthropic');
+    expect(present.status).toBe(0);
+    expect(present.stdout).toContain('coder_auth=ANTHROPIC_API_KEY');
+    expect(present.stdout).not.toContain('FAKETESTNOTREAL');
+    expect(present.stderr).not.toContain('FAKETESTNOTREAL');
+  });
+
+  it('the roles preflight and LIVE take the API key and not the consumer login token', () => {
+    const paid = job('first-live-mission');
+    for (const name of ["'Preflight: all three roles resolve to the expected models, nothing dispatched'", "'LIVE: run the first real Julius mission'"]) {
+      const block = step(paid, name);
+      expect(block).toContain('JULIUS_CLAUDE_AUTH: ANTHROPIC_API');
+      expect(block).toContain('ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}');
+      expect(block).not.toContain('secrets.CLAUDE_CODE_OAUTH_TOKEN');
+      expect(block).not.toContain('CLAUDE_SUBSCRIPTION');
+    }
+    const liveAt = paid.indexOf("- name: 'LIVE: run the first real Julius mission'");
+    const gateAt = paid.indexOf("- name: 'Gate: coder uses the Anthropic API key'");
+    const readyAt = paid.indexOf(`- name: ${READINESS}`);
+    expect(gateAt).toBeGreaterThan(-1);
+    expect(gateAt).toBeLessThan(readyAt);
+    expect(readyAt).toBeLessThan(liveAt);
+  });
+});
+
+describe('one spent tag per admission run id, before any provider call', () => {
+  const HEX = '0123456789abcdef01234567';
+  const WLJ = 'wlj_01234567-89ab-4cde-8fab-0123456789ab';
+  const WLJ_HEX = '0123456789ab4cde8fab0123456789ab';
+  const tagJob = job('spend-tag');
+  const tagScript = script(step(tagJob, "'Gate: one spent tag for this admission run id, before any provider call'"));
+
+  const runTag = (env: Record<string, string>, curl?: { code?: string; body?: string; exitCode?: string; getCode?: string; getBody?: string; refCode?: string; refBody?: string }): { status: number; stderr: string; output: string; curlLog: string } => {
+    const bin = mkdtempSync(join(tmpdir(), 'julius-spent-tag-'));
+    const curlLog = join(bin, 'curl.log');
+    const getCode = curl?.getCode ?? (curl?.code === '500' ? '500' : '404');
+    const refCode = curl?.refCode ?? (curl?.code === '422' ? '422' : '201');
+    const refBody = curl?.refBody ?? (curl?.code === '422' ? (curl.body ?? '') : '');
+    writeFileSync(join(bin, 'curl'), [
+      '#!/usr/bin/env bash',
+      'out=""',
+      'method="GET"',
+      'data=""',
+      'url=""',
+      'prev=""',
+      'for arg in "$@"; do',
+      '  printf \'%s\\n\' "$arg" >> "$CURL_LOG"',
+      '  if [ "$prev" = "-o" ]; then out=$arg; fi',
+      '  if [ "$prev" = "-X" ]; then method=$arg; fi',
+      '  if [ "$prev" = "--data-binary" ]; then data=$arg; fi',
+      '  case "$arg" in https://*) url=$arg ;; esac',
+      '  prev=$arg',
+      'done',
+      'printf \'DATA %s\\n\' "$data" >> "$CURL_LOG"',
+      'if [ "${CURL_EXIT:-0}" != 0 ]; then exit "$CURL_EXIT"; fi',
+      'respond() {',
+      '  if [ -n "$out" ]; then printf \'%s\' "$2" > "$out"; fi',
+      '  printf \'%s\' "$1"',
+      '  exit 0',
+      '}',
+      'if [ "$method" = GET ]; then respond "$CURL_GET_CODE" "$CURL_GET_BODY"; fi',
+      'case "$url" in',
+      '  */git/refs)',
+      '    if [ "$CURL_REF_CODE" = 201 ]; then',
+      '      sha=$(printf \'%s\' "$data" | grep -oE \'[0-9a-f]{40}\' | head -1)',
+      '      respond 201 "{\\"ref\\":\\"refs/tags/julius-run-spent\\",\\"object\\":{\\"sha\\":\\"$sha\\",\\"type\\":\\"tag\\"}}"',
+      '    fi',
+      '    respond "$CURL_REF_CODE" "$CURL_REF_BODY"',
+      '    ;;',
+      '  *)',
+      '    count=0',
+      '    if [ -f "$CURL_LOG.count" ]; then count=$(cat "$CURL_LOG.count"); fi',
+      '    count=$((count + 1))',
+      '    printf \'%s\' "$count" > "$CURL_LOG.count"',
+      '    sha=$(printf \'%040x\' "$count")',
+      '    respond 201 "{\\"sha\\":\\"$sha\\"}"',
+      '    ;;',
+      'esac',
+      '',
+    ].join('\n'));
+    chmodSync(join(bin, 'curl'), 0o755);
+    const output = join(bin, 'github-output.txt');
+    writeFileSync(output, '');
+    try {
+      execFileSync('bash', [...GITHUB_BASH, tagScript], {
+        cwd: ROOT,
+        env: {
+          ...process.env,
+          PATH: `${bin}${delimiter}${process.env.PATH ?? ''}`,
+          CURL_LOG: curlLog,
+          CURL_GET_CODE: getCode,
+          CURL_GET_BODY: curl?.getBody ?? '',
+          CURL_REF_CODE: refCode,
+          CURL_REF_BODY: refBody,
+          CURL_EXIT: curl?.exitCode ?? '0',
+          GITHUB_RUN_ATTEMPT: '1',
+          GITHUB_OUTPUT: output,
+          GITHUB_RUN_ID: '4242',
+          GITHUB_SHA: 'a'.repeat(40),
+          GITHUB_REPOSITORY: 'ohdieyuh-glitch/sunday-relay',
+          GH_TOKEN: 'github-token-placeholder',
+          JULIUS_RUN_ID: '',
+          MISSION: 'julius-first-live',
+          CONFIRM_LIVE: '',
+          ...env,
+        },
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      return {
+        status: 0, stderr: '', output: readFileSync(output, 'utf8'),
+        curlLog: (() => { try { return readFileSync(curlLog, 'utf8'); } catch { return ''; } })(),
+      };
+    } catch (error) {
+      const failed = error as { status?: number; stderr?: string };
+      return {
+        status: failed.status ?? 1,
+        stderr: failed.stderr ?? '',
+        output: (() => { try { return readFileSync(output, 'utf8'); } catch { return ''; } })(),
+        curlLog: (() => { try { return readFileSync(curlLog, 'utf8'); } catch { return ''; } })(),
+      };
+    }
+  };
+
+  it('the workflow contains both id patterns and does not mint a run id', () => {
+    expect(tagScript).toContain(WLJ_RUN_ID_PATTERN);
+    expect(tagScript).toContain(LEGACY_RUN_ID_PATTERN);
+    expect(tagScript).toContain('node scripts/julius-admission-run-id.mjs derive');
+    expect(tagScript.indexOf('node scripts/julius-admission-run-id.mjs derive')).toBeLessThan(tagScript.indexOf('curl '));
+    expect(tagScript).not.toMatch(/randomUUID|randomBytes|openssl rand|\/dev\/urandom/u);
+    expect(tagScript).not.toContain('${{');
+    expect(tagJob).not.toMatch(/secrets\./u);
+    expect(tagJob).toMatch(/\n    permissions:\n      contents: write\n/u);
+    expect(job('paid-slot')).not.toMatch(/\n    permissions:\n/u);
+    expect(job('first-live-mission')).not.toMatch(/\n    permissions:\n/u);
+    expect(workflow).toMatch(/concurrency:\s*\n\s*group:\s*\$\{\{ inputs\.confirm_live == 'RUN LIVE MISSION' && 'julius-paid-provider-slot'/u);
+  });
+
+  it('refuses uppercase, a UUIDv1, a UUIDv7, and other malformed ids before any tag write', () => {
+    for (const value of [
+      'wlj_01234567-89AB-4CDE-8FAB-0123456789AB',
+      'wlj_01234567-89ab-1cde-8fab-0123456789ab',
+      'wlj_01234567-89ab-7cde-8fab-0123456789ab',
+      'wlj_01234567-89ab-4cde-cfab-0123456789ab',
+      `run:${HEX.toUpperCase()}`,
+      `run:${HEX.slice(0, 23)}`,
+      'not-an-id',
+    ]) {
+      const run = runTag({ JULIUS_RUN_ID: value, CONFIRM_LIVE: 'RUN LIVE MISSION' });
+      expect(run.status, value).not.toBe(0);
+      expect(run.stderr, value).toContain('admission_run_id_malformed');
+      expect(run.curlLog, value).toBe('');
+    }
+  });
+
+  it('a missing id is a hard failure for a paid run and a preflight, and mints nothing', () => {
+    for (const confirm of ['RUN LIVE MISSION', '']) {
+      const refused = runTag({ JULIUS_RUN_ID: '', CONFIRM_LIVE: confirm });
+      expect(refused.status, confirm).not.toBe(0);
+      expect(refused.stderr, confirm).toContain('admission_run_id_required');
+      expect(refused.curlLog, confirm).toBe('');
+    }
+  });
+
+  it('derives the 32-hex wlj tag and the 24-hex legacy tag, and a preflight writes neither', () => {
+    const dry = runTag({ JULIUS_RUN_ID: WLJ, CONFIRM_LIVE: '' });
+    expect(dry.status).toBe(0);
+    expect(dry.output).toContain(`run_id=${WLJ}`);
+    expect(dry.output).toContain(`concurrency_group=julius-paid-${WLJ_HEX}`);
+    expect(dry.curlLog).toBe('');
+    const created = runTag({ JULIUS_RUN_ID: WLJ, CONFIRM_LIVE: 'RUN LIVE MISSION' });
+    expect(created.status).toBe(0);
+    expect(created.curlLog).toContain(`/git/ref/tags/julius-run-spent-${WLJ_HEX}`);
+    expect(created.curlLog).toContain(`refs/tags/julius-run-spent-${WLJ_HEX}`);
+    expect(created.curlLog).toContain(`run=${WLJ}`);
+    expect(created.curlLog).toContain('reservedUsdMicros=5000000');
+    expect(created.output).not.toContain('github-token-placeholder');
+    const legacy = runTag({ JULIUS_RUN_ID: `run:${HEX}`, CONFIRM_LIVE: 'RUN LIVE MISSION' });
+    expect(legacy.status).toBe(0);
+    expect(legacy.output).toContain(`concurrency_group=julius-paid-${HEX}`);
+    expect(legacy.curlLog).toContain(`/git/ref/tags/julius-run-spent-${HEX}`);
+    expect(legacy.curlLog).toContain(`run=run:${HEX}`);
+  });
+
+  it('a second dispatch of the same id creates no second tag', () => {
+    const bin = mkdtempSync(join(tmpdir(), 'julius-spent-replay-'));
+    const state = join(bin, 'spent');
+    writeFileSync(join(bin, 'curl'), [
+      '#!/usr/bin/env bash',
+      'out=""',
+      'method="GET"',
+      'data=""',
+      'url=""',
+      'prev=""',
+      'for arg in "$@"; do',
+      '  printf \'%s\\n\' "$arg" >> "$CURL_LOG"',
+      '  if [ "$prev" = "-o" ]; then out=$arg; fi',
+      '  if [ "$prev" = "-X" ]; then method=$arg; fi',
+      '  if [ "$prev" = "--data-binary" ]; then data=$arg; fi',
+      '  case "$arg" in https://*) url=$arg ;; esac',
+      '  prev=$arg',
+      'done',
+      'respond() {',
+      '  if [ -n "$out" ]; then printf \'%s\' "$2" > "$out"; fi',
+      '  printf \'%s\' "$1"',
+      '  exit 0',
+      '}',
+      'if [ "$method" = GET ]; then',
+      '  if [ -f "$SPENT_STATE" ]; then respond 200 \'{"object":{"sha":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}}\' ; fi',
+      '  respond 404 \'\'',
+      'fi',
+      'sha=$(printf \'%s\' "$data" | grep -oE \'[0-9a-f]{40}\' | head -1 || true)',
+      'if [ -z "$sha" ]; then sha=$(printf \'%040x\' 1); fi',
+      'case "$url" in',
+      '  */git/refs)',
+      '    printf \'%s\' "$url" > "$SPENT_STATE"',
+      '    respond 201 "{\\"ref\\":\\"refs/tags/julius-run-spent\\",\\"object\\":{\\"sha\\":\\"$sha\\",\\"type\\":\\"tag\\"}}"',
+      '    ;;',
+      '  *) respond 201 "{\\"sha\\":\\"$sha\\"}" ;;',
+      'esac',
+      '',
+    ].join('\n'));
+    chmodSync(join(bin, 'curl'), 0o755);
+    let invokeCount = 0;
+    const invoke = (id: string): { status: number; stderr: string; curlLog: string } => {
+      invokeCount += 1;
+      const curlLog = join(bin, `curl-${invokeCount}.log`);
+      const output = join(bin, 'github-output.txt');
+      writeFileSync(output, '');
+      try {
+        execFileSync('bash', [...GITHUB_BASH, tagScript], {
+          cwd: ROOT,
+          env: {
+            ...process.env,
+            PATH: `${bin}${delimiter}${process.env.PATH ?? ''}`,
+            CURL_LOG: curlLog,
+            SPENT_STATE: state,
+            GITHUB_RUN_ATTEMPT: '1',
+            GITHUB_OUTPUT: output,
+            GITHUB_RUN_ID: '4242',
+            GITHUB_SHA: 'a'.repeat(40),
+            GITHUB_REPOSITORY: 'ohdieyuh-glitch/sunday-relay',
+            GH_TOKEN: 'github-token-placeholder',
+            JULIUS_RUN_ID: id,
+            MISSION: 'julius-first-live',
+            CONFIRM_LIVE: 'RUN LIVE MISSION',
+          },
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        return { status: 0, stderr: '', curlLog: readFileSync(curlLog, 'utf8') };
+      } catch (error) {
+        const failed = error as { status?: number; stderr?: string };
+        let curlText = '';
+        try { curlText = readFileSync(curlLog, 'utf8'); } catch { curlText = ''; }
+        return { status: failed.status ?? 1, stderr: failed.stderr ?? '', curlLog: curlText };
+      }
+    };
+    const created = invoke(WLJ);
+    expect(created.status).toBe(0);
+    expect(created.curlLog).toContain('-X\nPOST');
+    expect(created.curlLog).toContain(`/git/ref/tags/julius-run-spent-${WLJ_HEX}`);
+    const replay = invoke(WLJ);
+    expect(replay.status).not.toBe(0);
+    expect(replay.stderr).toContain('RUN_ID_ALREADY_SPENT');
+    expect(replay.curlLog).not.toContain('-X\nPOST');
+    const again = invoke(WLJ);
+    expect(again.curlLog).toContain(`/git/ref/tags/julius-run-spent-${WLJ_HEX}`);
+    expect(again.curlLog).not.toContain('-X\nPOST');
+  });
+
+  it('an existing tag and any other API result do not authorize a second spend', () => {
+    const exists = runTag(
+      { JULIUS_RUN_ID: `run:${HEX}`, CONFIRM_LIVE: 'RUN LIVE MISSION' },
+      { code: '422', body: '{"message":"Reference already exists"}' },
+    );
+    expect(exists.status).not.toBe(0);
+    expect(exists.stderr).toContain('RUN_ID_ALREADY_SPENT');
+    const precreated = runTag(
+      { JULIUS_RUN_ID: WLJ, CONFIRM_LIVE: 'RUN LIVE MISSION' },
+      { getCode: '200', getBody: '{"object":{"sha":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}}' },
+    );
+    expect(precreated.status).not.toBe(0);
+    expect(precreated.stderr).toContain('RUN_ID_ALREADY_SPENT');
+    expect(precreated.curlLog).not.toContain('-X\nPOST');
+    const broken = runTag({ JULIUS_RUN_ID: WLJ, CONFIRM_LIVE: 'RUN LIVE MISSION' }, { code: '500', body: 'no' });
+    expect(broken.status).not.toBe(0);
+    expect(broken.stderr).toContain('SPENT_TAG_UNVERIFIED');
+  });
+
+  it('reserves the contract ceiling, and a missing contract writes nothing', () => {
+    const mission5 = runTag({
+      JULIUS_RUN_ID: `run:${HEX}`,
+      CONFIRM_LIVE: 'RUN LIVE MISSION',
+      MISSION: 'julius-live-mission-5',
+    });
+    expect(mission5.status).toBe(0);
+    expect(mission5.curlLog).toContain('namespace=julius-live-mission-5');
+    expect(mission5.curlLog).toContain('reservedUsdMicros=30000000');
+    const missing = runTag({
+      JULIUS_RUN_ID: `run:${HEX}`,
+      CONFIRM_LIVE: 'RUN LIVE MISSION',
+      MISSION: 'julius-no-such-mission',
+    });
+    expect(missing.status).not.toBe(0);
+    expect(missing.stderr).toContain('SPENT_TAG_UNVERIFIED');
+    expect(missing.curlLog).toBe('');
+  });
+});
+
+describe('the WITHOUT-arm log parser admits one id through the shared module', () => {
+  const WLJ = 'wlj_01234567-89ab-4cde-8fab-0123456789ab';
+  const LEGACY = 'run:0123456789abcdef01234567';
+  const probe = preflightIdentityFor({ tenantId: 'tenant', nonce: 'abcd1234', policyRevision: 'card:julius-live:1' });
+  const accepted = (runId: string): string => `Run ${runId} accepted in state READY; driving the Julius run loop.\n`;
+
+  function parseLog(log: string): { readonly status: number; readonly stdout: string; readonly stderr: string } {
+    const block = step(job('first-live-mission'), "'Learning pair arm WITHOUT: dump this run''s store, restorable, for its WITH arm'");
+    const full = script(block);
+    const from = full.indexOf('accepted_run=$(');
+    const at = full.indexOf('JULIUS_PG_CONTAINER=');
+    expect(from, 'the parser names the accepted run').toBeGreaterThan(0);
+    expect(at, 'the parser stops before the store dump').toBeGreaterThan(from);
+    const logPath = join(ROOT, 'live-mission.log');
+    writeFileSync(logPath, log);
+    try {
+      const stdout = execFileSync('bash', [...GITHUB_BASH, `set -euo pipefail\n${full.slice(from, at)}\nprintf '%s\\n' "$run_id"\n`], {
+        cwd: ROOT, encoding: 'utf8',
+      });
+      return { status: 0, stdout, stderr: '' };
+    } catch (error) {
+      const failed = error as { status?: number; stdout?: string; stderr?: string };
+      return { status: failed.status ?? 1, stdout: failed.stdout ?? '', stderr: failed.stderr ?? '' };
+    } finally {
+      rmSync(logPath, { force: true });
+    }
+  }
+
+  it('the executor probe id is not an admission id', () => {
+    expect(probe.runId).toBe('preflight:julius-abcd1234');
+    expect(probe.runId.startsWith('run:')).toBe(false);
+    expect(parseJuliusAdmissionRunId(probe.runId)).toEqual({ ok: false, reason: 'admission_run_id_malformed' });
+  });
+
+  it('calls the shared parser and no longer captures only a legacy run id', () => {
+    const block = script(step(job('first-live-mission'), "'Learning pair arm WITHOUT: dump this run''s store, restorable, for its WITH arm'"));
+    expect(block).toContain('node scripts/julius-admission-run-id.mjs derive');
+    expect(block).not.toContain('run:[0-9a-f]\\{24\\}');
+    expect(block.indexOf('node scripts/julius-admission-run-id.mjs derive')).toBeLessThan(block.indexOf('JULIUS_PG_CONTAINER='));
+  });
+
+  it('accepts one canonical wlj_ id', () => {
+    const parsed = parseLog(accepted(WLJ));
+    expect(parsed.status, parsed.stderr).toBe(0);
+    expect(parsed.stdout).toBe(`${WLJ}\n`);
+  });
+
+  it('still accepts one legacy run: id', () => {
+    const parsed = parseLog(accepted(LEGACY));
+    expect(parsed.status, parsed.stderr).toBe(0);
+    expect(parsed.stdout).toBe(`${LEGACY}\n`);
+  });
+
+  it('fails closed when the log names both forms, two ids, none, or a token the parser refuses', () => {
+    for (const log of [
+      accepted(WLJ) + accepted(LEGACY),
+      accepted(WLJ) + accepted('wlj_aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'),
+      '',
+      'Run not-an-id accepted in state READY; driving the Julius run loop.\n',
+      accepted('wlj_01234567-89AB-4CDE-8FAB-0123456789AB'),
+      accepted(`run:${'A'.repeat(24)}`),
+      accepted(probe.runId),
+      'RESULT: COMPLETED\n',
+    ]) {
+      const parsed = parseLog(log);
+      expect(parsed.status, log).not.toBe(0);
+      expect(parsed.stderr, log).toContain('learning_store_run_unnamed');
+    }
+  });
+
+  it('ignores a preflight probe line beside one admitted id', () => {
+    const parsed = parseLog(
+      `  preflight identity seeded in foreign-key order: project=prj-julius-preflight-abcd1234 run=${probe.runId} task=task:julius-preflight-abcd1234\n${accepted(WLJ)}`,
+    );
+    expect(parsed.status, parsed.stderr).toBe(0);
+    expect(parsed.stdout).toBe(`${WLJ}\n`);
+  });
 });

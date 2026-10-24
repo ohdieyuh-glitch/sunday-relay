@@ -300,3 +300,77 @@ describe('the reviewer adapter: told it has no tools, corrected once if it tries
     expect(failure.code).toBe('INVALID_REQUEST');
   }, 30_000);
 });
+
+describe('the reviewer records a provider request id only when the usage file carries a safe one', () => {
+  it('a captured request id reaches the durable diagnostics, and stdout does not', async () => {
+    const decoy = 'req_from_stdout_SHOULD_NOT_CAPTURE';
+    const rig = adapterOver([{
+      stdout: `${APPROVED}\nrequest_id=${decoy}\n`,
+      usage: { ...USAGE, session_id: 'sess_engine_only', request_id: 'req_01ABCDEFGHIJKLMN' },
+    }]);
+    const result = await rig.dispatch() as { status: string; diagnostics: Record<string, unknown> };
+    expect(result.status).toBe('SUCCEEDED');
+    const safe = safeReviewDiagnostics(result.diagnostics);
+    expect(safe?.providerRequestAvailability).toBe('CAPTURED');
+    expect(safe?.providerRequestId).toBe('req_01ABCDEFGHIJKLMN');
+    expect(safe?.providerRequestUnavailableReason).toBeNull();
+    expect(safe?.responseId).toBe('req_01ABCDEFGHIJKLMN');
+    const rendered = JSON.stringify(safe);
+    expect(rendered).not.toContain(decoy);
+    expect(rendered).not.toContain('sess_engine_only');
+    expect(rendered).not.toContain('UNAVAILABLE');
+  }, 30_000);
+
+  it('a usage file with only a session id is UNAVAILABLE, and the session id is not stored', async () => {
+    const rig = adapterOver([{
+      stdout: APPROVED,
+      usage: { ...USAGE, session_id: 'sess_only' },
+    }]);
+    const result = await rig.dispatch() as { diagnostics: Record<string, unknown> };
+    const safe = safeReviewDiagnostics(result.diagnostics);
+    expect(safe?.providerRequestId).toBeNull();
+    expect(safe?.responseId).toBeNull();
+    expect(safe?.providerRequestAvailability).toBe('UNAVAILABLE');
+    expect(safe?.providerRequestUnavailableReason).toBe('hermes_usage_file_has_no_provider_request_id');
+    expect(JSON.stringify(safe)).not.toContain('sess_only');
+  }, 30_000);
+
+  it('a missing usage file and a credential-shaped id are both UNAVAILABLE, and the secret is absent', async () => {
+    const missing = adapterOver([{ stdout: 'Billing or credits exhausted: out of credit\n', usage: null }]);
+    const missingFailure = await failureOf(missing.dispatch());
+    const missingSafe = safeReviewDiagnostics(missingFailure.diagnostics);
+    expect(missingSafe?.providerRequestAvailability).toBe('UNAVAILABLE');
+    expect(missingSafe?.providerRequestUnavailableReason).toBe('hermes_usage_file_absent');
+    expect(missingSafe?.providerRequestId).toBeNull();
+    expect(missingSafe?.responseId).toBeNull();
+
+    const secret = 'xai-FAKETESTNOTREAL';
+    const refused = adapterOver([{
+      stdout: 'Billing or credits exhausted: out of credit\n',
+      usage: { ...USAGE, request_id: secret },
+    }]);
+    const refusedFailure = await failureOf(refused.dispatch());
+    const refusedSafe = safeReviewDiagnostics(refusedFailure.diagnostics);
+    expect(refusedSafe?.providerRequestAvailability).toBe('UNAVAILABLE');
+    expect(refusedSafe?.providerRequestUnavailableReason).toBe('provider_request_id_credential_shaped');
+    expect(refusedSafe?.providerRequestId).toBeNull();
+    expect(refusedSafe?.responseId).toBeNull();
+    expect(JSON.stringify(refusedFailure.diagnostics)).not.toContain(secret);
+    expect(JSON.stringify(refusedSafe)).not.toContain(secret);
+  }, 30_000);
+
+  it('the allowlist drops a credential-shaped id even if a caller marks it captured', () => {
+    const secret = 'xai-FAKETESTNOTREAL';
+    const safe = safeReviewDiagnostics({
+      providerRequestId: secret,
+      providerRequestAvailability: 'CAPTURED',
+    });
+    expect(safe?.providerRequestId).toBeNull();
+    expect(safe?.providerRequestAvailability).toBe('UNAVAILABLE');
+    expect(safe?.providerRequestUnavailableReason).toBe('provider_request_id_credential_shaped');
+    // `responseId` is a separate field. This case proves a credential never
+    // lands in the provider-request columns. The status word is not written
+    // by the reviewer path; see the dispatch tests above.
+    expect(JSON.stringify(safe)).not.toContain(secret);
+  });
+});

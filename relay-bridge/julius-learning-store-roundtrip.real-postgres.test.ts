@@ -1,5 +1,6 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { parseJuliusAdmissionRunId } from '../scripts/julius-admission-run-id.mjs';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
@@ -273,7 +274,7 @@ suite('a learning pair across two databases: dumped and restored as Option D doe
         seeds: createPostgresMissionSeedStore(pool),
         knowledge: createPostgresMissionKnowledgeStore(pool),
         ...(input.carry === undefined ? {} : { carry: input.carry }),
-        tenantId: base.tenantId, executionId: `execution:julius-live:${base.missionId}`,
+        tenantId: base.tenantId, executionId: `execution:julius-live:${base.missionId}`, admittedRunId: `wlj_${randomUUID()}`,
       }).submit(request);
       const drive = async () => {
         if (!submitted.accepted) throw new Error(`${submitted.reasonCode}: ${submitted.safeMessage}`);
@@ -539,7 +540,7 @@ suite('a learning pair across two databases: dumped and restored as Option D doe
     const mainDump = join(scratch, 'store', 'julius.pgdump');
     expect(existsSync(mainDump), 'the main case wrote the dump this case restores').toBe(true);
     const mainRun = /^julius_run_id=(\S+)$/mu.exec(readFileSync(join(scratch, 'store', 'store-manifest.txt'), 'utf8'))?.[1] ?? '';
-    expect(mainRun).toMatch(/^run:[0-9a-f]{24}$/u);
+    expect(parseJuliusAdmissionRunId(mainRun)).toEqual({ ok: true, form: 'wlj', runId: mainRun });
     const foreign = await database('foreignreg');
     const refusedForeign = store(['restore', mainDump, mainRun, 'f'.repeat(64)], foreign.name);
     restoredBy(refusedForeign);

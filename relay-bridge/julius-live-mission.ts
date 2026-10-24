@@ -47,6 +47,7 @@ import { hostedChildEnv, hostedChildEnvKeys } from './hosted-coding-agent/hosted
 // on PATH in this process's environment, which a GitHub runner does not have.
 import { observeCoderLogin, resolveCoderClaudeExecutable } from './hosted-coding-agent/hosted-login-probe';
 import { readFileSync } from 'node:fs';
+import { parseJuliusAdmissionRunId } from '../scripts/julius-admission-run-id.mjs';
 import { createPublicKey, type KeyObject } from 'node:crypto';
 import { Pool } from 'pg';
 import { listenJuliusPool } from '../src/relay/persistence/julius-pg-held';
@@ -75,6 +76,7 @@ import { createDurableArtifactExchange, juliusReviewerBillingPath, type JuliusAr
 import { createJuliusDurableArtifacts, juliusWorkArtifactRoot } from './julius/durable-artifacts';
 import { LocalJuliusArtifactStore } from '../src/relay/workspace/julius-tools/local-artifact-store';
 import { JuliusWorkArtifactPostgresRepository } from '../src/relay/persistence/julius-work-artifact-postgres';
+import { ORG_ATTRIBUTION_UNVERIFIED, readAnthropicOrgAttribution } from './julius/anthropic-org-attribution';
 import { liveEvidenceLines } from './julius/live-evidence-lines';
 import {
   liveClaudeAuthRefusedLine, liveExecutionScopeLine, liveLearningFailedLine, liveOneLine, liveResearchLines, liveTickAccountLine,
@@ -114,7 +116,8 @@ function tickOverrideOf(value: string | null): { readonly ok: true; readonly ove
   if (!/^[1-9][0-9]{0,5}$/u.test(value)) return { ok: false };
   return { ok: true, override: Number(value) };
 }
-import { noJuliusResearch, type JuliusResearchPolicy } from '../src/relay/mission/julius';
+import { authorizeJuliusLiveSpend, JULIUS_QUALIFYING_PAIR_NAMESPACES, noJuliusResearch, type JuliusResearchPolicy } from '../src/relay/mission/julius';
+import { readJuliusPriorRunSpend, readJuliusSpentTagLedger } from './julius/julius-prior-spend';
 import {
   LIVE_REACH_ACTION_CAPABILITIES,
   LIVE_REACH_READ_CAPABILITIES,
@@ -579,6 +582,35 @@ export async function observeResearchCommand(input: {
   return 0;
 }
 
+/**
+ * THE RUN THE SPEND-TAG JOB ALREADY LOCKED.
+ *
+ * `JULIUS_RUN_ID` and `JULIUS_SERVER_RUN_ID` are both that job's `run_id`
+ * output. This reads them only through `parseJuliusAdmissionRunId`. A missing
+ * value, a shape that parser refuses, or two values that are not the same id
+ * refuse the start. A legacy `run:` id is read-only: nothing in this entry
+ * starts a mission on one. This function never mints.
+ */
+export function admitLiveJuliusRunId(env: {
+  readonly JULIUS_RUN_ID?: string;
+  readonly JULIUS_SERVER_RUN_ID?: string;
+}): { readonly ok: true; readonly runId: string } | {
+  readonly ok: false;
+  readonly reason: 'admission_run_id_required' | 'admission_run_id_malformed' | 'admission_run_id_mismatch' | 'admission_run_id_legacy_read_only';
+} {
+  const presented = parseJuliusAdmissionRunId(env.JULIUS_RUN_ID ?? '');
+  const spent = parseJuliusAdmissionRunId(env.JULIUS_SERVER_RUN_ID ?? '');
+  if (!presented.ok) return presented;
+  if (!spent.ok) {
+    return spent.reason === 'admission_run_id_required' ? spent : { ok: false, reason: 'admission_run_id_mismatch' };
+  }
+  if (presented.runId !== spent.runId) return { ok: false, reason: 'admission_run_id_mismatch' };
+  if (presented.form === 'legacy' || spent.form === 'legacy') {
+    return { ok: false, reason: 'admission_run_id_legacy_read_only' };
+  }
+  return { ok: true, runId: presented.runId };
+}
+
 /* ------------------------------------------------------------------ main */
 
 async function main(argv: readonly string[]): Promise<number> {
@@ -618,6 +650,16 @@ async function main(argv: readonly string[]): Promise<number> {
 
   const env = process.env as Record<string, string | undefined>;
   const cardRevision = env.RELAY_JULIUS_CARD_REVISION?.trim() || 'card:julius-live:1';
+  /**
+   * BEFORE PREFLIGHT. A run with no admitted `wlj_` id must not observe a login,
+   * open a database, or submit a run. Dry-run preflight is the same gate: a
+   * missing, malformed, or legacy id fails closed here, and nothing is created.
+   */
+  const admittedRun = admitLiveJuliusRunId(env);
+  if (!admittedRun.ok) {
+    out(`RESULT: BLOCKED — ${admittedRun.reason}. Nothing was submitted and no provider was contacted.`);
+    return 1;
+  }
 
   /**
    * THE OPERATOR'S OBSERVATIONS, CHECKED BEFORE ANYTHING IS SUBMITTED.
@@ -854,6 +896,34 @@ async function main(argv: readonly string[]): Promise<number> {
       out('RESULT: BLOCKED — live_ledger_unbound: the composed store serves no timeline, so allocation would fall back to a flat estimate. Nothing was submitted and no provider was contacted.');
       return 1;
     }
+    /**
+     * THE $60 COMBINED CAP, before a run row exists and before a provider can
+     * be asked. A qualifying-pair namespace lists `julius-run-spent-*` tags.
+     * A successful empty list is zero prior spend. A failed list, or a tag
+     * with no reserved ceiling, is not zero. This job's Postgres is not that
+     * record. The comparison never claims a provider balance was verified.
+     */
+    const qualifyingPair = (JULIUS_QUALIFYING_PAIR_NAMESPACES as readonly string[]).includes(contract.markerNamespace);
+    const spendLedger = qualifyingPair
+      ? await readJuliusSpentTagLedger({
+          repository: env.GITHUB_REPOSITORY ?? '',
+          token: env.GITHUB_TOKEN ?? env.GH_TOKEN ?? '',
+          namespace: contract.markerNamespace,
+          excludeRunId: env.JULIUS_SERVER_RUN_ID,
+        })
+      : await readJuliusPriorRunSpend(pool, {
+          missionId: contract.missionId, projectId: contract.projectId,
+        });
+    const spendAuthorization = authorizeJuliusLiveSpend({
+      namespace: contract.markerNamespace,
+      spendUsd: contract.limits?.spendUsd ?? null,
+      repairCycles: contract.limits?.repairCycles ?? null,
+      ledger: spendLedger,
+    });
+    if (!spendAuthorization.authorized) {
+      out(`RESULT: BLOCKED — ${spendAuthorization.reasonCode}: ${spendAuthorization.safeMessage}`);
+      return 1;
+    }
     const executionId = `execution:julius-live:${contract.missionId}`;
     const shell = createExecutorShellPort({
       pool,
@@ -920,6 +990,24 @@ async function main(argv: readonly string[]): Promise<number> {
       return 1;
     }
 
+    /**
+     * WHICH ANTHROPIC ORGANIZATION THE API KEY BILLS, BEFORE A RUN EXISTS.
+     *
+     * API mode is the paid workflow's coder. The organization id is the one
+     * header on a spend-free models read, compared with
+     * `JULIUS_EXPECTED_ANTHROPIC_ORG_ID`. A missing expected id, a missing
+     * header, or a different id is `ORG_ATTRIBUTION_UNVERIFIED` and submit is
+     * not called. Subscription mode has no API organization to attribute.
+     */
+    if (coderProvenance?.authentication === 'ANTHROPIC_API_KEY') {
+      const attribution = readAnthropicOrgAttribution(env, preflight.requested.codingModel ?? '');
+      out(`  ${attribution.line}`);
+      if (!attribution.verified) {
+        out(`RESULT: BLOCKED — ${ORG_ATTRIBUTION_UNVERIFIED}. Nothing was submitted. The organization check read model metadata only; no completion was requested.`);
+        return 1;
+      }
+    }
+
     const request = compileBootstrapRequest(contract, resolution.entries.map((entry) => ({
       role: entry.worker.role as JuliusBootstrapRequest['workers'][number]['role'],
       integrationId: entry.worker.workerId,
@@ -959,6 +1047,7 @@ async function main(argv: readonly string[]): Promise<number> {
         : {}),
       tenantId: contract.tenantId,
       executionId,
+      admittedRunId: admittedRun.runId,
     });
     const submitted = await bootstrap.submit(request);
     if (!submitted.accepted) {
@@ -990,8 +1079,8 @@ async function main(argv: readonly string[]): Promise<number> {
       store: handoffs.store,
       entries: resolution.entries,
       cardRevision,
-      spendCeilingUsdMicros: Math.round((contract.limits?.spendUsd ?? 5) * 1_000_000),
-      maxRepairRounds: contract.limits?.repairCycles ?? 1,
+      spendCeilingUsdMicros: spendAuthorization.spendCeilingUsdMicros,
+      maxRepairRounds: spendAuthorization.maxRepairRounds,
       executionScope: liveExecutionScope(env),
       ...(researchClause === undefined ? {} : {
         researchPolicyFor: researchPolicyOf,
