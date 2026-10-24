@@ -32,8 +32,8 @@ import {
   SHA256_HEX,
   applyWonderlandStatusTransition,
   createWonderlandAdmissionStore,
-  evaluateWonderlandAdmissionClock,
   parseWorkflowModelPins,
+  projectUnclaimedHeldPhase,
   projectWonderlandStatus,
   wonderlandStatusStateFromAdmission,
   type AdmissionLedger,
@@ -47,6 +47,7 @@ import {
   createFileAdmissionLedger,
   isAdmissionFileClosed,
   isLocalStorePath,
+  noteAwaitingOperatorExpiry,
   readAdmissionDocument,
   recordAdmissionOwner,
   resolveAdmissionStorePath,
@@ -378,10 +379,18 @@ export function handleWonderlandStatusRoute(
   if (admission === null) return Promise.resolve(STATUS_NOT_FOUND);
   const owner = admission.ownerPlayerId ?? (ports.env.JULIUS_J1_FOUNDER_PLAYER_ID ?? '').trim();
   if (owner === '' || owner !== guarded.native.playerId) return Promise.resolve(STATUS_NOT_FOUND);
-  return Promise.resolve({ status: 200, body: statusView(admission, document, runId, request.nowMs) });
+  try {
+    return Promise.resolve({ status: 200, body: statusView(storePath, admission, document, runId, request.nowMs) });
+  } catch (error) {
+    if (isAdmissionFileClosed(error)) {
+      return Promise.resolve(err(503, 'julius_dispatch_unavailable', 'Wonderland admission store is not available. Nothing was reserved.'));
+    }
+    return Promise.resolve({ status: 500, body: {} });
+  }
 }
 
 function statusView(
+  storePath: string,
   admission: StoredAdmission,
   document: OperatorDocument,
   serverRunId: string,
@@ -410,7 +419,8 @@ function statusView(
     );
   }
   if (admission.admissionState === 'ADMISSION_HELD') {
-    const phase = heldPhase(admission, nowMs);
+    const phase = projectUnclaimedHeldPhase(admission.receivedAt, nowMs);
+    if (phase.kind === 'operator_expired') noteAwaitingOperatorExpiry(storePath, serverRunId, phase.updatedAt);
     return statusBody(admission.runId, serverRunId, phase.projection, phase.updatedAt);
   }
   return statusBody(
@@ -422,29 +432,6 @@ function statusView(
     }),
     admission.receivedAt,
   );
-}
-
-/** The held phase before the claim. Reads the clock. Does not write the file. */
-function heldPhase(admission: StoredAdmission, nowMs: number): { projection: WonderlandStatusProjection; updatedAt: string } {
-  const acceptedAtMs = Date.parse(admission.receivedAt);
-  const phase = evaluateWonderlandAdmissionClock({
-    acceptedAtMs,
-    nowMs,
-    dispatchedAtMs: null,
-  });
-  if (phase.kind === 'awaiting_operator') {
-    return { projection: { state: 'awaiting_operator' }, updatedAt: admission.receivedAt };
-  }
-  if (phase.kind === 'operator_expired') {
-    return { projection: phase.projection, updatedAt: new Date(phase.expiredAtMs).toISOString() };
-  }
-  return {
-    projection: projectWonderlandStatus({
-      state: wonderlandStatusStateFromAdmission(admission.admissionState),
-      cause: null,
-    }),
-    updatedAt: admission.receivedAt,
-  };
 }
 
 function claimCause(claim: ClaimEvent): string | null {

@@ -308,7 +308,11 @@ value against those unions. A stored state outside the union, or a stored
 cause outside the union, is returned as `state: "unknown"` with no cause.
 The stored token is not copied into the answer. `unknown` is never terminal.
 The route does not call the operator tool, does not run `gh`, does not read
-a credential, and does not spawn a process.
+a credential, and does not spawn a process. The status clock is the server
+clock (`Date.now()` at the bridge). A query, a header, and a body do not
+set it. When the held phase has elapsed and no claim is stored, that read
+records one operator-journal note, `failed` / `AWAITING_OPERATOR_EXPIRED`,
+at the first expired instant. The admission document is not rewritten.
 
 `WonderlandStatusState`:
 
@@ -377,10 +381,16 @@ Terminal states, the ones a record does not leave:
 
 `AWAITING_OPERATOR_EXPIRED` is the non-paid terminal cause of the held phase.
 The workflow was not started and nothing was spent. It is not a slot outcome
-and not a spent-tag outcome. The operator claim reads this same clock before
-it records a claim or dispatches. Once the window has elapsed, the claim is
-refused, the admission file and the operator journal are left as they are,
-and `gh` is not spawned. The last millisecond of the window is still open.
+and not a spent-tag outcome. The operator claim and a confirmed dispatch
+read the server clock before they record a claim or spawn `gh`. That clock
+is not a request field, a query, a header, or a CLI argument. Tests inject
+it only through the claim tool. The last millisecond of the window is still
+open. Once the window has elapsed, the claim is refused, `gh` is not
+spawned, and the admission document is left as it is. The operator journal
+records one progress note, `failed` / `AWAITING_OPERATOR_EXPIRED`, at the
+first expired instant. A later clock, including one set back inside the
+window, cannot claim or dispatch that run. The operator CLI `status`
+command reports that same `failed` / `AWAITING_OPERATOR_EXPIRED` projection.
 
 Once the operator claim has recorded `dispatched`, `applyWonderlandStatusTransition`
 refuses every write of `INTERRUPTED` or `FAILED`, the status spellings
@@ -394,7 +404,8 @@ report: `dispatch_failed` and `already_spent`.
 A run is visible to the player recorded for that server run id in the operator
 journal. When the journal has no owner, the founder id is the owner. A different player, a
 `runId` that is not `run:` plus 24 lowercase hex, and an unknown `runId` each
-receive the same 404 body. The file is not modified by any of these answers.
+receive the same 404 body. Those answers do not rewrite the admission
+document. An elapsed held phase may record the journal note above.
 
 ## Durability
 
@@ -411,8 +422,9 @@ receive the same 404 body. The file is not modified by any of these answers.
 
 ## Progress source
 
-The operator tool's future `status --watch` is the only writer of later
-progress. It would read the run with the founder's own `gh` and append that
+The held-phase expiry is written when the operator claim or a status read
+observes it. Later progress from `gh` is still the operator tool's future
+`status --watch`. It would read the run with the founder's own `gh` and append that
 progress onto the operator journal beside the admission file. A note it appends has to use
 `WonderlandStatusState` (never `unknown`) and, when it has a cause,
 `WonderlandStatusCause`. That command is not implemented here. The relay only

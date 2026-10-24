@@ -5,7 +5,10 @@
  * local admission file. admitted -> dispatched is a single exclusive write.
  * A second claim returns that record and does not dispatch again.
  * A held row whose awaiting-operator window has already elapsed is refused
- * before any claim is written and before `gh` is spawned.
+ * before any claim is written and before `gh` is spawned. The server clock
+ * makes that decision. A test may inject the clock through the tool. A
+ * request body, query, header, or CLI flag cannot. Once expiry is observed
+ * it is stored on the operator journal and stays final.
  *
  * The default is a dry-run: after the claim it prints the exact `gh workflow
  * run` command and spawns nothing. `--dispatch` plus the exact confirmation
@@ -23,12 +26,14 @@
  */
 
 import {
-  evaluateWonderlandAdmissionClock,
+  applyWonderlandStatusTransition,
   JULIUS_BOOTSTRAP_RUN_ID,
   MISSION_SLUG,
   PAID_SLOT_DISPATCH_KEY,
   PAID_WORKFLOW_FILE,
+  projectUnclaimedHeldPhase,
   WONDERLAND_RUN_ID,
+  type WonderlandStatusProjection,
 } from './admission-contract';
 import type {
   AdmissionFile,
@@ -37,9 +42,10 @@ import type {
   DispatchError,
   OperatorDocument,
   StoredAdmission,
+  StoredProgress,
   WorkflowHalt,
 } from './admission-file';
-import { openAdmissionFile } from './admission-file';
+import { noteAwaitingOperatorExpiry, openAdmissionFile, readAdmissionDocument } from './admission-file';
 
 /** The workflow input the paid run must gain before this tool will dispatch. */
 export const SERVER_RUN_ID_INPUT = 'server_run_id';
@@ -112,7 +118,16 @@ export interface ClaimInput {
   readonly workflowSource: string;
   readonly dispatch: boolean;
   readonly confirmation: string | null;
-  readonly nowIso: string;
+}
+
+/** Server clock. Tests inject this. Callers cannot pass it on a claim. */
+export interface OperatorClaimClock {
+  readonly nowIso: () => string;
+}
+
+export interface OperatorStatusPhase {
+  readonly projection: WonderlandStatusProjection;
+  readonly updatedAt: string;
 }
 
 export type ClaimResult =
@@ -135,7 +150,7 @@ export type ClaimResult =
   };
 
 export type StatusResult =
-  | { readonly ok: true; readonly record: OperatorView }
+  | { readonly ok: true; readonly record: OperatorView; readonly phase: OperatorStatusPhase | null }
   | { readonly ok: false; readonly kind: string; readonly message: string };
 
 /** 24 lowercase hex from a full `run:` id. Checked before any command is built. */
@@ -259,24 +274,41 @@ export interface OperatorClaimTool {
   status(wonderlandRunId: string, serverRunId: string): Promise<StatusResult>;
 }
 
-export function createOperatorClaimTool(file: AdmissionFile, spawn: GhSpawner): OperatorClaimTool {
+export function createOperatorClaimTool(
+  file: AdmissionFile,
+  spawn: GhSpawner,
+  clock: OperatorClaimClock = { nowIso: () => new Date().toISOString() },
+): OperatorClaimTool {
   return {
     claim(input) {
-      return file.exclusive((io) => Promise.resolve(claimInside(io, input, spawn)));
+      return file.exclusive((io) => Promise.resolve(claimInside(io, file.path, input, spawn, clock)));
     },
     status(wonderlandRunId, serverRunId) {
-      return file.exclusive((io) => Promise.resolve(statusInside(io, wonderlandRunId, serverRunId)));
+      return file.exclusive((io) => Promise.resolve(statusInside(io, file.path, wonderlandRunId, serverRunId, clock)));
     },
   };
 }
 
-export function openOperatorClaimTool(storePath: string, spawn: GhSpawner): OperatorClaimTool {
-  return createOperatorClaimTool(openAdmissionFile(storePath), spawn);
+export function openOperatorClaimTool(
+  storePath: string,
+  spawn: GhSpawner,
+  clock?: OperatorClaimClock,
+): OperatorClaimTool {
+  const file = openAdmissionFile(storePath);
+  return clock === undefined ? createOperatorClaimTool(file, spawn) : createOperatorClaimTool(file, spawn, clock);
 }
 
-function claimInside(io: AdmissionFileIo, input: ClaimInput, spawn: GhSpawner): ClaimResult {
+function claimInside(
+  io: AdmissionFileIo,
+  storePath: string,
+  input: ClaimInput,
+  spawn: GhSpawner,
+  clock: OperatorClaimClock,
+): ClaimResult {
   const shape = validateShape(input);
   if (shape !== null) return shape;
+  const nowIso = clock.nowIso();
+  if (!ISO.test(nowIso)) return fail('clock_invalid', 'The operator clock is not an ISO timestamp.', null);
   const document = io.read();
   const located = locate(document, input.wonderlandRunId, input.serverRunId);
   if (located.kind === 'not_found') return fail('admission_not_found', 'No admitted record matches that pair.', null);
@@ -295,17 +327,11 @@ function claimInside(io: AdmissionFileIo, input: ClaimInput, spawn: GhSpawner): 
   if (admission.admissionState !== 'ADMISSION_HELD') {
     return fail('not_admitted', `The record is ${admission.admissionState} and is not admitted.`, toView(admission, null));
   }
-  const heldPhase = evaluateWonderlandAdmissionClock({
-    acceptedAtMs: Date.parse(admission.receivedAt),
-    nowMs: Date.parse(input.nowIso),
-    dispatchedAtMs: null,
-  });
+  if (sealedExpiry(storePath, document, admission.serverRunId) !== null) return expiredRefusal(admission);
+  const heldPhase = projectUnclaimedHeldPhase(admission.receivedAt, Date.parse(nowIso));
   if (heldPhase.kind === 'operator_expired') {
-    return fail(
-      'AWAITING_OPERATOR_EXPIRED',
-      'The held phase expired before the operator claim. The record was not claimed and nothing was dispatched.',
-      toView(admission, null),
-    );
+    noteAwaitingOperatorExpiry(storePath, admission.serverRunId, heldPhase.updatedAt);
+    return expiredRefusal(admission);
   }
   if (heldPhase.kind !== 'awaiting_operator') {
     return fail(
@@ -336,7 +362,8 @@ function claimInside(io: AdmissionFileIo, input: ClaimInput, spawn: GhSpawner): 
     serverRunId: admission.serverRunId,
   }));
   if (!input.dispatch) {
-    const event = baseEvent(admission, input.nowIso, {
+    if (sealedExpiry(storePath, document, admission.serverRunId) !== null) return expiredRefusal(admission);
+    const event = baseEvent(admission, nowIso, {
       state: 'dispatched',
       spentTagState: 'unknown',
       dispatchAttempted: false,
@@ -344,6 +371,7 @@ function claimInside(io: AdmissionFileIo, input: ClaimInput, spawn: GhSpawner): 
       halt: null,
     });
     io.write(appendClaim(document, event));
+    if (!claimWasRecorded(storePath, event)) return expiredRefusal(admission);
     return {
       ok: true,
       claimed: true,
@@ -370,7 +398,8 @@ function claimInside(io: AdmissionFileIo, input: ClaimInput, spawn: GhSpawner): 
     );
   }
   if (tag === 'present') {
-    const event = baseEvent(admission, input.nowIso, {
+    if (sealedExpiry(storePath, document, admission.serverRunId) !== null) return expiredRefusal(admission);
+    const event = baseEvent(admission, nowIso, {
       state: 'already_spent',
       spentTagState: 'present',
       dispatchAttempted: false,
@@ -378,13 +407,15 @@ function claimInside(io: AdmissionFileIo, input: ClaimInput, spawn: GhSpawner): 
       halt: 'RUN_ID_ALREADY_SPENT',
     });
     io.write(appendClaim(document, event));
+    if (!claimWasRecorded(storePath, event)) return expiredRefusal(admission);
     return fail(
       'RUN_ID_ALREADY_SPENT',
       'The spent tag already exists. The record is already_spent. Nothing was dispatched.',
       toView(admission, event),
     );
   }
-  const reserved = baseEvent(admission, input.nowIso, {
+  if (sealedExpiry(storePath, document, admission.serverRunId) !== null) return expiredRefusal(admission);
+  const reserved = baseEvent(admission, nowIso, {
     state: 'dispatched',
     spentTagState: 'absent',
     dispatchAttempted: false,
@@ -393,6 +424,7 @@ function claimInside(io: AdmissionFileIo, input: ClaimInput, spawn: GhSpawner): 
   });
   const claimedDoc = appendClaim(document, reserved);
   io.write(claimedDoc);
+  if (!claimWasRecorded(storePath, reserved)) return expiredRefusal(admission);
   const ran = spawn.run(workflowDispatchArgs({
     repo: input.repo,
     mission: admission.missionId,
@@ -402,7 +434,7 @@ function claimInside(io: AdmissionFileIo, input: ClaimInput, spawn: GhSpawner): 
   }));
   const halt = interpretWorkflowHalt(ran);
   if (halt === 'RUN_ID_ALREADY_SPENT') {
-    const spent = baseEvent(admission, input.nowIso, {
+    const spent = baseEvent(admission, nowIso, {
       state: 'already_spent',
       spentTagState: 'present',
       dispatchAttempted: true,
@@ -418,7 +450,7 @@ function claimInside(io: AdmissionFileIo, input: ClaimInput, spawn: GhSpawner): 
   }
   if (halt === 'SPENT_TAG_UNVERIFIED' || ran.code !== 0) {
     const unverified = halt === 'SPENT_TAG_UNVERIFIED';
-    const failed = baseEvent(admission, input.nowIso, {
+    const failed = baseEvent(admission, nowIso, {
       state: 'dispatch_failed',
       spentTagState: unverified ? 'unknown' : 'absent',
       dispatchAttempted: true,
@@ -434,7 +466,7 @@ function claimInside(io: AdmissionFileIo, input: ClaimInput, spawn: GhSpawner): 
       toView(admission, failed),
     );
   }
-  const attempted = baseEvent(admission, input.nowIso, {
+  const attempted = baseEvent(admission, nowIso, {
     state: 'dispatched',
     spentTagState: 'absent',
     dispatchAttempted: true,
@@ -453,11 +485,18 @@ function claimInside(io: AdmissionFileIo, input: ClaimInput, spawn: GhSpawner): 
   };
 }
 
-function statusInside(io: AdmissionFileIo, wonderlandRunId: string, serverRunId: string): StatusResult {
+function statusInside(
+  io: AdmissionFileIo,
+  storePath: string,
+  wonderlandRunId: string,
+  serverRunId: string,
+  clock: OperatorClaimClock,
+): StatusResult {
   if (!WONDERLAND_RUN_ID.test(wonderlandRunId) || !JULIUS_BOOTSTRAP_RUN_ID.test(serverRunId)) {
     return { ok: false, kind: 'run_id_invalid', message: 'The run id pair is not well formed.' };
   }
-  const located = locate(io.read(), wonderlandRunId, serverRunId);
+  const document = io.read();
+  const located = locate(document, wonderlandRunId, serverRunId);
   if (located.kind === 'not_found') return { ok: false, kind: 'admission_not_found', message: 'No admitted record matches that pair.' };
   if (located.kind === 'server_run_mismatch') {
     return { ok: false, kind: 'server_run_mismatch', message: 'The server run id does not match the admitted record.' };
@@ -467,9 +506,86 @@ function statusInside(io: AdmissionFileIo, wonderlandRunId: string, serverRunId:
   }
   if (located.admission === null) {
     if (located.claim === null) return { ok: false, kind: 'admission_not_found', message: 'No admitted record matches that pair.' };
-    return { ok: true, record: viewFromClaim(located.claim) };
+    return { ok: true, record: viewFromClaim(located.claim), phase: null };
   }
-  return { ok: true, record: toView(located.admission, located.claim) };
+  const admission = located.admission;
+  const dispatched = document.claims.some((event) =>
+    event.serverRunId === serverRunId
+    && event.wonderlandRunId === admission.runId
+    && (event.state === 'dispatched' || event.dispatchAttempted));
+  const progress = [...document.progress].reverse().find((note) => note.serverRunId === serverRunId) ?? null;
+  if (progress !== null) {
+    const decision = applyWonderlandStatusTransition({
+      dispatched,
+      proposedState: progress.state,
+      proposedCause: progress.cause,
+    });
+    if (decision.ok) {
+      if (isExpiryProjection(decision.projection)) {
+        return {
+          ok: true,
+          record: toView(admission, null),
+          phase: { projection: decision.projection, updatedAt: progress.updatedAt },
+        };
+      }
+      return { ok: true, record: toView(admission, located.claim), phase: null };
+    }
+  }
+  if (located.claim !== null) return { ok: true, record: toView(admission, located.claim), phase: null };
+  if (admission.admissionState !== 'ADMISSION_HELD') {
+    return { ok: true, record: toView(admission, null), phase: null };
+  }
+  const nowIso = clock.nowIso();
+  if (!ISO.test(nowIso)) return { ok: false, kind: 'clock_invalid', message: 'The operator clock is not an ISO timestamp.' };
+  const heldPhase = projectUnclaimedHeldPhase(admission.receivedAt, Date.parse(nowIso));
+  if (heldPhase.kind === 'operator_expired') {
+    noteAwaitingOperatorExpiry(storePath, serverRunId, heldPhase.updatedAt);
+    return {
+      ok: true,
+      record: toView(admission, null),
+      phase: { projection: heldPhase.projection, updatedAt: heldPhase.updatedAt },
+    };
+  }
+  if (heldPhase.kind === 'awaiting_operator') {
+    return {
+      ok: true,
+      record: toView(admission, null),
+      phase: { projection: heldPhase.projection, updatedAt: heldPhase.updatedAt },
+    };
+  }
+  return { ok: true, record: toView(admission, null), phase: null };
+}
+
+function expiredRefusal(admission: StoredAdmission): ClaimResult {
+  return fail(
+    'AWAITING_OPERATOR_EXPIRED',
+    'The held phase expired before the operator claim. The record was not claimed and nothing was dispatched.',
+    toView(admission, null),
+  );
+}
+
+function isExpiryProjection(projection: WonderlandStatusProjection): boolean {
+  return projection.state === 'failed' && projection.cause === 'AWAITING_OPERATOR_EXPIRED';
+}
+
+function expiryNote(progress: readonly StoredProgress[], serverRunId: string): StoredProgress | null {
+  return progress.find((note) =>
+    note.serverRunId === serverRunId
+    && note.state === 'failed'
+    && note.cause === 'AWAITING_OPERATOR_EXPIRED') ?? null;
+}
+
+function sealedExpiry(storePath: string, memory: OperatorDocument, serverRunId: string): StoredProgress | null {
+  return expiryNote(memory.progress, serverRunId) ?? expiryNote(readAdmissionDocument(storePath).progress, serverRunId);
+}
+
+function claimWasRecorded(storePath: string, reserved: ClaimEvent): boolean {
+  return readAdmissionDocument(storePath).claims.some((event) =>
+    event.wonderlandRunId === reserved.wonderlandRunId
+    && event.serverRunId === reserved.serverRunId
+    && event.state === reserved.state
+    && event.at === reserved.at
+    && event.dispatchAttempted === reserved.dispatchAttempted);
 }
 
 function replay(record: OperatorView): ClaimResult {
@@ -492,7 +608,6 @@ function validateShape(input: ClaimInput): ClaimResult | null {
   if (!OPERATOR_LANES.includes(input.lane as OperatorLane)) {
     return fail('lane_invalid', 'The lane must be qualification, qualification-repair, lab, or regression.', null);
   }
-  if (!ISO.test(input.nowIso)) return fail('clock_invalid', 'The operator clock is not an ISO timestamp.', null);
   return null;
 }
 

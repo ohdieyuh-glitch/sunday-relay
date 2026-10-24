@@ -633,15 +633,92 @@ function parseProgress(value: unknown): StoredProgress {
   };
 }
 
-function writeJournal(path: string, document: OperatorDocument): void {
-  const current = readJournal(operatorJournalPath(path));
-  writeJournalBytes(path, {
+/**
+ * Record that the held phase was observed expired. The admission document
+ * stays `{ schemaVersion, rows }` and the row stays `ADMISSION_HELD`. The
+ * note is the terminal record: a later claim must not dispatch.
+ *
+ * This does not take the admission lock. The bridge holds that lock for the
+ * process lifetime, and the status route runs in that process. A path that
+ * is not a local store, a run id that is not `run:` plus 24 hex, or a
+ * timestamp that is not ISO-8601 is ignored. A claim already stored for the
+ * server run, or the same expiry note, is left as it is.
+ */
+export function noteAwaitingOperatorExpiry(storePath: string, serverRunId: string, updatedAt: string): void {
+  const located = resolveAdmissionStorePath(storePath);
+  if (!located.ok || !JULIUS_BOOTSTRAP_RUN_ID.test(serverRunId) || !RECEIVED_AT.test(updatedAt)) return;
+  const current = readJournal(operatorJournalPath(located.path));
+  if (current.claims.some((event) => event.serverRunId === serverRunId)) return;
+  if (current.progress.some((note) => isOperatorExpiry(note) && note.serverRunId === serverRunId)) return;
+  writeJournalBytes(located.path, {
     schemaVersion: ADMISSION_FILE_SCHEMA_VERSION,
-    revision: document.revision,
-    claims: document.claims.map(parseClaim),
-    progress: (document.progress ?? []).map(parseProgress),
+    revision: current.revision + 1,
+    claims: current.claims,
+    progress: [...current.progress, {
+      serverRunId,
+      state: 'failed',
+      cause: 'AWAITING_OPERATOR_EXPIRED',
+      updatedAt,
+    }],
     owners: current.owners,
   });
+}
+
+function isOperatorExpiry(note: StoredProgress): boolean {
+  return note.state === 'failed' && note.cause === 'AWAITING_OPERATOR_EXPIRED';
+}
+
+function writeJournal(path: string, document: OperatorDocument): void {
+  const current = readJournal(operatorJournalPath(path));
+  const incomingProgress = (document.progress ?? []).map(parseProgress);
+  const progress = mergeExpiryProgress(incomingProgress, current.progress);
+  const claims = claimsRespectingExpiry(document.claims.map(parseClaim), current.claims, current.progress);
+  writeJournalBytes(path, {
+    schemaVersion: ADMISSION_FILE_SCHEMA_VERSION,
+    revision: Math.max(document.revision, current.revision),
+    claims,
+    progress,
+    owners: current.owners,
+  });
+}
+
+/** A claim write must not erase an expiry note it had not read. */
+function mergeExpiryProgress(incoming: readonly StoredProgress[], onDisk: readonly StoredProgress[]): StoredProgress[] {
+  const merged = [...incoming];
+  for (const note of onDisk) {
+    if (!isOperatorExpiry(note)) continue;
+    if (merged.some((row) => row.serverRunId === note.serverRunId && isOperatorExpiry(row))) continue;
+    merged.push(note);
+  }
+  return merged;
+}
+
+/**
+ * An expiry note already on disk means the run was judged expired. A claim
+ * that was not already stored does not get to land afterwards.
+ */
+function claimsRespectingExpiry(
+  incoming: readonly ClaimEvent[],
+  onDiskClaims: readonly ClaimEvent[],
+  onDiskProgress: readonly StoredProgress[],
+): ClaimEvent[] {
+  const expired = new Set(onDiskProgress.filter(isOperatorExpiry).map((note) => note.serverRunId));
+  if (expired.size === 0) return [...incoming];
+  const prior = new Set(onDiskClaims.map(claimStamp));
+  return incoming.filter((claim) => prior.has(claimStamp(claim)) || !expired.has(claim.serverRunId));
+}
+
+function claimStamp(claim: ClaimEvent): string {
+  return [
+    claim.wonderlandRunId,
+    claim.serverRunId,
+    claim.state,
+    claim.spentTagState,
+    claim.at,
+    claim.dispatchAttempted ? '1' : '0',
+    claim.dispatchError ?? '',
+    claim.halt ?? '',
+  ].join('\0');
 }
 
 function writeJournalBytes(path: string, body: OperatorJournal): void {

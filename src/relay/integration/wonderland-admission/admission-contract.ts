@@ -464,3 +464,50 @@ export function evaluateWonderlandAdmissionClock(input: {
   }
   return { kind: 'awaiting_operator', expiresAtMs };
 }
+
+export type UnclaimedHeldPhase =
+  | {
+    readonly kind: 'awaiting_operator';
+    readonly projection: WonderlandStatusProjection;
+    readonly updatedAt: string;
+  }
+  | {
+    readonly kind: 'operator_expired';
+    readonly projection: WonderlandStatusProjection;
+    readonly updatedAt: string;
+  }
+  | {
+    readonly kind: 'unreadable';
+    readonly projection: WonderlandStatusProjection;
+    readonly updatedAt: string;
+  };
+
+/**
+ * The held phase before any claim. `receivedAt` is Accepted. `nowMs` is the
+ * server clock. An unreadable clock stays `held` and is not expiry.
+ */
+export function projectUnclaimedHeldPhase(receivedAt: string, nowMs: number): UnclaimedHeldPhase {
+  const phase = evaluateWonderlandAdmissionClock({
+    acceptedAtMs: Date.parse(receivedAt),
+    nowMs,
+    dispatchedAtMs: null,
+  });
+  if (phase.kind === 'awaiting_operator') {
+    return { kind: 'awaiting_operator', projection: { state: 'awaiting_operator' }, updatedAt: receivedAt };
+  }
+  if (phase.kind === 'operator_expired') {
+    return {
+      kind: 'operator_expired',
+      projection: phase.projection,
+      updatedAt: new Date(phase.expiredAtMs).toISOString(),
+    };
+  }
+  return {
+    kind: 'unreadable',
+    projection: projectWonderlandStatus({
+      state: wonderlandStatusStateFromAdmission('ADMISSION_HELD'),
+      cause: null,
+    }),
+    updatedAt: receivedAt,
+  };
+}

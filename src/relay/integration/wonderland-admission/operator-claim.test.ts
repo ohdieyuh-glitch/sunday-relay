@@ -111,9 +111,12 @@ function claimInput(over: Partial<ClaimInput> = {}): ClaimInput {
     workflowSource: WORKFLOW_WITH_INPUT,
     dispatch: false,
     confirmation: null,
-    nowIso: WHEN,
     ...over,
   };
+}
+
+function claimTool(path: string, spawn: GhSpawner, nowIso: () => string = () => WHEN) {
+  return createOperatorClaimTool(openAdmissionFile(path), spawn, { nowIso });
 }
 
 function recorder(behavior: (args: readonly string[]) => GhResult): { spawn: GhSpawner; calls: string[][] } {
@@ -264,7 +267,7 @@ describe('operator claim', () => {
     await withStore(async (path) => {
       await admit(path);
       const fake = scripted(ABSENT, WORKFLOW_OK);
-      const claims = createOperatorClaimTool(openAdmissionFile(path), fake.spawn);
+      const claims = claimTool(path, fake.spawn);
       const first = await claims.claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
       const second = await claims.claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
       expect(first.ok).toBe(true);
@@ -299,7 +302,7 @@ describe('operator claim', () => {
     await withStore(async (path) => {
       await admit(path);
       const fake = scripted(ABSENT, WORKFLOW_OK);
-      const claims = createOperatorClaimTool(openAdmissionFile(path), fake.spawn);
+      const claims = claimTool(path, fake.spawn);
       const input = claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION });
       const [left, right] = await Promise.all([claims.claim(input), claims.claim(input)]);
       const results = [left, right];
@@ -320,7 +323,7 @@ describe('operator claim', () => {
     await withStore(async (path) => {
       await admit(path);
       const fake = scripted(ABSENT, WORKFLOW_OK);
-      const claims = createOperatorClaimTool(openAdmissionFile(path), fake.spawn);
+      const claims = claimTool(path, fake.spawn);
       const wrongServer = await claims.claim(claimInput({ serverRunId: OTHER_SERVER }));
       const wrongWonderland = await claims.claim(claimInput({ wonderlandRunId: OTHER }));
       expect(wrongServer.ok).toBe(false);
@@ -339,7 +342,7 @@ describe('operator claim', () => {
       const sample = `${JSON.stringify({ version: 1, revision: 1, admissions: [], claims: [] })}\n`;
       writeFileSync(path, sample);
       const fake = scripted(ABSENT, WORKFLOW_OK);
-      const claims = createOperatorClaimTool(openAdmissionFile(path), fake.spawn);
+      const claims = claimTool(path, fake.spawn);
       await expect(claims.claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }))).rejects.toBeInstanceOf(AdmissionFileClosedError);
       expect(readFileSync(path, 'utf8')).toBe(sample);
       expect(fake.calls).toEqual([]);
@@ -356,7 +359,7 @@ describe('operator claim', () => {
   it('dry-run claims, prints the exact command, and spawns nothing', async () => {
     await withStore(async (path) => {
       await admit(path);
-      const claims = createOperatorClaimTool(openAdmissionFile(path), {
+      const claims = claimTool(path, {
         run() { throw new Error('spawned'); },
       });
       const result = await claims.claim(claimInput());
@@ -376,7 +379,7 @@ describe('operator claim', () => {
     await withStore(async (path) => {
       await admit(path);
       const fake = scripted(ABSENT, WORKFLOW_FAIL);
-      const claims = createOperatorClaimTool(openAdmissionFile(path), fake.spawn);
+      const claims = claimTool(path, fake.spawn);
       const failed = await claims.claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
       expect(failed.ok).toBe(false);
       if (failed.ok) return;
@@ -395,7 +398,7 @@ describe('operator claim', () => {
       const rows = JSON.parse(readFileSync(path, 'utf8')) as { schemaVersion: number; claims?: unknown };
       expect(rows.schemaVersion).toBe(2);
       expect(rows.claims).toBeUndefined();
-      const reloaded = createOperatorClaimTool(openAdmissionFile(path), {
+      const reloaded = claimTool(path, {
         run() { throw new Error('spawned'); },
       });
       const status = await reloaded.status(RUN, SERVER);
@@ -411,7 +414,7 @@ describe('operator claim', () => {
       await admit(path);
       const halted = { code: 0, stdout: '::error::RUN_ID_ALREADY_SPENT\n', stderr: '' };
       const fake = scripted(ABSENT, halted);
-      const claims = createOperatorClaimTool(openAdmissionFile(path), fake.spawn);
+      const claims = claimTool(path, fake.spawn);
       const spent = await claims.claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
       expect(spent.ok).toBe(false);
       if (spent.ok) return;
@@ -435,7 +438,7 @@ describe('operator claim', () => {
       await admit(path);
       const halted = { code: 1, stdout: '', stderr: 'SPENT_TAG_UNVERIFIED\n' };
       const fake = scripted(ABSENT, halted);
-      const claims = createOperatorClaimTool(openAdmissionFile(path), fake.spawn);
+      const claims = claimTool(path, fake.spawn);
       const failed = await claims.claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
       expect(failed.ok).toBe(false);
       if (failed.ok) return;
@@ -459,7 +462,7 @@ describe('operator claim', () => {
     await withStore(async (path) => {
       await admit(path);
       const fake = scripted(PRESENT, WORKFLOW_OK);
-      const claims = createOperatorClaimTool(openAdmissionFile(path), fake.spawn);
+      const claims = claimTool(path, fake.spawn);
       const spent = await claims.claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
       expect(spent.ok).toBe(false);
       if (spent.ok) return;
@@ -481,7 +484,7 @@ describe('operator claim', () => {
     await withStore(async (path) => {
       await admit(path);
       const fake = scripted(ABSENT, WORKFLOW_OK);
-      const claims = createOperatorClaimTool(openAdmissionFile(path), fake.spawn);
+      const claims = claimTool(path, fake.spawn);
       const result = await claims.claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
       expect(result.ok && result.dispatchedWorkflow).toBe(true);
       if (!result.ok) return;
@@ -498,7 +501,7 @@ describe('operator claim', () => {
     await withStore(async (path) => {
       await admit(path);
       const fake = scripted({ code: 1, stdout: '', stderr: 'temporary failure' }, WORKFLOW_OK);
-      const claims = createOperatorClaimTool(openAdmissionFile(path), fake.spawn);
+      const claims = claimTool(path, fake.spawn);
       const result = await claims.claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
       expect(result.ok).toBe(false);
       if (result.ok) return;
@@ -514,7 +517,7 @@ describe('operator claim', () => {
     await withStore(async (path) => {
       await admit(path);
       const absent = scripted(ABSENT, WORKFLOW_OK);
-      const claims = createOperatorClaimTool(openAdmissionFile(path), absent.spawn);
+      const claims = claimTool(path, absent.spawn);
       const refused = await claims.claim(claimInput({
         workflowSource: WORKFLOW_WITHOUT_INPUT,
         dispatch: true,
@@ -526,7 +529,7 @@ describe('operator claim', () => {
       expect(refused.record?.state).toBe('admitted');
       expect(absent.calls).toEqual([]);
       const present = scripted(ABSENT, WORKFLOW_OK);
-      const allowed = await createOperatorClaimTool(openAdmissionFile(path), present.spawn).claim(claimInput({
+      const allowed = await claimTool(path, present.spawn).claim(claimInput({
         workflowSource: WORKFLOW_WITH_INPUT,
         dispatch: true,
         confirmation: OPERATOR_DISPATCH_CONFIRMATION,
@@ -543,7 +546,7 @@ describe('operator claim', () => {
       await admit(path);
       const source = readFileSync(join(__dirname, '../../../../.github/workflows/julius-first-live-mission.yml'), 'utf8');
       const fake = scripted(ABSENT, WORKFLOW_OK);
-      const claims = createOperatorClaimTool(openAdmissionFile(path), fake.spawn);
+      const claims = claimTool(path, fake.spawn);
       const refused = await claims.claim(claimInput({
         workflowSource: source,
         dispatch: true,
@@ -567,34 +570,40 @@ describe('operator claim', () => {
     });
   });
 
-  it('an expired held phase cannot be claimed or dispatched', async () => {
+  it('an expired held phase cannot be claimed or dispatched, and a back-dated clock cannot revive it', async () => {
     const openAt = new Date(Date.parse(WHEN) + AWAITING_OPERATOR_WINDOW_MS).toISOString();
     const expiredAt = new Date(Date.parse(WHEN) + AWAITING_OPERATOR_WINDOW_MS + 1).toISOString();
+    const expiryNote = {
+      serverRunId: SERVER,
+      state: 'failed',
+      cause: 'AWAITING_OPERATOR_EXPIRED',
+      updatedAt: expiredAt,
+    };
 
     await withStore(async (path) => {
       await admit(path);
       const fake = scripted(ABSENT, WORKFLOW_OK);
-      const claims = createOperatorClaimTool(openAdmissionFile(path), fake.spawn);
-      const open = await claims.claim(claimInput({ nowIso: openAt }));
+      const claims = claimTool(path, fake.spawn, () => openAt);
+      const open = await claims.claim(claimInput());
       expect(open.ok).toBe(true);
       if (!open.ok) return;
       expect(open.claimed).toBe(true);
       expect(open.dispatchedWorkflow).toBe(false);
       expect(fake.calls).toEqual([]);
+      expect(readAdmissionDocument(path).progress.some((note) => note.cause === 'AWAITING_OPERATOR_EXPIRED')).toBe(false);
     });
 
     await withStore(async (path) => {
       await admit(path);
       const before = readFileSync(path, 'utf8');
       const fake = scripted(ABSENT, WORKFLOW_OK);
-      const claims = createOperatorClaimTool(openAdmissionFile(path), fake.spawn);
-      const dry = await claims.claim(claimInput({ nowIso: expiredAt }));
+      const claims = claimTool(path, fake.spawn, () => expiredAt);
+      const dry = await claims.claim(claimInput());
       expect(dry.ok).toBe(false);
       if (dry.ok) return;
       expect(dry.kind).toBe('AWAITING_OPERATOR_EXPIRED');
       expect(dry.record?.state).toBe('admitted');
       const live = await claims.claim(claimInput({
-        nowIso: expiredAt,
         dispatch: true,
         confirmation: OPERATOR_DISPATCH_CONFIRMATION,
       }));
@@ -604,9 +613,27 @@ describe('operator claim', () => {
       expect(live.record?.state).toBe('admitted');
       expect(fake.calls).toEqual([]);
       expect(readAdmissionDocument(path).claims).toEqual([]);
+      expect(readAdmissionDocument(path).progress).toEqual([expiryNote]);
       expect(readFileSync(path, 'utf8')).toBe(before);
       const stored = JSON.parse(before) as { rows: { state: string }[] };
       expect(stored.rows[0]?.state).toBe('ADMISSION_HELD');
+
+      const revived = claimTool(path, fake.spawn, () => WHEN);
+      const again = await revived.claim(claimInput());
+      expect(again.ok).toBe(false);
+      if (again.ok) return;
+      expect(again.kind).toBe('AWAITING_OPERATOR_EXPIRED');
+      const againLive = await revived.claim(claimInput({
+        dispatch: true,
+        confirmation: OPERATOR_DISPATCH_CONFIRMATION,
+      }));
+      expect(againLive.ok).toBe(false);
+      if (againLive.ok) return;
+      expect(againLive.kind).toBe('AWAITING_OPERATOR_EXPIRED');
+      expect(fake.calls).toEqual([]);
+      expect(readAdmissionDocument(path).claims).toEqual([]);
+      expect(readAdmissionDocument(path).progress).toEqual([expiryNote]);
+      expect(readFileSync(path, 'utf8')).toBe(before);
     });
   });
 
@@ -614,7 +641,7 @@ describe('operator claim', () => {
     await withStore(async (path) => {
       await admit(path);
       const fake = scripted(ABSENT, WORKFLOW_OK);
-      const claims = createOperatorClaimTool(openAdmissionFile(path), fake.spawn);
+      const claims = claimTool(path, fake.spawn);
       const refused = await claims.claim(claimInput({ dispatch: true, confirmation: 'run live mission' }));
       expect(refused.ok).toBe(false);
       if (refused.ok) return;
@@ -627,12 +654,12 @@ describe('operator claim', () => {
   it('the store survives a reload', async () => {
     await withStore(async (path) => {
       await admit(path);
-      const first = createOperatorClaimTool(openAdmissionFile(path), {
+      const first = claimTool(path, {
         run() { throw new Error('spawned'); },
       });
       const claimed = await first.claim(claimInput());
       expect(claimed.ok && claimed.record.state).toBe('dispatched');
-      const second = createOperatorClaimTool(openAdmissionFile(path), {
+      const second = claimTool(path, {
         run() { throw new Error('spawned'); },
       });
       const status = await second.status(RUN, SERVER);
@@ -731,7 +758,7 @@ describe('operator claim cli', () => {
     await withStore(async (path) => {
       await admit(path);
       const fake = scripted(PRESENT, WORKFLOW_OK);
-      await createOperatorClaimTool(openAdmissionFile(path), fake.spawn).claim(claimInput({
+      await claimTool(path, fake.spawn).claim(claimInput({
         dispatch: true,
         confirmation: OPERATOR_DISPATCH_CONFIRMATION,
       }));
@@ -758,6 +785,105 @@ describe('operator claim cli', () => {
       expect(body.halt).toBe('RUN_ID_ALREADY_SPENT');
       expect(body.serverRunId).toBe(SERVER);
       expect(body.retry).toBe(false);
+    });
+  });
+
+  it('status reports an expired held phase the same way the HTTP route does', async () => {
+    const expiredAt = new Date(Date.parse(WHEN) + AWAITING_OPERATOR_WINDOW_MS + 1).toISOString();
+    await withStore(async (path) => {
+      await admit(path);
+      const before = readFileSync(path, 'utf8');
+      const out: string[] = [];
+      const code = await runOperatorClaimCli([
+        'status', '--store', path, '--wonderland-run', RUN, '--server-run', SERVER,
+      ], {
+        out: (line) => { out.push(line); },
+        err: () => {},
+      }, {
+        spawn: { run() { throw new Error('spawned'); } },
+        nowIso: () => expiredAt,
+        readWorkflow: () => { throw new Error('status reads no workflow'); },
+      });
+      expect(code).toBe(0);
+      const body = JSON.parse(out[0] ?? '{}') as {
+        state: string; cause: string; updatedAt: string; retry: boolean; serverRunId: string;
+      };
+      expect(body.state).toBe('failed');
+      expect(body.cause).toBe('AWAITING_OPERATOR_EXPIRED');
+      expect(body.updatedAt).toBe(expiredAt);
+      expect(body.retry).toBe(false);
+      expect(body.serverRunId).toBe(SERVER);
+      expect(readFileSync(path, 'utf8')).toBe(before);
+      expect(readAdmissionDocument(path).claims).toEqual([]);
+      expect(readAdmissionDocument(path).progress).toEqual([{
+        serverRunId: SERVER,
+        state: 'failed',
+        cause: 'AWAITING_OPERATOR_EXPIRED',
+        updatedAt: expiredAt,
+      }]);
+
+      const fake = scripted(ABSENT, WORKFLOW_OK);
+      const revived = claimTool(path, fake.spawn, () => WHEN);
+      const dry = await revived.claim(claimInput());
+      expect(dry.ok).toBe(false);
+      if (dry.ok) return;
+      expect(dry.kind).toBe('AWAITING_OPERATOR_EXPIRED');
+      const live = await revived.claim(claimInput({
+        dispatch: true,
+        confirmation: OPERATOR_DISPATCH_CONFIRMATION,
+      }));
+      expect(live.ok).toBe(false);
+      if (live.ok) return;
+      expect(live.kind).toBe('AWAITING_OPERATOR_EXPIRED');
+      expect(fake.calls).toEqual([]);
+      expect(readAdmissionDocument(path).progress).toHaveLength(1);
+      expect(readFileSync(path, 'utf8')).toBe(before);
+
+      const laterOut: string[] = [];
+      const later = await runOperatorClaimCli([
+        'status', '--store', path, '--wonderland-run', RUN, '--server-run', SERVER,
+      ], {
+        out: (line) => { laterOut.push(line); },
+        err: () => {},
+      }, {
+        spawn: { run() { throw new Error('spawned'); } },
+        nowIso: () => WHEN,
+        readWorkflow: () => { throw new Error('status reads no workflow'); },
+      });
+      expect(later).toBe(0);
+      const laterBody = JSON.parse(laterOut[0] ?? '{}') as { state: string; cause: string; updatedAt: string; retry: boolean };
+      expect(laterBody.state).toBe('failed');
+      expect(laterBody.cause).toBe('AWAITING_OPERATOR_EXPIRED');
+      expect(laterBody.updatedAt).toBe(expiredAt);
+      expect(laterBody.retry).toBe(false);
+    });
+  });
+
+  it('a clock flag is rejected before the server clock is read', async () => {
+    await withStore(async (path) => {
+      await admit(path);
+      const before = readFileSync(path, 'utf8');
+      let clockReads = 0;
+      const err: string[] = [];
+      const code = await runOperatorClaimCli([
+        'claim', '--store', path,
+        '--wonderland-run', RUN, '--server-run', SERVER,
+        '--repo', REPO, '--lane', LANE,
+        '--now', WHEN,
+      ], {
+        out: () => {},
+        err: (line) => { err.push(line); },
+      }, {
+        spawn: { run() { throw new Error('spawned'); } },
+        nowIso: () => { clockReads += 1; return WHEN; },
+        readWorkflow: () => WORKFLOW_WITH_INPUT,
+      });
+      expect(code).toBe(2);
+      expect(clockReads).toBe(0);
+      expect(err[0]).toBe('usage');
+      expect(readFileSync(path, 'utf8')).toBe(before);
+      expect(readAdmissionDocument(path).claims).toEqual([]);
+      expect(readAdmissionDocument(path).progress).toEqual([]);
     });
   });
 

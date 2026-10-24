@@ -147,7 +147,7 @@ describe('wonderland status', () => {
     }
   });
 
-  it('awaiting_operator is open on the last millisecond of its window and expired on the next, and neither read writes the file', async () => {
+  it('awaiting_operator is open on the last millisecond, and an expired read stays final', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'wlj-status-'));
     const storePath = join(dir, 'admission.json');
     try {
@@ -157,6 +157,8 @@ describe('wonderland status', () => {
       const ports = service(storePath, () => { throw new Error('status must not mint'); });
       const acceptedAtMs = Date.parse(WHEN);
       const before = readFileSync(storePath, 'utf8');
+      const journalPath = `${storePath}.operator.json`;
+      const journalBefore = readFileSync(journalPath, 'utf8');
       const open = await handleWonderlandStatusRoute(
         statusRequest(SERVER, { nowMs: acceptedAtMs + AWAITING_OPERATOR_WINDOW_MS }),
         ports,
@@ -167,17 +169,44 @@ describe('wonderland status', () => {
         state: 'awaiting_operator',
         updatedAt: WHEN,
       });
+      expect(readFileSync(storePath, 'utf8')).toBe(before);
+      expect(readFileSync(journalPath, 'utf8')).toBe(journalBefore);
       const expiredAtMs = acceptedAtMs + AWAITING_OPERATOR_WINDOW_MS + 1;
-      const closed = await handleWonderlandStatusRoute(statusRequest(SERVER, { nowMs: expiredAtMs }), ports);
-      expect(closed?.body).toEqual({
+      const poisoned = `${WONDERLAND_STATUS_PATH}?projectId=${PROJECT}&runId=${encodeURIComponent(SERVER)}&now=${encodeURIComponent(WHEN)}&nowMs=0`;
+      const closed = await handleWonderlandStatusRoute(statusRequest(SERVER, {
+        nowMs: expiredAtMs,
+        url: poisoned,
+        rawBody: JSON.stringify({ nowIso: WHEN, nowMs: 0 }),
+      }), ports);
+      const expiredBody = {
         wljRunId: RUN,
         serverRunId: SERVER,
         state: 'failed',
         cause: 'AWAITING_OPERATOR_EXPIRED',
         updatedAt: new Date(expiredAtMs).toISOString(),
-      });
+      };
+      expect(closed?.body).toEqual(expiredBody);
       expect(readFileSync(storePath, 'utf8')).toBe(before);
       expect(readAdmissionDocument(storePath).claims).toEqual([]);
+      const journal = JSON.parse(readFileSync(journalPath, 'utf8')) as {
+        revision: number;
+        claims: unknown[];
+        progress: unknown[];
+        owners: Record<string, string>;
+      };
+      expect(journal.claims).toEqual([]);
+      expect(journal.owners[SERVER]).toBe('founder');
+      expect(journal.revision).toBe(1);
+      expect(journal.progress).toEqual([{
+        serverRunId: SERVER,
+        state: 'failed',
+        cause: 'AWAITING_OPERATOR_EXPIRED',
+        updatedAt: new Date(expiredAtMs).toISOString(),
+      }]);
+      const again = await handleWonderlandStatusRoute(statusRequest(SERVER, { nowMs: Date.parse(WHEN) }), ports);
+      expect(again?.body).toEqual(expiredBody);
+      expect(JSON.parse(readFileSync(journalPath, 'utf8')).progress).toHaveLength(1);
+      expect(readFileSync(storePath, 'utf8')).toBe(before);
       ports.close();
     } finally {
       rmSync(dir, { recursive: true, force: true });

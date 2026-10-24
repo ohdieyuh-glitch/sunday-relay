@@ -92,7 +92,7 @@ export async function runOperatorClaimCli(
   } catch (error) {
     return failClosed(io, error);
   }
-  const tool = createOperatorClaimTool(file, deps.spawn);
+  const tool = createOperatorClaimTool(file, deps.spawn, { nowIso: deps.nowIso });
   if (parsed.command === 'status') {
     if (parsed.dispatch || parsed.flags.has('confirm') || parsed.flags.has('lane') || parsed.flags.has('repo')) {
       io.err(USAGE);
@@ -127,7 +127,6 @@ export async function runOperatorClaimCli(
       workflowSource,
       dispatch: parsed.dispatch,
       confirmation: flag(parsed, 'confirm'),
-      nowIso: deps.nowIso(),
     });
     return emitClaim(io, result);
   } catch (error) {
@@ -175,7 +174,16 @@ function emitStatus(io: OperatorClaimCliIo, result: StatusResult): number {
     return 1;
   }
   const body: Record<string, unknown> = { ok: true, ...publicRecord(result.record) };
-  if (result.record.state === 'dispatch_failed' || result.record.state === 'already_spent') body.retry = false;
+  if (result.phase !== null) {
+    body.state = result.phase.projection.state;
+    body.updatedAt = result.phase.updatedAt;
+    if (result.phase.projection.cause !== undefined) body.cause = result.phase.projection.cause;
+  }
+  if (
+    result.record.state === 'dispatch_failed'
+    || result.record.state === 'already_spent'
+    || result.phase?.projection.cause === 'AWAITING_OPERATOR_EXPIRED'
+  ) body.retry = false;
   io.out(JSON.stringify(body));
   return 0;
 }
