@@ -2,9 +2,12 @@ import { createHash, randomBytes } from 'node:crypto';
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, writeSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
+import { deriveJuliusSpentTag, parseJuliusAdmissionRunId } from '../scripts/julius-admission-run-id.mjs';
 import { bearerMatches } from './bearer-auth';
 import { sessionTokenFrom } from './browser-session/routes';
-import { isAdmittedRunId, type AdmissionClaimStore, type AdmittedRecord } from './julius-dispatch-admission';
+import { type AdmissionClaimStore } from './julius-dispatch-admission';
+import { runJuliusCompanionSlot, type JuliusCompanionBinding } from './julius-companion-slot';
+import type { CompanionEvidenceStore } from './julius-companion-evidence';
 import { preSpendDecision, spendRefusalCode, type JuliusSpendLedgerPort } from './julius-dispatch-spend';
 import { composeRoleProviders } from './julius-role-compose';
 import type { KeyStore } from './julius-key-store';
@@ -33,9 +36,12 @@ import type { JuliusSettlementFact } from '../src/relay/mission/julius/julius-sp
  *   8. a ledger that cannot be written: the acceptance row, every pre_call row. NO row = NO provider call.
  *   9. a live (non-fake) composition. Paid execution is the gated workflow. This process does not call a provider.
  *
- * RUN IDS. The client may present either id of the admitted pair: `wlj_` plus a canonical lowercase UUIDv4,
- * or `run:` plus 24 lowercase hex. Any other string is `400 julius_dispatch_run_invalid`. The id must be the
- * one on the admitted record. Spend, evidence and billing rows key on the `run:` id. This route does not mint one.
+ * RUN IDS. The canonical id is `wlj_` plus a lowercase UUIDv4, recognized only by
+ * `scripts/julius-admission-run-id.mjs`. Spend, evidence and billing rows key on that id.
+ * The spend tag is `refs/tags/julius-run-spent-` plus the UUID's 32 hex characters with the dashes removed.
+ * A legacy `run:` plus 24 lowercase hex is read-only: it cannot mint, dispatch, resume or claim spend.
+ * A legacy row already on the ledger still counts toward the mission cap and the $60 ceiling.
+ * Any other string is `400 julius_dispatch_run_invalid`. This route does not mint an id.
  *
  * THE TRIGGER ORIGINATES IN THE GAME. The dispatch body must carry `clientLogSha256`: the sha256 of the exact client log line
  * (run id, trigger id, key hash) the game wrote BEFORE it sent the request. The bridge cannot read the client log; it BINDS the
@@ -304,6 +310,10 @@ export interface ChainEvent {
   readonly usage?: RoleUsage | null;
   readonly failure?: string | null;
   readonly resultSha256?: string;
+  /** Companion evidence only: a scrubbed wake id, the body digest, and artifact hashes. Never a task body. */
+  readonly wakeId?: string | null;
+  readonly bodyDigest?: string | null;
+  readonly artifactHashes?: readonly string[];
 }
 /** UNRECORDED = the chain ended but its FINAL ledger row could not be written: the run has no sealed record (a restart will orphan it). */
 export type ChainState = 'ACCEPTED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'HALTED' | 'ORPHANED' | 'UNRECORDED';
@@ -322,12 +332,30 @@ export const J1_RESTART_LIMITS = Object.freeze({
 
 export type DispatchMode = 'live' | 'fake';
 
+type ClassifiedRun =
+  | { readonly kind: 'wlj'; readonly runId: string; readonly spendTag: string }
+  | { readonly kind: 'legacy'; readonly runId: string }
+  | { readonly kind: 'closed' };
+
+/** One parser. A legacy id is recognized and then refused for every mutating path. */
+function classifyRunId(value: unknown): ClassifiedRun {
+  const parsed = parseJuliusAdmissionRunId(value);
+  if (!parsed.ok) return { kind: 'closed' };
+  if (parsed.form === 'legacy') return { kind: 'legacy', runId: parsed.runId };
+  const spent = deriveJuliusSpentTag(parsed.runId);
+  if (!spent.ok || spent.form !== 'wlj') return { kind: 'closed' };
+  return { kind: 'wlj', runId: spent.runId, spendTag: spent.tag };
+}
+
 interface RunRecord {
   /** The id the caller presented. Events and the HTTP body echo it. */
   readonly presentedRunId: string;
-  /** Ledger key for spend, evidence and billing. Always `run:` + 24 hex. */
+  /** The admitted pair's legacy id. Echoed on reads. Never a spend or evidence key. */
   readonly serverRunId: string;
+  /** Ledger key for spend, evidence and billing. Always the canonical `wlj_` id. */
   readonly clientRunId: string;
+  /** `refs/tags/julius-run-spent-` plus 32 hex. Empty only for a legacy row reloaded for reading. */
+  readonly spendTag: string;
   readonly runId: string;
   readonly dispatchId: string;
   readonly projectHash: string;
@@ -408,6 +436,18 @@ export interface JuliusDispatchDeps {
   readonly claims?: AdmissionClaimStore;
   /** The durable spend ledger #404 reads. Settlements recorded here are the facts `authorizeJuliusLiveSpend` folds. */
   readonly spendLedger?: JuliusSpendLedgerPort;
+  /**
+   * Optional companion slot. Absent means the chain never wakes one. When present, Julius hands at most one
+   * companion task to `port` after the architect and does not call a provider for it. A timeout, failure,
+   * or rejection does not stop the coder. No spend row is written for the slot.
+   */
+  readonly companion?: JuliusCompanionBinding;
+  /**
+   * Optional store for the companion row BRIDGE's read route will serve.
+   * Absent means the slot still runs and nothing is persisted. A legacy id
+   * is not a key. The summary, when one is stored, stays unverified.
+   */
+  readonly companionEvidence?: CompanionEvidenceStore;
   readonly now: () => number;
   /** Safe lines only (ids, hashes, codes). Never a key, a body or provider text. */
   readonly log?: (line: string) => void;
@@ -498,7 +538,7 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
 
   async function runChain(rec: RunRecord, ctx: { readonly missionId: string; readonly budgetCapUsd: number; readonly legEstimateUsd: number; readonly mode: DispatchMode }): Promise<void> {
     const providers = deps.providers as DispatchProviders;
-    const base = { dispatchId: rec.dispatchId, runId: rec.serverRunId, clientRunId: rec.clientRunId };
+    const base = { dispatchId: rec.dispatchId, runId: rec.clientRunId, clientRunId: rec.clientRunId, spendTag: rec.spendTag };
     const env = deps.env();
     /** Every key in play, read NOW for one leg's scrub (the store is read again each time; nothing is kept between legs). */
     const keysInPlay = (): string[] => DISPATCH_ROLES.map((role) => {
@@ -512,6 +552,7 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
     let architectText: string | null = null;
     let coderArtifact: string | null = null;
     let coderEvidence: string | null = null;
+    let companionArtifactSha: string | null = null;
     let verdict: 'approve' | 'reject' | null = null;
     let failure: string | null = null;
     let halted = false;
@@ -624,14 +665,14 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
       if (resultWritten && deps.spendLedger !== undefined) {
         const usd = typeof out.costUsdMicros === 'number' && Number.isSafeInteger(out.costUsdMicros) && out.costUsdMicros >= 0 ? out.costUsdMicros : null;
         const fact: JuliusSettlementFact = {
-          taskId: `${rec.serverRunId}:${role}`,
+          taskId: `${rec.clientRunId}:${role}`,
           role: role === 'coder' ? 'CODING_AGENT' : role === 'reviewer' ? 'INDEPENDENT_REVIEWER' : 'PROMPT_ARCHITECT',
           basis: usd === null ? null : 'PROVIDER_REPORTED',
           usdMicros: usd,
           estimatedUsdMicros: null,
           billingPath: role === 'coder' ? 'API_BILLED' : null,
         };
-        try { await deps.spendLedger.record(rec.serverRunId, fact); } catch { resultWritten = false; }
+        try { await deps.spendLedger.record(rec.clientRunId, fact); } catch { resultWritten = false; }
       }
       emit(rec, {
         type: roleFailure === null ? 'role.completed' : 'role.failed', role, phase: roleFailure === null ? 'done' : 'refused', outcome,
@@ -649,8 +690,68 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
         failure = 'ledger_write_failed_after_call'; halted = true; break;
       }
       if (roleFailure !== null) { failure = `${role}_${roleFailure}`; break; }
-      if (role === 'architect') architectText = text;
-      if (role === 'coder') { coderArtifact = text; coderEvidence = evidence; }
+      if (role === 'architect') {
+        architectText = text;
+        const binding = deps.companion;
+        if (binding !== undefined) {
+          try {
+            const slot = await runJuliusCompanionSlot({
+              plan: text,
+              runId: rec.clientRunId,
+              legacyRunId: rec.serverRunId,
+              deadlineMs: binding.deadlineMs,
+              port: binding.port,
+              clock: binding.clock,
+              integrate: binding.integrate,
+              validate: binding.validate,
+              review: {
+                review: async (artifact) => {
+                  const verdict = await binding.review.review(artifact);
+                  if (verdict.verdict === 'approve') companionArtifactSha = artifact.sha256;
+                  return verdict;
+                },
+              },
+            });
+            const hash = slot.evidence.artifactHashes[0] ?? null;
+            if (deps.companionEvidence !== undefined) {
+              deps.companionEvidence.record({
+                wljRunId: slot.evidence.runId,
+                legacyRunId: slot.evidence.legacyRunId,
+                disposition: slot.evidence.disposition,
+                summary: null,
+                contentSha256: hash,
+                provenance: hash === null ? null : {
+                  source: 'companion_port',
+                  wakeId: slot.evidence.wakeId,
+                  bodyDigest: slot.evidence.bodyDigest,
+                  contentSha256: hash,
+                },
+                agent: slot.evidence.agent,
+                updatedAt: new Date(deps.now()).toISOString(),
+              });
+            }
+            emit(rec, {
+              type: 'companion.recorded',
+              outcome: slot.evidence.disposition,
+              failure: slot.evidence.reason,
+              resultSha256: slot.evidence.bodyDigest ?? undefined,
+              wakeId: slot.evidence.wakeId,
+              bodyDigest: slot.evidence.bodyDigest,
+              artifactHashes: slot.evidence.artifactHashes,
+            });
+          } catch {
+            emit(rec, { type: 'companion.recorded', outcome: 'failed', failure: 'companion_slot_failed' });
+          }
+        }
+      }
+      if (role === 'coder') {
+        coderArtifact = text;
+        coderEvidence = evidence;
+        if (companionArtifactSha !== null) {
+          const note = `untrusted_companion_sha256=${companionArtifactSha}`;
+          coderEvidence = coderEvidence === null || coderEvidence === '' ? note : `${coderEvidence}\n${note}`;
+        }
+      }
       if (role === 'reviewer') verdict = out.verdict ?? null;
     }
 
@@ -673,7 +774,7 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
 
     /* The ordering rule is verified against the ledger before the verdict is sealed. */
     let orderOk = false;
-    try { orderOk = verifyRunOrdering(await deps.ledger.rows(), rec.serverRunId).ok; } catch { orderOk = false; }
+    try { orderOk = verifyRunOrdering(await deps.ledger.rows(), rec.clientRunId).ok; } catch { orderOk = false; }
     if (!orderOk && failure === null) { failure = 'run_order_violation'; halted = true; }
     const state: ChainState = failure === null ? 'COMPLETED' : halted ? 'HALTED' : 'FAILED';
     const result = {
@@ -730,24 +831,31 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
       const orphaned: string[] = [];
       const finished: string[] = [];
       for (const start of rows.filter((row) => row.phase === 'run_start')) {
-        const serverRunId = String(start.runId);
-        const clientRunId = typeof start.clientRunId === 'string' && start.clientRunId !== '' ? String(start.clientRunId) : serverRunId;
-        if (records.has(serverRunId)) continue;
-        const final = rows.find((row) => row.phase === 'result' && row.role === 'final' && row.runId === serverRunId);
-        const orphanRow = rows.find((row) => row.phase === 'orphaned' && row.runId === serverRunId);
+        const keyed = classifyRunId(start.runId);
+        if (keyed.kind === 'closed') continue;
+        const key = keyed.runId;
+        if (records.has(key)) continue;
+        const client = classifyRunId(start.clientRunId);
+        const legacyField = classifyRunId(start.legacyRunId);
+        const wlj = keyed.kind === 'wlj' ? keyed : client.kind === 'wlj' ? client : null;
+        const legacy = keyed.kind === 'legacy' ? keyed : legacyField.kind === 'legacy' ? legacyField : null;
+        const final = rows.find((row) => row.phase === 'result' && row.role === 'final' && row.runId === key);
+        const orphanRow = rows.find((row) => row.phase === 'orphaned' && row.runId === key);
         const rec: RunRecord = {
-          presentedRunId: clientRunId, serverRunId, clientRunId, runId: clientRunId,
+          presentedRunId: wlj?.runId ?? key, serverRunId: legacy?.runId ?? key, clientRunId: wlj?.runId ?? key,
+          spendTag: wlj?.spendTag ?? '', runId: wlj?.runId ?? key,
           dispatchId: String(start.dispatchId), projectHash: String(start.projectHash), callerHash: String(start.authorizedPlayerHash),
           keyHash: String(start.keyHash), missionId: String(start.missionId), mode: start.mode === 'live' ? 'live' : 'fake', state: 'ORPHANED', events: [], resultText: null,
           resultSha256: final === undefined ? null : String(final.resultSha256),
         };
-        if (final !== undefined) { rec.state = String(final.state) as ChainState; finished.push(serverRunId); }
+        if (final !== undefined) { rec.state = String(final.state) as ChainState; finished.push(key); }
         else {
-          if (orphanRow === undefined) await deps.ledger.append({ phase: 'orphaned', runId: serverRunId, clientRunId, dispatchId: rec.dispatchId, at: new Date(deps.now()).toISOString() });
-          orphaned.push(serverRunId);
+          if (orphanRow === undefined) await deps.ledger.append({ phase: 'orphaned', runId: key, clientRunId: rec.clientRunId, dispatchId: rec.dispatchId, at: new Date(deps.now()).toISOString() });
+          orphaned.push(key);
         }
-        records.set(serverRunId, rec);
-        records.set(clientRunId, rec);
+        records.set(key, rec);
+        records.set(rec.clientRunId, rec);
+        if (legacy !== null) records.set(legacy.runId, rec);
       }
       return { orphaned, finished };
     },
@@ -759,9 +867,10 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
       const founder = (env.JULIUS_J1_FOUNDER_PLAYER_ID ?? '').trim();
       const project = (env.JULIUS_J1_PROJECT_ID ?? '').trim();
       const reviewerConfigured = (env.JULIUS_J1_REVIEWER_PROVIDER ?? '').trim();
-      let budgetCapUsd = positiveNumber(env.JULIUS_J1_BUDGET_CAP_USD);
+      const configuredBudgetUsd = positiveNumber(env.JULIUS_J1_BUDGET_CAP_USD);
       const legEstimateUsd = positiveNumber(env.JULIUS_J1_LEG_ESTIMATE_USD);
-      if (founder === '' || project === '' || reviewerConfigured === '' || budgetCapUsd === null || legEstimateUsd === null) return refuse(503, 'julius_dispatch_not_configured');
+      if (founder === '' || project === '' || reviewerConfigured === '' || configuredBudgetUsd === null || legEstimateUsd === null) return refuse(503, 'julius_dispatch_not_configured');
+      let budgetCapUsd = configuredBudgetUsd;
       if (input.callerPlayerId !== founder) return refuse(403, 'julius_dispatch_founder_only');
       if (input.projectId !== project) return refuse(403, 'julius_dispatch_wrong_project');
       if (boundSession !== null && boundSession !== input.sessionId) return refuse(403, 'julius_dispatch_second_pairing');
@@ -783,7 +892,10 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
       if (mode === 'live' && deps.keyStore === undefined) return refuse(503, 'julius_dispatch_key_store_required');
       /* D-4: the composition-time check is not enough; ask the env accessor AGAIN before anything is written or called. Any value, even empty, is a key present. */
       if (mode === 'live' && DISPATCH_ROLES.some((role) => { const name = providers[role].keyEnv; return name !== null && env[name] !== undefined; })) return refuse(503, 'julius_dispatch_provider_key_in_env');
-      if (!isAdmittedRunId(input.runId)) return refuse(400, 'julius_dispatch_run_invalid');
+      const presented = classifyRunId(input.runId);
+      if (presented.kind === 'closed') return refuse(400, 'julius_dispatch_run_invalid');
+      /* A legacy id is readable later. It cannot dispatch, resume, or claim. */
+      if (presented.kind === 'legacy') return refuse(409, 'julius_dispatch_legacy_read_only');
       if (deps.claims === undefined) return refuse(503, 'julius_dispatch_admission_required');
 
       const callerHash = sha16(input.callerPlayerId);
@@ -807,9 +919,11 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
       if (run.state !== 'READY') return refuse(409, 'julius_dispatch_run_not_ready');
       const admitted = await deps.claims.read(input.runId);
       if (admitted === null) return refuse(404, 'julius_dispatch_run_not_admitted');
+      const canonical = classifyRunId(admitted.clientRunId);
+      const legacy = classifyRunId(admitted.serverRunId);
       if (
-        (input.runId !== admitted.clientRunId && input.runId !== admitted.serverRunId)
-        || admitted.missionId !== frozen.missionId
+        canonical.kind !== 'wlj' || canonical.runId !== presented.runId
+        || legacy.kind !== 'legacy' || admitted.missionId !== frozen.missionId
       ) return refuse(409, 'julius_dispatch_run_mismatch');
 
       /* Concurrency: taken SYNCHRONOUSLY (no await since this check), before the reservation. */
@@ -827,7 +941,7 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
         const reserved = await locked(async (): Promise<DispatchOutcome | 'reserved'> => {
           const allRows = await deps.ledger.rows();
           const rows = allRows.filter((row) => row.phase === 'run_start');
-          const samePair = (row: DispatchRow): boolean => row.runId === admitted.serverRunId || row.clientRunId === admitted.clientRunId || row.runId === admitted.clientRunId;
+          const samePair = (row: DispatchRow): boolean => row.runId === canonical.runId || row.clientRunId === canonical.runId || row.runId === legacy.runId || row.clientRunId === legacy.runId;
           const createdRow = allRows.find((row) => row.phase === 'run_created' && samePair(row));
           if (createdRow !== undefined && (createdRow.creatorPlayerHash !== callerHash || createdRow.creatorKeyHash !== keyHash)) return refuse(403, 'julius_dispatch_run_creator_mismatch');
           if (createdRow !== undefined || rows.some(samePair)) return refuse(409, 'julius_dispatch_already_dispatched');
@@ -850,7 +964,7 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
                   : null;
           if (clockRefusal !== null) {
             await deps.ledger.append({
-              phase: 'run_refused', status: 'REFUSED', code: clockRefusal.code, runId: input.runId, dispatchId, mode, creatorPlayerHash: callerHash, creatorKeyHash: keyHash,
+              phase: 'run_refused', status: 'REFUSED', code: clockRefusal.code, runId: canonical.runId, clientRunId: canonical.runId, spendTag: canonical.spendTag, legacyRunId: legacy.runId, dispatchId, mode, creatorPlayerHash: callerHash, creatorKeyHash: keyHash,
               clientOffsetMs: offsetOk ? (input.clientOffsetMs as number) : null, echoId: echoGiven ? (input.echoId as string) : null, at: new Date(at).toISOString(),
             });
             log(`refused run=${sha16(input.runId)} code=${clockRefusal.code} mode=${mode}`);
@@ -858,7 +972,7 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
           }
           const ledgerRead = deps.spendLedger === undefined
             ? { readable: false as const }
-            : await deps.spendLedger.readPrior({ missionId: frozen.markerNamespace ?? frozen.missionId, projectId: input.projectId, excludeRunId: admitted.serverRunId });
+            : await deps.spendLedger.readPrior({ missionId: frozen.markerNamespace ?? frozen.missionId, projectId: input.projectId, excludeRunId: canonical.runId });
           const decision = preSpendDecision({
             markerNamespace: frozen.markerNamespace ?? null,
             spendUsd: frozen.spendUsd ?? null,
@@ -868,7 +982,7 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
           if (decision.applicable && decision.authorized === false) {
             const mapped = spendRefusalCode(decision.reasonCode);
             await deps.ledger.append({
-              phase: 'run_refused', status: 'REFUSED', code: mapped.code, runId: admitted.serverRunId, clientRunId: admitted.clientRunId,
+              phase: 'run_refused', status: 'REFUSED', code: mapped.code, runId: canonical.runId, clientRunId: canonical.runId, spendTag: canonical.spendTag, legacyRunId: legacy.runId,
               dispatchId, mode, creatorPlayerHash: callerHash, creatorKeyHash: keyHash, at: new Date(at).toISOString(),
             });
             return refuse(mapped.status, mapped.code);
@@ -887,15 +1001,15 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
             return refuse(claimed.reason === 'not_admitted' ? 404 : 409, code);
           }
           if (claimed.replayed) return refuse(409, 'julius_dispatch_already_dispatched');
-          /* RUN_CREATED keys on the server run id. The client id is stored beside it. */
+          /* RUN_CREATED keys on the canonical wlj_ id. The legacy id is stored beside it and is not the key. */
           await deps.ledger.append({
-            phase: 'run_created', runId: admitted.serverRunId, clientRunId: admitted.clientRunId, dispatchId, creatorPlayerHash: callerHash, creatorKeyHash: keyHash,
+            phase: 'run_created', runId: canonical.runId, clientRunId: canonical.runId, spendTag: canonical.spendTag, legacyRunId: legacy.runId, dispatchId, creatorPlayerHash: callerHash, creatorKeyHash: keyHash,
             uiActionUtc: input.clientUiActionUtc, clientTriggerId: input.clientTriggerId, clientLogSha256: input.clientLogSha256, at: new Date(at).toISOString(),
             clientOffsetMs: offsetOk ? (input.clientOffsetMs as number) : null, echoId: echoGiven ? (input.echoId as string) : null,
           });
           /* THE RUN_START ROW precedes every pre_call row. Its write is the commit point. */
           await deps.ledger.append({
-            phase: 'run_start', dispatchId, runId: admitted.serverRunId, clientRunId: admitted.clientRunId, missionId: frozen.missionId, frozenSha256: frozen.contractSha256,
+            phase: 'run_start', dispatchId, runId: canonical.runId, clientRunId: canonical.runId, spendTag: canonical.spendTag, legacyRunId: legacy.runId, missionId: frozen.missionId, frozenSha256: frozen.contractSha256,
             contractSha256: frozen.contractSha256, briefSha256: deps.briefSha256 ?? null, checkerSha256: frozen.checkerSha256, preregId: frozen.preregId,
             budgetCapUsd, legEstimateUsd, authorizedPlayerHash: callerHash, mode, at: new Date(at).toISOString(),
             projectHash: sha16(input.projectId), sessionHash: sha16(input.sessionId), keyHash,
@@ -909,12 +1023,12 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
 
         boundSession = input.sessionId;
         const rec: RunRecord = {
-          presentedRunId: input.runId, serverRunId: admitted.serverRunId, clientRunId: admitted.clientRunId, runId: input.runId,
+          presentedRunId: input.runId, serverRunId: legacy.runId, clientRunId: canonical.runId, spendTag: canonical.spendTag, runId: input.runId,
           dispatchId, projectHash: sha16(input.projectId), callerHash, keyHash, missionId: frozen.missionId, mode, state: 'ACCEPTED',
           events: [], resultText: null, resultSha256: null,
         };
-        records.set(admitted.serverRunId, rec);
-        records.set(admitted.clientRunId, rec);
+        records.set(legacy.runId, rec);
+        records.set(canonical.runId, rec);
         records.set(input.runId, rec);
         emit(rec, { type: 'chain.accepted' });
         log(`accepted run=${sha16(input.runId)} dispatch=${dispatchId} key=${keyHash} mode=${mode} reviewer=${providers.reviewer.providerId}`);
@@ -1005,13 +1119,11 @@ export function isLoopbackPeer(remoteAddress: string | undefined, host: string |
 }
 
 /**
- * RID-6 client run id. `wlj_` plus a canonical lowercase UUIDv4.
+ * RID-6 client run id. `wlj_` plus a canonical lowercase UUIDv4, from the shared parser.
  * The server validates this. It does not mint a substitute.
  */
-export const J1_CLIENT_RUN_ID = /^wlj_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-
 export function isClientMintedRunId(value: string): boolean {
-  return J1_CLIENT_RUN_ID.test(value);
+  return classifyRunId(value).kind === 'wlj';
 }
 
 const TRIGGER_ID = /^[A-Za-z0-9_-]{8,64}$/;
@@ -1047,7 +1159,7 @@ export async function handleJuliusDispatchRoute(
       return echo.ok ? { status: 200, body: { data: { bridgeUtc: echo.bridgeUtc, echoId: echo.echoId } } } : err(echo.status, echo.code, 'Julius could not issue a clock echo.');
     }
     const runId = query.get('runId') ?? '';
-    if (!isAdmittedRunId(runId)) return err(400, 'julius_dispatch_run_invalid', 'runId must be the admitted wlj_ id or the admitted run: id.');
+    if (classifyRunId(runId).kind === 'closed') return err(400, 'julius_dispatch_run_invalid', 'runId must be the canonical wlj_ id or a legacy run: id.');
     if (request.path === JULIUS_DISPATCH_RESULT_PATH) {
       return ports.dispatch.result({ projectId, runId, callerPlayerId: native.playerId });
     }
@@ -1063,7 +1175,7 @@ export async function handleJuliusDispatchRoute(
   try { body = JSON.parse(request.rawBody ?? '') as typeof body; } catch { body = null; }
   if (body === null || typeof body !== 'object') return err(400, 'julius_dispatch_body_invalid', 'The body must be JSON.');
   const { runId, clientTriggerId, clientLogSha256, clientUiActionUtc, clientOffsetMs, echoId } = body;
-  if (typeof runId !== 'string' || !isAdmittedRunId(runId)) return err(400, 'julius_dispatch_run_invalid', 'runId must be the admitted wlj_ id or the admitted run: id.');
+  if (typeof runId !== 'string' || classifyRunId(runId).kind === 'closed') return err(400, 'julius_dispatch_run_invalid', 'runId must be the canonical wlj_ id or a legacy run: id.');
   /* THE GAME-ORIGIN BINDING: no hash of a client log line, no dispatch. */
   if (typeof clientTriggerId !== 'string' || !TRIGGER_ID.test(clientTriggerId) || typeof clientLogSha256 !== 'string' || !HEX64.test(clientLogSha256)
     || typeof clientUiActionUtc !== 'string' || !UTC_ISO.test(clientUiActionUtc) || !Number.isFinite(Date.parse(clientUiActionUtc))) {

@@ -128,7 +128,7 @@ describe('frozen reviewer checker adapter (fake process only)', () => {
   it('a companion is pin-checked and staged beside the checker, and its path is not an argument', async () => {
     const oracle = 'oracle-bytes';
     const oracleSha = sha(oracle);
-    const calls: { args: readonly string[][]; staged: { name: string; bytes: string }[][] } = { args: [], staged: [] };
+    const calls: { args: string[][]; staged: { name: string; bytes: string }[][] } = { args: [], staged: [] };
     const files: Record<string, string> = { '/c/checker.mjs': CHECKER_BYTES, '/c/ledger.csv': LEDGER_BYTES, '/c/posts.json': POSTS_BYTES, '/c/oracle.mjs': oracle };
     const checker = createFrozenReviewerChecker({
       nodePath: 'node', checkerPath: '/c/checker.mjs', checkerSha256: PIN,

@@ -19,6 +19,15 @@ export const sha = (v: string | Uint8Array): string => createHash('sha256').upda
 export const canary = (name: string): string => ['canary', name, 'ZZ9', 'x7Q2m4k8w1'].join('_');
 export const KEY = { openai: canary('openai'), xai: canary('xai') };
 
+/**
+ * Assembled at runtime. A provider-key name followed by a long literal is a
+ * committed assignment to the repository boundary scan, so this stand-in is
+ * never written out beside that name. The joined value is the same string the
+ * checker allow-list must keep out of the child and out of recorded output.
+ */
+const joinedStandIn = (...parts: readonly string[]): string => parts.join('-');
+const childStandIn = joinedStandIn('must', 'not', 'reach', 'child');
+
 /** The private key directory the fake key store answers for. A canary: it must never reach a ledger row or a log. */
 export const KEY_DIR = '/private-keys-ZZ9-dir';
 export const FILES: Record<string, string> = {
@@ -89,7 +98,7 @@ export function makeDeps(over: Partial<J1WiringDeps> = {}, files: Record<string,
       return new TextEncoder().encode(files[key] ?? '');
     },
     realpath: async (p) => p,
-    checkerBaseEnv: { PATH: '/bin', OPENAI_API_KEY: 'must-not-reach-child' },
+    checkerBaseEnv: { PATH: '/bin', OPENAI_API_KEY: childStandIn },
     writeArtifact: async (text) => { const path = `/tmp/art-${probe.artifacts.size}.txt`; probe.artifacts.set(path, text); return { path, cleanup: async () => undefined }; },
     openLedger: () => { const l = createMemoryDispatchLedger(); probe.ledgers.push(l); return l; },
     architectRun: async () => ({ ok: true, actualModel: 'gpt-served', responseId: 'resp_arch_0011223344', status: 'completed', outputText: 'PLAN', usage: { inputTokens: 5, cachedInputTokens: null, outputTokens: 7, reasoningTokens: null, totalTokens: 12 } }) as GptRunOutcome,

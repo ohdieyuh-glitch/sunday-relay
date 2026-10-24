@@ -45,7 +45,6 @@ export const J1_ARCHITECT_PROVIDER_ID = 'openai';
 export const J1_CODER_PROVIDER_ID = 'anthropic';
 export const J1_REVIEWER_PROVIDER_ID = 'xai';
 
-const sha256 = (value: string): string => createHash('sha256').update(value, 'utf8').digest('hex');
 const nonEmpty = (value: string | null | undefined): value is string => typeof value === 'string' && value.trim() !== '';
 
 /* ---------------------------------------------------------------------------------------------------------------- */

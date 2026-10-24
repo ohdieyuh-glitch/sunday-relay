@@ -4,7 +4,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { deriveJuliusSpentTag } from '../scripts/julius-admission-run-id.mjs';
 import { createMemoryAdmissionStore, isClientRunId, isServerRunId, type AdmittedRecord } from './julius-dispatch-admission';
+import type { JuliusCompanionBinding } from './julius-companion-slot';
+import { createMemoryCompanionEvidenceStore, type CompanionEvidenceStore } from './julius-companion-evidence';
 import { createSharedSpendLedger, type JuliusSpendLedgerPort } from './julius-dispatch-spend';
 import { authorizeJuliusLiveSpend } from '../src/relay/mission/julius/julius-spend-ceiling';
 import type { KeyStore } from './julius-key-store';
@@ -32,6 +35,9 @@ const PROJECT = 'proj-1';
 const RUN = 'wlj_11111111-1111-4111-8111-111111111111';
 const CLIENT_RUN_2 = 'wlj_22222222-2222-4222-8222-222222222222';
 const CLIENT_RUN_UNKNOWN = 'wlj_33333333-3333-4333-8333-333333333333';
+/** A canonical id the test supplies. The controller does not mint one. */
+const wljN = (n: number): string => `wlj_00000000-0000-4000-8000-${n.toString(16).padStart(12, '0')}`;
+const SPEND_TAG = 'refs/tags/julius-run-spent-11111111111141118111111111111111';
 /** The UI-action time the game client reports: before the test clock's first tick (2026-10-22T12:00:01Z). */
 const UI_UTC = '2026-10-22T11:59:30.000Z';
 
@@ -103,6 +109,8 @@ function harness(options: {
   readonly claims?: ReturnType<typeof createMemoryAdmissionStore>;
   readonly autoAdmit?: boolean;
   readonly spendLedger?: JuliusSpendLedgerPort;
+  readonly companion?: JuliusCompanionBinding;
+  readonly companionEvidence?: CompanionEvidenceStore;
 } = {}): Harness {
   const env: Record<string, string | undefined> = {
     JULIUS_J1_ENABLED: '1', JULIUS_J1_FOUNDER_PLAYER_ID: FOUNDER, JULIUS_J1_PROJECT_ID: PROJECT, JULIUS_J1_REVIEWER_PROVIDER: (options.providerIds ?? ['openai', 'anthropic', 'xai'])[2], JULIUS_J1_BUDGET_CAP_USD: '10', JULIUS_J1_LEG_ESTIMATE_USD: '1', ...(options.mode === 'live' && options.keyStore !== null ? {} : KEYS), ...options.env,
@@ -124,7 +132,7 @@ function harness(options: {
   const built = options.providers === null
     ? createUncomposedJuliusDispatch(() => env, () => clock)
     : createJuliusDispatch({
-      providers, ledger, claims, ...(options.spendLedger === undefined ? {} : { spendLedger: options.spendLedger }), ...(keyStore === null ? {} : { keyStore }), ...(options.mode === 'live' ? { briefSha256: (options.frozen ?? FROZEN).contractSha256 } : {}), ...(options.omitMode === true ? {} : { mode: options.mode ?? 'fake' }), env: () => env, now: () => (clock += 1000), log: (line) => logs.push(line),
+      providers, ledger, claims, ...(options.spendLedger === undefined ? {} : { spendLedger: options.spendLedger }), ...(options.companion === undefined ? {} : { companion: options.companion }), ...(options.companionEvidence === undefined ? {} : { companionEvidence: options.companionEvidence }), ...(keyStore === null ? {} : { keyStore }), ...(options.mode === 'live' ? { briefSha256: (options.frozen ?? FROZEN).contractSha256 } : {}), ...(options.omitMode === true ? {} : { mode: options.mode ?? 'fake' }), env: () => env, now: () => (clock += 1000), log: (line) => logs.push(line),
       newId: () => `disp_${(n += 1)}`,
       frozen: options.frozen ?? FROZEN,
       checker: { check: async () => ({ pass: options.checkerPass ?? true }) },
@@ -348,7 +356,7 @@ describe('J1 negative controls', () => {
     expect(out).toMatchObject({ ok: false, status: 503, code: 'julius_dispatch_ledger_unavailable' });
     expect(h.calls).toHaveLength(0);
     // and the slot was released: a healthy retry on a healthy ledger is not "busy"
-    expect(await h.controller.dispatch(input({ runId: 'run:000000000000000000000099' }))).toMatchObject({ ok: false, code: 'julius_dispatch_ledger_unavailable' });
+    expect(await h.controller.dispatch(input({ runId: wljN(0x99) }))).toMatchObject({ ok: false, code: 'julius_dispatch_ledger_unavailable' });
   });
 
   it('ledger write failure on a pre_call row means NO call for that role', async () => {
@@ -376,13 +384,13 @@ describe('J1 negative controls', () => {
     const h = harness({ behave: { architect: async () => { await gate; return { ok: true, text: 'plan', responseId: 'resp_a_0011223344', model: 'm' }; } } });
     const first = await h.controller.dispatch(input());
     expect(first).toMatchObject({ ok: true, status: 202 });
-    const second = await h.controller.dispatch(input({ runId: 'run:000000000000000000000002', idempotencyKey: 'key-0000002' }));
+    const second = await h.controller.dispatch(input({ runId: wljN(2), idempotencyKey: 'key-0000002' }));
     expect(second).toMatchObject({ ok: false, status: 429, code: 'julius_dispatch_busy' });
     release();
     await h.controller.whenIdle();
     expect(h.calls.map((c) => c.role)).toEqual(['architect', 'coder', 'reviewer']);
     // idle again: a distinct run is now accepted
-    expect(await h.controller.dispatch(input({ runId: 'run:000000000000000000000002', idempotencyKey: 'key-0000002' }))).toMatchObject({ ok: true });
+    expect(await h.controller.dispatch(input({ runId: wljN(2), idempotencyKey: 'key-0000002' }))).toMatchObject({ ok: true });
     await h.controller.whenIdle();
   });
 
@@ -390,7 +398,7 @@ describe('J1 negative controls', () => {
     const h = harness();
     const [a, b] = await Promise.all([
       h.controller.dispatch(input()),
-      h.controller.dispatch(input({ runId: 'run:000000000000000000000002', idempotencyKey: 'key-0000002' })),
+      h.controller.dispatch(input({ runId: wljN(2), idempotencyKey: 'key-0000002' })),
     ]);
     await h.controller.whenIdle();
     expect([a.ok, b.ok].filter(Boolean)).toHaveLength(1);
@@ -455,7 +463,7 @@ describe('J1 negative controls', () => {
     expect(await harness({ env: { JULIUS_J1_FOUNDER_PLAYER_ID: undefined } }).controller.dispatch(input())).toMatchObject({ code: 'julius_dispatch_not_configured' });
     expect(await h.controller.dispatch(input())).toMatchObject({ ok: true });
     await h.controller.whenIdle();
-    expect(await h.controller.dispatch(input({ runId: 'run:000000000000000000000002', sessionId: 'sess-2', idempotencyKey: 'key-0000002' }))).toMatchObject({ status: 403, code: 'julius_dispatch_second_pairing' });
+    expect(await h.controller.dispatch(input({ runId: wljN(2), sessionId: 'sess-2', idempotencyKey: 'key-0000002' }))).toMatchObject({ status: 403, code: 'julius_dispatch_second_pairing' });
     expect(h.calls).toHaveLength(3);
   });
 
@@ -471,15 +479,15 @@ describe('J1 negative controls', () => {
 
   it('caps: two runs of the frozen mission, then refused; the daily cap also binds', async () => {
     const h = harness({ env: { JULIUS_J1_DAILY_CAP: '10' } });
-    for (const [i, run] of ['run:000000000000000000000001', 'run:000000000000000000000002'].entries()) {
+    for (const [i, run] of [wljN(1), wljN(2)].entries()) {
       expect(await h.controller.dispatch(input({ runId: run, idempotencyKey: `key-000000${i + 1}` }))).toMatchObject({ ok: true });
       await h.controller.whenIdle();
     }
-    expect(await h.controller.dispatch(input({ runId: 'run:000000000000000000000003', idempotencyKey: 'key-0000003' }))).toMatchObject({ status: 429, code: 'julius_dispatch_mission_cap_reached' });
+    expect(await h.controller.dispatch(input({ runId: wljN(3), idempotencyKey: 'key-0000003' }))).toMatchObject({ status: 429, code: 'julius_dispatch_mission_cap_reached' });
     const d = harness({ env: { JULIUS_J1_DAILY_CAP: '1' } });
     await d.controller.dispatch(input());
     await d.controller.whenIdle();
-    expect(await d.controller.dispatch(input({ runId: 'run:000000000000000000000002', idempotencyKey: 'key-0000002' }))).toMatchObject({ status: 429, code: 'julius_dispatch_cap_reached' });
+    expect(await d.controller.dispatch(input({ runId: wljN(2), idempotencyKey: 'key-0000002' }))).toMatchObject({ status: 429, code: 'julius_dispatch_cap_reached' });
     expect((await rowsOf(h)).filter((r) => r.phase === 'run_start').map((r) => r.runOrdinal)).toEqual([1, 2]);
   });
 
@@ -503,11 +511,13 @@ describe('J1 reviewer acceptance protocol (D1-D12) controls', () => {
       phase: 'run_start', clientRunId: RUN, missionId: FROZEN.missionId, frozenSha256: FROZEN.contractSha256, budgetCapUsd: 10,
       authorizedPlayerHash: sha(FOUNDER).slice(0, 16), keyHash: sha('key-0000001').slice(0, 16), mode: 'fake',
     });
-    expect(String(rows[1].runId)).toMatch(/^run:[0-9a-f]{24}$/u);
+    expect(rows[1].runId).toBe(RUN);
+    expect(rows[1].spendTag).toBe(SPEND_TAG);
     const pre = rows.filter((r) => r.phase === 'pre_call');
     expect(pre.map((r) => r.role)).toEqual(['architect', 'coder', 'reviewer']);
     for (const r of pre) expect(r).toMatchObject({ clientRunId: RUN, keyHash: sha('key-0000001').slice(0, 16), playerHash: sha(FOUNDER).slice(0, 16), mode: 'fake' });
-    expect(String(pre[0].runId)).toMatch(/^run:[0-9a-f]{24}$/u);
+    expect(pre[0].runId).toBe(RUN);
+    expect(pre[0].spendTag).toBe(SPEND_TAG);
     expect(pre[2]).toMatchObject({ provider: 'xai', model: 'grok-fake' });
     expect(pre.every((r) => typeof r.at === 'string' && typeof r.model === 'string')).toBe(true);
     const results = rows.filter((r) => r.phase === 'result' && r.role !== 'final');
@@ -624,7 +634,7 @@ describe('J1 reviewer acceptance protocol (D1-D12) controls', () => {
     await h.controller.whenIdle();
     const before = (await rowsOf(h)).length;
     expect(await h.controller.dispatch(input())).toMatchObject({ ok: true, replayed: true });
-    expect(await h.controller.dispatch(input({ runId: 'run:000000000000000000000099' }))).toMatchObject({ status: 409, code: 'julius_dispatch_key_reused' });
+    expect(await h.controller.dispatch(input({ runId: wljN(0x99) }))).toMatchObject({ status: 409, code: 'julius_dispatch_key_reused' });
     expect((await rowsOf(h)).length).toBe(before);
     expect(h.calls).toHaveLength(3);
   });
@@ -644,8 +654,8 @@ describe('J1 reviewer acceptance protocol (D1-D12) controls', () => {
     expect((await ledger.rows()).some((r) => r.phase === 'orphaned' && r.runId === 'run:00000000000000000000dead')).toBe(true);
     await second.controller.recover();
     expect((await ledger.rows()).length).toBe(countAfterRecover);
-    expect(await second.controller.dispatch(input({ runId: 'run:00000000000000000000dead', idempotencyKey: 'key-0000077' }))).toMatchObject({ ok: true, replayed: true, state: 'ORPHANED' });
-    expect(await second.controller.dispatch(input({ runId: 'run:00000000000000000000dead', idempotencyKey: 'key-0000078' }))).toMatchObject({ status: 403, code: 'julius_dispatch_run_creator_mismatch' });
+    expect(await second.controller.dispatch(input({ runId: 'run:00000000000000000000dead', idempotencyKey: 'key-0000077' }))).toMatchObject({ ok: false, status: 409, code: 'julius_dispatch_legacy_read_only' });
+    expect(await second.controller.dispatch(input({ runId: 'run:00000000000000000000dead', idempotencyKey: 'key-0000078' }))).toMatchObject({ ok: false, status: 409, code: 'julius_dispatch_legacy_read_only' });
     expect(second.controller.result({ projectId: PROJECT, runId: 'run:00000000000000000000dead', callerPlayerId: FOUNDER }).status).toBe(409);
     const ev = second.controller.events({ projectId: PROJECT, runId: 'run:00000000000000000000dead', callerPlayerId: FOUNDER, cursor: 0 }).body as { data: { state: string; terminal: boolean } };
     expect(ev.data).toMatchObject({ state: 'ORPHANED', terminal: true });
@@ -692,7 +702,7 @@ describe('G3-6 final-row failure and restart are explicit, not swallowed', () =>
     expect(await second.controller.dispatch(input({ idempotencyKey: 'key-0000099' }))).toMatchObject({ status: 403, code: 'julius_dispatch_run_creator_mismatch' });
     expect(second.calls).toHaveLength(0);
     // the limit itself: a NEW session pairing on a NEW run is not blocked by the first process's bound session
-    expect(await second.controller.dispatch(input({ runId: 'run:00000000000000000000000a', sessionId: 'sess-other', idempotencyKey: 'key-0000002' }))).toMatchObject({ ok: true });
+    expect(await second.controller.dispatch(input({ runId: wljN(0xa), sessionId: 'sess-other', idempotencyKey: 'key-0000002' }))).toMatchObject({ ok: true });
   });
 });
 
@@ -731,7 +741,8 @@ describe('G3-3 the run creator and the ordering evidence are recorded and enforc
     const rows = await rowsOf(h);
     const created = rows.find((r) => r.phase === 'run_created');
     expect(created).toMatchObject({ clientRunId: RUN, creatorPlayerHash: sha(FOUNDER).slice(0, 16), creatorKeyHash: sha('key-0000001').slice(0, 16), uiActionUtc: UI_UTC, clientLogSha256: sha('client line') });
-    expect(String(created!.runId)).toMatch(/^run:[0-9a-f]{24}$/u);
+    expect(created!.runId).toBe(RUN);
+    expect(created!.spendTag).toBe(SPEND_TAG);
     expect(rows.indexOf(created!)).toBeLessThan(rows.findIndex((r) => r.phase === 'run_start'));
     expect(Date.parse(String(created!.uiActionUtc))).toBeLessThan(Date.parse(String(created!.at)));
     expect(verifyRunOrdering(rows, String(created!.runId))).toEqual({ ok: true });
@@ -813,7 +824,7 @@ describe('Part 2: bridge echo and clock offset (REQUIRED in live, optional in co
     const h = fakeH();
     for (const [i, off] of [1001, -1001].entries()) {
       const e = echoOf(h);
-      expect(await h.controller.dispatch(input({ runId: `run:${(i + 16).toString(16).padStart(24, '0')}`, idempotencyKey: `key-000000${i + 1}`, clientOffsetMs: off, echoId: e.echoId }))).toMatchObject({ ok: false, status: 409, code: 'julius_dispatch_clock_offset_out_of_range' });
+      expect(await h.controller.dispatch(input({ runId: wljN(i + 16), idempotencyKey: `key-000000${i + 1}`, clientOffsetMs: off, echoId: e.echoId }))).toMatchObject({ ok: false, status: 409, code: 'julius_dispatch_clock_offset_out_of_range' });
     }
     const rows = await rowsOf(h);
     expect(rows.filter((r) => r.phase === 'run_refused')).toHaveLength(2);
@@ -821,7 +832,7 @@ describe('Part 2: bridge echo and clock offset (REQUIRED in live, optional in co
     expect(rows.some((r) => r.phase === 'run_start' || r.phase === 'run_created')).toBe(false);
     expect(h.calls).toHaveLength(0);
     const e3 = echoOf(h);
-    expect(await h.controller.dispatch(input({ runId: 'run:000000000000000000000013', idempotencyKey: 'key-0000003', clientOffsetMs: 0, echoId: e3.echoId }))).toMatchObject({ ok: false, status: 429, code: 'julius_dispatch_cap_reached' });
+    expect(await h.controller.dispatch(input({ runId: wljN(0x13), idempotencyKey: 'key-0000003', clientOffsetMs: 0, echoId: e3.echoId }))).toMatchObject({ ok: false, status: 429, code: 'julius_dispatch_cap_reached' });
     expect(h.calls).toHaveLength(0);
   });
   it('an unknown, expired or reused echoId is 409 julius_dispatch_clock_echo_unknown, recorded REFUSED, no provider call; the echo lives 120 s', async () => {
@@ -832,7 +843,7 @@ describe('Part 2: bridge echo and clock offset (REQUIRED in live, optional in co
     const e = echoOf(used);
     expect(await used.controller.dispatch(input({ clientOffsetMs: 0, echoId: e.echoId }))).toMatchObject({ ok: true });
     await used.controller.whenIdle();
-    expect(await used.controller.dispatch(input({ runId: 'run:000000000000000000000002', idempotencyKey: 'key-0000002', clientOffsetMs: 0, echoId: e.echoId }))).toMatchObject({ ok: false, status: 409, code: 'julius_dispatch_clock_echo_unknown' });
+    expect(await used.controller.dispatch(input({ runId: wljN(2), idempotencyKey: 'key-0000002', clientOffsetMs: 0, echoId: e.echoId }))).toMatchObject({ ok: false, status: 409, code: 'julius_dispatch_clock_echo_unknown' });
     /* the harness clock advances 1 s per reading: issue an echo, then burn more than 120 readings */
     const old = fakeH({ env: { JULIUS_J1_DAILY_CAP: '5' } });
     const oe = echoOf(old);
@@ -851,8 +862,8 @@ describe('Part 2: bridge echo and clock offset (REQUIRED in live, optional in co
     const live = liveH();
     const e = echoOf(live);
     expect(await live.controller.dispatch(input({ echoId: e.echoId }))).toMatchObject({ ok: false, status: 400, code: 'julius_dispatch_clock_binding_required' });
-    expect(await live.controller.dispatch(input({ runId: 'run:00000000000000000000000b', idempotencyKey: 'key-0000002', clientOffsetMs: 0 }))).toMatchObject({ ok: false, status: 400, code: 'julius_dispatch_clock_binding_required' });
-    expect(await live.controller.dispatch(input({ runId: 'run:00000000000000000000000c', idempotencyKey: 'key-0000003', clientOffsetMs: Number.NaN, echoId: e.echoId }))).toMatchObject({ ok: false, status: 400, code: 'julius_dispatch_clock_binding_required' });
+    expect(await live.controller.dispatch(input({ runId: wljN(0xb), idempotencyKey: 'key-0000002', clientOffsetMs: 0 }))).toMatchObject({ ok: false, status: 400, code: 'julius_dispatch_clock_binding_required' });
+    expect(await live.controller.dispatch(input({ runId: wljN(0xc), idempotencyKey: 'key-0000003', clientOffsetMs: Number.NaN, echoId: e.echoId }))).toMatchObject({ ok: false, status: 400, code: 'julius_dispatch_clock_binding_required' });
     expect((await rowsOf(live)).filter((r) => r.phase === 'run_refused')).toHaveLength(3);
     expect(live.calls).toHaveLength(0);
     const fake = fakeH({ env: { JULIUS_J1_DAILY_CAP: '5' } });
@@ -905,9 +916,9 @@ describe('J1 file ledger', () => {
     const b = createFileDispatchLedger({ file });
     const h2 = harness({ ledger: b, env: { JULIUS_J1_DAILY_CAP: '10' } });
     expect(await h2.controller.dispatch(input())).toMatchObject({ status: 409, code: 'julius_dispatch_already_dispatched' });
-    expect(await h2.controller.dispatch(input({ runId: 'run:000000000000000000000002', idempotencyKey: 'key-0000002' }))).toMatchObject({ ok: true });
+    expect(await h2.controller.dispatch(input({ runId: wljN(2), idempotencyKey: 'key-0000002' }))).toMatchObject({ ok: true });
     await h2.controller.whenIdle();
-    expect(await h2.controller.dispatch(input({ runId: 'run:000000000000000000000003', idempotencyKey: 'key-0000003' }))).toMatchObject({ code: 'julius_dispatch_mission_cap_reached' });
+    expect(await h2.controller.dispatch(input({ runId: wljN(3), idempotencyKey: 'key-0000003' }))).toMatchObject({ code: 'julius_dispatch_mission_cap_reached' });
     b.close();
     const lines = readFileSync(file, 'utf8').trim().split('\n').map((l) => JSON.parse(l) as DispatchRow);
     expect(lines.filter((r) => r.phase === 'run_start')).toHaveLength(2);
@@ -1050,9 +1061,11 @@ describe('J1 HTTP edge', () => {
     expect(accepted).toBe(RUN);
     expect(accepted.startsWith('wlj_')).toBe(true);
     const serverId = `run:${'ab'.repeat(12)}`;
-    const serverRes = await handleJuliusDispatchRoute(post({ rawBody: body({ runId: serverId }), idempotencyKey: 'key-server-01' }), ports(harness()));
-    expect(serverRes.status).toBe(202);
-    expect((serverRes.body as { data: { runId: string } }).data.runId).toBe(serverId);
+    const serverHarness = harness();
+    const serverRes = await handleJuliusDispatchRoute(post({ rawBody: body({ runId: serverId }), idempotencyKey: 'key-server-01' }), ports(serverHarness));
+    expect(serverRes).toMatchObject({ status: 409, body: { error: { kind: 'julius_dispatch_legacy_read_only' } } });
+    expect(serverHarness.calls).toHaveLength(0);
+    expect(serverHarness.claims.status(serverId)).toBe('admitted');
     const rejected = [
       'run:abc123',
       '11111111-1111-4111-8111-111111111111',
@@ -1273,11 +1286,13 @@ describe('the durable cap is authorizeJuliusLiveSpend, in both directions', () =
     });
     expect(await h.controller.dispatch(input())).toMatchObject({ ok: true, status: 202 });
     await h.controller.whenIdle();
-    const serverRunId = String((await rowsOf(h)).find((r) => r.phase === 'run_start')?.runId);
+    const spendKey = String((await rowsOf(h)).find((r) => r.phase === 'run_start')?.runId);
+    expect(spendKey).toBe(RUN);
+    expect((await rowsOf(h)).find((r) => r.phase === 'run_start')?.spendTag).toBe(SPEND_TAG);
     const read = await spendLedger.readPrior({ missionId: 'julius-inworld-data-1', projectId: PROJECT, excludeRunId: 'run:not-this-one' });
     expect(read.readable).toBe(true);
     if (!read.readable) return;
-    expect(read.priorRuns.map((run) => run.runId)).toEqual([serverRunId]);
+    expect(read.priorRuns.map((run) => run.runId)).toEqual([spendKey]);
     expect(read.priorRuns[0]?.knownUsdMicros).toBe(6_000_000);
     expect(read.priorRuns[0]?.spendVerified).toBe(true);
     expect(authorizeJuliusLiveSpend({
@@ -1286,10 +1301,313 @@ describe('the durable cap is authorizeJuliusLiveSpend, in both directions', () =
   });
 });
 
+describe('companion slot beside the chain', () => {
+  it('hands one task to the port, shows the artifact hash to the reviewer, and adds no spend row', async () => {
+    const serverRunId = `run:${sha(RUN).slice(0, 24)}`;
+    const bytes = new TextEncoder().encode('companion fixture');
+    const artifactSha = createHash('sha256').update(bytes).digest('hex');
+    const wakes: string[] = [];
+    const planText = JSON.stringify({
+      objectiveSummary: 'Plan the fixture.',
+      companion_task: { subtask: 'Add the companion note.', acceptanceCriteria: ['The note is present.'] },
+    });
+    const h = harness({
+      behave: { architect: () => ({ ok: true, text: planText, responseId: 'resp_a_0011223344', model: 'm' }) },
+      companion: {
+        deadlineMs: 1_000,
+        port: { async wake(request) { wakes.push(request.runId); expect(request.legacyRunId).toBe(serverRunId); return { wakeId: 'wake_01ABCDEF', outcome: 'posted', artifact: { bytes } }; } },
+        clock: { after: laterUnref },
+        integrate: { async submit() { return { accepted: true, reason: null }; } },
+        validate: { validate: () => ({ ok: true, reason: null }) },
+        review: { review: async () => ({ verdict: 'approve' }) },
+      },
+    });
+    expect(await h.controller.dispatch(input())).toMatchObject({ ok: true, status: 202 });
+    await h.controller.whenIdle();
+    expect(h.calls.map((call) => call.role)).toEqual(['architect', 'coder', 'reviewer']);
+    expect(wakes).toEqual([RUN]);
+    expect(h.calls[2]?.coderEvidence).toContain(`untrusted_companion_sha256=${artifactSha}`);
+    const events = h.controller.events({ projectId: PROJECT, runId: RUN, callerPlayerId: FOUNDER, cursor: 0 });
+    const body = events.body as { data: { state: string; events: { type: string; wakeId?: string | null; bodyDigest?: string | null; artifactHashes?: string[]; outcome?: string }[] } };
+    expect(body.data.state).toBe('COMPLETED');
+    const recorded = body.data.events.find((event) => event.type === 'companion.recorded');
+    expect(recorded).toMatchObject({ outcome: 'integrated', wakeId: 'wake_01ABCDEF', artifactHashes: [artifactSha] });
+    expect(recorded?.bodyDigest).toMatch(/^[0-9a-f]{64}$/u);
+    expect(JSON.stringify(recorded)).not.toContain('Add the companion note');
+    const roles = (await rowsOf(h)).filter((row) => row.phase === 'result').map((row) => row.role);
+    expect(roles).toEqual(['architect', 'coder', 'reviewer', 'final']);
+  });
+
+  it('keeps companion evidence apart from the Julius spend ledger', async () => {
+    const serverRunId = `run:${sha(RUN).slice(0, 24)}`;
+    const bytes = new TextEncoder().encode('companion fixture');
+    const artifactSha = createHash('sha256').update(bytes).digest('hex');
+    const wakeId = 'wake_01ABCDEF';
+    const companionCostUsdMicros = 9_999_999;
+    const planText = JSON.stringify({
+      objectiveSummary: 'Plan the fixture.',
+      companion_task: { subtask: 'Add the companion note.', acceptanceCriteria: ['The note is present.'] },
+    });
+    const spendLedger = createSharedSpendLedger();
+    const h = harness({
+      frozen: { ...FROZEN, markerNamespace: 'julius-inworld-data-1', spendUsd: 30, repairCycles: 3 },
+      spendLedger,
+      behave: {
+        architect: () => ({ ok: true, text: planText, responseId: 'resp_a_0011223344', model: 'm', costUsdMicros: 1_000_000 }),
+        coder: () => ({ ok: true, text: 'art', responseId: 'resp_c_0011223344', model: 'm', changedPaths: 1, costUsdMicros: 2_000_000 }),
+        reviewer: () => ({ ok: true, text: 'fine', responseId: 'resp_r_0011223344', model: 'g', verdict: 'approve', costUsdMicros: 3_000_000 }),
+      },
+      companion: {
+        deadlineMs: 1_000,
+        port: {
+          async wake(request) {
+            expect(request.runId).toBe(RUN);
+            expect(request.legacyRunId).toBe(serverRunId);
+            expect(Object.keys(request).sort()).toEqual(['acceptanceCriteria', 'bodyDigest', 'deadlineMs', 'legacyRunId', 'runId', 'subtask']);
+            const posted = {
+              wakeId,
+              outcome: 'posted' as const,
+              artifact: { bytes },
+              costUsdMicros: companionCostUsdMicros,
+              spendUsd: 9.999999,
+              provider: 'companion-host',
+              model: 'byoai-companion',
+              role: 'CODING_AGENT',
+            };
+            return posted;
+          },
+        },
+        clock: { after: laterUnref },
+        integrate: { async submit() { return { accepted: true, reason: null }; } },
+        validate: { validate: () => ({ ok: true, reason: null }) },
+        review: { review: async () => ({ verdict: 'approve' }) },
+      },
+    });
+    expect(await h.controller.dispatch(input())).toMatchObject({ ok: true, status: 202 });
+    await h.controller.whenIdle();
+    expect(h.calls.map((call) => call.role)).toEqual(['architect', 'coder', 'reviewer']);
+    expect(h.calls[2]?.coderEvidence).toContain(`untrusted_companion_sha256=${artifactSha}`);
+    const events = h.controller.events({ projectId: PROJECT, runId: RUN, callerPlayerId: FOUNDER, cursor: 0 });
+    const body = events.body as { data: { events: { type: string; wakeId?: string | null; bodyDigest?: string | null; artifactHashes?: string[]; outcome?: string }[] } };
+    const recorded = body.data.events.find((event) => event.type === 'companion.recorded');
+    expect(recorded).toMatchObject({ outcome: 'integrated', wakeId, artifactHashes: [artifactSha] });
+    expect(recorded?.bodyDigest).toMatch(/^[0-9a-f]{64}$/u);
+    expect(spendLedger.facts.has(serverRunId)).toBe(false);
+    const facts = spendLedger.facts.get(RUN) ?? [];
+    expect(facts.map((fact) => fact.taskId)).toEqual([
+      `${RUN}:architect`,
+      `${RUN}:coder`,
+      `${RUN}:reviewer`,
+    ]);
+    expect(facts.map((fact) => fact.role)).toEqual(['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER']);
+    expect(facts.map((fact) => fact.usdMicros)).toEqual([1_000_000, 2_000_000, 3_000_000]);
+    const spendText = JSON.stringify(facts);
+    expect(spendText).not.toContain(wakeId);
+    expect(spendText).not.toContain(artifactSha);
+    expect(spendText).not.toContain(recorded?.bodyDigest ?? 'missing-digest');
+    expect(spendText).not.toContain('Add the companion note');
+    expect(spendText).not.toContain('companion-host');
+    expect(spendText).not.toContain('byoai-companion');
+    expect(spendText).not.toContain(String(companionCostUsdMicros));
+    const rows = await rowsOf(h);
+    const rowText = JSON.stringify(rows);
+    expect(rowText).not.toContain(wakeId);
+    expect(rowText).not.toContain(artifactSha);
+    expect(rowText).not.toContain(recorded?.bodyDigest ?? 'missing-digest');
+    expect(rowText).not.toContain('companion-host');
+    expect(rowText).not.toContain(String(companionCostUsdMicros));
+    expect(rows.filter((row) => row.phase === 'result' && row.role !== 'final').map((row) => row.costUsdMicros)).toEqual([1_000_000, 2_000_000, 3_000_000]);
+    const read = await spendLedger.readPrior({ missionId: 'julius-inworld-data-1', projectId: PROJECT, excludeRunId: 'run:not-this-one' });
+    expect(read).toEqual({
+      readable: true,
+      priorRuns: [{
+        runId: RUN,
+        knownUsdMicros: 6_000_000,
+        unknownCostComponents: 0,
+        unverifiableApiSpend: false,
+        spendVerified: true,
+      }],
+    });
+    expect(authorizeJuliusLiveSpend({
+      namespace: 'julius-inworld-data-1', spendUsd: 30, repairCycles: 3, ledger: read,
+    })).toMatchObject({ authorized: true, spendCeilingUsdMicros: 30_000_000 });
+  });
+
+  it('persists the companion row on the wlj id and refuses a read by the legacy id', async () => {
+    const serverRunId = `run:${sha(RUN).slice(0, 24)}`;
+    const evidence = createMemoryCompanionEvidenceStore();
+    const planText = JSON.stringify({
+      objectiveSummary: 'Plan the fixture.',
+      companion_task: { subtask: 'Add the companion note.', acceptanceCriteria: ['The note is present.'] },
+    });
+    const h = harness({
+      companionEvidence: evidence,
+      behave: { architect: () => ({ ok: true, text: planText, responseId: 'resp_a_0011223344', model: 'm' }) },
+      companion: {
+        deadlineMs: 1_000,
+        port: {
+          async wake() {
+            return {
+              wakeId: 'wake_01ABCDEF',
+              outcome: 'missing' as const,
+              artifact: null,
+              model: 'generic-model-name',
+              declaration: {
+                agentId: 'agent-from-caller',
+                providerId: 'provider.example.unknown',
+                displayName: 'Caller agent',
+                kind: 'single',
+                declaredCapabilities: ['draft'],
+                authorizedCapabilities: ['note'],
+                connection: 'connected',
+              },
+            };
+          },
+        },
+        clock: { after: laterUnref },
+        integrate: { async submit() { return { accepted: true, reason: null }; } },
+        validate: { validate: () => ({ ok: true, reason: null }) },
+        review: { review: async () => ({ verdict: 'approve' }) },
+      },
+    });
+    expect(await h.controller.dispatch(input())).toMatchObject({ ok: true, status: 202 });
+    await h.controller.whenIdle();
+    expect(evidence.read(RUN)).toMatchObject({
+      ok: true,
+      result: {
+        wljRunId: RUN,
+        legacyRunId: serverRunId,
+        companion: { state: 'no_result' },
+        result: null,
+        provenance: null,
+        verified: false,
+        agents: [{
+          agentId: 'agent-from-caller',
+          providerId: 'provider.example.unknown',
+          displayName: 'Caller agent',
+          kind: 'single',
+          adapterVersion: null,
+          declaredCapabilities: ['draft'],
+          authorizedCapabilities: ['note'],
+          connection: 'unsupported',
+        }],
+      },
+    });
+    expect(evidence.read(serverRunId)).toEqual({ ok: false, reason: 'companion_legacy_read_only' });
+    const served = evidence.read(RUN);
+    expect(JSON.stringify(served)).toContain('"verified":false');
+    expect(JSON.stringify(served)).not.toContain('"verified":true');
+    expect(JSON.stringify(served)).not.toContain('verifiedBy');
+    expect(JSON.stringify(served)).not.toContain('generic-model-name');
+    const events = h.controller.events({ projectId: PROJECT, runId: RUN, callerPlayerId: FOUNDER, cursor: 0 });
+    const wire = JSON.stringify(events);
+    expect(wire).not.toContain('provider.example.unknown');
+    expect(wire).not.toContain('generic-model-name');
+    expect(wire).not.toContain('agent-from-caller');
+  });
+});
+
+const laterUnref = (): Promise<void> => new Promise((resolve) => { const timer = setTimeout(resolve, 30_000); timer.unref(); });
+
 describe('SOURCE SCAN: the controller reads keys only through the store', () => {
   const source = readFileSync(join(__dirname, 'julius-dispatch.ts'), 'utf8').split(/\r?\n/u).filter((line) => !/^\s*(\*|\/\/|\/\*)/u.test(line)).join('\n');
   it('has no process.env read, and a composed store is the key source', () => {
     expect(source).not.toMatch(/process\.env|process\[\s*['"]env['"]\s*\]/u);
     expect(source).toMatch(/keyStore\.getKey\(/u);
+  });
+});
+
+describe('canonical wlj_ spend key; legacy run: is read-only', () => {
+  const codeOf = (file: string): string => readFileSync(join(__dirname, file), 'utf8').split(/\r?\n/u).filter((line) => !/^\s*(\*|\/\/|\/\*)/u.test(line)).join('\n');
+  const LEGACY = 'run:abcdefabcdefabcdefabcdef';
+
+  it('does not mint a run id, and both files parse only through the shared module', () => {
+    for (const file of ['julius-dispatch.ts', 'julius-dispatch-admission.ts']) {
+      const code = codeOf(file);
+      expect(code, file).not.toMatch(/randomUUID/);
+      expect(code, file).not.toMatch(/wlj_\$\{/);
+      expect(code, file).not.toMatch(/`run:/);
+      expect(code, file).toContain("from '../scripts/julius-admission-run-id.mjs'");
+    }
+    expect(codeOf('julius-dispatch-admission.ts')).not.toMatch(/new RegExp|\^wlj_|\^run:/);
+    const derived = deriveJuliusSpentTag(RUN);
+    expect(derived).toMatchObject({ ok: true, form: 'wlj', suffix: '11111111111141118111111111111111', tag: SPEND_TAG });
+  });
+
+  it('keys spend and evidence on the wlj_ id and the 32-hex spent tag', async () => {
+    const spendLedger = createSharedSpendLedger();
+    const h = harness({ spendLedger });
+    expect(await h.controller.dispatch(input())).toMatchObject({ ok: true, runId: RUN });
+    await h.controller.whenIdle();
+    const rows = await rowsOf(h);
+    for (const row of rows) {
+      expect(row.runId).toBe(RUN);
+      expect(row.spendTag).toBe(SPEND_TAG);
+    }
+    expect(spendLedger.facts.has(RUN)).toBe(true);
+    expect(spendLedger.facts.has(`run:${sha(RUN).slice(0, 24)}`)).toBe(false);
+    expect([...spendLedger.facts.get(RUN) ?? []].map((fact) => fact.taskId)).toEqual([`${RUN}:architect`, `${RUN}:coder`, `${RUN}:reviewer`]);
+    const legacy = `run:${sha(RUN).slice(0, 24)}`;
+    expect(h.controller.result({ projectId: PROJECT, runId: legacy, callerPlayerId: FOUNDER }).status).toBe(200);
+    const before = spendLedger.facts.size;
+    expect(await h.controller.dispatch(input({ runId: legacy, idempotencyKey: 'key-legacy-1' }))).toMatchObject({ ok: false, status: 409, code: 'julius_dispatch_legacy_read_only' });
+    expect(spendLedger.facts.size).toBe(before);
+    expect(h.calls).toHaveLength(3);
+  });
+
+  it('a legacy id cannot dispatch, resume or claim spend, and an unparseable id fails closed', async () => {
+    const spendLedger = createSharedSpendLedger();
+    const h = harness({ spendLedger });
+    expect(await h.controller.dispatch(input({ runId: LEGACY }))).toMatchObject({ ok: false, status: 409, code: 'julius_dispatch_legacy_read_only' });
+    expect(h.claims.status(LEGACY)).toBe('admitted');
+    expect([...spendLedger.facts.keys()]).toEqual([]);
+    expect(h.calls).toHaveLength(0);
+    expect(await rowsOf(h)).toHaveLength(0);
+    for (const runId of ['', ` ${RUN}`, RUN.toUpperCase(), 'wlj_11111111-1111-1111-8111-111111111111', 'wlj_11111111-1111-7111-8111-111111111111', 'run:abc', 'run:ABCDEFABCDEFABCDEFABCDEF', `${LEGACY} `, 'not-an-id']) {
+      const one = harness();
+      expect(await one.controller.dispatch(input({ runId })), runId).toMatchObject({ ok: false, status: 400, code: 'julius_dispatch_run_invalid' });
+      expect(one.calls, runId).toHaveLength(0);
+      expect(await rowsOf(one), runId).toHaveLength(0);
+    }
+  });
+
+  it('a mismatched or ambiguous admitted pair fails closed before a claim', async () => {
+    const claims = {
+      status: () => 'admitted' as const,
+      close() { /* read-only fixture */ },
+      admit() { /* read-only fixture */ },
+      async read() {
+        return { clientRunId: RUN, serverRunId: CLIENT_RUN_2, idempotencyKey: 'key-0000001', missionId: FROZEN.missionId, state: 'admitted' as const };
+      },
+      async claim() { throw new Error('legacy_or_ambiguous_claimed'); },
+    } as ReturnType<typeof createMemoryAdmissionStore>;
+    const h = harness({ claims, autoAdmit: false });
+    expect(await h.controller.dispatch(input())).toMatchObject({ ok: false, status: 409, code: 'julius_dispatch_run_mismatch' });
+    expect(h.calls).toHaveLength(0);
+  });
+
+  it('a legacy ledger row still counts toward the mission cap', async () => {
+    const ledger = createMemoryDispatchLedger();
+    await ledger.append({ phase: 'run_start', runId: LEGACY, missionId: FROZEN.missionId, at: '2026-10-22T11:00:00.000Z', dispatchId: 'disp_old', mode: 'fake' });
+    const h = harness({ ledger, env: { JULIUS_J1_MAX_RUNS_PER_MISSION: '1', JULIUS_J1_DAILY_CAP: '10' } });
+    expect(await h.controller.dispatch(input())).toMatchObject({ ok: false, status: 429, code: 'julius_dispatch_mission_cap_reached' });
+    expect(h.claims.status(RUN)).toBe('admitted');
+    expect(h.calls).toHaveLength(0);
+  });
+
+  it('a legacy spend row still counts toward the $60 cap, and presenting it does not claim again', async () => {
+    const spendLedger = createSharedSpendLedger();
+    await spendLedger.record(LEGACY, {
+      taskId: `${LEGACY}:coder`, role: 'CODING_AGENT', basis: 'PROVIDER_REPORTED', usdMicros: 30_000_001, estimatedUsdMicros: null, billingPath: 'API_BILLED',
+    });
+    const frozen: FrozenMission = { ...FROZEN, markerNamespace: 'julius-inworld-data-1', spendUsd: 30, repairCycles: 3 };
+    const h = harness({ frozen, spendLedger });
+    expect(await h.controller.dispatch(input())).toMatchObject({ ok: false, status: 409, code: 'julius_dispatch_repeat_combined_ceiling' });
+    expect(h.claims.status(RUN)).toBe('admitted');
+    expect([...spendLedger.facts.keys()]).toEqual([LEGACY]);
+    const again = harness({ frozen, spendLedger });
+    expect(await again.controller.dispatch(input({ runId: LEGACY, idempotencyKey: 'key-legacy-2' }))).toMatchObject({ ok: false, code: 'julius_dispatch_legacy_read_only' });
+    expect([...spendLedger.facts.keys()]).toEqual([LEGACY]);
+    expect(again.calls).toHaveLength(0);
   });
 });
