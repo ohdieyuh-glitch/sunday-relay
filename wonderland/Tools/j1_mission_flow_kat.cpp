@@ -28,6 +28,7 @@ namespace
 	int FlowSteps = 0;
 	int Windows = 0;
 	int Bridge = 0;
+	int PhaseCases = 0;
 
 	void Expect(bool bOk, const char* What)
 	{
@@ -272,6 +273,336 @@ namespace
 		Expect(!ContainsText(Panel, "coderCost.costUsdMicros"), What);
 		Expect(!ContainsText(Panel, "608861"), What);
 		Expect(!ContainsText(Panel, "30000000"), What);
+	}
+
+
+	// d9880ad4 relay-bridge/julius-mission-evidence.conformance.test.ts, verbatim (BRIDGE's vectors for #448).
+	const char* const VerbatimPhaseVectors = R"BRIDGE(const CODER_PHASE = {
+  role: 'CODING_AGENT',
+  state: 'IDLE',
+  stage: 'repair:build',
+  attempt: 2,
+  spanId: null,
+  traceparent: null,
+  knownUsdMicros: 1000,
+  costComplete: true,
+} as const;
+
+const ABSENT_PHASE = {
+  state: 'NEVER_DISPATCHED',
+  stage: null,
+  attempt: null,
+  spanId: null,
+  traceparent: null,
+  knownUsdMicros: 0,
+  costComplete: true,
+} as const;
+    for (const projectBrainRevision of [null, '', 'nope', -1, 1.5, false]) {
+      [{ role: 'CODING_AGENT', ...ABSENT_PHASE, state: 'ACTIVE' }],
+      [],
+      PRESENT_PHASES.map((phase) => ({ ...phase, spanId: 'a'.repeat(16) })),
+      PRESENT_PHASES.map((phase) => ({ ...phase, knownUsdMicros: null })),
+      PRESENT_PHASES.map((phase, index) => index === 1 ? { ...phase, stage: 'checkpoint' } : phase),
+    expect(accepted).toEqual({ completion: null, phases: null });)BRIDGE";
+
+	std::string AbsentSlot(const char* Role, const char* SpanJson = "null", const char* CostJson = "0", const char* StageJson = "null")
+	{
+		return std::string("{\"role\":\"") + Role + "\",\"state\":\"NEVER_DISPATCHED\",\"stage\":" + StageJson
+			+ ",\"attempt\":null,\"spanId\":" + SpanJson + ",\"traceparent\":null,\"knownUsdMicros\":" + CostJson + ",\"costComplete\":true}";
+	}
+
+	std::string CoderSlot(const char* SpanJson = "null", const char* CostJson = "1000", const char* StageJson = "\"repair:build\"")
+	{
+		return std::string("{\"role\":\"CODING_AGENT\",\"state\":\"IDLE\",\"stage\":") + StageJson
+			+ ",\"attempt\":2,\"spanId\":" + SpanJson + ",\"traceparent\":null,\"knownUsdMicros\":" + CostJson + ",\"costComplete\":true}";
+	}
+
+	std::string PresentPhases()
+	{
+		return "[" + AbsentSlot("PROMPT_ARCHITECT") + "," + CoderSlot() + "," + AbsentSlot("INDEPENDENT_REVIEWER") + "]";
+	}
+
+	std::string HeaderOnlyPhases()
+	{
+		return "[" + AbsentSlot("PROMPT_ARCHITECT") + "," + AbsentSlot("CODING_AGENT") + "," + AbsentSlot("INDEPENDENT_REVIEWER") + "]";
+	}
+
+	std::string Replaced(std::string Text, const std::string& From, const std::string& To)
+	{
+		const std::size_t At = Text.find(From);
+		if (At != std::string::npos) { Text.replace(At, From.size(), To); }
+		return Text;
+	}
+
+	const char* const AccountingObject = "\"spendAccounting\":{\"knownUsdMicros\":30000000,\"unknownCostComponents\":0,\"unverifiableApiSpend\":false,\"spendVerified\":true}";
+
+	// The #454 completion: spendAccounting null, the revision and the phase list carried inside the completion too.
+	// PhasesJson nullptr leaves the completion's phases key out.
+	std::string Completion454(const char* Revision, const char* PhasesJson, const char* Schema = "julius-run-spent.v1", const char* FinalState = "COMPLETED")
+	{
+		const std::string Digest = Repeat('b', 64);
+		std::string Out = CompletionJson(FinalState, BridgeRun, Schema, "1000", Digest.c_str(), BridgeTrace, nullptr, nullptr);
+		Out = Replaced(Out, AccountingObject, "\"spendAccounting\":null");
+		std::string Tail = std::string(",\"projectBrainRevision\":") + Revision;
+		if (PhasesJson != nullptr) { Tail += std::string(",\"phases\":") + PhasesJson; }
+		return Replaced(Out, ",\"projectBrainRevision\":3", Tail);
+	}
+
+	std::string Result454(const char* State, const std::string& Completion, const char* PhasesJson, const char* Revision, const char* Cause = nullptr)
+	{
+		const std::string TraceJson = std::string("\"") + BridgeTrace + "\"";
+		const std::string Extra = std::string(",\"phases\":") + PhasesJson + ",\"projectBrainRevision\":" + Revision;
+		return ResultJson(BridgeRun, State, TraceJson.c_str(), Cause, Completion.empty() ? nullptr : Completion.c_str(), Extra.c_str());
+	}
+
+	std::string Progress454(const char* State, const char* PhasesJson, const char* Revision)
+	{
+		const std::string TraceJson = std::string("\"") + BridgeTrace + "\"";
+		const std::string Body = ProgressJson(BridgeRun, State, TraceJson.c_str(), PhasesJson);
+		return Body.substr(0, Body.size() - 1) + ",\"projectBrainRevision\":" + Revision + "}";
+	}
+
+	// One d9880ad4 read: the same phases and revision on /result, inside completion, and on /progress.
+	FResultRead Load454(const char* PhasesJson, const char* Revision)
+	{
+		return Load(Result454("completed", Completion454(Revision, PhasesJson), PhasesJson, Revision), Progress454("completed", PhasesJson, Revision));
+	}
+
+	bool HasPrefix(const FResultPanel& Panel, const char* Prefix)
+	{
+		for (const std::string& Line : Panel.Lines)
+		{
+			if (Line.rfind(Prefix, 0) == 0) { return true; }
+		}
+		return false;
+	}
+
+	const char* const PresentArchitectLine = "phase PROMPT_ARCHITECT: NEVER_DISPATCHED, stage Unknown, attempt Unknown, knownUsdMicros 0, costComplete true";
+	const char* const PresentCoderLine = "phase CODING_AGENT: IDLE, stage repair:build, attempt 2, knownUsdMicros 1000, costComplete true";
+	const char* const PresentReviewerLine = "phase INDEPENDENT_REVIEWER: NEVER_DISPATCHED, stage Unknown, attempt Unknown, knownUsdMicros 0, costComplete true";
+	const char* const HeaderCoderLine = "phase CODING_AGENT: NEVER_DISPATCHED, stage Unknown, attempt Unknown, knownUsdMicros 0, costComplete true";
+
+	void ExpectNoPhases(const FResultPanel& Panel, const char* What)
+	{
+		Expect(!HasPrefix(Panel, "phase "), What);
+		Expect(!ContainsText(Panel, "NEVER_DISPATCHED"), What);
+		Expect(!ContainsText(Panel, "repair:build"), What);
+	}
+
+	void ExpectUnverifiedHidesPhases(const FResultRead& Read, const char* What)
+	{
+		const FResultPanel Panel = ResultPanelFor(Read);
+		ExpectHidden(Panel, What);
+		ExpectNoPhases(Panel, What);
+		Expect(!HasPrefix(Panel, "phases:"), What);
+		Expect(!HasPrefix(Panel, "projectBrainRevision"), What);
+	}
+
+	void PhaseFixtures()
+	{
+		Expect(std::strstr(VerbatimPhaseVectors, "stage: 'repair:build',\n  attempt: 2,") != nullptr, "verbatim coder phase");
+		Expect(std::strstr(VerbatimPhaseVectors, "knownUsdMicros: 1000,") != nullptr, "verbatim coder cost");
+		Expect(std::strstr(VerbatimPhaseVectors, "state: 'NEVER_DISPATCHED',\n  stage: null,\n  attempt: null,") != nullptr, "verbatim absent phase");
+		Expect(std::strstr(VerbatimPhaseVectors, "[null, '', 'nope', -1, 1.5, false]") != nullptr, "verbatim bad revisions");
+		Expect(std::strstr(VerbatimPhaseVectors, "stage: 'checkpoint'") != nullptr, "verbatim bad stage");
+		Expect(std::strstr(VerbatimPhaseVectors, "{ completion: null, phases: null }") != nullptr, "verbatim unverified read");
+		++PhaseCases;
+
+		const std::string Present = PresentPhases();
+		const std::string Header = HeaderOnlyPhases();
+
+		// Present projection, revision 0, spendAccounting null (conformance "keeps a present phase projection and a projectBrainRevision of 0").
+		const FResultRead Zero = Load454(Present.c_str(), "0");
+		Expect(Zero.bVerified && Zero.bFinished, "present projection verifies");
+		Expect(Zero.Phases == EPhaseList::Projection && Zero.PhaseSlots.size() == 3, "present projection read");
+		Expect(Zero.ProjectBrainRevision.bKnown && Zero.ProjectBrainRevision.Value == 0, "revision 0 is known 0");
+		Expect(!Zero.bPhasesSplit && !Zero.bRevisionSplit && !Zero.bRevisionMalformed, "present projection agrees");
+		Expect(Zero.bSpendAccountingNull && !Zero.bSpendAccountingPresent, "spendAccounting null read");
+		const FResultPanel ZeroPanel = ResultPanelFor(Zero);
+		Expect(Same(ZeroPanel.Line, CopyStateCompleted), "present projection line");
+		Expect(HasLine(ZeroPanel, "projectBrainRevision: 0"), "revision 0 shown as 0");
+		Expect(!HasLine(ZeroPanel, "projectBrainRevision: Unknown"), "revision 0 is not Unknown");
+		Expect(HasLine(ZeroPanel, PresentArchitectLine), "architect phase line");
+		Expect(HasLine(ZeroPanel, PresentCoderLine), "coder phase line");
+		Expect(HasLine(ZeroPanel, PresentReviewerLine), "reviewer phase line");
+		Expect(!HasPrefix(ZeroPanel, "phases:"), "present projection has no Unknown line");
+		Expect(HasLine(ZeroPanel, "spendAccounting: Unknown"), "null spendAccounting shown as Unknown");
+		Expect(!HasPrefix(ZeroPanel, "spendAccounting.knownUsdMicros"), "null spendAccounting is not a number");
+		Expect(HasLine(ZeroPanel, "spendTag.reservedUsdMicros: 30000000") && !HasLine(ZeroPanel, "spendAccounting: 30000000"), "null spendAccounting is not the reservation");
+		Expect(!ContainsText(ZeroPanel, "spanId") && !ContainsText(ZeroPanel, "traceparent"), "phase spans are not shown");
+		const FFlowView ZeroView = WatchRead(Zero);
+		Expect(ZeroView.Result.bVerified && ZeroView.Result.bFinished, "flow shows the verified completion");
+		Expect(ZeroView.Progress.bFinished == false, "phases do not move progress");
+		++PhaseCases;
+
+		const FResultRead Four = Load454(Present.c_str(), "4");
+		Expect(Four.bVerified && Four.ProjectBrainRevision.bKnown && Four.ProjectBrainRevision.Value == 4, "revision 4");
+		Expect(HasLine(ResultPanelFor(Four), "projectBrainRevision: 4") && HasLine(ResultPanelFor(Four), PresentCoderLine), "revision 4 panel");
+		++PhaseCases;
+
+		// Header-only ledger: three NEVER_DISPATCHED slots with 0 and true. Shown as reported, not as Unknown.
+		const FResultRead HeaderRead = Load454(Header.c_str(), "0");
+		Expect(HeaderRead.bVerified && HeaderRead.Phases == EPhaseList::Projection, "header-only projection");
+		const FResultPanel HeaderPanel = ResultPanelFor(HeaderRead);
+		Expect(HasLine(HeaderPanel, HeaderCoderLine), "header-only coder line keeps 0");
+		Expect(HasLine(HeaderPanel, PresentArchitectLine) && HasLine(HeaderPanel, PresentReviewerLine), "header-only slots");
+		Expect(!HasPrefix(HeaderPanel, "phases:"), "header-only is not Unknown");
+		Expect(HasLine(HeaderPanel, "projectBrainRevision: 0"), "header-only revision 0");
+		++PhaseCases;
+
+		// A null phase list with revision 4: phases Unknown, nothing invented.
+		const FResultRead NullList = Load454("null", "4");
+		Expect(NullList.bVerified && NullList.Phases == EPhaseList::Null && NullList.PhaseSlots.empty(), "null phase list");
+		const FResultPanel NullPanel = ResultPanelFor(NullList);
+		Expect(HasLine(NullPanel, "phases: Unknown") && HasLine(NullPanel, "projectBrainRevision: 4"), "null phase list panel");
+		ExpectNoPhases(NullPanel, "null phase list invents nothing");
+		Expect(HasLine(NullPanel, "spendAccounting: Unknown"), "null phase list spendAccounting");
+		const FResultRead OldShape = Load(
+			ResultJson(BridgeRun, "completed", (std::string("\"") + BridgeTrace + "\"").c_str(), nullptr,
+				Completion454("4", nullptr).c_str(), nullptr),
+			"");
+		Expect(OldShape.bVerified && OldShape.Phases == EPhaseList::Absent, "absent phase key");
+		Expect(HasLine(ResultPanelFor(OldShape), "phases: Unknown"), "absent phase key is Unknown");
+		ExpectNoPhases(ResultPanelFor(OldShape), "absent phase key invents nothing");
+		++PhaseCases;
+
+		// Every bad revision is Unknown, never 0, and the header-only phases stay.
+		const char* const BadRevisions[] = {"null", "\"\"", "\"nope\"", "-1", "1.5", "false", "9007199254740992", "\"0\"", "{}", "[]"};
+		for (const char* Bad : BadRevisions)
+		{
+			const FResultRead Read = Load454(Header.c_str(), Bad);
+			Expect(Read.bVerified && !Read.ProjectBrainRevision.bKnown, Bad);
+			Expect(Read.ProjectBrainRevision.bNull == (std::strcmp(Bad, "null") == 0), Bad);
+			Expect(Read.bRevisionMalformed == (std::strcmp(Bad, "null") != 0), Bad);
+			const FResultPanel Panel = ResultPanelFor(Read);
+			Expect(HasLine(Panel, "projectBrainRevision: Unknown") && !HasLine(Panel, "projectBrainRevision: 0"), Bad);
+			Expect(HasLine(Panel, HeaderCoderLine), Bad);
+			++PhaseCases;
+		}
+		const FResultRead Largest = Load454(Header.c_str(), "9007199254740991");
+		Expect(Largest.ProjectBrainRevision.bKnown && Largest.ProjectBrainRevision.Value == 9007199254740991LL, "largest safe revision");
+		++PhaseCases;
+
+		// Lists that are not the projection: null, never a partial list, never NEVER_DISPATCHED invented.
+		const std::string SpanA = std::string("\"") + Repeat('a', 16) + "\"";
+		const std::string Malformed[] = {
+			"[" + Replaced(AbsentSlot("CODING_AGENT"), "NEVER_DISPATCHED", "ACTIVE") + "]",
+			"[]",
+			"[" + AbsentSlot("PROMPT_ARCHITECT", SpanA.c_str()) + "," + CoderSlot(SpanA.c_str()) + "," + AbsentSlot("INDEPENDENT_REVIEWER", SpanA.c_str()) + "]",
+			"[" + AbsentSlot("PROMPT_ARCHITECT", "null", "null") + "," + CoderSlot("null", "null") + "," + AbsentSlot("INDEPENDENT_REVIEWER", "null", "null") + "]",
+			"[" + AbsentSlot("PROMPT_ARCHITECT") + "," + CoderSlot("null", "1000", "\"checkpoint\"") + "," + AbsentSlot("INDEPENDENT_REVIEWER") + "]",
+			"[" + CoderSlot(SpanA.c_str()) + "]",
+			"[" + CoderSlot() + "," + AbsentSlot("PROMPT_ARCHITECT") + "," + AbsentSlot("INDEPENDENT_REVIEWER") + "]",
+			Present.substr(0, Present.size() - 1) + "," + AbsentSlot("INDEPENDENT_REVIEWER") + "]",
+			"[" + AbsentSlot("PROMPT_ARCHITECT") + "," + CoderSlot() + ",null]",
+			Replaced(Present, "\"state\":\"IDLE\"", "\"state\":\"RUNNING\""),
+			Replaced(Present, "\"stage\":\"repair:build\",", ""),
+			Replaced(Present, "\"attempt\":2,", ""),
+			Replaced(Present, "\"attempt\":2", "\"attempt\":-1"),
+			Replaced(Present, "\"attempt\":2", "\"attempt\":\"2\""),
+			Replaced(Present, "\"attempt\":2", "\"attempt\":9007199254740992"),
+			Replaced(Present, "\"knownUsdMicros\":1000", "\"knownUsdMicros\":-1"),
+			Replaced(Present, "\"knownUsdMicros\":1000", "\"knownUsdMicros\":1.5"),
+			Replaced(Present, "\"knownUsdMicros\":1000,", ""),
+			Replaced(Present, "\"knownUsdMicros\":1000,\"costComplete\":true", "\"knownUsdMicros\":1000,\"costComplete\":null"),
+			Replaced(Present, "\"knownUsdMicros\":1000,\"costComplete\":true", "\"knownUsdMicros\":1000,\"costComplete\":\"true\""),
+			Replaced(Present, "\"attempt\":2,\"spanId\":null,\"traceparent\":null", "\"attempt\":2,\"spanId\":null,\"traceparent\":\"00-0ef34f0df7cf2cf89b844dcfa5fe084f-6bc1bfe65ed9e64b-01\""),
+			Replaced(Present, "\"attempt\":2,\"spanId\":null,", "\"attempt\":2,"),
+			Replaced(Present, "\"role\":\"CODING_AGENT\"", "\"role\":\"coding_agent\""),
+			"{}",
+			"\"phases\"",
+		};
+		int MalformedIndex = 0;
+		for (const std::string& List : Malformed)
+		{
+			const std::string What = "malformed phase list " + std::to_string(MalformedIndex++);
+			const FResultRead Read = Load454(List.c_str(), "4");
+			Expect(Read.bVerified && Read.Phases == EPhaseList::Malformed && Read.PhaseSlots.empty(), What.c_str());
+			const FResultPanel Panel = ResultPanelFor(Read);
+			Expect(HasLine(Panel, "phases: Unknown") && HasLine(Panel, "projectBrainRevision: 4"), What.c_str());
+			ExpectNoPhases(Panel, What.c_str());
+			Expect(!ContainsText(Panel, Repeat('a', 16).c_str()), What.c_str());
+			++PhaseCases;
+		}
+
+		// Not a verified completion: phases and revision are never shown and never move progress.
+		const FResultRead Executing = Load(
+			Result454("completed", Completion454("0", Present.c_str(), "julius-run-spent.v1", "EXECUTING"), Present.c_str(), "0"),
+			Progress454("completed", Present.c_str(), "0"));
+		Expect(Executing.bVerified == false, "EXECUTING with phases and revision 0 is not completion");
+		ExpectUnverifiedHidesPhases(Executing, "EXECUTING hides phases");
+		++PhaseCases;
+		const FResultRead DispatchedPhases = Load(Result454("dispatched", "", Present.c_str(), "0"), Progress454("dispatched", Present.c_str(), "0"));
+		Expect(DispatchedPhases.bVerified == false && DispatchedPhases.bDispatchedCeiling, "dispatched with phases");
+		ExpectUnverifiedHidesPhases(DispatchedPhases, "dispatched hides phases");
+		const FFlowView DispatchedView = WatchRead(DispatchedPhases);
+		Expect(Same(DispatchedView.Progress.Line, ProgressDisplayLabel(EMissionProgress::OperatorStarted)), "dispatched stays the furthest state");
+		Expect(DispatchedView.Progress.bFinished == false && DispatchedView.Result.bFinished == false, "dispatched with phases is not finished");
+		++PhaseCases;
+		const std::string AllIdle = Replaced(Replaced(Present, "NEVER_DISPATCHED", "IDLE"), "NEVER_DISPATCHED", "IDLE");
+		const FResultRead IdleOnly = Load(Result454("completed", "", AllIdle.c_str(), "4"), Progress454("completed", AllIdle.c_str(), "4"));
+		Expect(IdleOnly.bVerified == false, "three idle phases are not completion");
+		ExpectUnverifiedHidesPhases(IdleOnly, "idle phases without evidence");
+		++PhaseCases;
+		const FResultRead UnknownPhases = Load(
+			Result454("unknown", Completion454("0", Present.c_str()), Present.c_str(), "0"),
+			Progress454("unknown", Present.c_str(), "0"));
+		Expect(UnknownPhases.bVerified == false && UnknownPhases.bUnknownState, "unknown with phases");
+		ExpectUnverifiedHidesPhases(UnknownPhases, "unknown hides phases");
+		Expect(WatchRead(UnknownPhases).Progress.bFinished == false, "unknown with phases is not finished");
+		++PhaseCases;
+		const FResultRead ExpiredPhases = Load(
+			Result454("failed", Completion454("0", Present.c_str()), Present.c_str(), "0", "AWAITING_OPERATOR_EXPIRED"),
+			Progress454("failed", Present.c_str(), "0"));
+		Expect(ExpiredPhases.bExpired && ExpiredPhases.bVerified == false, "expired with phases");
+		ExpectUnverifiedHidesPhases(ExpiredPhases, "expired hides phases");
+		Expect(WatchRead(ExpiredPhases).Progress.bNotStarted, "expired with phases stays NotStarted");
+		++PhaseCases;
+
+		// spendAccounting null is never completion by itself.
+		const FResultRead NullNoTag = Load(
+			Result454("completed", Completion454("0", Present.c_str(), nullptr), Present.c_str(), "0"),
+			Progress454("completed", Present.c_str(), "0"));
+		Expect(NullNoTag.bVerified == false && NullNoTag.bSpendAccountingNull, "null spendAccounting without a tag");
+		ExpectUnverifiedHidesPhases(NullNoTag, "null spendAccounting without a tag hides phases");
+		const FResultRead NullWrongRun = Load(
+			Result454("completed", Replaced(Completion454("0", Present.c_str()), std::string("\"run\":\"") + BridgeRun, std::string("\"run\":\"") + OtherRun), Present.c_str(), "0"),
+			Progress454("completed", Present.c_str(), "0"));
+		Expect(NullWrongRun.bVerified == false, "null spendAccounting with another run's tag");
+		++PhaseCases;
+
+		// The copies must agree. A split copy is Unknown, and the completion evidence is unchanged.
+		const FResultRead ProgressSplit = Load(
+			Result454("completed", Completion454("0", Present.c_str()), Present.c_str(), "0"),
+			Progress454("completed", Header.c_str(), "0"));
+		Expect(ProgressSplit.bVerified && ProgressSplit.bPhasesSplit && ProgressSplit.Phases == EPhaseList::Malformed, "progress phase split");
+		Expect(HasLine(ResultPanelFor(ProgressSplit), "phases: Unknown"), "progress phase split is Unknown");
+		ExpectNoPhases(ResultPanelFor(ProgressSplit), "progress phase split invents nothing");
+		const FResultRead ProgressNullSplit = Load(
+			Result454("completed", Completion454("0", Present.c_str()), Present.c_str(), "0"),
+			Progress454("completed", "null", "0"));
+		Expect(ProgressNullSplit.bPhasesSplit && HasLine(ResultPanelFor(ProgressNullSplit), "phases: Unknown"), "progress null phase split");
+		const FResultRead CompletionSplit = Load(
+			Result454("completed", Completion454("0", Header.c_str()), Present.c_str(), "0"),
+			Progress454("completed", Present.c_str(), "0"));
+		Expect(CompletionSplit.bVerified && CompletionSplit.bPhasesSplit, "completion phase split");
+		Expect(HasLine(ResultPanelFor(CompletionSplit), "phases: Unknown"), "completion phase split is Unknown");
+		const FResultRead ProgressRevisionSplit = Load(
+			Result454("completed", Completion454("0", Present.c_str()), Present.c_str(), "0"),
+			Progress454("completed", Present.c_str(), "4"));
+		Expect(ProgressRevisionSplit.bVerified && ProgressRevisionSplit.bRevisionSplit && !ProgressRevisionSplit.ProjectBrainRevision.bKnown, "progress revision split");
+		Expect(HasLine(ResultPanelFor(ProgressRevisionSplit), "projectBrainRevision: Unknown"), "progress revision split is Unknown");
+		Expect(!HasLine(ResultPanelFor(ProgressRevisionSplit), "projectBrainRevision: 0"), "progress revision split is not 0");
+		Expect(HasLine(ResultPanelFor(ProgressRevisionSplit), PresentCoderLine), "revision split keeps the phases");
+		const FResultRead CompletionRevisionSplit = Load(
+			Result454("completed", Completion454("4", Present.c_str()), Present.c_str(), "0"),
+			Progress454("completed", Present.c_str(), "0"));
+		Expect(CompletionRevisionSplit.bRevisionSplit && HasLine(ResultPanelFor(CompletionRevisionSplit), "projectBrainRevision: Unknown"), "completion revision split");
+		const FResultRead CompletionNullRevision = Load(
+			Result454("completed", Completion454("null", Present.c_str()), Present.c_str(), "0"),
+			Progress454("completed", Present.c_str(), "0"));
+		Expect(CompletionNullRevision.bRevisionSplit && !CompletionNullRevision.ProjectBrainRevision.bKnown, "completion null revision against 0");
+		++PhaseCases;
 	}
 
 	void BridgeRouteFixtures()
@@ -714,6 +1045,7 @@ int main()
 	++FlowSteps;
 
 	BridgeRouteFixtures();
+	PhaseFixtures();
 
 	if (Failures != 0)
 	{
@@ -721,7 +1053,7 @@ int main()
 		return 1;
 	}
 	std::printf(
-		"J1 MISSION FLOW KAT PASS meanings=%d route=%d result=%d flow=%d windows=%d bridge=%d\n",
-		Meanings, Routes, Results, FlowSteps, Windows, Bridge);
+		"J1 MISSION FLOW KAT PASS meanings=%d route=%d result=%d flow=%d windows=%d bridge=%d phases=%d\n",
+		Meanings, Routes, Results, FlowSteps, Windows, Bridge, PhaseCases);
 	return 0;
 }

@@ -12,8 +12,9 @@
 //
 // RESULT. A separate reader. FBridgeMissionResultClient parses the JSON bodies of
 // GET /relay-api/wonderland/julius/missions/{wljRunId}/result and /progress
-// (relay-bridge/wonderland-mission-result-route.ts at 7e71a122). It does not fetch them and it does
-// not derive a trace id, a cost, or an artifact reference. An unplugged reader reports nothing, and
+// (relay-bridge/wonderland-mission-result-route.ts at 7e71a122, phases and projectBrainRevision at
+// d9880ad4). It does not fetch them and it does not derive a trace id, a span id, a cost, a phase
+// list, a revision, or an artifact reference. An unplugged reader reports nothing, and
 // the panel says "No result reported yet". dispatched stays the furthest progress until a read verifies.
 //
 // WINDOWS. The bridge's operator window is 360 minutes from acceptance. The client hold is 362
@@ -128,6 +129,31 @@ namespace WonderlandJuliusMissionFlow
 	};
 
 	/**
+	 * One slot of BRIDGE's #454 phase projection, as d9880ad4 accepts it
+	 * (relay-bridge/julius-mission-evidence.ts:347-382). Every key is required. Stage and Attempt may be
+	 * null (Unknown). spanId and traceparent must be null and are not kept. KnownUsdMicros 0 is a real 0.
+	 */
+	struct FPhaseSlot
+	{
+		/** PROMPT_ARCHITECT, CODING_AGENT, INDEPENDENT_REVIEWER, in that order. */
+		std::string Role;
+		/** NEVER_DISPATCHED, ACTIVE, IDLE or FAILED. */
+		std::string State;
+		/** null, plan, build, repair:plan or repair:build. */
+		FReportedString Stage;
+		/** null or a non-negative safe integer. */
+		FReportedInt64 Attempt;
+		std::int64_t KnownUsdMicros = 0;
+		bool bCostComplete = false;
+	};
+
+	/**
+	 * Absent: no key (a body before d9880ad4). Null: the key is null. Projection: exactly the three-slot
+	 * projection. Malformed: anything else, which this client treats as null. None of them is completion.
+	 */
+	enum class EPhaseList : std::uint8_t { Absent, Null, Projection, Malformed };
+
+	/**
 	 * One parse of BRIDGE's result and progress bodies.
 	 *
 	 * Field names, from bridge/wonderland-julius-mission-result-20261024 @ 7e71a122fe03a2538904ab4b8651e034dcf2c1f3:
@@ -145,6 +171,16 @@ namespace WonderlandJuliusMissionFlow
 	 *     13-18: completion requires juliusFinalState "COMPLETED" and spendTag.run equal to the path wlj_ id.
 	 *     A missing cost is null, not zero. 77: this route does not recompute JuliusMissionResultView.verified.
 	 *     63-67: traceId and spanId are derived on the bridge. This client displays the strings the body carried.
+	 *
+	 * Phases and projectBrainRevision, from #448 @ d9880ad45c16bec6e338bf784bc045b7a23b2d37:
+	 *   relay-bridge/wonderland-mission-result-route.ts:145 projectBrainRevision is null unless completion is
+	 *     non-null (no falsy coercion: 0 stays 0); :153 phases null stays null on /result and /progress.
+	 *   relay-bridge/julius-mission-evidence.ts:193-194, :423 revision is a non-negative safe integer, else null;
+	 *     :347-382 the phase list is exactly the three-slot projection, else null (an empty array is null);
+	 *     :370, :378-379 spanId and traceparent stay null; :411-412 a read that is not a verified completion
+	 *     is { completion: null, phases: null }.
+	 *   Fixtures: relay-bridge/julius-mission-evidence.conformance.test.ts (PRESENT_PHASES, HEADER_ONLY_PHASES).
+	 *   spendAccounting stays null on #454 output (reader :623): shown as Unknown, never as 0, never as evidence.
 	 */
 	struct FResultRead
 	{
@@ -178,6 +214,18 @@ namespace WonderlandJuliusMissionFlow
 		FReportedInt64 MissionKnownUsdMicros;
 		FReportedInt64 MissionUnknownComponents;
 		FReportedBool MissionCostComplete;
+		/** The completion carried "spendAccounting": null (#454). Unknown, not zero, not evidence. */
+		bool bSpendAccountingNull = false;
+		/** Top-level phases on /result, cross-checked against completion.phases and /progress. */
+		EPhaseList Phases = EPhaseList::Absent;
+		/** Filled only when Phases is Projection. */
+		std::vector<FPhaseSlot> PhaseSlots;
+		/** /result, /progress or completion disagreed on phases. Phases is then Malformed. */
+		bool bPhasesSplit = false;
+		/** Top-level projectBrainRevision. 0 is a real 0. A string, fraction, negative or bool is Unknown. */
+		FReportedInt64 ProjectBrainRevision;
+		bool bRevisionMalformed = false;
+		bool bRevisionSplit = false;
 		FReportedString ProviderMessageId;
 		FReportedString SecretText;
 		/** Honest parse leaves both false. They exist so a display flip is observable. */

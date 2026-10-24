@@ -433,6 +433,7 @@ namespace WonderlandJuliusMissionFlow
 				Out.bSpendAccountingPresent = true;
 				Out.SpendAccountingKnownUsdMicros = ReadInt(Accounting, "knownUsdMicros");
 			}
+			Out.bSpendAccountingNull = Accounting != nullptr && Accounting->Kind == EJsonKind::Null; // #454 reader :623
 			const FJson* Coder = Field(*Completion, "coderCost");
 			if (Coder != nullptr && Coder->Kind == EJsonKind::Object)
 			{
@@ -455,6 +456,146 @@ namespace WonderlandJuliusMissionFlow
 			}
 			Out.SecretText = ReadString(Completion, "apiKey");
 			if (!Out.SecretText.bKnown) { Out.SecretText = ReadString(Completion, "token"); }
+		}
+
+		constexpr std::int64_t MaxSafeInteger = 9007199254740991LL; // Number.MAX_SAFE_INTEGER
+
+		// d9880ad4 julius-mission-evidence.ts:193-194 nonNegativeInt: a number, a safe integer, >= 0.
+		bool SafeCount(const FJson* Node, std::int64_t& Out)
+		{
+			if (Node == nullptr || Node->Kind != EJsonKind::Number || !Node->bInt) { return false; }
+			if (Node->Int > MaxSafeInteger) { return false; } // FLOW_SAFE_INTEGER_ONLY
+			Out = Node->Int;
+			return true;
+		}
+
+		// route.ts:145, evidence.ts:423. 0 stays 0. Null stays null. Anything else is Unknown, not 0.
+		FReportedInt64 ReadRevision(const FJson* Object, bool& bMalformed)
+		{
+			FReportedInt64 Out;
+			bMalformed = false;
+			if (Object == nullptr || Object->Kind != EJsonKind::Object) { return Out; }
+			const FJson* Node = Field(*Object, "projectBrainRevision");
+			if (Node == nullptr) { return Out; }
+			if (Node->Kind == EJsonKind::Null) { Out.bNull = true; return Out; } // FLOW_REVISION_NULL_NOT_ZERO
+			if (SafeCount(Node, Out.Value)) { Out.bKnown = true; return Out; } // FLOW_REVISION_ZERO_KEPT
+			bMalformed = true; // FLOW_REVISION_MALFORMED_IS_UNKNOWN
+			return Out;
+		}
+
+		const char* const PhaseRoles[3] = {"PROMPT_ARCHITECT", "CODING_AGENT", "INDEPENDENT_REVIEWER"};
+
+		bool IsPhaseState(const std::string& S)
+		{
+			return S == "NEVER_DISPATCHED" || S == "ACTIVE" || S == "IDLE" || S == "FAILED"; // FLOW_PHASE_STATE_CLOSED
+		}
+
+		bool IsPhaseStage(const std::string& S)
+		{
+			return S == "plan" || S == "build" || S == "repair:plan" || S == "repair:build"; // FLOW_PHASE_STAGE_CLOSED
+		}
+
+		// evidence.ts:347-382. Every key is required; any miss fails the slot, and a failed slot nulls the list.
+		bool ReadPhaseSlot(const FJson& Node, const char* Role, FPhaseSlot& Out)
+		{
+			if (Node.Kind != EJsonKind::Object) { return false; }
+			if (!IsExactString(Field(Node, "role"), Role)) { return false; } // FLOW_PHASES_ROLE_ORDER
+			const FJson* State = Field(Node, "state");
+			if (State == nullptr || State->Kind != EJsonKind::String || !IsPhaseState(State->Text)) { return false; }
+			const FJson* Stage = Field(Node, "stage");
+			if (Stage == nullptr) { return false; } // FLOW_PHASE_STAGE_KEY_REQUIRED
+			if (Stage->Kind == EJsonKind::Null) { Out.Stage.bNull = true; }
+			else if (Stage->Kind == EJsonKind::String && IsPhaseStage(Stage->Text)) { Out.Stage.bKnown = true; Out.Stage.Text = Stage->Text; }
+			else { return false; }
+			const FJson* Attempt = Field(Node, "attempt");
+			if (Attempt == nullptr) { return false; } // FLOW_PHASE_ATTEMPT_KEY_REQUIRED
+			if (Attempt->Kind == EJsonKind::Null) { Out.Attempt.bNull = true; }
+			else if (SafeCount(Attempt, Out.Attempt.Value)) { Out.Attempt.bKnown = true; }
+			else { return false; } // FLOW_PHASE_ATTEMPT_SAFE
+			const FJson* Span = Field(Node, "spanId");
+			if (Span == nullptr || Span->Kind != EJsonKind::Null) { return false; } // FLOW_PHASE_SPAN_ID_NULL
+			const FJson* Parent = Field(Node, "traceparent");
+			if (Parent == nullptr || Parent->Kind != EJsonKind::Null) { return false; } // FLOW_PHASE_TRACEPARENT_NULL
+			if (!SafeCount(Field(Node, "knownUsdMicros"), Out.KnownUsdMicros)) { return false; } // FLOW_PHASE_COST_REQUIRED
+			const FJson* Complete = Field(Node, "costComplete");
+			if (Complete == nullptr || Complete->Kind != EJsonKind::Bool) { return false; } // FLOW_PHASE_COST_COMPLETE_BOOL
+			Out.bCostComplete = Complete->bBool;
+			Out.Role = Role;
+			Out.State = State->Text;
+			return true;
+		}
+
+		EPhaseList ReadPhases(const FJson* Object, std::vector<FPhaseSlot>& Out)
+		{
+			Out.clear();
+			if (Object == nullptr || Object->Kind != EJsonKind::Object) { return EPhaseList::Absent; }
+			const FJson* Node = Field(*Object, "phases");
+			if (Node == nullptr) { return EPhaseList::Absent; }
+			if (Node->Kind == EJsonKind::Null) { return EPhaseList::Null; }
+			if (Node->Kind != EJsonKind::Array || Node->Array.size() != 3) { return EPhaseList::Malformed; } // FLOW_PHASES_EXACTLY_THREE
+			std::vector<FPhaseSlot> Slots(3);
+			for (std::size_t I = 0; I < 3; ++I)
+			{
+				if (!ReadPhaseSlot(Node->Array[I], PhaseRoles[I], Slots[I])) { return EPhaseList::Malformed; } // FLOW_ONE_BAD_SLOT_NULLS_LIST
+			}
+			Out = std::move(Slots);
+			return EPhaseList::Projection;
+		}
+
+		// Canonical text of a phase read, so two routes' copies can be compared. Absent, Null and Malformed all read "-".
+		std::string PhaseKey(EPhaseList List, const std::vector<FPhaseSlot>& Slots)
+		{
+			if (List != EPhaseList::Projection) { return "-"; }
+			std::string Key;
+			for (const FPhaseSlot& Slot : Slots)
+			{
+				Key += Slot.Role + "|" + Slot.State + "|" + (Slot.Stage.bKnown ? Slot.Stage.Text : std::string("~")) + "|"
+					+ (Slot.Attempt.bKnown ? std::to_string(Slot.Attempt.Value) : std::string("~")) + "|"
+					+ std::to_string(Slot.KnownUsdMicros) + "|" + (Slot.bCostComplete ? "1" : "0") + ";";
+			}
+			return Key;
+		}
+
+		std::string RevisionKey(const FReportedInt64& Revision)
+		{
+			return Revision.bKnown ? std::to_string(Revision.Value) : std::string("-");
+		}
+
+		std::string ReportedOrUnknown(const FReportedString& Field)
+		{
+			return Field.bKnown ? Field.Text : std::string("Unknown");
+		}
+
+		std::string ReportedOrUnknown(const FReportedInt64& Field)
+		{
+			return Field.bKnown ? std::to_string(Field.Value) : std::string("Unknown");
+		}
+
+		// Phases and the revision are published only on a verified completion (evidence.ts:411-412). Never invented.
+		void AppendPhasesAndRevision(std::vector<std::string>& Lines, const FResultRead& Read)
+		{
+			if (!Read.bVerified) { return; } // FLOW_PHASES_ONLY_IF_VERIFIED
+			if (Read.ProjectBrainRevision.bKnown)
+			{
+				Lines.push_back(std::string("projectBrainRevision: ") + std::to_string(Read.ProjectBrainRevision.Value));
+			}
+			else
+			{
+				Lines.push_back("projectBrainRevision: Unknown");
+			}
+			if (Read.Phases != EPhaseList::Projection)
+			{
+				Lines.push_back("phases: Unknown"); // FLOW_NULL_PHASES_NOT_INVENTED
+				return;
+			}
+			for (const FPhaseSlot& Slot : Read.PhaseSlots)
+			{
+				Lines.push_back(std::string("phase ") + Slot.Role + ": " + Slot.State
+					+ ", stage " + ReportedOrUnknown(Slot.Stage)
+					+ ", attempt " + ReportedOrUnknown(Slot.Attempt)
+					+ ", knownUsdMicros " + std::to_string(Slot.KnownUsdMicros) // FLOW_ZERO_COST_IS_ZERO
+					+ ", costComplete " + (Slot.bCostComplete ? "true" : "false"));
+			}
 		}
 
 		bool SpendTagVerifies(const FJson* Completion, std::string_view WljRunId)
@@ -663,6 +804,7 @@ namespace WonderlandJuliusMissionFlow
 			}
 		}
 		Out.bShowsArtifact = bArtifactAllowed && HasReportedArtifact(Read);
+		AppendPhasesAndRevision(Out.Lines, Read);
 		if (!Read.bVerified)
 		{
 			Out.Line = CopyNoResultYet;
@@ -688,6 +830,10 @@ namespace WonderlandJuliusMissionFlow
 		}
 		AppendInt(Out.Lines, "spendTag.reservedUsdMicros", Read.ReservedUsdMicros, Read.bSpendTagPresent);
 		AppendInt(Out.Lines, "spendAccounting.knownUsdMicros", Read.SpendAccountingKnownUsdMicros, Read.bSpendAccountingPresent);
+		if (Read.bSpendAccountingNull)
+		{
+			Out.Lines.push_back("spendAccounting: Unknown"); // FLOW_NULL_SPEND_ACCOUNTING_IS_UNKNOWN
+		}
 		AppendInt(Out.Lines, "coderCost.costUsdMicros", Read.CoderCostUsdMicros, Read.bCoderCostPresent);
 		if (Read.bCoderCostPresent && Read.CoderCostBasis.bKnown)
 		{
@@ -739,6 +885,8 @@ namespace WonderlandJuliusMissionFlow
 		const FReportedString State = ReadString(&Root, "state");
 		if (State.bKnown) { Out.State = State.Text; }
 		Out.Cause = ReadString(&Root, "cause");
+		Out.Phases = ReadPhases(&Root, Out.PhaseSlots);
+		Out.ProjectBrainRevision = ReadRevision(&Root, Out.bRevisionMalformed);
 		const FJson* Completion = Field(Root, "completion");
 		const bool bCompletionObject = Completion != nullptr && Completion->Kind == EJsonKind::Object;
 		if (bCompletionObject)
@@ -747,9 +895,24 @@ namespace WonderlandJuliusMissionFlow
 			ReadCosts(Completion, Out);
 			Out.CompletionTraceId = ReadString(Completion, "traceId");
 			Out.CompletionTraceparent = ReadString(Completion, "traceparent");
+			std::vector<FPhaseSlot> CompletionSlots;
+			const EPhaseList CompletionPhases = ReadPhases(Completion, CompletionSlots);
+			if (CompletionPhases != EPhaseList::Absent && PhaseKey(CompletionPhases, CompletionSlots) != PhaseKey(Out.Phases, Out.PhaseSlots))
+			{
+				Out.bPhasesSplit = true; // FLOW_COMPLETION_PHASES_AGREE
+			}
+			bool bCompletionRevisionMalformed = false;
+			const FJson* CompletionRevision = Field(*Completion, "projectBrainRevision");
+			if (CompletionRevision != nullptr
+				&& RevisionKey(ReadRevision(Completion, bCompletionRevisionMalformed)) != RevisionKey(Out.ProjectBrainRevision))
+			{
+				Out.bRevisionSplit = true; // FLOW_COMPLETION_REVISION_AGREES
+			}
 		}
+		constexpr bool bAcceptNullAccountingAsSettled = false; // FLOW_NULL_SPEND_ACCOUNTING_NOT_COMPLETION
 
 		bool bVerified = EvidenceVerifies(Root, bCompletionObject ? Completion : nullptr, WljRunId);
+		if (bAcceptNullAccountingAsSettled && Out.bSpendAccountingNull) { bVerified = true; }
 		if (Completion == nullptr || Completion->Kind == EJsonKind::Null)
 		{
 			bVerified = false; // FLOW_NULL_COMPLETION_NOT_VERIFIED
@@ -774,6 +937,18 @@ namespace WonderlandJuliusMissionFlow
 				if (ProgressWord.bKnown) { ProgressState = ProgressWord.Text; }
 				const FJson* Phases = Field(Progress, "phases");
 				bPhasesPresent = Phases != nullptr && Phases->Kind == EJsonKind::Array;
+				std::vector<FPhaseSlot> ProgressSlots;
+				const EPhaseList ProgressPhases = ReadPhases(&Progress, ProgressSlots);
+				if (ProgressPhases != EPhaseList::Absent && PhaseKey(ProgressPhases, ProgressSlots) != PhaseKey(Out.Phases, Out.PhaseSlots))
+				{
+					Out.bPhasesSplit = true; // FLOW_PROGRESS_PHASES_AGREE
+				}
+				bool bProgressRevisionMalformed = false;
+				if (Field(Progress, "projectBrainRevision") != nullptr
+					&& RevisionKey(ReadRevision(&Progress, bProgressRevisionMalformed)) != RevisionKey(Out.ProjectBrainRevision))
+				{
+					Out.bRevisionSplit = true; // FLOW_PROGRESS_REVISION_AGREES
+				}
 			}
 			else
 			{
@@ -806,6 +981,15 @@ namespace WonderlandJuliusMissionFlow
 			Out.bFinished = bVerified;
 		}
 		Out.bVerified = bVerified;
+		if (Out.bPhasesSplit)
+		{
+			Out.Phases = EPhaseList::Malformed; // FLOW_SPLIT_PHASES_ARE_UNKNOWN
+			Out.PhaseSlots.clear();
+		}
+		if (Out.bRevisionSplit)
+		{
+			Out.ProjectBrainRevision = FReportedInt64{}; // FLOW_SPLIT_REVISION_IS_UNKNOWN
+		}
 		Out.bDispatchedCeiling = Out.bParsed && !Out.bVerified && Out.State == "dispatched";
 		Out.bEchoProviderMessageId = false; // FLOW_MESSAGE_ID_IS_NOT_A_RECEIPT
 		Out.bEchoSecret = false; // FLOW_SECRET_NOT_DISPLAYED
