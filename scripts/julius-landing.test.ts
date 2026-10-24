@@ -837,7 +837,157 @@ describe('the provenance gate and the allowlist are founder-governed', () => {
     expect(list).toEqual([
       'relay/julius-partial-secret-capture-fix', 'relay/julius-coder-runtime-budget', 'relay/julius-diag-digest-evidence-2', 'relay/julius-report-refused-reason', 'relay/julius-accounting-instruments',
       'relay/julius-maxeffort-gauntlet-1', 'relay/julius-maxeffort-loop-1', 'relay/julius-ask-route',
+      'relay/julius-wonderland-j1-client-recut-20261023',
+      'relay/julius-wonderland-handoff-backend-20261023',
+      'relay/julius-wonderland-b33-tooling-fixes-20261023',
+      'relay/julius-aggregate-spend-cap-20261023',
+      'relay/julius-j1-route-keystore-20261023',
+      'relay/julius-j1-route-dispatch-20261023',
+      'relay/julius-j1-route-inworld-data-20261023',
+      'relay/julius-j1-route-adapters-20261023',
+      'relay/julius-j1-route-shell-port-20261023',
+      'relay/julius-provider-baseline-20261023',
+      'relay/julius-slot-view-diag-20261023',
+      'relay/julius-served-model-halt-20261023',
+      'relay/julius-reviewer-request-id-20261023',
+      'relay/julius-bridge-mission-adapter-20261023',
+      'relay/julius-inworld-data-limits-20261023',
+      'relay/julius-wonderland-lff-20261023',
+      'relay/julius-wonder-web-windows-20261023',
+      'relay/julius-wonderland-mp-reliability-20261023',
+      'relay/julius-wonderland-j1-progress-20261023',
+      'relay/julius-wonderland-docs-20261023',
+      'relay/julius-wonder-web-unreal-20261023',
+      'relay/julius-bridge-operator-claim-20261023',
+      'relay/julius-wonderland-j1-wrapper-20261023',
+      'relay/julius-wonder-web-sessions-20261023',
+      'relay/julius-wonder-web-stream-20261023',
+      'relay/julius-wonder-web-vm-tools-20261023',
+      'relay/julius-wonder-web-vm-tools-live-20261023',
+      'relay/julius-run-id-adoption-20261023',
+      'relay/julius-bridge-grok-companion-20261023',
+      'relay/julius-wonderland-chatgpt-companion-20261023',
+      'relay/julius-companion-task-20261023',
     ]);
+  });
+
+  it('allows exactly relay/julius-wonderland-j1-client-recut-20261023 and refuses a prefix, a suffix, a case change, a child path, a glob, and the source branch', () => {
+    const exact = 'relay/julius-wonderland-j1-client-recut-20261023';
+    const list = readFileSync(join(LANDING, 'allowed-branches.txt'), 'utf8').split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
+    expect(exact).toMatch(/^relay\/julius-[a-z0-9-]+$/u);
+    expect(list.filter((b) => b === exact)).toEqual([exact]);
+    expect(list).not.toContain('wonderland/j1-client-recut-20261023');
+    expect(list.some((b) => /[*?[\]{}]/.test(b))).toBe(false);
+    const gate = readFileSync(join(LANDING, 'land-lib.mjs'), 'utf8');
+    expect(gate).toContain('allowedBranches.includes(pr.head?.ref)');
+    const onBranch = (ref: string) => check({ allowedBranches: list, pr: { ...goodPr(), head: { ...goodPr().head, ref } } });
+    expect(onBranch(exact)).toEqual([]);
+    for (const broader of [
+      'prefix-relay/julius-wonderland-j1-client-recut-20261023',
+      'relay/julius-wonderland-j1-client-recut-2026102',
+      'relay/julius-wonderland-j1-client-recut-20261023-extra',
+      'relay/julius-wonderland-j1-client-recut-202610233',
+      'Relay/julius-wonderland-j1-client-recut-20261023',
+      'relay/julius-Wonderland-j1-client-recut-20261023',
+      'relay/julius-wonderland-j1-client-recut-20261023/child',
+      'relay/julius-wonderland-j1-client-recut-*',
+      'relay/julius-*',
+      '*',
+      'wonderland/j1-client-recut-20261023',
+    ]) {
+      expect(onBranch(broader).join(' '), broader).toContain('not in the founder');
+    }
+  });
+
+  const restack = [
+    'relay/julius-wonderland-j1-client-recut-20261023',
+    'relay/julius-wonderland-handoff-backend-20261023',
+    'relay/julius-wonderland-b33-tooling-fixes-20261023',
+    'relay/julius-aggregate-spend-cap-20261023',
+    'relay/julius-j1-route-keystore-20261023',
+    'relay/julius-j1-route-dispatch-20261023',
+    'relay/julius-j1-route-inworld-data-20261023',
+    'relay/julius-j1-route-adapters-20261023',
+    'relay/julius-j1-route-shell-port-20261023',
+    'relay/julius-provider-baseline-20261023',
+    'relay/julius-slot-view-diag-20261023',
+    'relay/julius-served-model-halt-20261023',
+    'relay/julius-reviewer-request-id-20261023',
+    'relay/julius-bridge-mission-adapter-20261023',
+    'relay/julius-inworld-data-limits-20261023',
+    'relay/julius-wonderland-lff-20261023',
+    'relay/julius-wonder-web-windows-20261023',
+    'relay/julius-wonderland-mp-reliability-20261023',
+    'relay/julius-wonderland-j1-progress-20261023',
+    'relay/julius-wonderland-docs-20261023',
+    'relay/julius-wonder-web-unreal-20261023',
+    'relay/julius-bridge-operator-claim-20261023',
+    'relay/julius-wonderland-j1-wrapper-20261023',
+    'relay/julius-wonder-web-sessions-20261023',
+    'relay/julius-wonder-web-stream-20261023',
+    'relay/julius-wonder-web-vm-tools-20261023',
+    'relay/julius-wonder-web-vm-tools-live-20261023',
+    'relay/julius-run-id-adoption-20261023',
+    'relay/julius-bridge-grok-companion-20261023',
+    'relay/julius-wonderland-chatgpt-companion-20261023',
+    'relay/julius-companion-task-20261023',
+  ];
+  const provisional = [
+    'relay/julius-wonderland-mp-reliability-20261023',
+    'relay/julius-wonder-web-unreal-20261023',
+    'relay/julius-wonder-web-stream-20261023',
+    'relay/julius-wonder-web-vm-tools-live-20261023',
+  ];
+
+  for (const exact of restack) {
+    it(`allows exactly ${exact} and refuses a prefix, a suffix, a case change, a child path, and a glob`, () => {
+      const list = readFileSync(join(LANDING, 'allowed-branches.txt'), 'utf8').split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
+      expect(exact).toMatch(/^relay\/julius-[a-z0-9-]+$/u);
+      expect(list.filter((b) => b === exact)).toEqual([exact]);
+      expect(list).not.toContain('wonderland/j1-client-recut-20261023');
+      expect(list.some((b) => /[*?[\]{}]/.test(b))).toBe(false);
+      const onBranch = (ref: string) => check({ allowedBranches: list, pr: { ...goodPr(), head: { ...goodPr().head, ref } } });
+      expect(onBranch(exact)).toEqual([]);
+      for (const broader of [
+        `prefix-${exact}`,
+        exact.slice(0, -1),
+        `${exact}-extra`,
+        `${exact}3`,
+        exact.replace('relay/', 'Relay/'),
+        exact.replace('julius-', 'Julius-'),
+        `${exact}/child`,
+        `${exact.slice(0, -1)}*`,
+        'relay/julius-*',
+        '*',
+      ]) {
+        expect(onBranch(broader).join(' '), broader).toContain('not in the founder');
+      }
+    });
+  }
+
+  it('marks the provisional restack entries and retires every new entry after it lands', () => {
+    const raw = readFileSync(join(LANDING, 'allowed-branches.txt'), 'utf8').split('\n');
+    for (const name of restack) {
+      const index = raw.findIndex((line) => line.trim() === name);
+      expect(index, name).toBeGreaterThan(0);
+      const comment = [...raw.slice(0, index)].reverse().find((line) => line.trim().startsWith('#'));
+      expect(comment, name).toMatch(/Retire (this|each) entry after it lands/u);
+      if (provisional.includes(name)) expect(comment, name).toMatch(/PROVISIONAL/u);
+      else expect(comment, name).not.toMatch(/PROVISIONAL/u);
+    }
+    const text = raw.join('\n');
+    expect(text).toContain('# FORGE.');
+    expect(text).toContain('# Cosmo.');
+    expect(text).toContain('# BRIDGE.');
+    expect(text).toContain('# YUJI.');
+    const adoption = raw.findIndex((line) => line.trim() === 'relay/julius-run-id-adoption-20261023');
+    expect(raw[adoption - 1]).toBe('# YUJI. Julius bootstrap adopts the admission-minted server_run_id. Retire this entry after it lands.');
+    const grok = raw.findIndex((line) => line.trim() === 'relay/julius-bridge-grok-companion-20261023');
+    expect(raw[grok - 1]).toBe('# BRIDGE. Grok Bot companion contract, wake sender and result route; stacks on #407. Retire this entry after it lands.');
+    const chatgpt = raw.findIndex((line) => line.trim() === 'relay/julius-wonderland-chatgpt-companion-20261023');
+    expect(raw[chatgpt - 1]).toBe('# Cosmo. player-owned ChatGPT side companion, relay part. Retire this entry after it lands.');
+    const task = raw.findIndex((line) => line.trim() === 'relay/julius-companion-task-20261023');
+    expect(raw[task - 1]).toBe('# YUJI. Julius companion_task slot. Retire this entry after it lands.');
   });
 
   it('the shipped allowlist refuses the superseded Candidate C branch (evidence-1) and allows evidence-2', () => {
