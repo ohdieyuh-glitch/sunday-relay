@@ -571,10 +571,9 @@ function clearanceFromLandingMessage(message) {
   return { clearance, signatureB64 };
 }
 
-async function hardForbidden(root) {
-  const href = pathToFileURL(join(root, '.github/julius-landing/land-lib.mjs')).href;
-  const mod = await import(href);
-  return mod.HARD_FORBIDDEN_PATH;
+async function hardForbidden() {
+  const { HARD_FORBIDDEN_PATH } = await import('../.github/julius-landing/land-lib.mjs');
+  return HARD_FORBIDDEN_PATH;
 }
 
 /** Worktree attestation bytes must be the blobs at HEAD. A dirty swap fails here. */
@@ -670,7 +669,7 @@ export async function requireTrustedVerifier(env = process.env, options = {}) {
   if (head === '') return { ok: false, reason: 'the trust chain from the trusted checkpoint could not be read' };
   const checkpoint = parsed.fields.checkpoint;
   if (head !== checkpoint) {
-    const forbidden = await hardForbidden(root);
+    const forbidden = await hardForbidden();
     const walked = [];
     let sha = head;
     for (let i = 0; i < 30 && sha !== checkpoint; i += 1) {

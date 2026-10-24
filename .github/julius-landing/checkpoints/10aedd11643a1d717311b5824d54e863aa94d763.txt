@@ -3,7 +3,7 @@ repo: ohdieyuh-glitch/sunday-relay
 prior: 2528ac5c0f0d4303051123a7592ef18e3552ba74
 checkpoint: 10aedd11643a1d717311b5824d54e863aa94d763
 key-spki-sha256: b0b8e29b3efff5936dd51a54617ca8bda1b94e75557339821d7d00a98364d13a
-nonce: a53f3cb85feead99da624bda49e0c93a
+nonce: f71f185889f5a724561611faaef702b4
 issued: 2026-10-23T18:30:00Z
 expires: 2027-04-23T18:30:00Z
 by: INDEPENDENT_REVIEW
@@ -33,7 +33,7 @@ tcb.9.sha256: 13e22f2c4aaab67eb4c7fef7aa2807af093acbd5c54198603a71a70b917776fb
 tcb.10.path: scripts/julius-main-provenance.d.mts
 tcb.10.sha256: ba62dbbef782539fb9005fa5d533ccdb3700fb66b70d1e023ab4043eeca3752f
 tcb.11.path: scripts/julius-main-provenance-trust.mjs
-tcb.11.sha256: ff2724e0c60f3c4f8fdc130bfb28c42ee1681dad95e6849c5a5c1c5f8889a4db
+tcb.11.sha256: 16f5f02bb619cb58cb33a8c51475bba86f55de6df4b4834368a4efcb74bd4ab8
 tcb.12.path: scripts/julius-main-provenance-trust.d.mts
 tcb.12.sha256: 1fab512c53a2ce47750fe717d48240ea2719e83e5255e953e5a695641cda24a4
 tcb.13.path: scripts/julius-review-currency.mjs

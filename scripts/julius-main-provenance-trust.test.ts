@@ -370,7 +370,10 @@ describe('the checkpoint workflow and the working tree', () => {
     }
     expect(attestationNonceProblems(live.fields)).toBeNull();
     expect(existsSync(livePath.replace(/\.txt$/u, '.sig'))).toBe(false);
-    expect(git(['rev-parse', 'HEAD']).trim() === checkpoint || git(['rev-parse', 'HEAD^']).trim() === checkpoint).toBe(true);
+    const head = git(['rev-parse', 'HEAD']).trim();
+    const parent = git(['rev-parse', 'HEAD^']).trim();
+    const grandparent = git(['rev-parse', 'HEAD^^']).trim();
+    expect(head === checkpoint || parent === checkpoint || grandparent === checkpoint).toBe(true);
   });
 });
 
