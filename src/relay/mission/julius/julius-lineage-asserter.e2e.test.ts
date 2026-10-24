@@ -96,7 +96,12 @@ const factsOf = (harness: JuliusHarness, type: string) => harness.store.events()
 
 describe('decision B, the live contradiction path (ACCEPT x OPEN-BLOCKING-VERIFIED)', () => {
   it('the halting set is closed and names the clash (pinned: the founder rule decides it, nothing else)', () => {
-    expect([...JULIUS_RUN_HALTING_FAILURE_CLASSES]).toEqual(['coder_served_model_mismatch', 'coder_served_model_unattested', 'context_integrity_unresolved_clash']);
+    expect([...JULIUS_RUN_HALTING_FAILURE_CLASSES]).toEqual([
+      'coder_served_model_mismatch', 'coder_served_model_unattested',
+      'architect_served_model_mismatch', 'architect_served_model_unattested',
+      'reviewer_served_model_mismatch', 'reviewer_served_model_unattested',
+      'context_integrity_unresolved_clash',
+    ]);
   });
 
   it('AT DISPATCH: an accepted task with a blocking verified finding still open refuses the next packet, records the PAIR and HALTS the run; nothing more is claimed', async () => {

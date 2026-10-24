@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -129,7 +129,7 @@ suite('the Learning Loop’s runtime caller over a real PostgreSQL (E9-a)', () =
         },
         seeds: createPostgresMissionSeedStore(pool),
         knowledge: createPostgresMissionKnowledgeStore(pool),
-        tenantId: base.tenantId, executionId: `execution:julius-live:${base.missionId}`,
+        tenantId: base.tenantId, executionId: `execution:julius-live:${base.missionId}`, admittedRunId: `wlj_${randomUUID()}`,
       }).submit(request);
       if (!submitted.accepted) throw new Error(`${submitted.reasonCode}: ${submitted.safeMessage}`);
       const runtime = assembleLiveJuliusRuntime({
