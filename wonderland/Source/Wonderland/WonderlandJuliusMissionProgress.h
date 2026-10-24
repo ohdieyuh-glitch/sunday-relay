@@ -36,6 +36,13 @@
 //     never written. These three words are single constants below (BridgeAwaitingOperatorState,
 //     BridgeDispatchedState, BridgeOperatorWindowExpiredCause) and MUST BE RE-PINNED to BRIDGE's closed state and
 //     cause sets once BRIDGE posts them with commit SHAs.
+//   RE-PINNED (contract v0.1) against the #407 candidate acc96ab0 (= #407 dde37363 + r2 c9b0ddef + #443 0715fd8f
+//     + 3f7738fc + acc96ab0, read from its patch): the status route's closed cause list is RUN_ID_ALREADY_SPENT,
+//     SPENT_TAG_UNVERIFIED, gh_workflow_run_failed, AWAITING_OPERATOR_EXPIRED (WONDERLAND_STATUS_CAUSES). The
+//     operator window's expiry is state "failed" + cause "AWAITING_OPERATOR_EXPIRED"; "operator_window_expired" was
+//     a room word that never reached code. AWAITING_OPERATOR_WINDOW_MS = 360 min from Accepted (receivedAt), open
+//     at exactly 360 min, expired 1 ms later. The status body is a top-level object (no data wrapper; only the
+//     dispatch answer is wrapped); the "data." names in this file are the wrapper's FStatusAnswer fields.
 //   So the wrapper tags every status answer with the vocabulary it came from (EStatusVocabulary): Admission for an
 //   answer shaped like the dispatch data object, JuliusRun for a JuliusRunView, Unknown for anything else. Every
 //   status string is matched by its exact bytes inside its own vocabulary, never by case-folding, prefix or free
@@ -148,8 +155,11 @@ namespace WonderlandJuliusMissionLogic
 	inline constexpr std::string_view BridgeAwaitingOperatorState = "awaiting_operator";
 	/** data.state once the operator claim dispatched the paid workflow; carries data.dispatchedAt (P9). */
 	inline constexpr std::string_view BridgeDispatchedState = "dispatched";
-	/** data.cause when the awaiting_operator window expired: unpaid, never started. Shown as NotStarted. */
-	inline constexpr std::string_view BridgeOperatorWindowExpiredCause = "operator_window_expired";
+	/**
+	 * The status cause when the awaiting_operator window expired (state "failed"): unpaid, never started. Shown as
+	 * NotStarted. #407 candidate acc96ab0 WONDERLAND_STATUS_CAUSES; contract v0.1 section 4.2.
+	 */
+	inline constexpr std::string_view BridgeOperatorWindowExpiredCause = "AWAITING_OPERATOR_EXPIRED";
 
 	/**
 	 * P9: strict UTC ISO-8601, "YYYY-MM-DDTHH:MM:SSZ" or "YYYY-MM-DDTHH:MM:SS.sssZ" (exactly 3 fraction digits, the
@@ -191,7 +201,7 @@ namespace WonderlandJuliusMissionLogic
 		 */
 		DispatchFailed,
 		/**
-		 * Terminal, neutral. The operator never started the run: BRIDGE's operator_window_expired cause, or the client's
+		 * Terminal, neutral. The operator never started the run: BRIDGE's AWAITING_OPERATOR_EXPIRED cause, or the client's
 		 * hold window ran out while AdmittedHeld (P5). Never DispatchFailed, never a failure.
 		 */
 		NotStarted,
@@ -304,11 +314,12 @@ namespace WonderlandJuliusMissionLogic
 	inline constexpr std::uint64_t PollSlowAfterMs = 1800000;
 	inline constexpr std::uint32_t PollSlowDelayMs = 120000;
 	/**
-	 * 180 min from the first Accepted answer while the bridge has not reported the operator's dispatch (P5). PROVISIONAL:
-	 * BRIDGE has not posted the awaiting_operator expiry yet; re-pin to at least that expiry plus one slow wait
-	 * (PollSlowDelayMs), so the client sees BRIDGE's operator_window_expired before its own window ends.
+	 * 362 min from the first Accepted answer while the bridge has not reported the operator's dispatch (P5): BRIDGE's
+	 * awaiting_operator window (AWAITING_OPERATOR_WINDOW_MS = 360 min from Accepted, #407 candidate acc96ab0) plus one
+	 * slow wait (PollSlowDelayMs), so the client sees BRIDGE's AWAITING_OPERATOR_EXPIRED before its own window ends
+	 * and never gives up on a run the operator can still claim. Must stay >= 21,600,000 + PollSlowDelayMs.
 	 */
-	inline constexpr std::uint64_t PollHoldWatchMs = 10800000;
+	inline constexpr std::uint64_t PollHoldWatchMs = 21720000;
 	/**
 	 * 360 min from BRIDGE's recorded dispatchedAt while no JuliusRun status has been applied. Must stay >= the
 	 * paid-slot job's timeout-minutes: 350 in .github/workflows/julius-first-live-mission.yml (line 132 on this client line;

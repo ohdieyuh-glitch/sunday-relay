@@ -9,8 +9,9 @@
 //
 // WHERE THE EXPECTED VALUES COME FROM. The status vocabularies are BRIDGE's #407 at dd0153a0
 // (src/relay/integration/wonderland-admission/admission-store.ts AdmissionState), BRIDGE's status-route words as BRIDGE
-// confirmed them in the room on 2026-10-23 (awaiting_operator, dispatched + dispatchedAt, operator_window_expired; not
-// yet on a pushed branch, re-pin when BRIDGE posts the closed sets with SHAs) and src/relay/mission/julius/julius-runtime.ts
+// confirmed them in the room on 2026-10-23 (awaiting_operator, dispatched + dispatchedAt), re-pinned for contract v0.1 to
+// the #407 candidate acc96ab0 (cause AWAITING_OPERATOR_EXPIRED on state "failed"; AWAITING_OPERATOR_WINDOW_MS = 360 min,
+// so the hold window is 360 min + one slow wait = 21,720,000 ms; "operator_window_expired" was never a wire value) and src/relay/mission/julius/julius-runtime.ts
 // JULIUS_MISSION_STATES. On the #421 line only (not on this client line), src/relay/mission/wonderland/wonderland-j1-progress.test.ts parses every table below
 // (KAT-...-BEGIN/END), restates the rules of WonderlandJuliusMissionProgress.h independently, and checks each expected
 // value, so a value here cannot be edited without that test failing, and the C++ cannot drift without this failing.
@@ -89,6 +90,8 @@ namespace
 	{ "admission_dispatched_mixed_case", EStatusVocabulary::Admission, "Dispatched", EMissionProgress::Waiting },
 	{ "admission_dispatched_padded", EStatusVocabulary::Admission, "dispatched ", EMissionProgress::Waiting },
 	{ "admission_cause_word_as_state", EStatusVocabulary::Admission, "operator_window_expired", EMissionProgress::Waiting },
+	{ "admission_wire_cause_as_state", EStatusVocabulary::Admission, "AWAITING_OPERATOR_EXPIRED", EMissionProgress::Waiting },
+	{ "admission_withdrawn_expired_state", EStatusVocabulary::Admission, "expired", EMissionProgress::Waiting },
 	{ "julius_awaiting_operator", EStatusVocabulary::JuliusRun, "awaiting_operator", EMissionProgress::Waiting },
 	{ "julius_dispatched_word_lower", EStatusVocabulary::JuliusRun, "dispatched", EMissionProgress::Waiting },
 	{ "unknown_dispatched", EStatusVocabulary::Unknown, "dispatched", EMissionProgress::Waiting },
@@ -155,7 +158,7 @@ namespace
 	// KAT-PROGRESS-DISPLAY-END
 	};
 
-	// P5. Budgets: Hold 10,800,000 ms (180 min, provisional until BRIDGE posts the awaiting_operator expiry), Dispatch
+	// P5. Budgets: Hold 21,720,000 ms (362 min: BRIDGE's 360 min awaiting_operator window + one 120,000 ms slow wait), Dispatch
 	// 21,600,000 ms (360 min, from BRIDGE's dispatchedAt), Run 19,800,000 ms (330 min); 120,000 ms waits from
 	// 1,800,000 ms (30 min) into a phase. The dispatch and run budgets come from .github/workflows/julius-first-live-mission.yml. On this client line the file
 	// has the paid-slot job's timeout-minutes: 350 (line 132) and the first-live-mission job's timeout-minutes: 120
@@ -169,12 +172,14 @@ namespace
 	{ "no_count_cap_far_hold", 4294967295, EPollPhase::Hold, 0, EPollStep::WaitThenPoll, 60000 },
 	{ "hold_fast_until_30_minutes", 10, EPollPhase::Hold, 1799999, EPollStep::WaitThenPoll, 60000 },
 	{ "hold_slow_at_30_minutes", 10, EPollPhase::Hold, 1800000, EPollStep::WaitThenPoll, 120000 },
-	{ "hold_fits_exactly", 10, EPollPhase::Hold, 10680000, EPollStep::WaitThenPoll, 120000 },
-	{ "hold_would_overrun", 10, EPollPhase::Hold, 10680001, EPollStep::Stop, 0 },
-	{ "hold_at_limit", 0, EPollPhase::Hold, 10800000, EPollStep::Stop, 0 },
-	{ "hold_past_limit", 0, EPollPhase::Hold, 10800001, EPollStep::Stop, 0 },
-	{ "hold_budget_is_not_dispatch_budget", 10, EPollPhase::Hold, 21000000, EPollStep::Stop, 0 },
-	{ "hold_budget_is_not_run_budget", 10, EPollPhase::Hold, 19680000, EPollStep::Stop, 0 },
+	{ "hold_fits_exactly", 10, EPollPhase::Hold, 21600000, EPollStep::WaitThenPoll, 120000 },
+	{ "hold_would_overrun", 10, EPollPhase::Hold, 21600001, EPollStep::Stop, 0 },
+	{ "hold_at_limit", 0, EPollPhase::Hold, 21720000, EPollStep::Stop, 0 },
+	{ "hold_past_limit", 0, EPollPhase::Hold, 21720001, EPollStep::Stop, 0 },
+	{ "hold_budget_is_not_dispatch_budget", 10, EPollPhase::Hold, 21500000, EPollStep::WaitThenPoll, 120000 },
+	{ "hold_outlasts_bridge_awaiting_window", 10, EPollPhase::Hold, 21600000, EPollStep::WaitThenPoll, 120000 },
+	{ "hold_budget_is_not_run_budget", 10, EPollPhase::Hold, 19680001, EPollStep::WaitThenPoll, 120000 },
+	{ "hold_old_180_min_budget_is_gone", 10, EPollPhase::Hold, 10680001, EPollStep::WaitThenPoll, 120000 },
 	{ "hold_far_past", 3, EPollPhase::Hold, 9007199254740991, EPollStep::Stop, 0 },
 	{ "schedule_0", 0, EPollPhase::Dispatch, 0, EPollStep::WaitThenPoll, 5000 },
 	{ "schedule_1", 1, EPollPhase::Dispatch, 0, EPollStep::WaitThenPoll, 10000 },
@@ -195,7 +200,7 @@ namespace
 	{ "dispatch_at_limit", 0, EPollPhase::Dispatch, 21600000, EPollStep::Stop, 0 },
 	{ "dispatch_past_limit", 0, EPollPhase::Dispatch, 21600001, EPollStep::Stop, 0 },
 	{ "dispatch_far_past", 3, EPollPhase::Dispatch, 9007199254740991, EPollStep::Stop, 0 },
-	{ "dispatch_budget_is_not_hold_budget", 10, EPollPhase::Dispatch, 10800000, EPollStep::WaitThenPoll, 120000 },
+	{ "dispatch_budget_is_not_hold_budget", 10, EPollPhase::Dispatch, 21500000, EPollStep::Stop, 0 },
 	{ "run_schedule_0", 0, EPollPhase::Run, 0, EPollStep::WaitThenPoll, 5000 },
 	{ "run_backoff_continues", 3, EPollPhase::Run, 0, EPollStep::WaitThenPoll, 40000 },
 	{ "run_fast_until_30_minutes", 10, EPollPhase::Run, 1799999, EPollStep::WaitThenPoll, 60000 },
@@ -223,16 +228,16 @@ namespace
 	struct FPollRunRow { const char* Label; const char* Answer; std::uint32_t RequestMs; std::uint32_t DispatchFromPoll; std::uint32_t DispatchAgeMs; std::uint32_t JuliusFromPoll; std::uint32_t ExpectedPolls; std::uint64_t ExpectedWatchedMs; EMissionProgress ExpectedFinal; };
 	const FPollRunRow PollRunRows[] = {
 	// KAT-POLL-RUN-BEGIN
-	{ "instant_held_hold_exhausted", "held", 0, 0, 0, 0, 107, 10695000, EMissionProgress::NotStarted },
-	{ "one_second_held_hold_exhausted", "held", 1000, 0, 0, 0, 106, 10681000, EMissionProgress::NotStarted },
-	{ "instant_failures_hold_exhausted", "fail", 0, 0, 0, 0, 107, 10695000, EMissionProgress::NotStarted },
-	{ "timeout_30s_failures_hold", "fail", 30000, 0, 0, 0, 82, 10815000, EMissionProgress::NotStarted },
-	{ "ten_minute_polls_hold", "held", 600000, 0, 0, 0, 16, 11195000, EMissionProgress::NotStarted },
-	{ "one_poll_took_the_whole_hold", "fail", 10800000, 0, 0, 0, 1, 10805000, EMissionProgress::NotStarted },
+	{ "instant_held_hold_exhausted", "held", 0, 0, 0, 0, 198, 21615000, EMissionProgress::NotStarted },
+	{ "one_second_held_hold_exhausted", "held", 1000, 0, 0, 0, 197, 21692000, EMissionProgress::NotStarted },
+	{ "instant_failures_hold_exhausted", "fail", 0, 0, 0, 0, 198, 21615000, EMissionProgress::NotStarted },
+	{ "timeout_30s_failures_hold", "fail", 30000, 0, 0, 0, 154, 21615000, EMissionProgress::NotStarted },
+	{ "ten_minute_polls_hold", "held", 600000, 0, 0, 0, 31, 21995000, EMissionProgress::NotStarted },
+	{ "one_poll_took_the_whole_hold", "fail", 21720000, 0, 0, 0, 1, 21725000, EMissionProgress::NotStarted },
 	{ "dispatch_from_first_poll", "held", 0, 1, 0, 0, 197, 21495000, EMissionProgress::PollLimitReached },
 	{ "dispatch_from_first_poll_one_second", "held", 1000, 1, 0, 0, 196, 21571000, EMissionProgress::PollLimitReached },
 	{ "dispatch_after_two_hours_held", "held", 0, 72, 0, 0, 267, 28095000, EMissionProgress::PollLimitReached },
-	{ "dispatch_at_last_hold_poll", "held", 0, 107, 0, 0, 302, 32295000, EMissionProgress::PollLimitReached },
+	{ "dispatch_at_last_hold_poll", "held", 0, 198, 0, 0, 393, 43215000, EMissionProgress::PollLimitReached },
 	{ "dispatch_after_two_hours_age_10_min", "held", 0, 72, 600000, 0, 257, 27495000, EMissionProgress::PollLimitReached },
 	{ "dispatch_age_older_than_the_watch", "held", 0, 3, 3000000, 0, 197, 21495000, EMissionProgress::PollLimitReached },
 	{ "dispatch_after_failures", "fail", 30000, 40, 0, 0, 192, 26115000, EMissionProgress::PollLimitReached },
@@ -371,7 +376,7 @@ namespace
 	{ "held_late_busy", "D,202,-,ok,S1,ADMISSION_HELD D,429,julius_dispatch_busy,none,none,-", EMissionProgress::AdmittedHeld, "late_dispatch_answer_ignored", "S1", 0 },
 	{ "held_late_refusal", "D,202,-,ok,S1,ADMISSION_HELD D,409,julius_dispatch_already_dispatched,none,none,-", EMissionProgress::AdmittedHeld, "late_dispatch_answer_ignored", "S1", 0 },
 	{ "held_next_poll_in_budget", "D,202,-,ok,S1,ADMISSION_HELD N,0", EMissionProgress::AdmittedHeld, "admitted", "S1", 0 },
-	{ "held_next_poll_over_budget", "D,202,-,ok,S1,ADMISSION_HELD N,10800000", EMissionProgress::NotStarted, "hold_window_expired", "S1", 0 },
+	{ "held_next_poll_over_budget", "D,202,-,ok,S1,ADMISSION_HELD N,21720000", EMissionProgress::NotStarted, "hold_window_expired", "S1", 0 },
 	{ "dispatched_to_held_admission", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,J,none,S1,CREATED P,200,-,A,ok,S1,ADMISSION_HELD", EMissionProgress::Dispatched, "admission_answer_logged", "S1", 0 },
 	{ "dispatched_to_reserved_admission", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,J,none,S1,CREATED P,200,-,A,ok,S1,RESERVED", EMissionProgress::Dispatched, "admission_answer_logged", "S1", 0 },
 	{ "dispatched_to_dispatched_created", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,J,none,S1,CREATED P,200,-,J,none,S1,CREATED", EMissionProgress::Dispatched, "status_applied", "S1", 0 },
@@ -630,16 +635,16 @@ namespace
 	{ "sticky_answer_invalid_then_other_run", "D,202,-,ok,bad,ADMISSION_HELD P,200,-,J,none,S2,FAILED", EMissionProgress::AnswerInvalid, "ignored_after_terminal", "none", 0 },
 	{ "sticky_answer_invalid_then_poll_failure", "D,202,-,ok,bad,ADMISSION_HELD P0", EMissionProgress::AnswerInvalid, "ignored_after_terminal", "none", 0 },
 	{ "sticky_answer_invalid_then_everything", "D,202,-,ok,bad,ADMISSION_HELD N,0 D,202,-,ok,S1,ADMISSION_HELD D0 P,200,-,J,none,S1,EXECUTING N,0 P0", EMissionProgress::AnswerInvalid, "ignored_after_terminal", "none", 0 },
-	{ "sticky_poll_limit_then_accepted", "D,202,-,ok,S1,QUEUED N,10800000 D,202,-,ok,S1,ADMISSION_HELD", EMissionProgress::PollLimitReached, "ignored_after_terminal", "S1", 0 },
-	{ "sticky_poll_limit_then_accepted_other_run", "D,202,-,ok,S1,QUEUED N,10800000 D,200,-,ok,S2,RESERVED", EMissionProgress::PollLimitReached, "ignored_after_terminal", "S1", 0 },
-	{ "sticky_poll_limit_then_no_answer", "D,202,-,ok,S1,QUEUED N,10800000 D0", EMissionProgress::PollLimitReached, "ignored_after_terminal", "S1", 0 },
-	{ "sticky_poll_limit_then_refusal", "D,202,-,ok,S1,QUEUED N,10800000 D,409,julius_dispatch_already_dispatched,none,none,-", EMissionProgress::PollLimitReached, "ignored_after_terminal", "S1", 0 },
-	{ "sticky_poll_limit_then_running", "D,202,-,ok,S1,QUEUED N,10800000 P,200,-,J,none,S1,EXECUTING", EMissionProgress::PollLimitReached, "ignored_after_terminal", "S1", 0 },
-	{ "sticky_poll_limit_then_completed", "D,202,-,ok,S1,QUEUED N,10800000 P,200,-,J,none,S1,COMPLETED", EMissionProgress::PollLimitReached, "ignored_after_terminal", "S1", 0 },
-	{ "sticky_poll_limit_then_admission_held", "D,202,-,ok,S1,QUEUED N,10800000 P,200,-,A,ok,S1,ADMISSION_HELD", EMissionProgress::PollLimitReached, "ignored_after_terminal", "S1", 0 },
-	{ "sticky_poll_limit_then_other_run", "D,202,-,ok,S1,QUEUED N,10800000 P,200,-,J,none,S2,FAILED", EMissionProgress::PollLimitReached, "ignored_after_terminal", "S1", 0 },
-	{ "sticky_poll_limit_then_poll_failure", "D,202,-,ok,S1,QUEUED N,10800000 P0", EMissionProgress::PollLimitReached, "ignored_after_terminal", "S1", 0 },
-	{ "sticky_poll_limit_then_everything", "D,202,-,ok,S1,QUEUED N,10800000 N,0 D,202,-,ok,S1,ADMISSION_HELD D0 P,200,-,J,none,S1,EXECUTING N,0 P0", EMissionProgress::PollLimitReached, "ignored_after_terminal", "S1", 0 },
+	{ "sticky_poll_limit_then_accepted", "D,202,-,ok,S1,QUEUED N,21720000 D,202,-,ok,S1,ADMISSION_HELD", EMissionProgress::PollLimitReached, "ignored_after_terminal", "S1", 0 },
+	{ "sticky_poll_limit_then_accepted_other_run", "D,202,-,ok,S1,QUEUED N,21720000 D,200,-,ok,S2,RESERVED", EMissionProgress::PollLimitReached, "ignored_after_terminal", "S1", 0 },
+	{ "sticky_poll_limit_then_no_answer", "D,202,-,ok,S1,QUEUED N,21720000 D0", EMissionProgress::PollLimitReached, "ignored_after_terminal", "S1", 0 },
+	{ "sticky_poll_limit_then_refusal", "D,202,-,ok,S1,QUEUED N,21720000 D,409,julius_dispatch_already_dispatched,none,none,-", EMissionProgress::PollLimitReached, "ignored_after_terminal", "S1", 0 },
+	{ "sticky_poll_limit_then_running", "D,202,-,ok,S1,QUEUED N,21720000 P,200,-,J,none,S1,EXECUTING", EMissionProgress::PollLimitReached, "ignored_after_terminal", "S1", 0 },
+	{ "sticky_poll_limit_then_completed", "D,202,-,ok,S1,QUEUED N,21720000 P,200,-,J,none,S1,COMPLETED", EMissionProgress::PollLimitReached, "ignored_after_terminal", "S1", 0 },
+	{ "sticky_poll_limit_then_admission_held", "D,202,-,ok,S1,QUEUED N,21720000 P,200,-,A,ok,S1,ADMISSION_HELD", EMissionProgress::PollLimitReached, "ignored_after_terminal", "S1", 0 },
+	{ "sticky_poll_limit_then_other_run", "D,202,-,ok,S1,QUEUED N,21720000 P,200,-,J,none,S2,FAILED", EMissionProgress::PollLimitReached, "ignored_after_terminal", "S1", 0 },
+	{ "sticky_poll_limit_then_poll_failure", "D,202,-,ok,S1,QUEUED N,21720000 P0", EMissionProgress::PollLimitReached, "ignored_after_terminal", "S1", 0 },
+	{ "sticky_poll_limit_then_everything", "D,202,-,ok,S1,QUEUED N,21720000 N,0 D,202,-,ok,S1,ADMISSION_HELD D0 P,200,-,J,none,S1,EXECUTING N,0 P0", EMissionProgress::PollLimitReached, "ignored_after_terminal", "S1", 0 },
 	{ "m2_running_admission_poll_no_regression", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,J,none,S1,EXECUTING P,200,-,A,ok,S1,ADMISSION_HELD", EMissionProgress::Running, "admission_answer_logged", "S1", 0 },
 	{ "m2_running_admission_poll_no_dispatch_failed_interrupted", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,J,none,S1,EXECUTING P,200,-,A,ok,S1,INTERRUPTED", EMissionProgress::Running, "admission_answer_logged", "S1", 0 },
 	{ "m2_running_admission_poll_no_dispatch_failed_failed", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,J,none,S1,EXECUTING P,200,-,A,ok,S1,FAILED", EMissionProgress::Running, "admission_answer_logged", "S1", 0 },
@@ -656,13 +661,14 @@ namespace
 	{ "m2_unknown_vocabulary_is_not_julius", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,U,none,S1,EXECUTING P,200,-,A,ok,S1,FAILED", EMissionProgress::DispatchFailed, "status_applied", "S1", 0 },
 	{ "runid_julius_own_name_is_not_applied", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,J,none,jkey,COMPLETED", EMissionProgress::RunIdMismatch, "run_id_mismatched", "S1", 0 },
 	{ "runid_julius_own_name_while_running", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,J,none,S1,EXECUTING P,200,-,J,none,jkey,FAILED", EMissionProgress::RunIdMismatch, "run_id_mismatched", "S1", 0 },
-	{ "phase_held_hold_budget_fits", "D,202,-,ok,S1,ADMISSION_HELD N,10680000", EMissionProgress::AdmittedHeld, "admitted", "S1", 0 },
-	{ "phase_held_hold_budget_exhausted", "D,202,-,ok,S1,ADMISSION_HELD N,10680001", EMissionProgress::NotStarted, "hold_window_expired", "S1", 0 },
-	{ "phase_held_never_gets_the_dispatch_budget", "D,202,-,ok,S1,ADMISSION_HELD N,21480000", EMissionProgress::NotStarted, "hold_window_expired", "S1", 0 },
-	{ "phase_awaiting_operator_hold_budget_exhausted", "D,202,-,ok,S1,awaiting_operator N,10680001", EMissionProgress::NotStarted, "hold_window_expired", "S1", 0 },
-	{ "phase_unknown_vocabulary_keeps_hold_budget", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,U,none,S1,COMPLETED N,10800000", EMissionProgress::PollLimitReached, "poll_limit_reached", "S1", 0 },
-	{ "phase_unknown_vocabulary_hold_budget_fits", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,U,none,S1,COMPLETED N,10680000", EMissionProgress::Waiting, "status_applied", "S1", 0 },
-	{ "phase_admission_word_keeps_hold_budget", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,RESERVED N,10800000", EMissionProgress::NotStarted, "hold_window_expired", "S1", 0 },
+	{ "phase_held_hold_budget_fits", "D,202,-,ok,S1,ADMISSION_HELD N,21600000", EMissionProgress::AdmittedHeld, "admitted", "S1", 0 },
+	{ "phase_held_hold_budget_exhausted", "D,202,-,ok,S1,ADMISSION_HELD N,21600001", EMissionProgress::NotStarted, "hold_window_expired", "S1", 0 },
+	{ "phase_held_keeps_hold_budget_past_dispatch_budget", "D,202,-,ok,S1,ADMISSION_HELD N,21500000", EMissionProgress::AdmittedHeld, "admitted", "S1", 0 },
+	{ "phase_held_open_at_bridge_window_end", "D,202,-,ok,S1,awaiting_operator N,21600000", EMissionProgress::AdmittedHeld, "admitted", "S1", 0 },
+	{ "phase_awaiting_operator_hold_budget_exhausted", "D,202,-,ok,S1,awaiting_operator N,21600001", EMissionProgress::NotStarted, "hold_window_expired", "S1", 0 },
+	{ "phase_unknown_vocabulary_keeps_hold_budget", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,U,none,S1,COMPLETED N,21720000", EMissionProgress::PollLimitReached, "poll_limit_reached", "S1", 0 },
+	{ "phase_unknown_vocabulary_hold_budget_fits", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,U,none,S1,COMPLETED N,21600000", EMissionProgress::Waiting, "status_applied", "S1", 0 },
+	{ "phase_admission_word_keeps_hold_budget", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,RESERVED N,21720000", EMissionProgress::NotStarted, "hold_window_expired", "S1", 0 },
 	{ "phase_julius_opens_fresh_window", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,J,none,S1,EXECUTING N,21600000 N,41280000", EMissionProgress::Running, "status_applied", "S1", 0 },
 	{ "phase_julius_fresh_window_exhausted", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,J,none,S1,EXECUTING N,21600000 N,41280001", EMissionProgress::PollLimitReached, "poll_limit_reached", "S1", 0 },
 	{ "phase_julius_unknown_word_opens_fresh_window", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,J,none,S1,DONE N,21600000 N,41000000", EMissionProgress::Waiting, "status_applied", "S1", 0 },
@@ -670,9 +676,9 @@ namespace
 	{ "accepted_awaiting_operator", "D,202,-,ok,S1,awaiting_operator", EMissionProgress::AdmittedHeld, "admitted", "S1", 0 },
 	{ "accepted_dispatched_with_time", "D,200,-,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778400000", EMissionProgress::OperatorStarted, "admitted", "S1", 0 },
 	{ "accepted_dispatched_without_time", "D,200,-,ok,S1,dispatched,-,-,-", EMissionProgress::DispatchUnconfirmed, "admitted", "S1", 0 },
-	{ "accepted_operator_window_expired_interrupted", "D,200,-,ok,S1,INTERRUPTED,-,operator_window_expired,-", EMissionProgress::NotStarted, "admitted", "S1", 0 },
+	{ "accepted_awaiting_operator_expired_interrupted", "D,200,-,ok,S1,INTERRUPTED,-,AWAITING_OPERATOR_EXPIRED,-", EMissionProgress::NotStarted, "admitted", "S1", 0 },
 	{ "accepted_interrupted_other_cause", "D,200,-,ok,S1,INTERRUPTED,-,lock_lost,-", EMissionProgress::DispatchFailed, "admitted", "S1", 0 },
-	{ "accepted_failed_cause_case_variant", "D,200,-,ok,S1,FAILED,-,OPERATOR_WINDOW_EXPIRED,-", EMissionProgress::DispatchFailed, "admitted", "S1", 0 },
+	{ "accepted_failed_cause_case_variant", "D,200,-,ok,S1,FAILED,-,awaiting_operator_expired,-", EMissionProgress::DispatchFailed, "admitted", "S1", 0 },
 	{ "accepted_dispatched_other_client_run_id", "D,200,-,other,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778400000", EMissionProgress::RunIdMismatch, "run_id_mismatched", "none", 0 },
 	{ "held_to_awaiting_operator", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,awaiting_operator", EMissionProgress::AdmittedHeld, "status_applied", "S1", 0 },
 	{ "held_to_operator_started", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778400000", EMissionProgress::OperatorStarted, "status_applied", "S1", 0 },
@@ -681,11 +687,17 @@ namespace
 	{ "held_to_dispatch_unconfirmed_offset_form", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,dispatched,2026-10-23T18:00:00+00:00,-,1792778400000", EMissionProgress::DispatchUnconfirmed, "status_applied", "S1", 0 },
 	{ "held_to_dispatch_unconfirmed_epoch_number", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,dispatched,1792778400000,-,1792778400000", EMissionProgress::DispatchUnconfirmed, "status_applied", "S1", 0 },
 	{ "held_to_dispatch_unconfirmed_impossible_date", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,dispatched,2026-02-29T18:00:00Z,-,1792778400000", EMissionProgress::DispatchUnconfirmed, "status_applied", "S1", 0 },
-	{ "held_to_not_started_operator_window_expired", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,awaiting_operator,-,operator_window_expired,-", EMissionProgress::NotStarted, "status_applied", "S1", 0 },
-	{ "held_operator_window_expired_on_failed_is_not_dispatch_failed", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,FAILED,-,operator_window_expired,-", EMissionProgress::NotStarted, "status_applied", "S1", 0 },
-	{ "held_late_replay_operator_window_expired", "D,202,-,ok,S1,ADMISSION_HELD D,200,-,ok,S1,INTERRUPTED,-,operator_window_expired,-", EMissionProgress::NotStarted, "dispatch_replayed", "S1", 0 },
-	{ "held_dispatched_wins_over_cause", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,dispatched,2026-10-23T18:00:00.000Z,operator_window_expired,1792778400000", EMissionProgress::OperatorStarted, "status_applied", "S1", 0 },
-	{ "held_cause_on_julius_vocabulary_ignored", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,J,none,S1,EXECUTING,-,operator_window_expired,-", EMissionProgress::Running, "status_applied", "S1", 0 },
+	{ "held_to_not_started_awaiting_operator_expired", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,awaiting_operator,-,AWAITING_OPERATOR_EXPIRED,-", EMissionProgress::NotStarted, "status_applied", "S1", 0 },
+	{ "held_awaiting_operator_expired_on_failed_is_not_dispatch_failed", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,FAILED,-,AWAITING_OPERATOR_EXPIRED,-", EMissionProgress::NotStarted, "status_applied", "S1", 0 },
+	{ "held_late_replay_awaiting_operator_expired", "D,202,-,ok,S1,ADMISSION_HELD D,200,-,ok,S1,INTERRUPTED,-,AWAITING_OPERATOR_EXPIRED,-", EMissionProgress::NotStarted, "dispatch_replayed", "S1", 0 },
+	{ "held_dispatched_wins_over_cause", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,dispatched,2026-10-23T18:00:00.000Z,AWAITING_OPERATOR_EXPIRED,1792778400000", EMissionProgress::OperatorStarted, "status_applied", "S1", 0 },
+	{ "held_to_not_started_wire_failed_awaiting_operator_expired", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,failed,-,AWAITING_OPERATOR_EXPIRED,-", EMissionProgress::NotStarted, "status_applied", "S1", 0 },
+	{ "awaiting_operator_to_not_started_wire_shape", "D,202,-,ok,S1,awaiting_operator P,200,-,A,ok,S1,failed,-,AWAITING_OPERATOR_EXPIRED,-", EMissionProgress::NotStarted, "status_applied", "S1", 0 },
+	{ "accepted_wire_failed_awaiting_operator_expired", "D,200,-,ok,S1,failed,-,AWAITING_OPERATOR_EXPIRED,-", EMissionProgress::NotStarted, "admitted", "S1", 0 },
+	{ "room_word_on_failed_is_dispatch_failed", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,FAILED,-,operator_window_expired,-", EMissionProgress::DispatchFailed, "status_applied", "S1", 0 },
+	{ "room_word_while_awaiting_is_still_held", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,awaiting_operator,-,operator_window_expired,-", EMissionProgress::AdmittedHeld, "status_applied", "S1", 0 },
+	{ "wire_cause_case_variant_on_awaiting_is_still_held", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,awaiting_operator,-,Awaiting_Operator_Expired,-", EMissionProgress::AdmittedHeld, "status_applied", "S1", 0 },
+	{ "held_cause_on_julius_vocabulary_ignored", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,J,none,S1,EXECUTING,-,AWAITING_OPERATOR_EXPIRED,-", EMissionProgress::Running, "status_applied", "S1", 0 },
 	{ "held_dispatched_other_server_run_id", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S2,dispatched,2026-10-23T18:00:00.000Z,-,1792778400000", EMissionProgress::RunIdMismatch, "run_id_mismatched", "S1", 0 },
 	{ "operator_started_to_dispatched_created", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778400000 P,200,-,J,none,S1,CREATED", EMissionProgress::Dispatched, "status_applied", "S1", 0 },
 	{ "operator_started_to_running_executing", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778400000 P,200,-,J,none,S1,EXECUTING", EMissionProgress::Running, "status_applied", "S1", 0 },
@@ -698,7 +710,7 @@ namespace
 	{ "operator_started_awaiting_operator_logged", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778400000 P,200,-,A,ok,S1,awaiting_operator", EMissionProgress::OperatorStarted, "admission_answer_logged", "S1", 0 },
 	{ "operator_started_interrupted_logged", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778400000 P,200,-,A,ok,S1,INTERRUPTED", EMissionProgress::OperatorStarted, "admission_answer_logged", "S1", 0 },
 	{ "operator_started_failed_logged", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778400000 P,200,-,A,ok,S1,FAILED", EMissionProgress::OperatorStarted, "admission_answer_logged", "S1", 0 },
-	{ "operator_started_window_expired_logged", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778400000 P,200,-,A,ok,S1,awaiting_operator,-,operator_window_expired,-", EMissionProgress::OperatorStarted, "admission_answer_logged", "S1", 0 },
+	{ "operator_started_window_expired_logged", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778400000 P,200,-,A,ok,S1,awaiting_operator,-,AWAITING_OPERATOR_EXPIRED,-", EMissionProgress::OperatorStarted, "admission_answer_logged", "S1", 0 },
 	{ "operator_started_late_replay_interrupted_logged", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778400000 D,200,-,ok,S1,INTERRUPTED", EMissionProgress::OperatorStarted, "admission_answer_logged", "S1", 0 },
 	{ "operator_started_dispatched_again_logged", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778400000 P,200,-,A,ok,S1,dispatched,2026-10-23T19:00:00.000Z,-,1792782000000", EMissionProgress::OperatorStarted, "admission_answer_logged", "S1", 0 },
 	{ "operator_started_dispatched_without_time_logged", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778400000 P,200,-,A,ok,S1,dispatched,-,-,1792778400000", EMissionProgress::OperatorStarted, "admission_answer_logged", "S1", 0 },
@@ -718,21 +730,21 @@ namespace
 	{ "dispatch_unconfirmed_to_failed_cancelled", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,dispatched,-,-,1792778400000 P,200,-,J,none,S1,CANCELLED", EMissionProgress::Failed, "status_applied", "S1", 0 },
 	{ "dispatch_unconfirmed_admission_held_logged", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,dispatched,-,-,1792778400000 P,200,-,A,ok,S1,ADMISSION_HELD", EMissionProgress::DispatchUnconfirmed, "admission_answer_logged", "S1", 0 },
 	{ "dispatch_unconfirmed_interrupted_logged", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,dispatched,-,-,1792778400000 P,200,-,A,ok,S1,INTERRUPTED", EMissionProgress::DispatchUnconfirmed, "admission_answer_logged", "S1", 0 },
-	{ "dispatch_unconfirmed_window_expired_logged", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,dispatched,-,-,1792778400000 P,200,-,A,ok,S1,awaiting_operator,-,operator_window_expired,-", EMissionProgress::DispatchUnconfirmed, "admission_answer_logged", "S1", 0 },
+	{ "dispatch_unconfirmed_window_expired_logged", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,dispatched,-,-,1792778400000 P,200,-,A,ok,S1,awaiting_operator,-,AWAITING_OPERATOR_EXPIRED,-", EMissionProgress::DispatchUnconfirmed, "admission_answer_logged", "S1", 0 },
 	{ "dispatch_unconfirmed_mismatch_server_run_id", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,dispatched,-,-,1792778400000 P,200,-,A,ok,S2,dispatched,2026-10-23T18:00:00.000Z,-,1792778400000", EMissionProgress::RunIdMismatch, "run_id_mismatched", "S1", 0 },
 	{ "dispatch_unconfirmed_poll_failure", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,dispatched,-,-,1792778400000 P0", EMissionProgress::DispatchUnconfirmed, "poll_failed", "S1", 0 },
-	{ "dispatch_unconfirmed_no_fresh_window_fits_hold", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,dispatched,-,-,1792778400000 N,10680000", EMissionProgress::DispatchUnconfirmed, "status_applied", "S1", 0 },
-	{ "dispatch_unconfirmed_no_fresh_window_cant_confirm", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,dispatched,-,-,1792778400000 N,10680001", EMissionProgress::PollLimitReached, "poll_limit_reached", "S1", 0 },
-	{ "dispatch_unconfirmed_never_not_started", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,dispatched,-,-,1792778400000 N,10800000", EMissionProgress::PollLimitReached, "poll_limit_reached", "S1", 0 },
+	{ "dispatch_unconfirmed_no_fresh_window_fits_hold", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,dispatched,-,-,1792778400000 N,21600000", EMissionProgress::DispatchUnconfirmed, "status_applied", "S1", 0 },
+	{ "dispatch_unconfirmed_no_fresh_window_cant_confirm", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,dispatched,-,-,1792778400000 N,21600001", EMissionProgress::PollLimitReached, "poll_limit_reached", "S1", 0 },
+	{ "dispatch_unconfirmed_never_not_started", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,dispatched,-,-,1792778400000 N,21720000", EMissionProgress::PollLimitReached, "poll_limit_reached", "S1", 0 },
 	{ "waiting_to_operator_started", "D,202,-,ok,S1,QUEUED P,200,-,A,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778400000", EMissionProgress::OperatorStarted, "status_applied", "S1", 0 },
 	{ "waiting_to_dispatch_unconfirmed", "D,202,-,ok,S1,QUEUED P,200,-,A,ok,S1,dispatched,-,-,1792778400000", EMissionProgress::DispatchUnconfirmed, "status_applied", "S1", 0 },
-	{ "waiting_to_not_started_operator_window_expired", "D,202,-,ok,S1,QUEUED P,200,-,A,ok,S1,awaiting_operator,-,operator_window_expired,-", EMissionProgress::NotStarted, "status_applied", "S1", 0 },
-	{ "waiting_hold_window_is_poll_limit_not_not_started", "D,202,-,ok,S1,QUEUED N,10800000", EMissionProgress::PollLimitReached, "poll_limit_reached", "S1", 0 },
+	{ "waiting_to_not_started_awaiting_operator_expired", "D,202,-,ok,S1,QUEUED P,200,-,A,ok,S1,awaiting_operator,-,AWAITING_OPERATOR_EXPIRED,-", EMissionProgress::NotStarted, "status_applied", "S1", 0 },
+	{ "waiting_hold_window_is_poll_limit_not_not_started", "D,202,-,ok,S1,QUEUED N,21720000", EMissionProgress::PollLimitReached, "poll_limit_reached", "S1", 0 },
 	{ "l6_window_fits_after_late_claim", "D,202,-,ok,S1,ADMISSION_HELD N,0 P,200,-,A,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778400000 N,9000000 N,30480000", EMissionProgress::OperatorStarted, "status_applied", "S1", 0 },
 	{ "l6_window_exhausted_after_late_claim", "D,202,-,ok,S1,ADMISSION_HELD N,0 P,200,-,A,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778400000 N,9000000 N,30480001", EMissionProgress::PollLimitReached, "poll_limit_reached", "S1", 0 },
 	{ "l6_old_budget_from_accepted_is_gone", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778400000 N,9000000 N,21480001", EMissionProgress::OperatorStarted, "status_applied", "S1", 0 },
-	{ "l6_claim_at_end_of_hold_window", "D,202,-,ok,S1,ADMISSION_HELD N,10680000 P,200,-,A,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778400000 N,10740000 N,32220000", EMissionProgress::OperatorStarted, "status_applied", "S1", 0 },
-	{ "l6_claim_at_end_of_hold_window_exhausted", "D,202,-,ok,S1,ADMISSION_HELD N,10680000 P,200,-,A,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778400000 N,10740000 N,32220001", EMissionProgress::PollLimitReached, "poll_limit_reached", "S1", 0 },
+	{ "l6_claim_at_end_of_hold_window", "D,202,-,ok,S1,ADMISSION_HELD N,21600000 P,200,-,A,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778400000 N,21660000 N,43140000", EMissionProgress::OperatorStarted, "status_applied", "S1", 0 },
+	{ "l6_claim_at_end_of_hold_window_exhausted", "D,202,-,ok,S1,ADMISSION_HELD N,21600000 P,200,-,A,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778400000 N,21660000 N,43140001", EMissionProgress::PollLimitReached, "poll_limit_reached", "S1", 0 },
 	{ "l6_backdated_by_dispatch_age_fits", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792779000000 N,9000000 N,29880000", EMissionProgress::OperatorStarted, "status_applied", "S1", 0 },
 	{ "l6_backdated_by_dispatch_age_exhausted", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792779000000 N,9000000 N,29880001", EMissionProgress::PollLimitReached, "poll_limit_reached", "S1", 0 },
 	{ "l6_age_never_before_accepted_fits", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792808400000 N,1000 N,21480000", EMissionProgress::OperatorStarted, "status_applied", "S1", 0 },
@@ -745,11 +757,11 @@ namespace
 	{ "l6_confirmed_after_unconfirmed_window_from_confirmation", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,dispatched,-,-,1792778400000 N,9000000 P,200,-,A,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778400000 N,10000000 N,31480000", EMissionProgress::OperatorStarted, "status_applied", "S1", 0 },
 	{ "l6_julius_opens_fresh_run_window", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778400000 N,9000000 P,200,-,J,none,S1,EXECUTING N,30000000 N,49680000", EMissionProgress::Running, "status_applied", "S1", 0 },
 	{ "l6_julius_fresh_run_window_exhausted", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778400000 N,9000000 P,200,-,J,none,S1,EXECUTING N,30000000 N,49680001", EMissionProgress::PollLimitReached, "poll_limit_reached", "S1", 0 },
-	{ "sticky_not_started_then_everything", "D,202,-,ok,S1,ADMISSION_HELD N,10800000 N,0 D,202,-,ok,S1,ADMISSION_HELD D0 P,200,-,J,none,S1,EXECUTING N,0 P0", EMissionProgress::NotStarted, "ignored_after_terminal", "S1", 0 },
-	{ "sticky_not_started_then_dispatched", "D,202,-,ok,S1,ADMISSION_HELD N,10800000 P,200,-,A,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778400000", EMissionProgress::NotStarted, "ignored_after_terminal", "S1", 0 },
-	{ "sticky_not_started_cause_then_dispatched", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,awaiting_operator,-,operator_window_expired,- P,200,-,A,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778400000 D,200,-,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778400000", EMissionProgress::NotStarted, "ignored_after_terminal", "S1", 0 },
-	{ "sticky_not_started_then_completed", "D,202,-,ok,S1,ADMISSION_HELD N,10800000 P,200,-,J,none,S1,COMPLETED", EMissionProgress::NotStarted, "ignored_after_terminal", "S1", 0 },
-	{ "sticky_not_started_then_other_run", "D,202,-,ok,S1,ADMISSION_HELD N,10800000 P,200,-,J,none,S2,FAILED", EMissionProgress::NotStarted, "ignored_after_terminal", "S1", 0 },
+	{ "sticky_not_started_then_everything", "D,202,-,ok,S1,ADMISSION_HELD N,21720000 N,0 D,202,-,ok,S1,ADMISSION_HELD D0 P,200,-,J,none,S1,EXECUTING N,0 P0", EMissionProgress::NotStarted, "ignored_after_terminal", "S1", 0 },
+	{ "sticky_not_started_then_dispatched", "D,202,-,ok,S1,ADMISSION_HELD N,21720000 P,200,-,A,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778400000", EMissionProgress::NotStarted, "ignored_after_terminal", "S1", 0 },
+	{ "sticky_not_started_cause_then_dispatched", "D,202,-,ok,S1,ADMISSION_HELD P,200,-,A,ok,S1,awaiting_operator,-,AWAITING_OPERATOR_EXPIRED,- P,200,-,A,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778400000 D,200,-,ok,S1,dispatched,2026-10-23T18:00:00.000Z,-,1792778400000", EMissionProgress::NotStarted, "ignored_after_terminal", "S1", 0 },
+	{ "sticky_not_started_then_completed", "D,202,-,ok,S1,ADMISSION_HELD N,21720000 P,200,-,J,none,S1,COMPLETED", EMissionProgress::NotStarted, "ignored_after_terminal", "S1", 0 },
+	{ "sticky_not_started_then_other_run", "D,202,-,ok,S1,ADMISSION_HELD N,21720000 P,200,-,J,none,S2,FAILED", EMissionProgress::NotStarted, "ignored_after_terminal", "S1", 0 },
 	// The wlj_ contract (P2): the client's own wlj_ id is accepted as the server/Julius run id; legacy run: still is.
 	{ "wlj_accepted_own_id_pins", "D,202,-,ok,own,ADMISSION_HELD", EMissionProgress::AdmittedHeld, "admitted", "own", 0 },
 	{ "wlj_own_pin_held_admission", "D,202,-,ok,own,ADMISSION_HELD P,200,-,A,ok,own,ADMISSION_HELD", EMissionProgress::AdmittedHeld, "status_applied", "own", 0 },
@@ -955,7 +967,7 @@ int main()
 
 	// P9: BRIDGE's status-route words, pinned (re-pin when BRIDGE posts its closed sets with SHAs).
 	Expect(BridgeAwaitingOperatorState == "awaiting_operator" && BridgeDispatchedState == "dispatched"
-		&& BridgeOperatorWindowExpiredCause == "operator_window_expired", "BRIDGE status-route words");
+		&& BridgeOperatorWindowExpiredCause == "AWAITING_OPERATOR_EXPIRED", "BRIDGE status-route words");
 
 	// P9: the dispatchedAt format.
 	for (const FUtcRow& Row : UtcRows)
@@ -1052,8 +1064,16 @@ int main()
 		Expect(Got.Step == Row.Step && Got.DelayMs == Row.DelayMs, std::string("poll ") + Row.Label + ": delay " + std::to_string(Got.DelayMs));
 	}
 	Expect(PollBaseDelayMs == 5000 && PollGrowthFactor == 2 && PollMaxDelayMs == 60000 && PollSlowAfterMs == 1800000
-		&& PollSlowDelayMs == 120000 && PollHoldWatchMs == 10800000 && PollDispatchWatchMs == 21600000
+		&& PollSlowDelayMs == 120000 && PollHoldWatchMs == 21720000 && PollDispatchWatchMs == 21600000
 		&& PollRunWatchMs == 19800000, "poll constants");
+	// v0.1: BRIDGE's awaiting_operator window (#407 candidate acc96ab0 AWAITING_OPERATOR_WINDOW_MS = 360 * 60_000, open at
+	// exactly 360 min, expired 1 ms later) plus one slow wait must fit inside the hold window, so the client is still
+	// polling when BRIDGE reports AWAITING_OPERATOR_EXPIRED and never gives up on a run the operator can still claim.
+	{
+		const std::uint64_t BridgeAwaitingOperatorWindowMs = std::uint64_t{360} * 60000;
+		Expect(PollHoldWatchMs >= BridgeAwaitingOperatorWindowMs + PollSlowDelayMs, "hold window covers BRIDGE's awaiting_operator window + one slow wait");
+		Expect(NextPoll(10, EPollPhase::Hold, BridgeAwaitingOperatorWindowMs).Step == EPollStep::WaitThenPoll, "a poll is still scheduled at BRIDGE's window end");
+	}
 	// The workflow's numbers, pinned here as constants (this line's yml: 350 at line 132, 120 at line 226; the #421
 	// line's live job: 300 min, worst case 17516316 ms). No test on this client line reads the workflow file.
 	Expect(PollDispatchWatchMs >= 350ull * 60000ull, "dispatch budget >= paid-slot timeout-minutes 350");
