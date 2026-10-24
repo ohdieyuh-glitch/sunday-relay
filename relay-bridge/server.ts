@@ -79,6 +79,7 @@ import { WonderlandBackend } from '../src/relay/mission/wonderland/wonderland-ba
 import { classifyWonderlandDispatchPath, handleWonderlandRoute } from './wonderland-routes';
 import { createWonderlandAdmissionBridge, createWonderlandAdmissionService, createWonderlandStatusBridge, isWonderlandAdmissionRoute, isWonderlandStatusRoute, type WonderlandAdmissionRoutePorts } from './wonderland-admission-route';
 import { createCompanionResultStore, createWonderlandCompanionBridge, isWonderlandCompanionRoute } from './wonderland-companion-route';
+import { createCompanionAdapterRegistry, type CompanionAdapterRegistry } from './wonderland-companion-registry';
 import { handleProjectBrainRoute, isProjectBrainRoute, type ProjectBrainRoutePorts } from './project-brain-routes';
 import { composeProjectBrainPorts, nativeSessionVerifier } from './project-brain/compose';
 import { handleNativePairingRoute, isNativePairingRoute } from './wonderland-native-pairing-routes';
@@ -278,6 +279,11 @@ export function createBridgeServer(
    * store. There is no ingest and no outbound call.
    */
   const companionResults = createCompanionResultStore(process.env.JULIUS_WONDERLAND_COMPANION_STORE);
+  /**
+   * Companion adapters are optional. The registry starts empty: no provider
+   * is built in, and the companion read does not require one.
+   */
+  const companionAgents = createCompanionAdapterRegistry();
   const wonderland = wonderlandBackend ?? WonderlandBackend.empty();
   /**
    * WONDERLAND SOCIAL (R16): the desktop client's own sign-in (GitHub's device flow) and the social routes. OFF unless the
@@ -456,6 +462,7 @@ let juliusMissionCache: JuliusMissionRoutePorts | null = null;
 const juliusMissionPorts = (
   wonderlandAdmission: WonderlandAdmissionRoutePorts,
   companionResults: ReturnType<typeof createCompanionResultStore>,
+  companionAgents: CompanionAdapterRegistry,
 ): JuliusMissionRoutePorts => {
   if (juliusMissionCache === null) {
     const pool = juliusPool();
@@ -471,7 +478,7 @@ const juliusMissionPorts = (
     ...juliusMissionCache,
     wonderlandAdmissionBridge: createWonderlandAdmissionBridge(wonderlandAdmission),
     wonderlandStatusBridge: createWonderlandStatusBridge(wonderlandAdmission),
-    wonderlandCompanionBridge: createWonderlandCompanionBridge({ ...wonderlandAdmission, companionResults }),
+    wonderlandCompanionBridge: createWonderlandCompanionBridge({ ...wonderlandAdmission, companionResults, companionAgents }),
   };
 };
 
@@ -1094,7 +1101,7 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
             url: (req.url ?? '/').replace('/relay-api', ''),
             nowIso: new Date().toISOString(),
             nowMs: Date.now(),
-          }, juliusMissionPorts(wonderlandAdmission, companionResults));
+          }, juliusMissionPorts(wonderlandAdmission, companionResults, companionAgents));
           if (missionResult !== null) {
             send(res, missionResult.status, missionResult.body, cors);
             return;

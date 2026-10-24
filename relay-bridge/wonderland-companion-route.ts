@@ -11,6 +11,10 @@
  * does not call out. A body that is not 200 has no result. A 200 hard-codes
  * `verified: false`. Nothing in the store can turn that into true.
  *
+ * The same 200 adds `agents`, from the injected registry. An empty registry
+ * is the normal case and yields an empty array. The provider id is not part
+ * of this path. See docs/companion/universal-companion-contract-v0.2.md.
+ *
  * Reconciliation with YUJI's #440 at e01a1df8
  * (relay-bridge/julius-companion-evidence.ts): that module is not imported.
  * The row fields and wire states below are the subset this GET serves.
@@ -31,6 +35,11 @@ import {
   type WonderlandAdmissionRoutePorts,
   type WonderlandAdmissionRouteRequest,
 } from './wonderland-admission-route';
+import {
+  publishAgentDescriptor,
+  type AgentDescriptor,
+  type CompanionAgentSource,
+} from './wonderland-companion-registry';
 
 const COMPANION_PATH = /^\/wonderland\/julius\/missions\/([^/]+)\/companion$/;
 
@@ -109,6 +118,8 @@ export interface CompanionResultStore {
 
 export interface WonderlandCompanionRoutePorts extends WonderlandAdmissionRoutePorts {
   readonly companionResults: CompanionResultStore;
+  /** Absent or empty: the route still answers. No adapter is required. */
+  readonly companionAgents?: CompanionAgentSource;
 }
 
 export function isWonderlandCompanionRoute(path: string): boolean {
@@ -152,13 +163,32 @@ export function handleWonderlandCompanionRoute(
     return Promise.resolve({ status: 500, body: {} });
   }
   if (row === null || row.wljRunId !== parsed.runId) return Promise.resolve(NOT_FOUND);
-  return Promise.resolve({ status: 200, body: companionBody(row) });
+  return Promise.resolve({ status: 200, body: companionBody(row, readAgents(ports, parsed.runId)) });
+}
+
+/**
+ * Agents are read after the row is known. A thrown source becomes an empty
+ * list, so one broken registry cannot turn this GET into a 5xx. The
+ * registry itself isolates one adapter from the next.
+ */
+function readAgents(ports: WonderlandCompanionRoutePorts, wljRunId: string): readonly AgentDescriptor[] {
+  if (ports.companionAgents === undefined) return [];
+  try {
+    const published: AgentDescriptor[] = [];
+    for (const agent of ports.companionAgents.agentsFor(wljRunId)) {
+      const descriptor = publishAgentDescriptor(agent);
+      if (descriptor !== null) published.push(descriptor);
+    }
+    return published;
+  } catch {
+    return [];
+  }
 }
 
 /**
  * `verified` is a literal. The row is not consulted for it.
  */
-export function companionBody(row: CompanionResultRecord): {
+export function companionBody(row: CompanionResultRecord, agents: readonly AgentDescriptor[] = []): {
   readonly wljRunId: string;
   readonly legacyRunId: string | null;
   readonly taskId: string | null;
@@ -170,6 +200,7 @@ export function companionBody(row: CompanionResultRecord): {
   };
   readonly provenance: CompanionResultProvenance | null;
   readonly updatedAt: string;
+  readonly agents: readonly AgentDescriptor[];
   readonly verified: false;
 } {
   const showResult = RESULT_STATES.has(row.state)
@@ -193,6 +224,7 @@ export function companionBody(row: CompanionResultRecord): {
     } : null,
     provenance: showResult ? row.provenance : null,
     updatedAt: row.updatedAt,
+    agents,
     verified: false,
   };
 }

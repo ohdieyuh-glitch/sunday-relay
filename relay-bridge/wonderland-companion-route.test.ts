@@ -16,8 +16,17 @@ import {
   type CompanionResultStore,
   type WonderlandCompanionRoutePorts,
 } from './wonderland-companion-route';
+import {
+  authorizationBoundary,
+  createCompanionAdapterRegistry,
+  type CompanionAdapter,
+  type CompanionProviderSession,
+} from './wonderland-companion-registry';
 
 const RUN = 'wlj_0b7a1c2e-4f3d-4a6b-8c2d-3e4f5a6b7c8d';
+const AGENT_A = 'agt_0b7a1c2e-4f3d-4a6b-8c2d-3e4f5a6b7c8d';
+const AGENT_B = 'agt_aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+const AGENT_C = 'agt_11111111-2222-4333-8444-555555555555';
 const UNKNOWN = 'wlj_aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
 const LEGACY = `run:${'ab'.repeat(12)}`;
 const WHEN = '2026-10-23T17:18:00.000Z';
@@ -126,8 +135,9 @@ describe('wonderland companion read', () => {
     try {
       const result = await handleWonderlandCompanionRoute(request(RUN), open);
       expect(result?.status).toBe(200);
-      const body = result?.body as { verified?: boolean; result?: { summary?: string; untrusted?: boolean } };
+      const body = result?.body as { verified?: boolean; agents?: unknown[]; result?: { summary?: string; untrusted?: boolean } };
       expect(body.verified).toBe(false);
+      expect(body.agents).toEqual([]);
       expect(body.result).toEqual({
         untrusted: true,
         summary: 'a local note',
@@ -240,13 +250,247 @@ describe('wonderland companion read', () => {
 
   it('does not call out or mount an ingest', () => {
     const source = readFileSync(join(__dirname, 'wonderland-companion-route.ts'), 'utf8');
+    const registry = readFileSync(join(__dirname, 'wonderland-companion-registry.ts'), 'utf8');
     const mission = readFileSync(join(__dirname, 'julius-mission-routes.ts'), 'utf8');
-    expect(source).not.toContain('child_process');
-    expect(source).not.toContain('fetch(');
-    expect(source).not.toContain('operator-claim');
-    expect(source).not.toMatch(/\bgh\b/);
-    expect(source).not.toContain('http.request');
+    for (const text of [source, registry]) {
+      expect(text).not.toContain('child_process');
+      expect(text).not.toContain('fetch(');
+      expect(text).not.toContain('operator-claim');
+      expect(text).not.toMatch(/\bgh\b/);
+      expect(text).not.toContain('http.request');
+      for (const word of ['grok', 'chatgpt', 'openai', 'claude', 'anthropic', 'gemini', 'gpt-']) {
+        expect(text.toLowerCase()).not.toContain(word);
+      }
+    }
     expect(mission).not.toContain('wonderland-companion-route');
     expect(mission).not.toContain('wonderland-admission-route');
+  });
+
+  it('does not treat a provider segment or the agent-id prefix as this route', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wlj-companion-'));
+    try {
+      const open = ports(join(dir, 'admission.json'), { read: () => storedRow() });
+      expect(isWonderlandCompanionRoute(`/wonderland/julius/missions/${RUN}/companion/grok`)).toBe(false);
+      expect(isWonderlandCompanionRoute('/wonderland/companions/agents')).toBe(false);
+      expect(isWonderlandCompanionRoute(`/wonderland/companions/agents/${AGENT_A}`)).toBe(false);
+      const posted = await handleWonderlandCompanionRoute(request(RUN, {
+        method: 'POST',
+        path: '/wonderland/companions/agents',
+        url: '/wonderland/companions/agents',
+        rawBody: JSON.stringify({ providerId: 'alpha-lab', wljRunId: RUN }),
+      }), open);
+      expect(posted).toBeNull();
+      open.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+function session(providerId: string, over: Partial<CompanionProviderSession> = {}): CompanionProviderSession {
+  return {
+    providerId,
+    displayName: `${providerId} session`,
+    kind: 'single',
+    providerSessionRef: `sess-${providerId}`,
+    declaredCapabilities: ['read', 'write'],
+    authorizedCapabilities: ['read'],
+    connection: 'connected',
+    ...over,
+  };
+}
+
+function adapter(providerId: string, readSession: CompanionAdapter['readSession'], adapterVersion = '0.test'): CompanionAdapter {
+  return { providerId, adapterVersion, readSession };
+}
+
+describe('provider-neutral companion agents', () => {
+  it('answers with an empty agents array when no adapter is registered', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wlj-companion-'));
+    const registry = createCompanionAdapterRegistry();
+    try {
+      expect(registry.list()).toEqual([]);
+      const open = ports(join(dir, 'admission.json'), { read: () => storedRow() });
+      const result = await handleWonderlandCompanionRoute(request(RUN), { ...open, companionAgents: registry });
+      expect(result?.status).toBe(200);
+      const body = result?.body as { agents?: unknown[]; verified?: boolean; companion?: { state?: string } };
+      expect(body.agents).toEqual([]);
+      expect(body.verified).toBe(false);
+      expect(body.companion).toEqual({ state: 'result_received' });
+      open.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('attaches two providers to one mission and keeps a thrown or disconnected adapter off the other', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wlj-companion-'));
+    const registry = createCompanionAdapterRegistry();
+    registry.register(adapter('alpha-lab', () => session('alpha-lab', {
+      displayName: 'Alpha session',
+      kind: 'single',
+      declaredCapabilities: ['read', 'write'],
+      authorizedCapabilities: ['read', 'billing'],
+    })));
+    registry.register(adapter('beta-lab', () => session('beta-lab', {
+      displayName: 'Beta session',
+      kind: 'compound',
+      connection: 'disconnected',
+      declaredCapabilities: ['listen'],
+      authorizedCapabilities: ['listen'],
+    })));
+    registry.register(adapter('gamma-lab', () => {
+      throw new Error('adapter failed');
+    }));
+    registry.attach({ wljRunId: RUN, providerId: 'alpha-lab', agentId: AGENT_A });
+    registry.attach({ wljRunId: RUN, providerId: 'beta-lab', agentId: AGENT_B });
+    registry.attach({ wljRunId: RUN, providerId: 'gamma-lab', agentId: AGENT_C });
+    try {
+      const open = ports(join(dir, 'admission.json'), { read: () => storedRow() });
+      const result = await handleWonderlandCompanionRoute(request(RUN), { ...open, companionAgents: registry });
+      expect(result?.status).toBe(200);
+      const body = result?.body as {
+        verified?: boolean;
+        result?: { summary?: string };
+        agents?: Array<{
+          agentId: string;
+          providerId: string;
+          displayName: string | null;
+          kind: string | null;
+          connection: string;
+          declaredCapabilities: string[];
+          authorizedCapabilities: string[];
+        }>;
+      };
+      expect(body.verified).toBe(false);
+      expect(body.result?.summary).toBe('a local note');
+      expect(body.agents?.map((agent) => agent.providerId)).toEqual(['alpha-lab', 'beta-lab', 'gamma-lab']);
+      expect(body.agents?.[0]).toMatchObject({
+        agentId: AGENT_A,
+        displayName: 'Alpha session',
+        kind: 'single',
+        connection: 'connected',
+        declaredCapabilities: ['read', 'write'],
+        authorizedCapabilities: ['read'],
+      });
+      expect(body.agents?.[1]).toMatchObject({
+        agentId: AGENT_B,
+        displayName: 'Beta session',
+        kind: 'compound',
+        connection: 'disconnected',
+      });
+      expect(body.agents?.[2]).toMatchObject({
+        agentId: AGENT_C,
+        providerId: 'gamma-lab',
+        displayName: null,
+        kind: null,
+        connection: 'error',
+        declaredCapabilities: [],
+        authorizedCapabilities: [],
+      });
+      open.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('reports an unknown provider id as unsupported and does not fail the read', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wlj-companion-'));
+    const registry = createCompanionAdapterRegistry();
+    registry.register(adapter('alpha-lab', () => session('alpha-lab', { displayName: 'Alpha session' })));
+    const unknown = registry.attach({ wljRunId: RUN, providerId: 'not-a-registered-provider', agentId: AGENT_B });
+    registry.attach({ wljRunId: RUN, providerId: 'alpha-lab', agentId: AGENT_A });
+    try {
+      expect(unknown.connection).toBe('unsupported');
+      expect(unknown.displayName).toBeNull();
+      const open = ports(join(dir, 'admission.json'), { read: () => storedRow() });
+      const result = await handleWonderlandCompanionRoute(request(RUN), { ...open, companionAgents: registry });
+      expect(result?.status).toBe(200);
+      const agents = (result?.body as { agents?: Array<{ providerId: string; connection: string; displayName: string | null }> }).agents;
+      expect(agents?.find((agent) => agent.providerId === 'not-a-registered-provider')).toEqual({
+        agentId: AGENT_B,
+        providerId: 'not-a-registered-provider',
+        displayName: null,
+        kind: null,
+        adapterVersion: null,
+        declaredCapabilities: [],
+        authorizedCapabilities: [],
+        connection: 'unsupported',
+      });
+      expect(agents?.find((agent) => agent.providerId === 'alpha-lab')?.connection).toBe('connected');
+      open.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('drops authorized capabilities that were not declared, including from a lying source', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wlj-companion-'));
+    try {
+      const open = ports(join(dir, 'admission.json'), { read: () => storedRow() });
+      const result = await handleWonderlandCompanionRoute(request(RUN), {
+        ...open,
+        companionAgents: {
+          agentsFor: () => [{
+            agentId: AGENT_A,
+            providerId: 'alpha-lab',
+            displayName: 'Alpha session',
+            kind: 'single',
+            adapterVersion: '0.test',
+            declaredCapabilities: ['read', 'write', 'admin'],
+            authorizedCapabilities: ['admin', 'billing', 'read'],
+            connection: 'connected',
+          }],
+        },
+      });
+      expect(result?.status).toBe(200);
+      const agent = (result?.body as { agents: Array<{ declaredCapabilities: string[]; authorizedCapabilities: string[] }> }).agents[0];
+      expect(agent?.declaredCapabilities).toEqual(['read', 'write', 'admin']);
+      expect(agent?.authorizedCapabilities).toEqual(['read', 'admin']);
+      for (const capability of agent?.authorizedCapabilities ?? []) {
+        expect(agent?.declaredCapabilities).toContain(capability);
+      }
+      open.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not keep a substituted identity, and a thrown agent source still returns the row', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wlj-companion-'));
+    const registry = createCompanionAdapterRegistry();
+    registry.register(adapter('alpha-lab', () => session('other-lab', { displayName: 'Substituted model' })));
+    const substituted = registry.attach({ wljRunId: RUN, providerId: 'alpha-lab', agentId: AGENT_A });
+    const minted = registry.attach({ wljRunId: RUN, providerId: 'alpha-lab', agentId: 'chatgpt' });
+    const boundary = authorizationBoundary(
+      { wljRunId: RUN, agentId: AGENT_A },
+      session('alpha-lab', { authorizedCapabilities: ['read', 'billing'] }),
+    );
+    try {
+      expect(substituted.connection).toBe('error');
+      expect(substituted.displayName).toBeNull();
+      expect(JSON.stringify(substituted)).not.toContain('Substituted model');
+      expect(minted.agentId).toMatch(/^agt_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u);
+      expect(minted.agentId).not.toBe('chatgpt');
+      expect(boundary.credentialOwner).toBe('user');
+      expect(boundary.relayFundedFallback).toBe(false);
+      expect(boundary.authorizedCapabilities).toEqual(['read']);
+      const open = ports(join(dir, 'admission.json'), { read: () => storedRow() });
+      const thrown = await handleWonderlandCompanionRoute(request(RUN), {
+        ...open,
+        companionAgents: {
+          agentsFor() {
+            throw new Error('registry failed');
+          },
+        },
+      });
+      expect(thrown?.status).toBe(200);
+      expect((thrown?.body as { agents?: unknown[]; verified?: boolean }).agents).toEqual([]);
+      expect((thrown?.body as { verified?: boolean }).verified).toBe(false);
+      expect((thrown?.body as { result?: { summary?: string } }).result?.summary).toBe('a local note');
+      open.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
