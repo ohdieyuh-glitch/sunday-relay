@@ -959,6 +959,8 @@ async function main(argv: readonly string[]): Promise<number> {
         : {}),
       tenantId: contract.tenantId,
       executionId,
+      serverRunId: env.JULIUS_SERVER_RUN_ID,
+      namespace: contract.markerNamespace,
     });
     const submitted = await bootstrap.submit(request);
     if (!submitted.accepted) {
@@ -966,6 +968,12 @@ async function main(argv: readonly string[]): Promise<number> {
       return 1;
     }
     out(`Run ${submitted.runId} accepted in state ${submitted.state}; driving the Julius run loop.`);
+    /* A replay of an admission id that already bootstrapped must not enter the provider loop. */
+    if (submitted.resumed === true) {
+      out(`RESULT: BLOCKED — admission_run_already_bootstrapped: run ${submitted.runId} already exists; this process did not start another paid loop.`);
+      out(`  run: ${submitted.runId}`);
+      return 1;
+    }
     /* A RE-RUN STOPS HERE, before any provider can be reached (audit F4): the bootstrap above wrote only to this job's
        disposable database, and the drive below is the first thing that can spend. */
     const rerunRefusal = liveRunAttemptRefusal(env);
