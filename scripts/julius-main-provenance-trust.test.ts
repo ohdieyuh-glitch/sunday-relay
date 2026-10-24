@@ -370,17 +370,20 @@ describe('the checkpoint workflow and the working tree', () => {
     }
     expect(attestationNonceProblems(live.fields)).toBeNull();
     expect(existsSync(livePath.replace(/\.txt$/u, '.sig'))).toBe(false);
-    // A depth-1 checkout has the HEAD commit object and not its parents.
-    // `%P` reads the parent sha from that object. `rev-parse HEAD^` throws.
+    // A depth-1 checkout keeps the commit object and hides its parents from
+    // rev-parse and log. cat-file reads the parent line from the object.
     const firstParent = (sha: string) => {
-      const parents = git(['log', '-1', '--format=%P', sha]).trim().split(/\s+/u).filter((part) => part !== '');
+      const parents = git(['cat-file', '-p', sha]).split('\n').filter((line) => line.startsWith('parent ')).map((line) => line.slice('parent '.length));
       expect(parents, sha).toHaveLength(1);
       return parents[0]!;
     };
+    const parentReadFix = 'f9b5b051b546787b486079f945ced851b1f46382';
     const boundaryFix = 'bdd2194bb6d2a721da16e14546c7115915f5b5d3';
     const installer = 'b994daebe511e3bbddcd18edb1a7caf221810387';
     const head = git(['rev-parse', 'HEAD']).trim();
-    expect(firstParent(head)).toBe(boundaryFix);
+    expect(firstParent(head)).toBe(parentReadFix);
+    ensureCommit(parentReadFix, 1);
+    expect(firstParent(parentReadFix)).toBe(boundaryFix);
     ensureCommit(boundaryFix, 1);
     expect(firstParent(boundaryFix)).toBe(installer);
     ensureCommit(installer, 1);
