@@ -94,10 +94,6 @@ const LOCAL_DIFFERENCES: Record<string, { readonly local: string; readonly why: 
     local: 'julius_qualification',
     why: 'a name of its own, so nothing that reaches the wrong port can find a database called "julius" there',
   },
-  SERVER_RUN_ID: {
-    local: 'none',
-    why: 'a local qualification has no Wonderland admission id; none is the absent sentinel, so bootstrap keeps today\'s run name',
-  },
 };
 
 describe('the local launch mirrors the workflow job, and names every difference', () => {
@@ -117,7 +113,7 @@ describe('the local launch mirrors the workflow job, and names every difference'
     }
   });
 
-  it('adds exactly two variables of its own; the workflow runs its coder in the same subscription mode and sets none of the rig-only switches', () => {
+  it('adds exactly two variables of its own; the workflow draft uses the API key and sets none of the rig-only switches', () => {
     const begin = launcher.indexOf('# BEGIN JOB ENV');
     const end = launcher.indexOf('# END JOB ENV');
     const outside = (launcher.slice(0, begin) + launcher.slice(end)).split('\n')
@@ -130,12 +126,11 @@ describe('the local launch mirrors the workflow job, and names every difference'
     const port = outside[1]![2]!;
     expect(port).toMatch(/^[0-9]+$/u);
     expect(port, '127.0.0.1:5432 inside WSL2 is the live store\'s forward').not.toBe('5432');
-    // THE CODER'S AUTH IS NO LONGER A LOCAL-ONLY SWITCH (founder, 2026-09-29): the paid workflow runs
-    // the Coding Agent on the founder's Claude subscription as well, so it sets the SAME mode the
-    // launcher exports, on exactly the two steps that start the coder, and never an API mode.
+    // PENDING FOUNDER RULING. The paid workflow draft authenticates the Coding
+    // Agent with ANTHROPIC_API on the two steps that start it. The local
+    // launcher still exports CLAUDE_SUBSCRIPTION and is not this draft's path.
     const modes = [...workflow.matchAll(/^\s+JULIUS_CLAUDE_AUTH: (.+)$/gmu)].map((match) => match[1]!.trim());
-    expect(modes, 'the roles preflight and the LIVE step, and no other').toHaveLength(2);
-    for (const mode of modes) expect(mode, 'the workflow agrees with the launcher').toBe(auth);
+    expect(modes, 'the roles preflight and the LIVE step, and no other').toEqual(['ANTHROPIC_API', 'ANTHROPIC_API']);
     // CI UNCHANGED for the rest: every other switch added for the local rig defaults to the old
     // behaviour, and the workflow sets none of them.
     for (const name of ['JULIUS_LIVE_PG_PORT', 'HERMES_PHASE', 'HERMES_PYTHON', 'HERMES_VENV_DIR', 'HERMES_SRC_DIR']) {

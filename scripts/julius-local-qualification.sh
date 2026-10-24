@@ -93,10 +93,6 @@ export RELAY_HERMES_MODEL=grok-build-0.1
 # relay-bridge/julius/live-workers.ts, parsed as relay-bridge/attestation.ts parses it).
 export RELAY_HERMES_BILLING_MODE=api_billed
 export HERMES_REQUEST_TIMEOUT_SECONDS=480
-# A local qualification has no Wonderland admission id. `none` is the absent
-# sentinel: bootstrap keeps today's run name. The hosted job sets this from
-# the spend-tag output.
-export SERVER_RUN_ID=none
 # END JOB ENV
 
 # THE TWO LOCAL ADDITIONS. Neither exists in the workflow, which is what keeps CI unchanged.

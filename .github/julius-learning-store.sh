@@ -35,9 +35,24 @@ set -euo pipefail
 die() { echo "$1" >&2; exit 1; }
 usage() { die 'usage: julius-learning-store.sh dump <out-dir> <julius-run-id> [<rendering-file>] | restore <dump-file> <without-julius-run-id> <registration-digest> | gh-get <actions-endpoint> [<jq-filter>]'; }
 
-# The run a learning pair's arm is: an explicit rerun's id (`run:` + 24 hex), exactly as the workflow reads it.
-RUN_ID_SHAPE='^run:[0-9a-f]{24}$'
+# The run a learning pair's arm is, accepted only by the shared admission parser
+# (scripts/julius-admission-run-id.mjs). A canonical wlj_ id and a legacy run:
+# id are both readable. The parser never mints. Anything else is not a run.
 DIGEST_SHAPE='^[0-9a-f]{64}$'
+admit_store_run() {
+  local id=$1 derived form run_id
+  # A literal path: the repository boundary scan reads the file this runs.
+  # Callers (the paid job, the container arm, the round trip) invoke this
+  # script from a checkout that has scripts/ beside .github/.
+  [ -f scripts/julius-admission-run-id.mjs ] || die 'julius_store_parser_missing: scripts/julius-admission-run-id.mjs'
+  derived=$(JULIUS_RUN_ID="$id" node scripts/julius-admission-run-id.mjs derive) || die "julius_store_run_invalid: '$id'"
+  form=$(printf '%s\n' "$derived" | sed -n 's/^form=//p')
+  run_id=$(printf '%s\n' "$derived" | sed -n 's/^run_id=//p')
+  case "$form" in
+    wlj|legacy) [ "$run_id" = "$id" ] || die "julius_store_run_invalid: '$id'" ;;
+    *) die "julius_store_run_invalid: '$id'" ;;
+  esac
+}
 
 # ---------------------------------------------------------------- the argument lists, built once
 args_dump()     { printf '%s\n' --format=custom --compress=0 --no-password; }
@@ -173,7 +188,7 @@ case "${1:-}" in
   dump)
     [ "$#" -eq 3 ] || [ "$#" -eq 4 ] || usage
     out=$2; run_id=$3
-    [[ "$run_id" =~ $RUN_ID_SHAPE ]] || die "julius_store_run_invalid: '$run_id'"
+    admit_store_run "$run_id"
     mkdir -p "$out"
     if [ "$#" -eq 4 ]; then
       rendering=$4
@@ -207,7 +222,7 @@ case "${1:-}" in
     [ "$#" -eq 4 ] || usage
     dump=$2; without=$3; registration=$4
     [ -f "$dump" ] || die "learning_store_dump_missing: $dump"
-    [[ "$without" =~ $RUN_ID_SHAPE ]] || die "julius_store_run_invalid: '$without'"
+    admit_store_run "$without"
     [[ "$registration" =~ $DIGEST_SHAPE ]] || die 'julius_store_registration_invalid'
     check_versions
     # Every answer is taken by ASSIGNMENT first: a psql that fails then stops the script with psql's own words, and is

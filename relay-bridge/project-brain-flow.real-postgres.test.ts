@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import type { Server } from 'node:http';
 import { tmpdir } from 'node:os';
@@ -84,6 +84,8 @@ async function call(base: string, method: string, path: string, options: { body?
   return { status: response.status, json: (await response.json()) as Json };
 }
 const operator = (tenantId: string, extra: Record<string, string> = {}) => ({ auth: `Bearer ${OPERATOR}`, headers: { 'x-relay-tenant': tenantId, ...extra } });
+/** The admission id the Wonderland client already holds. The route never mints one. */
+const admittedRun = (): Record<string, string> => ({ 'x-relay-julius-run-id': `wlj_${randomUUID()}` });
 
 /** A Wonderland player, signed in through the bridge's real pairing: operator mints, the browser redeems. */
 async function signIn(base: string, participantId: string): Promise<{ auth: string; origin: string }> {
@@ -175,7 +177,7 @@ suite('Julius ↔ Project Brain ↔ Wonderland, end to end over a real PostgreSQ
   const wonderland = (method: string, path: string, body?: unknown) => call(bridge.base, method, `/relay-api${path}`, { ...player, ...(body === undefined ? {} : { body }) });
 
   it('A-C: a mission Julius creates is durable at once, and Wonderland reads it from the one Brain', async () => {
-    const created = await call(bridge.base, 'POST', '/relay-api/julius/missions', { auth: `Bearer ${OPERATOR}`, body: contractFor(projectId, tenant, id) });
+    const created = await call(bridge.base, 'POST', '/relay-api/julius/missions', { auth: `Bearer ${OPERATOR}`, headers: admittedRun(), body: contractFor(projectId, tenant, id) });
     expect(created.status, JSON.stringify(created.json)).toBe(201);
     runId = created.json.data.runId;
     const row = await pool.query('SELECT state, project_id FROM relay_wonderland.julius_runs WHERE run_id=$1', [runId]);
@@ -336,7 +338,7 @@ suite('Julius ↔ Project Brain ↔ Wonderland, end to end over a real PostgreSQ
   });
 
   it('I-J: a second mission inherits what the project was told, and another project sees none of it', async () => {
-    const second = await call(bridge.base, 'POST', '/relay-api/julius/missions', { auth: `Bearer ${OPERATOR}`, body: { ...contractFor(projectId, tenant, `${id}-2`), objective: 'Second mission: pick one format.' } });
+    const second = await call(bridge.base, 'POST', '/relay-api/julius/missions', { auth: `Bearer ${OPERATOR}`, headers: admittedRun(), body: { ...contractFor(projectId, tenant, `${id}-2`), objective: 'Second mission: pick one format.' } });
     expect(second.status).toBe(201);
     const run2 = second.json.data.runId as string;
     const read = await call(bridge.base, 'GET', `/relay-api/project-brain/projects/${projectId}/julius-context?runId=${encodeURIComponent(run2)}`, operator(tenant));
@@ -346,7 +348,7 @@ suite('Julius ↔ Project Brain ↔ Wonderland, end to end over a real PostgreSQ
 
     const otherTenant = `other-${id}`;
     const otherProject = `prj-pbflow-other-${id}`;
-    expect((await call(bridge.base, 'POST', '/relay-api/julius/missions', { auth: `Bearer ${OPERATOR}`, body: contractFor(otherProject, otherTenant, `${id}-x`) })).status).toBe(201);
+    expect((await call(bridge.base, 'POST', '/relay-api/julius/missions', { auth: `Bearer ${OPERATOR}`, headers: admittedRun(), body: contractFor(otherProject, otherTenant, `${id}-x`) })).status).toBe(201);
     const other = await signIn(bridge.base, otherTenant);
     const theirs = await call(bridge.base, 'GET', `/relay-api/wonderland/brain?projectId=${otherProject}&view=document`, other);
     expect(theirs.status).toBe(200);

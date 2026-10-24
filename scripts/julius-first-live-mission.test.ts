@@ -23,7 +23,6 @@ import {
   HOSTED_ALLOWED_TOOLS, HOSTED_CHILD_MODEL_PIN_KEYS, HOSTED_DISALLOWED_TOOLS, hostedChildEnv,
 } from '../relay-bridge/hosted-coding-agent/hosted-envelope';
 import { claudeAuthLine, claudeAuthSourceLine, resolveClaudeAuthMode, type ClaudeAuthProvenance } from '../relay-bridge/hosted-coding-agent/hosted-auth';
-import { sdkExecutableCandidates } from '../relay-bridge/hosted-coding-agent/hosted-login-probe';
 import { PREFLIGHT_LIMITS, PREFLIGHT_POLICY } from './julius-live-preflight';
 
 /**
@@ -197,8 +196,8 @@ describe('only a human dispatch can start the live mission', () => {
     // paid job itself. Both are asserted here; neither may ever cancel.
     expect(workflow, 'the workflow-level group is per run, so it can hold no pending paid run')
       .toMatch(/^concurrency:\s*\n\s*group:\s*julius-first-live-mission-\$\{\{ github\.run_id \}\}\s*\n\s*cancel-in-progress:\s*false/mu);
-    expect(workflow, 'the paid job takes the group spend-tag minted, and never cancels')
-      .toMatch(/concurrency:\s*\n\s*group:\s*\$\{\{ needs\.spend-tag\.outputs\.concurrency_group \}\}\s*\n\s*cancel-in-progress:\s*false/u);
+    expect(workflow, 'two concurrent live missions would race for one workspace and one executor')
+      .toMatch(/concurrency:\s*\n\s*group:\s*\$\{\{ inputs\.confirm_live == 'RUN LIVE MISSION' && 'julius-paid-provider-slot' \|\| format\('julius-preflight-\{0\}', github\.run_id\) \}\}\s*\n\s*cancel-in-progress:\s*false/u);
     expect(workflow, 'nothing in the paid workflow may ever cancel a run').not.toMatch(/cancel-in-progress:\s*true/u);
   });
 
@@ -326,11 +325,10 @@ describe('no credential is committed, and none can leave the runner', () => {
   });
 
   /**
-   * FOUNDER RULE: the Coding Agent runs on the Claude Max subscription, never on
-   * Anthropic API billing. Paid attempt 1 (run 36568129865) ran it on
-   * ANTHROPIC_API_KEY and died on `credit_unavailable`.
+   * PENDING FOUNDER RULING. The Coding Agent authenticates with the user-owned
+   * Anthropic API key. A consumer Claude Max login is not a product credential.
    */
-  it('the roles preflight and LIVE run the Coding Agent on the subscription token, never on an Anthropic key', () => {
+  it('the roles preflight and LIVE run the Coding Agent on the user-owned API key, never on the consumer login token', () => {
     const stepNamed = (name: string): string => {
       const start = workflow.indexOf(`- name: ${name}`);
       expect(start, name).toBeGreaterThan(-1);
@@ -339,136 +337,67 @@ describe('no credential is committed, and none can leave the runner', () => {
     };
     for (const name of ["'Preflight: all three roles resolve to the expected models, nothing dispatched'", "'LIVE: run the first real Julius mission'"]) {
       const step = stepNamed(name);
-      expect(step, name).toMatch(/\n\s+JULIUS_CLAUDE_AUTH: CLAUDE_SUBSCRIPTION\n/u);
-      expect(step, name).toContain('CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}');
-      expect(step, `${name} must not hand the Coding Agent an API key`).not.toContain('secrets.ANTHROPIC_API_KEY');
+      expect(step, name).toMatch(/\n\s+JULIUS_CLAUDE_AUTH: ANTHROPIC_API\n/u);
+      expect(step, name).toContain('ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}');
+      expect(step, `${name} must not map the consumer login token into the step`).not.toContain('secrets.CLAUDE_CODE_OAUTH_TOKEN');
     }
     const roles = stepNamed("'Preflight: all three roles resolve to the expected models, nothing dispatched'");
-    expect(roles).toContain("grep -qx '  billing paths: architect=API_BILLED coder=SUBSCRIPTION reviewer=API_BILLED' preflight-roles.log");
-    expect(roles).toContain("grep -qx '  claude auth source: subscription_oauth_token' preflight-roles.log");
-    expect(roles).toContain("grep -qx '  ANTHROPIC_API_KEY: MISSING' preflight-roles.log");
-    expect(roles).toMatch(/for name in OPENAI_API_KEY CLAUDE_CODE_OAUTH_TOKEN /u);
+    expect(roles).toContain("grep -qx '  billing paths: architect=API_BILLED coder=API_BILLED reviewer=API_BILLED' preflight-roles.log");
+    expect(roles).toContain("grep -qx '  claude auth source: anthropic_api_key' preflight-roles.log");
+    expect(roles).toContain("grep -qx '  CLAUDE_CODE_OAUTH_TOKEN: MISSING' preflight-roles.log");
+    expect(roles).toMatch(/for name in OPENAI_API_KEY ANTHROPIC_API_KEY /u);
     const readiness = stepNamed("'Preflight: each provider accepts its credential and serves the pinned model, nothing generated'");
-    expect(readiness, 'the Anthropic API-key probe is gone').not.toContain('api.anthropic.com');
-    expect(readiness).toContain('node scripts/julius-subscription-check.mjs env-check --model "$RELAY_HOSTED_CODING_MODEL"');
-    expect(readiness).toContain('node scripts/julius-subscription-check.mjs status-verdict --model "$RELAY_HOSTED_CODING_MODEL" < "$sub/status.json"');
-    expect(readiness).toContain(`${SUBSCRIPTION_CLI} auth status --json > "$sub/status.json" 2>/dev/null`);
+    expect(readiness).toContain('https://api.anthropic.com/v1/models/');
     expect(readiness, 'the readiness check never generates').not.toMatch(/claude" -p /u);
+    expect(readiness).not.toContain('CLAUDE_CODE_OAUTH_TOKEN');
   });
 
-  /**
-   * THE CLI RUNS AS A LITERAL COMMAND IN THE WORKFLOW, never from a script, so the
-   * repository boundary scan can read it; the check script only judges its JSON.
-   * Every invocation is the same `env -i` allow-list, from an empty directory.
-   */
-  const SUBSCRIPTION_CLI = `"$PWD/node_modules/${sdkExecutableCandidates('linux', 'x64')[0]}"`;
-  // The two small-model slots are pinned to the Coding Agent's own model, so no other model can
-  // produce output in a subscription CLI call and the smoke may require that every producer is it.
-  const ENV_ALLOW_LIST = 'env -i -C "$sub/work" PATH="$PATH" HOME="$sub/home" CI=1 NO_COLOR=1 TERM=dumb ANTHROPIC_DEFAULT_HAIKU_MODEL="$RELAY_HOSTED_CODING_MODEL" ANTHROPIC_SMALL_FAST_MODEL="$RELAY_HOSTED_CODING_MODEL" CLAUDE_CODE_OAUTH_TOKEN="$CLAUDE_CODE_OAUTH_TOKEN" \\';
-
-  it('every subscription CLI call is the SDK\'s bundled linux-x64 CLI under the exact env -i allow-list', () => {
-    const lines = workflow.split('\n');
-    const calls = lines.map((line, index) => ({ line, index })).filter(({ line }) => line.includes('claude-agent-sdk-'));
-    expect(calls.length, 'status in the readiness step; status and one request in the smoke').toBe(3);
-    for (const { line, index } of calls) {
-      expect(line.trim().startsWith(`${SUBSCRIPTION_CLI} `), line).toBe(true);
-      expect(lines[index - 1].trim(), line).toBe(ENV_ALLOW_LIST);
-      expect(line, 'stdout to a file the check script judges; stderr discarded').toMatch(/ > "\$sub\/(status|smoke)\.json" 2>\/dev\/null$/u);
-    }
-    expect(workflow, 'the file a paid run executes starts no process').not.toMatch(/julius-subscription-check\.mjs" /u);
-  });
-
-  /**
-   * THE SMOKE QUALIFIES THE CODING AGENT'S OWN ENVIRONMENT. The coder's child pins the
-   * same two housekeeping slots to its requested model (`hostedChildEnv`), so a smoke in
-   * which only that model produced output vouches for the environment the paid run uses.
-   *
-   * The one name the smoke does not set is CLAUDE_CODE_NO_MODEL_FALLBACK=1, which the
-   * coder always sets. A served request is unchanged by it (measured spend-free,
-   * 2026-10-01). A fallback only follows a refused request, and a refused request fails
-   * the smoke either way. The founder chose the coder-side fix for PR #305.
-   */
-  it('the smoke pins exactly the housekeeping slots the Coding Agent pins, to the same model', () => {
-    const pinned = [...ENV_ALLOW_LIST.matchAll(/ (ANTHROPIC_[A-Z_]+)="\$RELAY_HOSTED_CODING_MODEL"/gu)].map((match) => match[1]).sort();
-    expect(pinned).toEqual([...HOSTED_CHILD_MODEL_PIN_KEYS].sort());
-    const coder = hostedChildEnv({ apiKey: '', mode: 'CLAUDE_SUBSCRIPTION', model: 'claude-opus-5-5' });
+  it('the product path does not invoke a consumer Claude login, and the coder child still pins its model', () => {
+    expect(workflow).not.toContain('claude-agent-sdk-');
+    expect(workflow).not.toMatch(/julius-subscription-check\.mjs/u);
+    const coder = hostedChildEnv({ apiKey: 'present', mode: 'ANTHROPIC_API', model: 'claude-opus-5-5' });
     for (const name of HOSTED_CHILD_MODEL_PIN_KEYS) expect(coder[name], name).toBe('claude-opus-5-5');
     expect(coder.CLAUDE_CODE_NO_MODEL_FALLBACK, 'the coder itself can never fall back').toBe('1');
+    expect(coder.ANTHROPIC_API_KEY).toBe('present');
+    expect('CLAUDE_CODE_OAUTH_TOKEN' in coder).toBe(false);
   });
 
-  it('the subscription smoke runs on its own exact phrase AND before every paid run, and sends one literal request', () => {
+  it('a subscription-smoke request is refused and does not run on a paid dispatch', () => {
     const start = workflow.indexOf("- name: 'Subscription smoke:");
     expect(start).toBeGreaterThan(-1);
     const rest = workflow.slice(start);
     const step = rest.slice(0, rest.indexOf('\n      - ', 1));
     expect(step).toContain('\n        id: subscription_smoke\n');
-    expect(step).toContain("\n        if: success() && (inputs.subscription_smoke == 'RUN SUBSCRIPTION SMOKE' || inputs.confirm_live == 'RUN LIVE MISSION')\n");
-    expect(step, 'a failed smoke must fail the job, or a paid step could still see success()').not.toMatch(/continue-on-error/u);
-    expect(step).toContain('node scripts/julius-subscription-check.mjs env-check --for smoke');
-    expect(step).toContain('node scripts/julius-subscription-check.mjs status-verdict --for smoke');
-    expect(step).toContain('node scripts/julius-subscription-check.mjs smoke-verdict --model "$RELAY_HOSTED_CODING_MODEL" --status-file "$sub/status.json" --auth-exit "$auth_exit" --cli-exit "$cli_exit" < "$sub/smoke.json"');
-    expect(step.match(/claude" -p /gu)?.length, 'exactly one request').toBe(1);
-    expect(step).toContain(`${SUBSCRIPTION_CLI} -p 'Reply with exactly OK' --max-turns 1 --output-format json --model "$RELAY_HOSTED_CODING_MODEL" --setting-sources user --strict-mcp-config --no-session-persistence > "$sub/smoke.json" 2>/dev/null`);
-    expect(step).not.toMatch(/API_KEY/u);
-    expect(step).not.toContain('--confirm-live');
-  });
-
-  it('the smoke always reaches its verdict and records both exit codes (run 36685079176)', () => {
-    const start = workflow.indexOf("- name: 'Subscription smoke:");
-    const rest = workflow.slice(start);
-    const lines = rest.slice(0, rest.indexOf('\n      - ', 1)).split('\n').map((line) => line.trim());
-    // Errexit is off before the first CLI call, so a non-zero exit cannot end the step early.
-    const errexitOff = lines.indexOf('set +e');
-    const firstCall = lines.findIndex((line) => line.startsWith(`${SUBSCRIPTION_CLI} `));
-    expect(errexitOff, 'set +e').toBeGreaterThan(lines.indexOf('set -uo pipefail'));
-    expect(errexitOff, 'before the first CLI call').toBeLessThan(firstCall);
-    expect(lines.slice(errexitOff), 'and it is not switched back on').not.toContain('set -e');
-    // Each exit is kept on the line straight after its call, before anything else can set `$?`,
-    // and recorded from that variable.
-    const at = (needle: string): number => lines.findIndex((line) => line.startsWith(SUBSCRIPTION_CLI) && line.includes(needle));
-    expect(lines[at(' auth status --json ') + 1]).toBe('auth_exit=$?');
-    expect(lines[at(' auth status --json ') + 2]).toBe('echo "subscription_smoke_auth_exit=$auth_exit" | tee -a subscription-smoke.log');
-    expect(lines[at(" -p 'Reply with exactly OK' ") + 1]).toBe('cli_exit=$?');
-    expect(lines[at(" -p 'Reply with exactly OK' ") + 2]).toBe('echo "subscription_smoke_cli_exit=$cli_exit" | tee -a subscription-smoke.log');
-    // Both start as a non-zero word, so a step that never ran a call cannot read as exit 0.
-    expect(lines).toContain('auth_exit=none');
-    expect(lines).toContain('cli_exit=none');
-    expect(lines.indexOf('auth_exit=none'), 'set before the first call').toBeLessThan(firstCall);
-    // Still fail-closed: the step succeeds only on the one PASS line, AND only when both exits were 0
-    // (Codex review of #302: JSON that reads OK from a CLI that then exited non-zero must FAIL).
-    expect(rest).toContain("grep -qE '^subscription_smoke provider=anthropic .* auth=CLAUDE_SUBSCRIPTION method=(oauth_token|claude\\.ai) reply=OK result=PASS$' subscription-smoke.log");
-    const exitGate = lines.indexOf('[ "$auth_exit" = 0 ] && [ "$cli_exit" = 0 ] \\');
-    expect(exitGate, 'the exit gate').toBeGreaterThan(-1);
-    expect(lines[exitGate + 1]).toMatch(/^\|\| \{ echo "subscription_smoke_failed: [^"]+" >&2; exit 1; \}$/u);
-    expect(lines.indexOf('exit "$status"'), 'the exit gate is passed before the step can succeed').toBeGreaterThan(exitGate);
+    expect(step).toContain("\n        if: success() && inputs.subscription_smoke == 'RUN SUBSCRIPTION SMOKE' && inputs.confirm_live != 'RUN LIVE MISSION'\n");
+    expect(step).toContain('coder_auth_subscription_refused');
+    expect(step).not.toMatch(/claude|curl|api\.anthropic/u);
+    expect(step).not.toContain('secrets.CLAUDE_CODE_OAUTH_TOKEN');
   });
 
   /**
-   * A PAID RUN QUALIFIES ITS CODER BEFORE ANYTHING CAN SPEND (Codex review of #302, P1).
+   * A PAID RUN DOES NOT START UNLESS THE CODER'S API KEY WAS PRESENT.
    *
-   * Readiness proves a login, not that the pinned model is served. Without this, a paid run
-   * could pay the Prompt Architect and the plan review before the coder learned its model was
-   * unavailable or substituted. The smoke runs on `confirm_live` too, BEFORE the attempt marker,
-   * and every step on the paid path names the smoke's success by id, so a skipped or failed
-   * smoke can never be read as a pass.
+   * The gate runs before readiness and before LIVE. Every paid step names that
+   * gate's success by id, so a run holding only CLAUDE_CODE_OAUTH_TOKEN cannot
+   * be read as ready. PENDING FOUNDER RULING.
    */
-  it('no paid step runs unless the subscription smoke PASSED in the same job', () => {
-    const smoke = workflow.indexOf("- name: 'Subscription smoke:");
+  it('no paid step runs unless the coder API-key gate PASSED in the same job', () => {
+    const gate = workflow.indexOf("- name: 'Gate: coder uses the user-owned Anthropic API key (pending founder ruling)'");
     const attempt = workflow.indexOf("- name: 'Record that a paid mission was attempted (before any provider can be reached)'");
     const live = workflow.indexOf("- name: 'LIVE: run the first real Julius mission'");
     expect(attempt, 'the attempt marker step').toBeGreaterThan(-1);
-    expect(smoke, 'the smoke step').toBeGreaterThan(-1);
-    expect(smoke, 'the smoke runs before the attempt is recorded').toBeLessThan(attempt);
-    expect(smoke, 'and before the entrypoint that can spend').toBeLessThan(live);
+    expect(gate, 'the coder auth gate').toBeGreaterThan(-1);
+    expect(gate, 'the gate runs before the attempt is recorded').toBeLessThan(attempt);
+    expect(gate, 'and before the entrypoint that can spend').toBeLessThan(live);
     const uploads = workflow.split('- uses: actions/upload-artifact');
     const attemptUpload = uploads.find((block) => block.includes('name: ${{ steps.inputs_gate.outputs.marker_namespace }}-attempted')) ?? '';
     const conditionOf = (text: string): string => /\n\s*if: (.+)/u.exec(text)?.[1] ?? '';
     for (const [label, condition] of [
-      ['the attempt marker', conditionOf(workflow.slice(attempt, attempt + 300))],
+      ['the attempt marker', conditionOf(workflow.slice(attempt, attempt + 400))],
       ['the attempt marker upload', conditionOf(attemptUpload)],
-      ['LIVE', conditionOf(workflow.slice(live, live + 300))],
+      ['LIVE', conditionOf(workflow.slice(live, live + 400))],
     ] as const) {
-      expect(condition, `${label} requires the smoke's success by id`).toContain("steps.subscription_smoke.outcome == 'success'");
+      expect(condition, `${label} requires the API-key gate's success by id`).toContain("steps.coder_auth.outcome == 'success'");
       expect(condition, `${label} stays on the fail-closed paid path`).toMatch(/^success\(\) && inputs\.confirm_live == 'RUN LIVE MISSION' && /u);
     }
     // COMPLETED means LIVE succeeded (Second julius's review of A2): LIVE can be skipped while
@@ -483,12 +412,13 @@ describe('no credential is committed, and none can leave the runner', () => {
     ] as const) {
       expect(condition, `${label} requires LIVE's success by id`).toBe("success() && inputs.confirm_live == 'RUN LIVE MISSION' && steps.live_mission.outcome == 'success'");
     }
-    // The zero-dispatch preflight stays zero-contact: without either phrase the smoke does not run.
+    // A paid dispatch does not run the refused smoke. An explicit smoke phrase
+    // still fails closed, and it never uses always().
+    const smoke = workflow.indexOf("- name: 'Subscription smoke:");
     const smokeIf = conditionOf(workflow.slice(smoke, smoke + 400));
     expect(smokeIf).not.toContain('always()');
-    expect(smokeIf.match(/inputs\.[a-z_]+ == '[A-Z ]+'/gu)).toEqual([
-      "inputs.subscription_smoke == 'RUN SUBSCRIPTION SMOKE'", "inputs.confirm_live == 'RUN LIVE MISSION'",
-    ]);
+    expect(smokeIf).toContain("inputs.subscription_smoke == 'RUN SUBSCRIPTION SMOKE'");
+    expect(smokeIf).toContain("inputs.confirm_live != 'RUN LIVE MISSION'");
   });
 
   it('the smoke evidence keeps every closed line the smoke prints, and nothing with a tail', () => {
@@ -1525,7 +1455,7 @@ describe('the evidence dump names only tables and columns the migrations create'
     const called = script.indexOf("write_manifest || echo 'JULIUS_EVIDENCE_MANIFEST unavailable'");
     expect(called, 'the manifest is written, and a failure to write it cannot stop the dump').toBeGreaterThan(0);
     expect(called, 'before the first table').toBeLessThan(script.indexOf('dump "SELECT'));
-    for (const key of ['manifest_version=1', 'commit=', 'tree=', 'mode=', 'mode_basis=', 'julius_run_id=', 'workflow_run_id=', 'workflow_run_attempt=', 'workflow_ref=', 'event=', 'server_run_id=']) {
+    for (const key of ['manifest_version=1', 'commit=', 'tree=', 'mode=', 'mode_basis=', 'julius_run_id=', 'workflow_run_id=', 'workflow_run_attempt=', 'workflow_ref=', 'event=']) {
       expect(script, `the manifest records ${key}`).toContain(`echo "${key}`.replace('echo "manifest_version=1', "echo 'manifest_version=1"));
     }
     expect(script, 'the file the gate reads').toContain('"$out/bundle-manifest.txt"');
@@ -1744,7 +1674,7 @@ describe('the preflight is a legitimate participant in the durable schema (dry r
     expect(fixture).toContain("throw new Error('preflight_identity_not_owned')");
     // The one table without a project column is reached only through the nonce's run AND project.
     expect(fixture).toContain('DELETE FROM relay_wonderland.julius_tasks t USING relay_wonderland.julius_runs r WHERE t.run_id=r.run_id AND r.run_id=$1 AND r.project_id=$2');
-    expect(fixture, 'ownership is asserted on every identifier, not the project alone').toMatch(/identity\.runId === `run:julius-preflight-\$\{identity\.nonce\}`/u);
+    expect(fixture, 'ownership is asserted on every identifier, not the project alone').toMatch(/identity\.runId === `preflight:julius-\$\{identity\.nonce\}`/u);
   });
 
   it('the Docker regression job runs the PostgreSQL-backed suite with JULIUS_REAL_POSTGRES=1 (the proof is that step, not this case)', () => {
@@ -2763,10 +2693,8 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
     expect(groups.length, 'one workflow-level group and one on the paid job').toBe(2);
     expect(groups[0], 'the workflow-level group is per run').toContain('github.run_id');
     expect(groups[0], 'the workflow-level group must not be the shared live slot').not.toContain("'live'");
-    expect(groups[1], 'the paid job uses the group spend-tag computed').toContain('needs.spend-tag.outputs.concurrency_group');
-    expect(workflow, 'a missing server run id halts before a group is chosen').toContain("echo 'server_run_id_required'");
-    expect(workflow, 'a paid run is grouped by the spent-tag hex').toContain('group="julius-paid-${hex}"');
-    expect(workflow, 'an empty id is not given the shared slot').not.toContain("group='julius-paid-provider-slot'");
+    expect(groups[1], 'paid jobs serialise on one group').toContain("'julius-paid-provider-slot'");
+    expect(groups[1], 'dry runs stay unlimited and parallel').toContain('github.run_id');
     const cancels = [...workflow.matchAll(/cancel-in-progress:\s*(\S+)/gu)].map((match) => match[1]);
     expect(cancels.length).toBe(2);
     expect(cancels.every((value) => value === 'false'), 'a live run must never be cancelled mid-flight').toBe(true);
@@ -3151,21 +3079,14 @@ describe('the trust gate runs before anything the candidate controls', () => {
   });
 
   it('the verifier is a SEPARATE checkout from the candidate', () => {
-    // Two checkouts PER JOB that runs repository code, and only the verifier
-    // carries a pinned ref and a path. The `paid-slot` admission job proves
-    // the same commit the same way before it runs its queue script, so those
-    // two jobs are two pairs. `spend-tag` adds one candidate checkout, with
-    // credentials dropped, and reads the committed contract as data. It does
-    // not check out the verifier and it does not run a repository script.
+    // Two checkouts in paid-slot and in the paid job, and only the verifier
+    // carries a pinned ref and a path. spend-tag checks out the candidate once,
+    // with credentials persistence off, and does not check out a verifier: it
+    // locks the run id and does not judge the candidate.
     const checkouts = workflow.split('- uses: actions/checkout').length - 1;
-    expect(checkouts, 'two verifier pairs, plus the spend-tag checkout that only reads the committed contract').toBe(5);
+    expect(checkouts, 'two verifier pairs, plus the spend-tag candidate checkout').toBe(5);
     const pinned = workflow.split('ref: f131098cc4e8f35d7231cf2e9693b83c05dab75c').length - 1;
-    expect(pinned, 'each job that runs repository code checks out the pinned verifier exactly once').toBe(2);
-    const spendTag = workflow.slice(workflow.indexOf('\n  spend-tag:\n'), workflow.indexOf('\n  paid-slot:\n'));
-    expect(spendTag.split('- uses: actions/checkout').length - 1).toBe(1);
-    expect(spendTag).toContain('persist-credentials: false');
-    expect(spendTag).not.toContain('.julius-trusted-verifier');
-    expect(spendTag).not.toMatch(/\n\s+ref:/u);
+    expect(pinned, 'each job that judges the candidate checks out the pinned verifier exactly once').toBe(2);
     expect(verifierCheckout()).toContain('path: .julius-trusted-verifier');
     expect(verifierCheckout(), 'a token in the verifier checkout would ride into the container')
       .toContain('persist-credentials: false');
@@ -4049,9 +3970,20 @@ describe('a learning pair is two jobs on one store: arm WITHOUT exports it, arm 
     expect(gate(without, '')).toEqual({ status: 0, output: `arm=WITHOUT\nwithout_julius_run=-\nregistration_digest=${DIGEST}\n` });
     expect(gate(without, '5').status).not.toBe(0);
     const withArm = { arm: 'WITH', registrationDigest: DIGEST, rerunKey: 'c1', withoutRunId: WITHOUT };
+    const wlj = 'wlj_01234567-89ab-4cde-8fab-0123456789ab';
     expect(gate(withArm, '4242')).toEqual({ status: 0, output: `arm=WITH\nwithout_julius_run=${WITHOUT}\nregistration_digest=${DIGEST}\n` });
+    expect(gate({ ...withArm, withoutRunId: wlj }, '4242')).toEqual({ status: 0, output: `arm=WITH\nwithout_julius_run=${wlj}\nregistration_digest=${DIGEST}\n` });
     for (const input of ['', '12a', '999', '1'.repeat(21)]) expect(gate(withArm, input).status, `input '${input}'`).not.toBe(0);
-    for (const clause of [{ ...withArm, arm: 'BOTH' }, { ...withArm, withoutRunId: undefined }, { ...without, registrationDigest: `sha256:${DIGEST}` }]) {
+    for (const clause of [
+      { ...withArm, arm: 'BOTH' },
+      { ...withArm, withoutRunId: undefined },
+      { ...withArm, withoutRunId: '' },
+      { ...withArm, withoutRunId: 'run:not-hex' },
+      { ...withArm, withoutRunId: WITHOUT.toUpperCase() },
+      { ...withArm, withoutRunId: 'wlj_not-a-uuid' },
+      { ...withArm, withoutRunId: `${wlj} ${wlj}` },
+      { ...without, registrationDigest: `sha256:${DIGEST}` },
+    ]) {
       expect(gate(clause, '4242').status, JSON.stringify(clause)).not.toBe(0);
     }
   }, 30_000);
@@ -4089,9 +4021,12 @@ describe('a learning pair is two jobs on one store: arm WITHOUT exports it, arm 
       writeFileSync(join(stub, 'state'), 'COMPLETED\n');
       writeFileSync(join(stub, 'record'), '1\n');
       writeFileSync(join(stub, 'occupied'), '0\n');
-      // The step runs the store script from the job's checkout, so the job holds it, byte for byte.
+      // The step runs the store script from the job's checkout, so the job holds it, byte for byte,
+      // and the script asks the shared admission parser beside it.
       mkdirSync(join(job, '.github'));
+      mkdirSync(join(job, 'scripts'));
       writeFileSync(join(job, '.github', 'julius-learning-store.sh'), readFileSync(join(ROOT, '.github', 'julius-learning-store.sh')), { mode: 0o755 });
+      writeFileSync(join(job, 'scripts', 'julius-admission-run-id.mjs'), readFileSync(join(ROOT, 'scripts', 'julius-admission-run-id.mjs')));
       writeFileSync(join(bin, 'gh'), ['#!/usr/bin/env bash', 'case "$2" in',
         '  */runs/999) echo 111;;', '  */runs/4242) cat "$STUB/run.txt";;', '  */runs/4242/artifacts?name=*) cat "$STUB/artifact.id";;',
         '  */zip) echo zip;;', '  *) exit 9;;', 'esac'].join('\n'), { mode: 0o755 });

@@ -50,7 +50,7 @@ dump() {
 # the gate reads as not paid.
 manifest_token() { printf '%s' "${1:-}" | tr -c 'A-Za-z0-9._:/@#+=-' '_' | cut -c1-200; }
 write_manifest() {
-  local commit tree tracked status mode mode_basis source run_id accepted count server_run_id
+  local commit tree tracked status mode mode_basis source run_id accepted count
   commit=$(git rev-parse HEAD 2>/dev/null || echo unknown)
   tree=$(git rev-parse 'HEAD^{tree}' 2>/dev/null || echo unknown)
   if status=$(git status --porcelain --untracked-files=no 2>/dev/null); then
@@ -94,14 +94,6 @@ write_manifest() {
     echo "mode_basis=$(manifest_token "$mode_basis")"
     echo "julius_run_id=$(manifest_token "$run_id")"
     echo "workflow_run_id=$(manifest_token "${GITHUB_RUN_ID:-none}")"
-    # The Wonderland admission id, when the workflow passed a validated one.
-    # Anything else — absent, empty, or not `run:` plus 24 lowercase hex — is
-    # `none`, never a guess and never the raw input.
-    server_run_id=none
-    if printf '%s' "${SERVER_RUN_ID:-}" | grep -Eqx 'run:[0-9a-f]{24}'; then
-      server_run_id=$SERVER_RUN_ID
-    fi
-    echo "server_run_id=$(manifest_token "$server_run_id")"
     echo "workflow_run_attempt=$(manifest_token "${GITHUB_RUN_ATTEMPT:-none}")"
     echo "workflow_ref=$(manifest_token "${GITHUB_WORKFLOW_REF:-none}")"
     echo "event=$(manifest_token "${GITHUB_EVENT_NAME:-none}")"
@@ -109,7 +101,7 @@ write_manifest() {
     echo "github_sha=$(manifest_token "${GITHUB_SHA:-none}")"
     echo "produced_at=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
   } > "$out/bundle-manifest.txt"
-  echo "JULIUS_EVIDENCE_MANIFEST mode=$mode commit=$(manifest_token "$commit") julius_run_id=$(manifest_token "$run_id") workflow_run_id=$(manifest_token "${GITHUB_RUN_ID:-none}") server_run_id=$(manifest_token "$server_run_id")"
+  echo "JULIUS_EVIDENCE_MANIFEST mode=$mode commit=$(manifest_token "$commit") julius_run_id=$(manifest_token "$run_id") workflow_run_id=$(manifest_token "${GITHUB_RUN_ID:-none}")"
 }
 write_manifest || echo 'JULIUS_EVIDENCE_MANIFEST unavailable'
 
@@ -171,6 +163,7 @@ dump "SELECT artifact_id,project_id,run_id,task_id,lease_generation,role,kind,co
 # as julius-live-hermes.sh runs its own node entry: the repository boundary scan must be able to read the file node
 # runs, and a path built at run time ("$here/...") is unanalyzable by design.
 node scripts/julius-evidence-bodies.mjs "$out" || echo "julius-evidence-bodies: exited $?" >&2
+cp scripts/julius-admission-run-id.mjs "$out/julius-admission-run-id.mjs" || echo 'julius-evidence-dump: julius-admission-run-id.mjs was not copied' >&2
 cp scripts/julius-evidence-resolve.mjs "$out/resolve-artifacts.mjs" || echo 'julius-evidence-dump: resolve-artifacts.mjs was not copied' >&2
 
 # WHY A TASK FAILED, WITHOUT A RAW LOG.

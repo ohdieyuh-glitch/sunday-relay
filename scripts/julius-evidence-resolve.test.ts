@@ -90,6 +90,7 @@ describe('the evidence bundle resolver (decision A)', () => {
     expect(sha(readFileSync(file))).not.toBe(sha(original));
     expect(verdicts(dir)).toEqual([`MISMATCH ${idOf('DIFF')}`]);
     expect(exitOf(dir, true)).toBe(1);
+    copyFileSync(join(ROOT, 'scripts', 'julius-admission-run-id.mjs'), join(dir, 'julius-admission-run-id.mjs'));
     copyFileSync(join(ROOT, 'scripts', 'julius-evidence-resolve.mjs'), join(dir, 'resolve-artifacts.mjs'));
     const env = { PATH: process.env.PATH ?? '', SystemRoot: process.env.SystemRoot ?? '' };
     const run = spawnSync(process.execPath, [join(dir, 'resolve-artifacts.mjs'), '--strict'], { cwd: tmpdir(), env, encoding: 'utf8' });
@@ -158,6 +159,7 @@ describe('the evidence bundle resolver (decision A)', () => {
     const dir = bundleOf([{ id: idOf('DIFF'), body: `a body holding ${marker}`, evidence: [{ evidenceId: 'bad-ref', ref: `blob:${marker}` }, { evidenceId: 'unknown-ref', ref: `artifact:${marker}` }] }]);
     appendFileSync(join(dir, 'artifacts', `${sha(idOf('DIFF'))}.body`), ` and ${marker} again`);
     writeFileSync(join(dir, 'artifacts', `${marker}.body`), marker);
+    copyFileSync(join(ROOT, 'scripts', 'julius-admission-run-id.mjs'), join(dir, 'julius-admission-run-id.mjs'));
     copyFileSync(join(ROOT, 'scripts', 'julius-evidence-resolve.mjs'), join(dir, 'resolve-artifacts.mjs'));
     const run = spawnSync(process.execPath, [join(dir, 'resolve-artifacts.mjs')], { cwd: tmpdir(), env: { PATH: process.env.PATH ?? '', SystemRoot: process.env.SystemRoot ?? '' }, encoding: 'utf8' });
     expect(run.status, 'the tampered body, the bad refs and the stray file all fail it').toBe(1);
@@ -176,6 +178,7 @@ describe('the evidence bundle resolver (decision A)', () => {
 
   it('A-6, OFF-HOST: copied into a bundle as resolve-artifacts.mjs, it resolves that bundle in a child process with no database variable and no network', () => {
     const dir = bundleOf([{ id: idOf('DIFF'), body: 'diff' }, { id: idOf('PLAN'), body: 'plan' }]);
+    copyFileSync(join(ROOT, 'scripts', 'julius-admission-run-id.mjs'), join(dir, 'julius-admission-run-id.mjs'));
     copyFileSync(join(ROOT, 'scripts', 'julius-evidence-resolve.mjs'), join(dir, 'resolve-artifacts.mjs'));
     const env = { PATH: process.env.PATH ?? '', SystemRoot: process.env.SystemRoot ?? '' };
     const run = spawnSync(process.execPath, [join(dir, 'resolve-artifacts.mjs'), '--strict'], { cwd: tmpdir(), env, encoding: 'utf8' });
