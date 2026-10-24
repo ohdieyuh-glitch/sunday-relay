@@ -3,7 +3,7 @@ import { dirname, join, resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { checkHostedRunnerDynamicImports, closureOf, envReadAliases, HOSTED_RUNNER_ALLOWED_SPECIFIER, scanSource, type ScanIo } from './julius-dispatch-source-scan';
+import { checkHostedRunnerDynamicImports, closureOf, HOSTED_RUNNER_ALLOWED_SPECIFIER, scanSource, type ScanIo } from './julius-dispatch-source-scan';
 
 /* M3 D3: the wiring source scan must see .js-suffixed specifiers, index files and dynamic import() with a string literal, and a
    non-literal dynamic import in the closure is a failure. The scan itself is under test here, with MUTANTS (the old scan). */
