@@ -23,6 +23,16 @@ function stripComments(src: string): string {
  * Bracket access and a `createRequire` alias are reads, the same as `process.env`.
  * Comment text is ignored. The returned tokens are the patterns that matched.
  */
+const PROVIDER_KEY_ENV_NAMES = ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'XAI_API_KEY'] as const;
+
+/** True when the source reads or writes one of the provider key env names. A bare mention of the name is not a read. */
+export function readsProviderKeyEnv(source: string): boolean {
+  const src = stripComments(source);
+  const names = PROVIDER_KEY_ENV_NAMES.join('|');
+  const re = new RegExp(String.raw`(?:process\s*(?:\.\s*env|\[\s*['"]env['"]\s*\])|(?:\boptions\s*\.\s*)?env)\s*(?:\.\s*|\[\s*['"])(?:${names})\b`, 'u');
+  return re.test(src);
+}
+
 export function envReadAliases(source: string): readonly string[] {
   const src = stripComments(source);
   const hits: string[] = [];

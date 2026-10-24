@@ -133,6 +133,8 @@ const EXCLUDED_FILES = [
 
 /** Kernel dependants that are neither reached nor declared, what kind of file each is, and why it stays out. */
 const KERNEL_DEPENDANT_EXCLUSIONS = [
+  { path: 'relay-bridge/julius-dispatch.ts', category: 'unmounted route', reason: 'the J1 dispatch controller. It imports the spend ceiling so a pre-spend refusal uses that module and no other counter. It is not mounted from server.ts and it is not reached from the live mission root: a live composition refuses before claim, and paid execution stays the gated workflow. Reaching it from julius-live-mission.ts would put the route on the paid import graph.' },
+  { path: 'relay-bridge/julius-dispatch-spend.ts', category: 'unmounted route', reason: 'the J1 pre-spend port. It calls authorizeJuliusLiveSpend and records JuliusSettlementFact rows. It exists so the controller can use the runtime ceiling without becoming part of the live mission composition.' },
   { path: 'src/relay/mission/julius/julius-carry-verify.ts', category: 'off-host evidence tooling', reason: 'the OFF-HOST verifier of Decision C’s four-point carry chain (C-7): it reads two arms’ evidence bundles and re-derives what arm WITH should have carried with the kernel’s own rule, fold, renderer and record. It runs on a reviewer’s machine after a paid pair, never inside a run, and no runtime path imports it' },
   { path: 'src/relay/persistence/julius-event-append-conformance.ts', category: 'conformance cases', reason: 'the event-append contract cases themselves: written once and run by BOTH the in-memory suite and the real-PostgreSQL one, so the two stores cannot drift again. Test support, imported by no root' },
   { path: 'src/relay/persistence/julius-criteria-scope-conformance.ts', category: 'conformance cases', reason: 'the criteria-scope contract cases themselves: a criterion belongs to a RUN, not to the database. Written once and run by BOTH the in-memory store, which was always right, and real PostgreSQL, where a global primary key on criterion_id silently gave every rerun no criteria at all. Test support, imported by no root' },
@@ -288,6 +290,9 @@ const FILE_RULES = [
   // about what it DID spend, and on whose authority. Same subsystem: both are
   // the budget's own arithmetic, and neither is a worker's to state.
   ['src/relay/mission/julius/julius-cost-accounting.ts', 'LEASES / BUDGETS / PERMISSIONS'],
+  // The runtime's own namespace ceilings and the qualifying-pair cap. Same
+  // arithmetic as the cost ledger: a grant, not a worker's claim.
+  ['src/relay/mission/julius/julius-spend-ceiling.ts', 'LEASES / BUDGETS / PERMISSIONS'],
   ['src/relay/mission/julius/julius-recovery.ts', 'RECOVERY / CONTINUATION'],
   ['src/relay/mission/julius/julius-continuation.ts', 'RECOVERY / CONTINUATION'],
   ['src/relay/mission/julius/julius-lease-protocol.ts', 'LEASES / BUDGETS / PERMISSIONS'],
@@ -447,6 +452,9 @@ const FILE_RULES = [
   // live shell port and the provider-free preflight, so both settle the same command.
   ['relay-bridge/julius/shell-settlement.ts', 'TOOLS'],
   ['relay-bridge/julius/live-composition.ts', 'LIVE PROVIDER COMPOSITION'],
+  // The live entry's read of prior runs of this mission, so the pair cap is a
+  // ledger fact. Path-adjacent to the composition that spends.
+  ['relay-bridge/julius/julius-prior-spend.ts', 'LIVE PROVIDER COMPOSITION'],
   // The one place the sealed mission policy and Live Reach's bounded fetch
   // meet, and the service it wraps. Composition, both of them: the domain has
   // no network and the connector may not import `/mission`.
