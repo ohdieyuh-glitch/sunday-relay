@@ -668,8 +668,10 @@ namespace WonderlandCompanionLogic
 	bool IsCompanionTaskId(std::string_view Text) { return HasPrefixedUuid(Text, "cmp_"); }
 	bool IsMessageId(std::string_view Text) { return HasPrefixedUuid(Text, "msg_"); }
 
-	FChatStreamDecoder::FChatStreamDecoder(std::string ExpectedConversationId, bool bReplayResend, std::string ExpectedMessageId)
-		: ExpectedConv(std::move(ExpectedConversationId)), bReplay(bReplayResend), ExpectedMsg(std::move(ExpectedMessageId))
+	FChatStreamDecoder::FChatStreamDecoder(std::string ExpectedProviderId, std::string ExpectedConversationId, bool bReplayResend,
+		std::string ExpectedMessageId)
+		: ExpectedProvider(std::move(ExpectedProviderId)), ExpectedConv(std::move(ExpectedConversationId)), bReplay(bReplayResend),
+		  ExpectedMsg(std::move(ExpectedMessageId))
 	{
 		ConvId = ExpectedConv;
 	}
@@ -734,7 +736,7 @@ namespace WonderlandCompanionLogic
 			const FJsonValue* Model = FindString(Root, "model");
 			const FJsonValue* Simulated = Root.Find("simulated");
 			const FJsonValue* Replayed = Root.Find("replayed");
-			if (Provider == nullptr || Provider->Text != "openai") { Fail(EChatProtocolFault::MetaWrongProvider); return; }
+			if (Provider == nullptr || Provider->Text.empty() || Provider->Text != ExpectedProvider) { Fail(EChatProtocolFault::MetaWrongProvider); return; }
 			if (Mode == nullptr || Mode->Text != "api_key") { Fail(EChatProtocolFault::MetaWrongMode); return; }
 			if (Conv == nullptr || !IsConversationId(Conv->Text)) { Fail(EChatProtocolFault::MetaBadConversationId); return; }
 			if (!ExpectedConv.empty() && Conv->Text != ExpectedConv) { Fail(EChatProtocolFault::ConversationMismatch); return; }
@@ -878,38 +880,6 @@ namespace WonderlandCompanionLogic
 		bOverlong = false;
 	}
 
-	FKeyHandoff::~FKeyHandoff() { Wipe(); }
-
-	FKeyHandoff::FKeyHandoff(FKeyHandoff&& Other) noexcept
-		: MethodName(std::move(Other.MethodName)), Url(std::move(Other.Url)), IdemKey(std::move(Other.IdemKey)),
-		  BodyBytes(std::move(Other.BodyBytes))
-	{
-		Other.Wipe();
-	}
-
-	FKeyHandoff& FKeyHandoff::operator=(FKeyHandoff&& Other) noexcept
-	{
-		if (this != &Other)
-		{
-			Wipe();
-			MethodName = std::move(Other.MethodName);
-			Url = std::move(Other.Url);
-			IdemKey = std::move(Other.IdemKey);
-			BodyBytes = std::move(Other.BodyBytes);
-			Other.Wipe();
-		}
-		return *this;
-	}
-
-	void FKeyHandoff::MarkSent() { Wipe(); }
-
-	void FKeyHandoff::Wipe()
-	{
-		if (!BodyBytes.empty()) { SecureZero(&BodyBytes[0], BodyBytes.size()); }
-		BodyBytes.clear();
-		BodyBytes.shrink_to_fit();
-	}
-
 	/* ---------------------------------------------------------------- history */
 
 	void FTurnHistory::Add(FTurn Turn)
@@ -918,13 +888,226 @@ namespace WonderlandCompanionLogic
 		while (Turns.size() > HistoryMaxTurns) { Turns.pop_front(); }
 	}
 
-	/* ---------------------------------------------------------------- the session */
+	/* ---------------------------------------------------------------- agents (BRIDGE 7e5e1e30: registry.ts, route.ts) */
 
 	namespace
 	{
-		constexpr const char* LineConnect = "Connect your OpenAI key";
+		// 1-64 of [A-Za-z0-9_-]: safe in a query string without escaping.
+		bool IsQuerySafeProjectId(std::string_view Text)
+		{
+			if (Text.empty() || Text.size() > 64) { return false; }
+			for (const char C : Text)
+			{
+				const bool bOk = (C >= 'a' && C <= 'z') || (C >= 'A' && C <= 'Z') || (C >= '0' && C <= '9') || C == '_' || C == '-';
+				if (!bOk) { return false; }
+			}
+			return true;
+		}
+
+		// What String.prototype.trim() removes (ECMAScript WhiteSpace + LineTerminator), for BRIDGE's "non-blank" checks.
+		bool IsJsTrimSpace(char32_t Cp)
+		{
+			return Cp == 0x09 || Cp == 0x0A || Cp == 0x0B || Cp == 0x0C || Cp == 0x0D || Cp == 0x20 || Cp == 0xA0 || Cp == 0x1680
+				|| (Cp >= 0x2000 && Cp <= 0x200A) || Cp == 0x2028 || Cp == 0x2029 || Cp == 0x202F || Cp == 0x205F || Cp == 0x3000
+				|| Cp == 0xFEFF;
+		}
+
+		// Valid UTF-8, 1..MaxUnits UTF-16 units, and not all trim-space: BRIDGE's providerId / displayName rule.
+		bool IsNonBlankText(std::string_view Text, std::size_t MaxUnits)
+		{
+			const std::size_t Units = Utf16Units(Text);
+			if (Units == static_cast<std::size_t>(-1) || Units == 0 || Units > MaxUnits) { return false; }
+			for (std::size_t Pos = 0; Pos < Text.size();)
+			{
+				char32_t Cp = 0;
+				const std::size_t Len = DecodeUtf8(Text, Pos, Cp);
+				if (!IsJsTrimSpace(Cp)) { return true; }
+				Pos += Len;
+			}
+			return false;
+		}
+
+		bool IsTokenChar(char C, bool bAllowDotColon)
+		{
+			if ((C >= 'a' && C <= 'z') || (C >= 'A' && C <= 'Z') || (C >= '0' && C <= '9') || C == '_' || C == '-') { return true; }
+			return bAllowDotColon && (C == '.' || C == ':');
+		}
+
+		bool IsToken(std::string_view Text, std::size_t MaxLen, bool bAllowDotColon)
+		{
+			if (Text.empty() || Text.size() > MaxLen) { return false; }
+			for (const char C : Text)
+			{
+				if (!IsTokenChar(C, bAllowDotColon)) { return false; }
+			}
+			return true;
+		}
+
+		// A capability list: an array of distinct capability words, at most CapabilityListMaxCount.
+		bool ReadCapabilities(const FJsonValue* List, std::vector<std::string>& Out)
+		{
+			Out.clear();
+			if (List == nullptr || List->Kind != FJsonValue::EKind::Array || List->Items.size() > CapabilityListMaxCount) { return false; }
+			for (const FJsonValue& Item : List->Items)
+			{
+				if (!Item.IsString() || !IsCapabilityWord(Item.Text) || HasCapability(Out, Item.Text)) { Out.clear(); return false; }
+				Out.push_back(Item.Text);
+			}
+			return true;
+		}
+
+		bool ConnectionFromWord(std::string_view W, EAgentConnection& Out)
+		{
+			if (W == "connected") { Out = EAgentConnection::Connected; return true; }
+			if (W == "disconnected") { Out = EAgentConnection::Disconnected; return true; }
+			if (W == "unsupported") { Out = EAgentConnection::Unsupported; return true; }
+			if (W == "error") { Out = EAgentConnection::Error; return true; }
+			return false;
+		}
+
+		FAgentSlot FaultSlot(std::string AgentId, EAgentSlotFault Why)
+		{
+			FAgentSlot S;
+			S.Descriptor.AgentId = std::move(AgentId);
+			S.Descriptor.Connection = EAgentConnection::Error;
+			S.Fault = Why;
+			return S;
+		}
+	}
+
+	bool IsAgentId(std::string_view Text) { return HasPrefixedUuid(Text, "agt_"); }
+	bool IsProviderId(std::string_view Text) { return IsNonBlankText(Text, ProviderIdMaxUtf16Units); }
+	bool IsAgentDisplayName(std::string_view Text) { return IsNonBlankText(Text, DisplayNameMaxUtf16Units); }
+	bool IsCapabilityWord(std::string_view Text) { return IsToken(Text, CapabilityMaxBytes, true); }
+
+	bool HasCapability(const std::vector<std::string>& List, std::string_view Capability)
+	{
+		return std::find(List.begin(), List.end(), Capability) != List.end();
+	}
+
+	const char* AgentSlotFaultName(EAgentSlotFault Fault)
+	{
+		switch (Fault)
+		{
+		case EAgentSlotFault::None: return "none";
+		case EAgentSlotFault::NotObject: return "not_object";
+		case EAgentSlotFault::BadAgentId: return "bad_agent_id";
+		case EAgentSlotFault::BadProviderId: return "bad_provider_id";
+		case EAgentSlotFault::BadDisplayName: return "bad_display_name";
+		case EAgentSlotFault::BadKind: return "bad_kind";
+		case EAgentSlotFault::BadAdapterVersion: return "bad_adapter_version";
+		case EAgentSlotFault::BadDeclaredCapabilities: return "bad_declared_capabilities";
+		case EAgentSlotFault::BadAuthorizedCapabilities: return "bad_authorized_capabilities";
+		case EAgentSlotFault::AuthorizedNotDeclared: return "authorized_not_declared";
+		case EAgentSlotFault::BadConnection: return "bad_connection";
+		case EAgentSlotFault::BadVerified: return "bad_verified";
+		case EAgentSlotFault::InconsistentConnection: return "inconsistent_connection";
+		case EAgentSlotFault::DuplicateAgentId: return "duplicate_agent_id";
+		case EAgentSlotFault::TooMany: return "too_many";
+		}
+		return "?";
+	}
+
+	const char* AgentListParseName(EAgentListParse Result)
+	{
+		switch (Result)
+		{
+		case EAgentListParse::Ok: return "ok";
+		case EAgentListParse::Absent: return "absent";
+		case EAgentListParse::NotArray: return "not_array";
+		}
+		return "?";
+	}
+
+	FAgentSlot ParseAgentDescriptor(const FJsonValue& Entry)
+	{
+		if (!Entry.IsObject()) { return FaultSlot(std::string(), EAgentSlotFault::NotObject); }
+		const FJsonValue* Id = FindString(Entry, "agentId");
+		if (Id == nullptr || !IsAgentId(Id->Text)) { return FaultSlot(std::string(), EAgentSlotFault::BadAgentId); }
+		const std::string AgentId = Id->Text;
+		const FJsonValue* Provider = FindString(Entry, "providerId");
+		if (Provider == nullptr || !IsProviderId(Provider->Text)) { return FaultSlot(AgentId, EAgentSlotFault::BadProviderId); }
+		// displayName: string | null (registry.ts:31); BRIDGE publishes no blank string (registry.ts:197).
+		const FJsonValue* Name = Entry.Find("displayName");
+		if (Name == nullptr || !(Name->IsNull() || (Name->IsString() && IsAgentDisplayName(Name->Text)))) { return FaultSlot(AgentId, EAgentSlotFault::BadDisplayName); }
+		const bool bHasName = Name->IsString();
+		// kind: "single" | "compound" | null (registry.ts:32); null reads Unknown (contract:67).
+		const FJsonValue* KindValue = Entry.Find("kind");
+		EAgentKind Kind = EAgentKind::Unknown;
+		if (KindValue != nullptr && KindValue->IsNull()) { Kind = EAgentKind::Unknown; }
+		else if (KindValue != nullptr && KindValue->IsString() && KindValue->Text == "single") { Kind = EAgentKind::Single; }
+		else if (KindValue != nullptr && KindValue->IsString() && KindValue->Text == "compound") { Kind = EAgentKind::Compound; }
+		else { return FaultSlot(AgentId, EAgentSlotFault::BadKind); }
+		// adapterVersion: string | null (registry.ts:33); the 1-64 printable bound is the client's guess (open).
+		const FJsonValue* Version = Entry.Find("adapterVersion");
+		if (Version == nullptr || !(Version->IsNull() || (Version->IsString() && IsPrintableAscii(Version->Text, 1, AdapterVersionMaxBytes))))
+		{
+			return FaultSlot(AgentId, EAgentSlotFault::BadAdapterVersion);
+		}
+		std::vector<std::string> Declared;
+		if (!ReadCapabilities(Entry.Find("declaredCapabilities"), Declared)) { return FaultSlot(AgentId, EAgentSlotFault::BadDeclaredCapabilities); }
+		std::vector<std::string> Authorized;
+		if (!ReadCapabilities(Entry.Find("authorizedCapabilities"), Authorized)) { return FaultSlot(AgentId, EAgentSlotFault::BadAuthorizedCapabilities); }
+		for (const std::string& Cap : Authorized)
+		{
+			if (!HasCapability(Declared, Cap)) { return FaultSlot(AgentId, EAgentSlotFault::AuthorizedNotDeclared); } // A6
+		}
+		const FJsonValue* ConnWord = FindString(Entry, "connection");
+		EAgentConnection Connection = EAgentConnection::Error;
+		if (ConnWord == nullptr || !ConnectionFromWord(ConnWord->Text, Connection)) { return FaultSlot(AgentId, EAgentSlotFault::BadConnection); }
+		// No AgentDescriptor carries "verified" (registry.ts:28-37): any such key is a claim nothing backs.
+		if (Entry.Find("verified") != nullptr) { return FaultSlot(AgentId, EAgentSlotFault::BadVerified); }
+		// publishAgentDescriptor's guarantees (registry.ts:198-212); a descriptor that breaks one is not BRIDGE's.
+		const bool bHidden = Connection == EAgentConnection::Unsupported || Connection == EAgentConnection::Error;
+		if ((Connection == EAgentConnection::Connected && (!bHasName || Kind == EAgentKind::Unknown))
+			|| (bHidden && (Kind != EAgentKind::Unknown || !Declared.empty() || !Authorized.empty()))
+			|| (Connection == EAgentConnection::Unsupported && !Version->IsNull()))
+		{
+			return FaultSlot(AgentId, EAgentSlotFault::InconsistentConnection);
+		}
+		FAgentSlot Out;
+		Out.Descriptor.AgentId = AgentId;
+		Out.Descriptor.ProviderId = Provider->Text;
+		Out.Descriptor.DisplayName = bHasName ? SanitizeUntrustedText(Name->Text) : std::string();
+		Out.Descriptor.Kind = Kind;
+		Out.Descriptor.AdapterVersion = Version->IsNull() ? std::string() : Version->Text;
+		Out.Descriptor.DeclaredCapabilities = std::move(Declared);
+		Out.Descriptor.AuthorizedCapabilities = std::move(Authorized);
+		Out.Descriptor.Connection = Connection;
+		return Out;
+	}
+
+	EAgentListParse ParseAgentList(const FJsonValue& Root, std::vector<FAgentSlot>& Out)
+	{
+		Out.clear();
+		const FJsonValue* List = Root.IsObject() ? Root.Find("agents") : nullptr;
+		if (List == nullptr) { return EAgentListParse::Absent; }
+		if (List->Kind != FJsonValue::EKind::Array) { return EAgentListParse::NotArray; }
+		const std::size_t Count = std::min(List->Items.size(), AgentListMaxEntries);
+		for (std::size_t I = 0; I < Count; ++I) { Out.push_back(ParseAgentDescriptor(List->Items[I])); }
+		if (List->Items.size() > AgentListMaxEntries) { Out.push_back(FaultSlot(std::string(), EAgentSlotFault::TooMany)); }
+		// The same agentId twice: neither entry can be trusted to be "the" agent.
+		for (std::size_t I = 0; I < Out.size(); ++I)
+		{
+			const std::string Id = Out[I].Descriptor.AgentId;
+			if (Id.empty()) { continue; }
+			bool bDup = false;
+			for (std::size_t J = 0; J < Out.size(); ++J)
+			{
+				if (J != I && Out[J].Descriptor.AgentId == Id) { bDup = true; }
+			}
+			if (bDup) { Out[I] = FaultSlot(Id, EAgentSlotFault::DuplicateAgentId); }
+		}
+		return EAgentListParse::Ok;
+	}
+
+	/* ---------------------------------------------------------------- the session: an agent registry */
+
+	namespace
+	{
+		constexpr const char* LineConnect = "Connect your agent";
 		constexpr const char* LineRejected = "Your key was rejected";
-		constexpr const char* LineOutOfCredit = "Your OpenAI account is out of credit";
+		constexpr const char* LineOutOfCredit = "Your provider account is out of credit";
 		constexpr const char* LineRetryLater = "Retry later";
 		constexpr const char* LineSlowDown = "Slow down";
 		constexpr const char* LineRefused = "The provider refused this message";
@@ -932,48 +1115,40 @@ namespace WonderlandCompanionLogic
 		constexpr const char* LineError = "Companion error";
 		constexpr const char* LineTooLong = "Message too long";
 		constexpr const char* LineNotLoopback = "Companion relay must be on this machine";
-		constexpr const char* LineProvidersUnknown = "Companion unavailable";
-		constexpr const char* LineModeUnavailable = "Key connection is not available";
 		constexpr const char* LineConnecting = "Connecting";
-		constexpr const char* LineConnFailed = "Could not connect the key";
-		constexpr const char* LineConnError = "Connection error; reconnect your OpenAI key";
+		constexpr const char* LineConnFailed = "Could not connect the agent";
+		constexpr const char* LineConnError = "Connection error; reconnect your agent";
+		constexpr const char* LineUnsupported = "This agent is not supported yet";
+		constexpr const char* LineNotAuthorized = "This agent has not authorized chat";
+		constexpr const char* LineChatNotServed = "Chat with agents is not available on this relay yet";
+		constexpr const char* LineNoProject = "Companion needs a paired project";
+		constexpr const char* LineUnreadable = "Agent details could not be read";
+		constexpr const char* LineIdentityChanged = "Agent identity changed; this agent is not used";
 		constexpr const char* LineLengthLimit = "The reply reached the length limit";
 		constexpr const char* LineNoRandom = "Secure random unavailable; try again";
-		constexpr const char* LineDeliveryFailed = "Companion delivery failed";
 		constexpr std::size_t TraceMaxLines = 256;
 
-		bool IsConnState(std::string_view S)
+		const char* ConnectionWord(EAgentConnection C)
 		{
-			return S == "not_connected" || S == "connected_unverified" || S == "connected" || S == "invalid" || S == "revoked"
-				|| S == "pending_authorization" || S == "error";
-		}
-
-		bool IsDisplayLabel(std::string_view Text)
-		{
-			if (Text.empty() || Text.size() > ProviderLabelMaxBytes || !IsValidUtf8(Text)) { return false; }
-			return SanitizeUntrustedText(Text) == Text && Text.find('\n') == std::string_view::npos && Text.find('\t') == std::string_view::npos;
-		}
-
-		// Q15: lastErrorKind -> its 2.3 text; nullptr for null or a word outside the closed set (never the raw word).
-		const char* LastErrorLineFor(std::string_view Kind)
-		{
-			if (Kind == "provider_auth_failed") { return LineRejected; }
-			if (Kind == "provider_quota_exhausted") { return LineOutOfCredit; }
-			if (Kind == "provider_rate_limited" || Kind == "provider_unavailable") { return LineRetryLater; }
-			if (Kind == "provider_refused") { return LineRefused; }
-			if (Kind == "companion_internal") { return LineError; }
-			if (Kind == "delivery_failed") { return LineDeliveryFailed; }
-			return nullptr;
+			switch (C)
+			{
+			case EAgentConnection::Connected: return "connected";
+			case EAgentConnection::Disconnected: return "disconnected";
+			case EAgentConnection::Unsupported: return "unsupported";
+			case EAgentConnection::Error: return "error";
+			}
+			return "error";
 		}
 	}
 
-	FOpenAiCompanionSession::FOpenAiCompanionSession(std::string RelayOrigin)
-		: Origin(std::move(RelayOrigin)), bOriginOk(IsLoopbackRelayOrigin(Origin))
+	FCompanionSession::FCompanionSession(std::string RelayOrigin, std::string ProjectId, bool bChatRouteServed)
+		: Origin(std::move(RelayOrigin)), bOriginOk(IsLoopbackRelayOrigin(Origin)), Project(std::move(ProjectId)),
+		  bProjectOk(IsQuerySafeProjectId(Project)), bChatServed(bChatRouteServed)
 	{
-		Recompute();
+		RecomputeSession();
 	}
 
-	std::string FOpenAiCompanionSession::Url(std::string_view Path) const
+	std::string FCompanionSession::Url(std::string_view Path) const
 	{
 		std::string Out = Origin;
 		Out += RelayBasePath;
@@ -981,334 +1156,390 @@ namespace WonderlandCompanionLogic
 		return Out;
 	}
 
-	void FOpenAiCompanionSession::Note(std::string Word)
+	std::string FCompanionSession::AgentUrl(const FAgent& A, std::string_view Suffix) const
+	{
+		// The provider never appears in a URL: only the agentId (IsAgentId: agt_ + UUID, path-segment safe).
+		std::string Out = Url(AgentsPath);
+		Out += '/';
+		Out += A.Descriptor.AgentId;
+		Out += Suffix;
+		Out += "?projectId="; // the dispatch guard needs it on every route (admission-route.ts:288)
+		Out += Project;
+		return Out;
+	}
+
+	void FCompanionSession::Note(std::string Word)
 	{
 		if (TraceLines.size() >= TraceMaxLines) { TraceLines.erase(TraceLines.begin()); }
 		TraceLines.push_back(std::move(Word));
 	}
 
-	void FOpenAiCompanionSession::SetError(const char* Line, const char* TraceWord)
+	void FCompanionSession::SetError(FAgent& A, const char* Line, const char* TraceWord)
 	{
-		Transient = ECompanionState::Error;
-		TransientLine = Line;
+		A.Transient = ECompanionState::Error;
+		A.TransientLine = Line;
 		Note(TraceWord);
 	}
 
-	FRelayRequest FOpenAiCompanionSession::ProvidersRequest() const
+	FCompanionSession::FAgent* FCompanionSession::Find(std::string_view AgentId)
 	{
-		FRelayRequest Out;
-		if (bOriginOk)
+		for (const std::unique_ptr<FAgent>& A : Agents)
 		{
-			Out.Method = "GET";
-			Out.Url = Url("/companions/providers");
+			if (!AgentId.empty() && A->Descriptor.AgentId == AgentId) { return A.get(); }
 		}
-		return Out;
+		return nullptr;
 	}
 
-	void FOpenAiCompanionSession::ApplyProvidersAnswer(int HttpStatus, std::string_view Body)
+	const FCompanionSession::FAgent* FCompanionSession::Find(std::string_view AgentId) const
 	{
-		bProvidersOk = false;
-		bApiKeyModeAvailable = false;
-		Labels.clear();
-		FJsonValue Root;
-		const FJsonValue* List = nullptr;
-		if (HttpStatus == 200 && Body.size() <= ListMaxBodyBytes && ParseJson(Body, Root) && Root.IsObject())
+		for (const std::unique_ptr<FAgent>& A : Agents)
 		{
-			List = Root.Find("providers");
+			if (!AgentId.empty() && A->Descriptor.AgentId == AgentId) { return A.get(); }
 		}
-		if (List == nullptr || List->Kind != FJsonValue::EKind::Array)
-		{
-			Note("providers_refused");
-			Recompute();
-			return;
-		}
-		std::vector<std::pair<std::string, std::vector<std::pair<std::string, std::string>>>> NewLabels;
-		bool bOpenAiApiKey = false;
-		for (const FJsonValue& Entry : List->Items)
-		{
-			// Q10: "labels" has one label per mode in "modes"; the deprecated "label" is never read.
-			const FJsonValue* Provider = Entry.IsObject() ? FindString(Entry, "provider") : nullptr;
-			const FJsonValue* Modes = Entry.IsObject() ? Entry.Find("modes") : nullptr;
-			const FJsonValue* LabelMap = Entry.IsObject() ? Entry.Find("labels") : nullptr;
-			const FJsonValue* Avail = Entry.IsObject() ? Entry.Find("modeAvailability") : nullptr;
-			bool bEntryOk = Provider != nullptr && IsSnakeKind(Provider->Text) && Modes != nullptr && Modes->Kind == FJsonValue::EKind::Array
-				&& !Modes->Items.empty() && LabelMap != nullptr && LabelMap->IsObject() && Avail != nullptr && Avail->IsObject();
-			std::vector<std::pair<std::string, std::string>> ModeLabels;
-			for (std::size_t I = 0; bEntryOk && I < Modes->Items.size(); ++I)
-			{
-				const FJsonValue& Mode = Modes->Items[I];
-				const FJsonValue* ModeLabel = Mode.IsString() ? FindString(*LabelMap, Mode.Text) : nullptr;
-				bEntryOk = Mode.IsString() && IsSnakeKind(Mode.Text) && ModeLabel != nullptr && IsDisplayLabel(ModeLabel->Text);
-				for (const auto& Seen : ModeLabels)
-				{
-					if (bEntryOk && Seen.first == Mode.Text) { bEntryOk = false; } // a mode listed twice
-				}
-				if (bEntryOk) { ModeLabels.emplace_back(Mode.Text, ModeLabel->Text); }
-			}
-			if (!bEntryOk)
-			{
-				Note("providers_refused");
-				Recompute();
-				return; // one malformed entry: the whole list is untrusted
-			}
-			for (const auto& Known : NewLabels)
-			{
-				if (Known.first == Provider->Text)
-				{
-					Note("providers_refused");
-					Recompute();
-					return;
-				}
-			}
-			NewLabels.emplace_back(Provider->Text, std::move(ModeLabels));
-			if (Provider->Text == "openai")
-			{
-				const FJsonValue* ApiKey = FindString(*Avail, "api_key");
-				bOpenAiApiKey = ApiKey != nullptr && ApiKey->Text == "available";
-			}
-		}
-		Labels = std::move(NewLabels);
-		bProvidersOk = !LabelFor("openai", "api_key").empty();
-		bApiKeyModeAvailable = bProvidersOk && bOpenAiApiKey;
-		Note(bProvidersOk ? "providers_ok" : "providers_no_openai");
-		Recompute();
+		return nullptr;
 	}
 
-	std::string FOpenAiCompanionSession::LabelFor(std::string_view Provider, std::string_view Mode) const
+	FCompanionSession::FAgent* FCompanionSession::FindOrAdd(const std::string& AgentId)
 	{
-		for (const auto& Entry : Labels)
-		{
-			if (Entry.first != Provider) { continue; }
-			for (const auto& ModeLabel : Entry.second)
-			{
-				if (ModeLabel.first == Mode) { return ModeLabel.second; }
-			}
-		}
-		return std::string();
+		if (FAgent* Known = Find(AgentId)) { return Known; }
+		if (Agents.size() >= AgentRegistryMaxSlots) { return nullptr; }
+		Agents.push_back(std::make_unique<FAgent>());
+		Agents.back()->Descriptor.AgentId = AgentId;
+		return Agents.back().get();
 	}
 
-	FRelayRequest FOpenAiCompanionSession::ConnectionsRequest() const
+	bool FCompanionSession::ApplySlot(FAgent& A, const FAgentSlot& Slot)
 	{
-		FRelayRequest Out;
-		if (bOriginOk)
+		if (Slot.Fault != EAgentSlotFault::None)
 		{
-			Out.Method = "GET";
-			Out.Url = Url("/companions/connections");
+			// Fail closed for THIS agent only: no capabilities, no chat. Its identity (providerId) is kept.
+			A.Fault = Slot.Fault;
+			A.Descriptor.DeclaredCapabilities.clear();
+			A.Descriptor.AuthorizedCapabilities.clear();
+			A.Descriptor.Connection = EAgentConnection::Error;
+			Note(std::string("agent_slot_") + AgentSlotFaultName(Slot.Fault));
+			return true;
 		}
-		return Out;
-	}
-
-	void FOpenAiCompanionSession::ApplyConnectionsAnswer(int HttpStatus, std::string_view Body)
-	{
-		FJsonValue Root;
-		const FJsonValue* List = nullptr;
-		if (HttpStatus == 200 && Body.size() <= ListMaxBodyBytes && ParseJson(Body, Root) && Root.IsObject())
+		if (!A.Descriptor.ProviderId.empty() && Slot.Descriptor.ProviderId != A.Descriptor.ProviderId)
 		{
-			List = Root.Find("connections");
-		}
-		if (List == nullptr || List->Kind != FJsonValue::EKind::Array)
-		{
-			ConnState.clear(); // unknown: not a real connection
-			Note("connections_refused");
-			Recompute();
-			return;
-		}
-		std::string Found;
-		const char* FoundErrorLine = nullptr;
-		for (const FJsonValue& Entry : List->Items)
-		{
-			const FJsonValue* Provider = Entry.IsObject() ? FindString(Entry, "provider") : nullptr;
-			if (Provider == nullptr || Provider->Text != "openai") { continue; }
-			const FJsonValue* Mode = FindString(Entry, "mode");
-			const FJsonValue* State = FindString(Entry, "state");
-			const FJsonValue* LastError = Entry.Find("lastErrorKind");
-			if (LastError != nullptr && !LastError->IsNull())
-			{
-				// Q15: display-only; a word outside the closed set (or a non-string) is null, logged, never a fault.
-				FoundErrorLine = LastError->IsString() ? LastErrorLineFor(LastError->Text) : nullptr;
-				if (FoundErrorLine == nullptr) { Note("connections_last_error_unknown"); }
-			}
-			if (!Found.empty() || State == nullptr || !IsConnState(State->Text))
-			{
-				Found = "error"; // duplicate or unknown state word: fail closed
-				break;
-			}
-			// v0 chat is api_key mode only; any other mode is not a usable connection for this terminal.
-			const bool bApiKey = Mode != nullptr && Mode->Text == "api_key";
-			Found = (bApiKey || State->Text == "not_connected") ? State->Text : std::string("not_connected");
-		}
-		ConnState = Found.empty() ? std::string("not_connected") : Found;
-		LastErrorLine = Found == "error" ? nullptr : FoundErrorLine;
-		Note("connections_" + ConnState);
-		Recompute();
-	}
-
-	bool FOpenAiCompanionSession::BeginConnect(FMaskedKeyField& Field, std::string_view IdempotencyKey, FKeyHandoff& Out)
-	{
-		struct FWipeOnExit
-		{
-			FMaskedKeyField& F;
-			~FWipeOnExit() { F.Wipe(); }
-		} WipeOnExit{Field};
-
-		Out.Wipe();
-		Out.MethodName.clear();
-		Out.Url.clear();
-		Out.IdemKey.clear();
-		const bool bKeyFresh = std::find(UsedKeys.begin(), UsedKeys.end(), IdempotencyKey) == UsedKeys.end();
-		if (!bOriginOk || !bProvidersOk || !bApiKeyModeAvailable || bConnecting || bStreaming
-			|| !WonderlandJuliusMissionLogic::IsCanonicalUuidV4(IdempotencyKey) || !bKeyFresh || Field.bOverlong)
-		{
-			Note("connect_refused");
-			Recompute();
+			A.bIdentityChanged = true; // the same agentId now claims another provider: never the player's agent
+			Note("agent_identity_changed");
 			return false;
 		}
-		std::size_t Begin = 0;
-		std::size_t End = Field.Length;
-		const auto IsSpace = [](char C) { return C == ' ' || C == '\t' || C == '\r' || C == '\n'; };
-		while (Begin < End && IsSpace(Field.Buffer[Begin])) { ++Begin; }
-		while (End > Begin && IsSpace(Field.Buffer[End - 1])) { --End; }
-		if (Begin == End)
-		{
-			Note("connect_refused");
-			Recompute();
-			return false;
-		}
-		for (std::size_t I = Begin; I < End; ++I)
-		{
-			const char C = Field.Buffer[I];
-			if (C < 0x21 || C > 0x7E)
-			{
-				Note("connect_refused");
-				Recompute();
-				return false;
-			}
-		}
-		static constexpr std::string_view Head = "{\"mode\":\"api_key\",\"apiKey\":\"";
-		static constexpr std::string_view Tail = "\"}";
-		// Reserved once so the key bytes are never left behind in a reallocated buffer.
-		Out.BodyBytes.reserve(Head.size() + 2 * (End - Begin) + Tail.size());
-		Out.BodyBytes.append(Head);
-		for (std::size_t I = Begin; I < End; ++I)
-		{
-			const char C = Field.Buffer[I];
-			if (C == '"' || C == '\\') { Out.BodyBytes.push_back('\\'); }
-			Out.BodyBytes.push_back(C);
-		}
-		Out.BodyBytes.append(Tail);
-		Out.MethodName = "PUT";
-		Out.Url = Url("/companions/connections/openai");
-		Out.IdemKey.assign(IdempotencyKey);
-		UsedKeys.emplace_back(IdempotencyKey);
-		bConnecting = true;
-		ConnectNotice = nullptr;
-		Note("connect_begin");
-		Recompute();
+		A.Fault = EAgentSlotFault::None;
+		A.Descriptor = Slot.Descriptor;
+		Note(std::string("agent_") + ConnectionWord(Slot.Descriptor.Connection));
 		return true;
 	}
 
-	void FOpenAiCompanionSession::ApplyConnectAnswer(int HttpStatus, std::string_view Body, std::uint64_t NowMs)
+	void FCompanionSession::ApplyAgentSlots(const std::vector<FAgentSlot>& Slots)
+	{
+		UnreadableSlots = 0;
+		for (const FAgentSlot& Slot : Slots)
+		{
+			if (Slot.Descriptor.AgentId.empty())
+			{
+				++UnreadableSlots;
+				Note(std::string("agent_slot_unreadable_") + AgentSlotFaultName(Slot.Fault));
+				continue;
+			}
+			FAgent* A = FindOrAdd(Slot.Descriptor.AgentId);
+			if (A == nullptr)
+			{
+				++UnreadableSlots;
+				Note("agent_registry_full");
+				continue;
+			}
+			ApplySlot(*A, Slot);
+			Recompute(*A);
+		}
+		RecomputeSession();
+	}
+
+	std::vector<std::string> FCompanionSession::AgentIds() const
+	{
+		std::vector<std::string> Out;
+		for (const std::unique_ptr<FAgent>& A : Agents) { Out.push_back(A->Descriptor.AgentId); }
+		return Out;
+	}
+
+	const FAgentView* FCompanionSession::View(std::string_view AgentId) const
+	{
+		const FAgent* A = Find(AgentId);
+		return A != nullptr ? &A->View : nullptr;
+	}
+
+	std::string FCompanionSession::ProviderIdOf(std::string_view AgentId) const
+	{
+		const FAgent* A = Find(AgentId);
+		return A != nullptr ? A->Descriptor.ProviderId : std::string();
+	}
+
+	const FTurnHistory* FCompanionSession::History(std::string_view AgentId) const
+	{
+		const FAgent* A = Find(AgentId);
+		return A != nullptr ? &A->Turns : nullptr;
+	}
+
+	std::string FCompanionSession::ConversationId(std::string_view AgentId) const
+	{
+		const FAgent* A = Find(AgentId);
+		return A != nullptr ? A->ConvId : std::string();
+	}
+
+	bool FCompanionSession::BeginConnect(std::string_view ProviderId, std::string_view WljRunId, std::string_view DisplayLabel, FRelayRequest& Out)
+	{
+		Out = FRelayRequest();
+		const bool bRunOk = WljRunId.empty() || WonderlandJuliusMissionLogic::IsClientMintedRunId(WljRunId);
+		const bool bLabelOk = DisplayLabel.empty() || IsAgentDisplayName(DisplayLabel);
+		if (!bOriginOk || !bProjectOk || bConnecting || !IsProviderId(ProviderId) || !bRunOk || !bLabelOk)
+		{
+			Note("connect_refused");
+			RecomputeSession();
+			return false;
+		}
+		// route.ts:288-311, contract:113-125: {providerId[, wljRunId][, displayName]}. No credential field of any kind:
+		// the route refuses apiKey / token / password at any depth (route.ts:58,367-375) and nothing else carries a key.
+		// No idempotency key: the route reads none and every POST mints a new slot (registry.ts:246); never resent.
+		std::string Body = "{\"providerId\":";
+		AppendJsonString(Body, ProviderId);
+		if (!WljRunId.empty())
+		{
+			Body += ",\"wljRunId\":";
+			AppendJsonString(Body, WljRunId);
+		}
+		if (!DisplayLabel.empty())
+		{
+			Body += ",\"displayName\":";
+			AppendJsonString(Body, DisplayLabel);
+		}
+		Body += "}";
+		Out.Method = "POST";
+		Out.Url = Url(AgentsPath) + "?projectId=" + Project;
+		Out.Body = std::move(Body);
+		bConnecting = true;
+		ConnectingProviderId.assign(ProviderId);
+		Notice = nullptr;
+		Note("connect_begin");
+		RecomputeSession();
+		return true;
+	}
+
+	namespace
+	{
+		bool EqualsAsciiNoCase(std::string_view A, std::string_view B)
+		{
+			if (A.size() != B.size()) { return false; }
+			for (std::size_t I = 0; I < A.size(); ++I)
+			{
+				const char X = (A[I] >= 'A' && A[I] <= 'Z') ? static_cast<char>(A[I] + 32) : A[I];
+				if (X != B[I]) { return false; }
+			}
+			return true;
+		}
+
+		// BRIDGE's containsCredentialField (route.ts:58,367-375): /^(apikey|token|password)$/i at any depth, plus the
+		// client's own key / hint / last-4 words (contract 1.2). The names are lower case; the match folds ASCII case.
+		bool HasCredentialKey(const FJsonValue& Value)
+		{
+			static constexpr std::string_view Forbidden[] = {"apikey", "token", "password", "key", "keyhint", "last4", "apikeylast4", "hint", "secret"};
+			for (const FJsonValue& Item : Value.Items)
+			{
+				if (HasCredentialKey(Item)) { return true; }
+			}
+			for (const std::pair<std::string, FJsonValue>& Member : Value.Members)
+			{
+				for (const std::string_view Name : Forbidden)
+				{
+					if (EqualsAsciiNoCase(Member.first, Name)) { return true; }
+				}
+				if (HasCredentialKey(Member.second)) { return true; }
+			}
+			return false;
+		}
+
+		// One AgentDescriptor answer body (connect 201, GET 200, DELETE 200). Not JSON, not an object, too large, or
+		// carrying a key / hint / credential name anywhere: a NotObject slot with no agentId.
+		FAgentSlot DescriptorFromBody(std::string_view Body)
+		{
+			FJsonValue Root;
+			if (Body.size() > ListMaxBodyBytes || !ParseJson(Body, Root) || !Root.IsObject()) { return FaultSlot(std::string(), EAgentSlotFault::NotObject); }
+			if (HasCredentialKey(Root)) { return FaultSlot(std::string(), EAgentSlotFault::NotObject); }
+			return ParseAgentDescriptor(Root);
+		}
+
+		// An answer to a per-agent route must describe THAT agent; anything else is a fault slot for it.
+		FAgentSlot ForAgent(const FAgentSlot& Slot, const std::string& AgentId)
+		{
+			if (Slot.Descriptor.AgentId == AgentId) { return Slot; }
+			return FaultSlot(AgentId, Slot.Fault == EAgentSlotFault::None ? EAgentSlotFault::BadAgentId : Slot.Fault);
+		}
+	}
+
+	void FCompanionSession::ApplyConnectAnswer(int HttpStatus, std::string_view Body, std::uint64_t NowMs)
 	{
 		(void)NowMs;
 		if (!bConnecting) { Note("connect_answer_unexpected"); return; }
 		bConnecting = false;
-		if (HttpStatus == 200)
+		const std::string Requested = std::move(ConnectingProviderId);
+		ConnectingProviderId.clear();
+		if (HttpStatus == 201) // route.ts:319: 201 and one AgentDescriptor; nothing else is a success
 		{
-			FJsonValue Root;
-			bool bOk = Body.size() <= ListMaxBodyBytes && ParseJson(Body, Root) && Root.IsObject();
-			if (bOk)
+			const FAgentSlot Slot = DescriptorFromBody(Body);
+			if (Slot.Fault != EAgentSlotFault::None)
 			{
-				// Contract 1.2: the answer carries no key, key hint or last-4. One that does is refused outright.
-				static constexpr std::string_view Forbidden[] = {"apiKey", "key", "keyHint", "last4", "apiKeyLast4", "hint", "secret"};
-				for (const std::string_view Name : Forbidden)
-				{
-					if (Root.Find(Name) != nullptr) { bOk = false; }
-				}
-			}
-			const FJsonValue* Provider = bOk ? FindString(Root, "provider") : nullptr;
-			const FJsonValue* Mode = bOk ? FindString(Root, "mode") : nullptr;
-			const FJsonValue* State = bOk ? FindString(Root, "state") : nullptr;
-			// Q14: connectedAt is always a UTC instant; verifiedAt is one for "connected" and null for "connected_unverified".
-			const FJsonValue* ConnectedAt = bOk ? FindString(Root, "connectedAt") : nullptr;
-			const FJsonValue* VerifiedAt = bOk ? Root.Find("verifiedAt") : nullptr;
-			std::uint64_t AtMs = 0;
-			const bool bConnectedAtOk = ConnectedAt != nullptr && WonderlandJuliusMissionLogic::ParseBridgeUtcTimestampMs(ConnectedAt->Text, AtMs);
-			const bool bVerifiedUtc = VerifiedAt != nullptr && VerifiedAt->IsString()
-				&& WonderlandJuliusMissionLogic::ParseBridgeUtcTimestampMs(VerifiedAt->Text, AtMs);
-			const bool bVerifiedNull = VerifiedAt != nullptr && VerifiedAt->IsNull();
-			if (Provider != nullptr && Provider->Text == "openai" && Mode != nullptr && Mode->Text == "api_key" && State != nullptr
-				&& bConnectedAtOk && ((State->Text == "connected" && bVerifiedUtc) || (State->Text == "connected_unverified" && bVerifiedNull)))
-			{
-				ConnState = State->Text;
-				bKeyRejected = false; // Q12: the only place the sticky rejection is cleared
-				LastErrorLine = nullptr;
-				Transient = ECompanionState::Ready;
-				TransientLine = nullptr;
-				Refusal.clear();
-				Note("connect_ok");
-				Recompute();
+				Notice = LineConnFailed;
+				Note("connect_answer_refused");
+				RecomputeSession();
 				return;
 			}
-			ConnectNotice = LineConnFailed;
-			Note("connect_answer_refused");
-			Recompute();
+			if (Slot.Descriptor.ProviderId != Requested)
+			{
+				Notice = LineConnFailed; // the server answered for another provider; never shown as the player's agent
+				Note("connect_answer_provider_mismatch");
+				RecomputeSession();
+				return;
+			}
+			FAgent* A = FindOrAdd(Slot.Descriptor.AgentId);
+			if (A == nullptr)
+			{
+				Notice = LineConnFailed;
+				Note("agent_registry_full");
+				RecomputeSession();
+				return;
+			}
+			if (!ApplySlot(*A, Slot))
+			{
+				Notice = LineConnFailed;
+				Recompute(*A);
+				RecomputeSession();
+				return;
+			}
+			LastConnected = A->Descriptor.AgentId;
+			switch (Slot.Descriptor.Connection)
+			{
+			case EAgentConnection::Connected:
+				A->bKeyRejected = false; // Q12: the only place an agent's sticky rejection is cleared
+				A->Transient = ECompanionState::Ready;
+				A->TransientLine = nullptr;
+				A->Refusal.clear();
+				Notice = nullptr;
+				Note("connect_ok");
+				break;
+			case EAgentConnection::Unsupported:
+				Notice = LineUnsupported; // an unknown provider is an unsupported slot, never a fault
+				Note("connect_unsupported");
+				break;
+			case EAgentConnection::Disconnected:
+			case EAgentConnection::Error:
+				Notice = LineConnFailed;
+				Note("connect_not_connected");
+				break;
+			}
+			Recompute(*A);
+			RecomputeSession();
 			return;
 		}
-		const std::string Kind = ErrorKindOf(Body);
-		if (HttpStatus == 403 && (Kind == "companion_mode_not_eligible" || Kind == "companion_provider_not_in_v0"))
-		{
-			bApiKeyModeAvailable = false;
-			ConnectNotice = nullptr;
-		}
-		else if (HttpStatus == 422 && Kind == "companion_credential_rejected")
-		{
-			ConnectNotice = LineRejected; // Q14: not stored; the previous connection (and its state) is unchanged
-		}
-		else if (HttpStatus == 429) { ConnectNotice = LineSlowDown; }
-		else if (HttpStatus == 503) { ConnectNotice = LineRetryLater; }
-		else { ConnectNotice = LineConnFailed; }
+		// 503: julius_dispatch_unavailable / _disabled / _not_configured (route.ts:315; admission-route.ts:262-281).
+		// Everything else (400 companion_request_invalid / companion_credentials_rejected / julius_dispatch_run_invalid,
+		// 401 sign_in_required, 403 guard kinds, 405) leaves every agent as it was.
+		Notice = HttpStatus == 503 ? LineRetryLater : LineConnFailed;
 		Note("connect_failed");
-		Recompute();
+		RecomputeSession();
 	}
 
-	FRelayRequest FOpenAiCompanionSession::BeginDisconnect()
+	FRelayRequest FCompanionSession::BeginReadAgent(std::string_view AgentId)
 	{
 		FRelayRequest Out;
-		if (!bOriginOk || bStreaming || bConnecting)
+		const FAgent* A = Find(AgentId);
+		if (!bOriginOk || !bProjectOk || A == nullptr)
+		{
+			Note("agent_read_refused");
+			return Out;
+		}
+		Out.Method = "GET"; // route.ts:325-337
+		Out.Url = AgentUrl(*A, std::string_view());
+		Note("agent_read_begin");
+		return Out;
+	}
+
+	void FCompanionSession::ApplyReadAgentAnswer(std::string_view AgentId, int HttpStatus, std::string_view Body)
+	{
+		FAgent* A = Find(AgentId);
+		if (A == nullptr) { Note("agent_read_unexpected"); return; }
+		if (HttpStatus == 200) { ApplySlot(*A, ForAgent(DescriptorFromBody(Body), A->Descriptor.AgentId)); }
+		else if (HttpStatus == 404) // route.ts:269,330: no such slot here
+		{
+			ForceDisconnected(*A);
+			Note("agent_read_not_found");
+		}
+		else { Note("agent_read_failed"); }
+		Recompute(*A);
+		RecomputeSession();
+	}
+
+	void FCompanionSession::ForceDisconnected(FAgent& A)
+	{
+		A.Descriptor.Connection = EAgentConnection::Disconnected; // Q12: bKeyRejected stays
+		A.Descriptor.AuthorizedCapabilities.clear();
+		A.Transient = ECompanionState::Ready;
+		A.TransientLine = nullptr;
+		A.Refusal.clear();
+		A.bResendAllowed = false;
+	}
+
+	FRelayRequest FCompanionSession::BeginDisconnect(std::string_view AgentId)
+	{
+		FRelayRequest Out;
+		const FAgent* A = Find(AgentId);
+		if (!bOriginOk || !bProjectOk || A == nullptr || A->bStreaming)
 		{
 			Note("disconnect_refused");
 			return Out;
 		}
-		Out.Method = "DELETE";
-		Out.Url = Url("/companions/connections/openai");
+		Out.Method = "DELETE"; // Q13: no idempotency key, no body
+		Out.Url = AgentUrl(*A, std::string_view());
 		Note("disconnect_begin");
 		return Out;
 	}
 
-	void FOpenAiCompanionSession::ApplyDisconnectAnswer(int HttpStatus)
+	void FCompanionSession::ApplyDisconnectAnswer(std::string_view AgentId, int HttpStatus, std::string_view Body)
 	{
-		if (HttpStatus == 204)
+		FAgent* A = Find(AgentId);
+		if (A == nullptr) { Note("disconnect_answer_unexpected"); return; }
+		if (HttpStatus == 200) // route.ts:347: 200 + the descriptor, connection "disconnected" for good (registry.ts:233,272-283)
 		{
-			ConnState = "not_connected"; // Q12: bKeyRejected stays: only a successful PUT clears it
-			LastErrorLine = nullptr;
-			Transient = ECompanionState::Ready;
-			TransientLine = nullptr;
-			Refusal.clear();
-			bResendAllowed = false;
-			ConnectNotice = nullptr;
-			Note("disconnect_ok");
+			const FAgentSlot Slot = ForAgent(DescriptorFromBody(Body), A->Descriptor.AgentId);
+			const bool bGood = Slot.Fault == EAgentSlotFault::None && Slot.Descriptor.Connection == EAgentConnection::Disconnected && ApplySlot(*A, Slot);
+			// The DELETE happened either way: the agent is disconnected; an odd answer is only noted.
+			ForceDisconnected(*A);
+			Notice = nullptr;
+			Note(bGood ? "disconnect_ok" : "disconnect_answer_refused");
+		}
+		else if (HttpStatus == 404) // route.ts:345: no such slot; nothing to use
+		{
+			ForceDisconnected(*A);
+			Note("disconnect_not_found");
 		}
 		else
 		{
 			Note("disconnect_failed");
 		}
-		Recompute();
+		Recompute(*A);
+		RecomputeSession();
 	}
 
-	void FOpenAiCompanionSession::ApplyKeyMintFailure()
+	void FCompanionSession::ApplyKeyMintFailure(std::string_view AgentId)
 	{
-		SetError(LineNoRandom, "key_mint_failed"); // nothing was sent; no fallback key
-		Recompute();
+		Notice = LineNoRandom; // nothing was sent; no fallback key
+		Note("key_mint_failed");
+		if (FAgent* A = Find(AgentId))
+		{
+			A->Transient = ECompanionState::Error;
+			A->TransientLine = LineNoRandom;
+			Recompute(*A);
+		}
+		RecomputeSession();
 	}
 
 	namespace
@@ -1327,254 +1558,265 @@ namespace WonderlandCompanionLogic
 		}
 	}
 
-	bool FOpenAiCompanionSession::BeginMessage(std::string_view Message, std::string_view IdempotencyKey, std::string_view WljRunId,
-		std::uint64_t NowMs, FRelayRequest& Out)
+	bool FCompanionSession::BeginMessage(std::string_view AgentId, std::string_view Message, std::string_view IdempotencyKey,
+		std::string_view WljRunId, std::uint64_t NowMs, FRelayRequest& Out)
 	{
 		Out = FRelayRequest();
+		FAgent* A = Find(AgentId);
 		const bool bKeyFresh = std::find(UsedKeys.begin(), UsedKeys.end(), IdempotencyKey) == UsedKeys.end();
 		const std::size_t Units = Utf16Units(Message);
 		const bool bRunOk = WljRunId.empty() || WonderlandJuliusMissionLogic::IsClientMintedRunId(WljRunId);
-		if (!ViewState.bCanSend || NowMs < RetryNotBefore || !WonderlandJuliusMissionLogic::IsCanonicalUuidV4(IdempotencyKey)
+		if (A == nullptr || !A->View.bCanSend || NowMs < A->RetryNotBefore || !WonderlandJuliusMissionLogic::IsCanonicalUuidV4(IdempotencyKey)
 			|| !bKeyFresh || Message.empty() || Units == static_cast<std::size_t>(-1) || Units > ChatMaxMessageUtf16Units || !bRunOk)
 		{
 			Note("chat_refused");
 			return false;
 		}
 		UsedKeys.emplace_back(IdempotencyKey);
-		PendingMessage.assign(Message);
-		PendingKey.assign(IdempotencyKey);
-		PendingRunId.assign(WljRunId);
-		PendingConvSent = ConvId;
-		PendingConvSeen.clear();
-		PendingMsgSeen.clear();
-		ConnectNotice = nullptr; // Q14: a 422 notice lasts until the next connect or message
+		A->PendingMessage.assign(Message);
+		A->PendingKey.assign(IdempotencyKey);
+		A->PendingRunId.assign(WljRunId);
+		A->PendingConvSent = A->ConvId;
+		A->PendingConvSeen.clear();
+		A->PendingMsgSeen.clear();
+		Notice = nullptr; // Q14: a 422 notice lasts until the next connect or message
 		Out.Method = "POST";
-		Out.Url = Url("/companions/openai/chat");
-		Out.IdempotencyKey = PendingKey;
-		Out.Body = BuildChatBody(PendingConvSent, PendingRunId, PendingMessage);
-		Decoder = FChatStreamDecoder(PendingConvSent, false);
-		bStreaming = true;
-		bResendAllowed = false;
-		Transient = ECompanionState::Ready;
-		TransientLine = nullptr;
-		Refusal.clear();
+		Out.Url = AgentUrl(*A, AgentChatSuffix);
+		Out.IdempotencyKey = A->PendingKey;
+		Out.Body = BuildChatBody(A->PendingConvSent, A->PendingRunId, A->PendingMessage);
+		A->Decoder = FChatStreamDecoder(A->Descriptor.ProviderId, A->PendingConvSent, false);
+		A->bStreaming = true;
+		A->bResendAllowed = false;
+		A->Transient = ECompanionState::Ready;
+		A->TransientLine = nullptr;
+		A->Refusal.clear();
 		Note("chat_begin");
-		Recompute();
+		Recompute(*A);
+		RecomputeSession();
 		return true;
 	}
 
-	bool FOpenAiCompanionSession::BeginResend(std::uint64_t NowMs, FRelayRequest& Out)
+	bool FCompanionSession::BeginResend(std::string_view AgentId, std::uint64_t NowMs, FRelayRequest& Out)
 	{
 		Out = FRelayRequest();
-		const bool bReal = (ConnState == "connected" || ConnState == "connected_unverified") && !bKeyRejected;
-		if (!bResendAllowed || !bReal || bStreaming || bConnecting || NowMs < RetryNotBefore || PendingKey.empty() || !bOriginOk)
+		FAgent* A = Find(AgentId);
+		if (A == nullptr || !A->bResendAllowed || !CanChat(*A) || A->bStreaming || NowMs < A->RetryNotBefore || A->PendingKey.empty() || !bOriginOk)
 		{
 			Note("resend_refused");
 			return false;
 		}
 		Out.Method = "POST";
-		Out.Url = Url("/companions/openai/chat");
-		Out.IdempotencyKey = PendingKey; // the SAME key: the server replays a finished reply
-		Out.Body = BuildChatBody(PendingConvSent, PendingRunId, PendingMessage);
+		Out.Url = AgentUrl(*A, AgentChatSuffix);
+		Out.IdempotencyKey = A->PendingKey; // the SAME key: the server replays a finished reply
+		Out.Body = BuildChatBody(A->PendingConvSent, A->PendingRunId, A->PendingMessage);
 		// Q1/Q3: the replay must show the cnv_ and msg_ ids an earlier attempt of this key already showed.
-		Decoder = FChatStreamDecoder(PendingConvSeen.empty() ? PendingConvSent : PendingConvSeen, true, PendingMsgSeen);
-		bStreaming = true;
-		bResendAllowed = false;
-		Transient = ECompanionState::Ready;
-		TransientLine = nullptr;
-		Refusal.clear();
+		A->Decoder = FChatStreamDecoder(A->Descriptor.ProviderId, A->PendingConvSeen.empty() ? A->PendingConvSent : A->PendingConvSeen, true, A->PendingMsgSeen);
+		A->bStreaming = true;
+		A->bResendAllowed = false;
+		A->Transient = ECompanionState::Ready;
+		A->TransientLine = nullptr;
+		A->Refusal.clear();
 		Note("resend_begin");
-		Recompute();
+		Recompute(*A);
 		return true;
 	}
 
-	void FOpenAiCompanionSession::ApplyChatHttpAnswer(int HttpStatus, std::string_view RetryAfterHeader, std::string_view Body,
-		std::uint64_t NowMs)
+	void FCompanionSession::ApplyChatHttpAnswer(std::string_view AgentId, int HttpStatus, std::string_view RetryAfterHeader,
+		std::string_view Body, std::uint64_t NowMs)
 	{
-		if (!bStreaming) { Note("chat_answer_unexpected"); return; }
-		bStreaming = false;
+		FAgent* A = Find(AgentId);
+		if (A == nullptr || !A->bStreaming) { Note("chat_answer_unexpected"); return; }
+		A->bStreaming = false;
 		const std::string Kind = ErrorKindOf(Body);
 		if (HttpStatus == 409 && Kind == "companion_not_connected")
 		{
-			ConnState = "not_connected";
-			Transient = ECompanionState::Ready;
-			TransientLine = nullptr;
+			A->Descriptor.Connection = EAgentConnection::Disconnected; // this agent only
+			A->Transient = ECompanionState::Ready;
+			A->TransientLine = nullptr;
 			Note("chat_not_connected");
 		}
 		else if (HttpStatus == 409 && Kind == "companion_message_in_progress")
 		{
-			Transient = ECompanionState::RetryLater;
-			TransientLine = LineRetryLater;
-			bResendAllowed = true;
-			RetryNotBefore = NowMs + ChatInProgressBackoffMs; // Q4: back off 2 s, then the SAME key
+			A->Transient = ECompanionState::RetryLater;
+			A->TransientLine = LineRetryLater;
+			A->bResendAllowed = true;
+			A->RetryNotBefore = NowMs + ChatInProgressBackoffMs; // Q4: back off 2 s, then the SAME key
 			Note("chat_in_progress");
 		}
 		else if (HttpStatus == 429 && Kind == "companion_rate_limited")
 		{
 			std::uint64_t WaitMs = 0;
 			if (!ParseRetryAfterSeconds(RetryAfterHeader, WaitMs)) { WaitMs = DefaultRetryWaitMs; }
-			Transient = ECompanionState::SlowDown;
-			TransientLine = LineSlowDown;
-			RetryNotBefore = NowMs + WaitMs;
+			A->Transient = ECompanionState::SlowDown;
+			A->TransientLine = LineSlowDown;
+			A->RetryNotBefore = NowMs + WaitMs;
 			Note("chat_slow_down");
 		}
 		else if (HttpStatus == 503)
 		{
-			Transient = ECompanionState::RetryLater;
-			TransientLine = LineRetryLater;
-			bResendAllowed = true;
+			A->Transient = ECompanionState::RetryLater;
+			A->TransientLine = LineRetryLater;
+			A->bResendAllowed = true;
 			Note("chat_unavailable");
 		}
-		else if (HttpStatus == 413) { SetError(LineTooLong, "chat_too_large"); } // Q6: companion_message_too_large
-		else if (HttpStatus == 400) { SetError(LineError, "chat_body_invalid"); } // Q6: companion_body_invalid
-		else { SetError(LineError, "chat_http_error"); }
-		Recompute();
+		else if (HttpStatus == 413) { SetError(*A, LineTooLong, "chat_too_large"); } // Q6: companion_message_too_large
+		else if (HttpStatus == 400) { SetError(*A, LineError, "chat_body_invalid"); } // Q6: companion_body_invalid
+		else { SetError(*A, LineError, "chat_http_error"); }
+		Recompute(*A);
+		RecomputeSession();
 	}
 
-	void FOpenAiCompanionSession::FeedChatBytes(std::string_view Chunk, std::uint64_t NowMs)
+	void FCompanionSession::FeedChatBytes(std::string_view AgentId, std::string_view Chunk, std::uint64_t NowMs)
 	{
-		if (!bStreaming) { return; }
-		if (Decoder.Feed(Chunk) != EChatStreamOutcome::Open)
+		FAgent* A = Find(AgentId);
+		if (A == nullptr || !A->bStreaming) { return; }
+		if (A->Decoder.Feed(Chunk) != EChatStreamOutcome::Open)
 		{
-			ApplyStreamOutcome(NowMs);
+			ApplyStreamOutcome(*A, NowMs);
 			return;
 		}
-		Recompute();
+		Recompute(*A);
 	}
 
-	void FOpenAiCompanionSession::FinishChatStream(std::uint64_t NowMs)
+	void FCompanionSession::FinishChatStream(std::string_view AgentId, std::uint64_t NowMs)
 	{
-		if (!bStreaming) { return; }
-		Decoder.Finish();
-		ApplyStreamOutcome(NowMs);
+		FAgent* A = Find(AgentId);
+		if (A == nullptr || !A->bStreaming) { return; }
+		A->Decoder.Finish();
+		ApplyStreamOutcome(*A, NowMs);
 	}
 
-	void FOpenAiCompanionSession::ApplyChatTransportFailure(std::uint64_t NowMs)
+	void FCompanionSession::ApplyChatTransportFailure(std::string_view AgentId, std::uint64_t NowMs)
 	{
 		(void)NowMs;
-		if (!bStreaming) { return; }
-		bStreaming = false;
-		Transient = ECompanionState::RetryLater;
-		TransientLine = LineRetryLater;
-		bResendAllowed = true;
+		FAgent* A = Find(AgentId);
+		if (A == nullptr || !A->bStreaming) { return; }
+		A->bStreaming = false;
+		A->Transient = ECompanionState::RetryLater;
+		A->TransientLine = LineRetryLater;
+		A->bResendAllowed = true;
 		Note("chat_transport_failed");
-		Recompute();
+		Recompute(*A);
 	}
 
-	void FOpenAiCompanionSession::ApplyStreamOutcome(std::uint64_t NowMs)
+	void FCompanionSession::ApplyStreamOutcome(FAgent& A, std::uint64_t NowMs)
 	{
-		bStreaming = false;
+		const FChatStreamDecoder& Decoder = A.Decoder;
+		A.bStreaming = false;
 		if (Decoder.HasMeta())
 		{
-			ConvId = Decoder.ConversationId();
-			PendingConvSeen = Decoder.ConversationId();
-			PendingMsgSeen = Decoder.MessageId();
+			A.ConvId = Decoder.ConversationId();
+			A.PendingConvSeen = Decoder.ConversationId();
+			A.PendingMsgSeen = Decoder.MessageId();
 		}
 		switch (Decoder.Outcome())
 		{
 		case EChatStreamOutcome::Done:
 		{
 			FTurn Turn;
-			Turn.PlayerText = SanitizeUntrustedText(PendingMessage);
+			Turn.PlayerText = SanitizeUntrustedText(A.PendingMessage);
 			Turn.ReplyText = Decoder.ReplyForDisplay();
 			Turn.MessageId = Decoder.MessageId();
 			Turn.Model = Decoder.Model();
 			Turn.FinishReason = Decoder.FinishReason();
 			Turn.bHitLengthLimit = Decoder.HitLengthLimit();
-			Turns.Add(std::move(Turn));
-			Transient = ECompanionState::Ready;
-			TransientLine = Decoder.HitLengthLimit() ? LineLengthLimit : nullptr; // Q5
-			bResendAllowed = false;
+			A.Turns.Add(std::move(Turn));
+			A.Transient = ECompanionState::Ready;
+			A.TransientLine = Decoder.HitLengthLimit() ? LineLengthLimit : nullptr; // Q5
+			A.bResendAllowed = false;
 			Note(Decoder.HitLengthLimit() ? "chat_done_max_length" : "chat_done");
 			break;
 		}
 		case EChatStreamOutcome::ProviderError:
-			bResendAllowed = false;
+			A.bResendAllowed = false;
 			switch (Decoder.ErrorKind())
 			{
 			case EChatErrorKind::ProviderAuthFailed:
-				bKeyRejected = true;
-				ConnState = "invalid";
-				Transient = ECompanionState::Ready;
-				TransientLine = nullptr;
+				A.bKeyRejected = true; // sticky (Q12), this agent only
+				A.Transient = ECompanionState::Ready;
+				A.TransientLine = nullptr;
 				Note("chat_key_rejected");
 				break;
 			case EChatErrorKind::ProviderQuotaExhausted:
-				Transient = ECompanionState::OutOfCredit;
-				TransientLine = LineOutOfCredit;
+				A.Transient = ECompanionState::OutOfCredit;
+				A.TransientLine = LineOutOfCredit;
 				Note("chat_out_of_credit");
 				break;
 			case EChatErrorKind::ProviderRateLimited:
-				Transient = ECompanionState::RetryLater;
-				TransientLine = LineRetryLater;
-				RetryNotBefore = NowMs + (Decoder.HasRetryAfter() ? Decoder.RetryAfterMs() : DefaultRetryWaitMs); // Q8
+				A.Transient = ECompanionState::RetryLater;
+				A.TransientLine = LineRetryLater;
+				A.RetryNotBefore = NowMs + (Decoder.HasRetryAfter() ? Decoder.RetryAfterMs() : DefaultRetryWaitMs); // Q8
 				Note("chat_provider_rate_limited");
 				break;
 			case EChatErrorKind::ProviderUnavailable:
-				Transient = ECompanionState::RetryLater;
-				TransientLine = LineRetryLater;
+				A.Transient = ECompanionState::RetryLater;
+				A.TransientLine = LineRetryLater;
 				Note("chat_provider_unavailable");
 				break;
 			case EChatErrorKind::ProviderRefused:
-				Transient = ECompanionState::Refused;
-				TransientLine = LineRefused;
-				Refusal = Decoder.ErrorMessage();
+				A.Transient = ECompanionState::Refused;
+				A.TransientLine = LineRefused;
+				A.Refusal = Decoder.ErrorMessage();
 				Note("chat_provider_refused");
 				break;
 			case EChatErrorKind::CompanionInternal:
 			case EChatErrorKind::Unknown:
 			case EChatErrorKind::None:
-				SetError(LineError, "chat_error_event");
+				SetError(A, LineError, "chat_error_event");
 				break;
 			}
 			break;
 		case EChatStreamOutcome::ProtocolError:
-			SetError(LineCutOff, "chat_protocol_fault");
+			SetError(A, LineCutOff, "chat_protocol_fault");
 			Note(std::string("chat_fault_") + ChatProtocolFaultName(Decoder.Fault()));
-			bResendAllowed = true;
+			A.bResendAllowed = true;
 			break;
 		case EChatStreamOutcome::Open:
 			break;
 		}
-		Recompute();
+		Recompute(A);
+		RecomputeSession();
 	}
 
-	FRelayRequest FOpenAiCompanionSession::BeginDeleteHistory()
+	FRelayRequest FCompanionSession::BeginDeleteHistory(std::string_view AgentId)
 	{
 		FRelayRequest Out;
-		if (bStreaming)
+		FAgent* A = Find(AgentId);
+		if (A == nullptr || A->bStreaming)
 		{
 			Note("delete_history_refused");
 			return Out;
 		}
-		Turns.Clear();
-		PendingMessage.clear();
-		PendingKey.clear();
-		PendingRunId.clear();
-		PendingConvSent.clear();
-		PendingConvSeen.clear();
-		PendingMsgSeen.clear();
-		bResendAllowed = false;
-		if (!ConvId.empty())
+		A->Turns.Clear();
+		A->PendingMessage.clear();
+		A->PendingKey.clear();
+		A->PendingRunId.clear();
+		A->PendingConvSent.clear();
+		A->PendingConvSeen.clear();
+		A->PendingMsgSeen.clear();
+		A->bResendAllowed = false;
+		if (!A->ConvId.empty())
 		{
-			DeletePendingConv = ConvId;
-			ConvId.clear();
+			A->DeletePendingConv = A->ConvId;
+			A->ConvId.clear();
 		}
-		if (!DeletePendingConv.empty() && bOriginOk)
+		if (!A->DeletePendingConv.empty() && bOriginOk)
 		{
 			Out.Method = "DELETE";
-			Out.Url = Url("/companions/openai/conversations/" + DeletePendingConv);
+			Out.Url = AgentUrl(*A, std::string(AgentConversationsSuffix) + A->DeletePendingConv);
 		}
 		Note("delete_history_local");
-		Recompute();
+		Recompute(*A);
 		return Out;
 	}
 
-	void FOpenAiCompanionSession::ApplyDeleteHistoryAnswer(int HttpStatus)
+	void FCompanionSession::ApplyDeleteHistoryAnswer(std::string_view AgentId, int HttpStatus)
 	{
+		FAgent* A = Find(AgentId);
+		if (A == nullptr) { Note("delete_history_unexpected"); return; }
 		if (HttpStatus == 204 || HttpStatus == 404) // Q7: a 409 (stream still active) stays pending and is resent
 		{
-			DeletePendingConv.clear();
+			A->DeletePendingConv.clear();
 			Note("delete_history_ok");
 		}
 		else
@@ -1583,61 +1825,98 @@ namespace WonderlandCompanionLogic
 		}
 	}
 
-	void FOpenAiCompanionSession::Recompute()
+	bool FCompanionSession::IsReal(const FAgent& A) const
 	{
-		FCompanionView V;
-		V.ProviderLabel = LabelFor("openai", "api_key"); // Q10: labels[connection.mode]; v0 chat is api_key only
-		V.LastErrorLine = LastErrorLine != nullptr ? LastErrorLine : "";
-		const bool bReal = (ConnState == "connected" || ConnState == "connected_unverified") && !bKeyRejected;
+		return A.Fault == EAgentSlotFault::None && !A.bIdentityChanged && A.Descriptor.Connection == EAgentConnection::Connected && !A.bKeyRejected;
+	}
+
+	bool FCompanionSession::IsChatAuthorized(const FAgent& A) const
+	{
+		// No inference: a connected agent chats only if the server authorized the chat capability.
+		return IsReal(A) && HasCapability(A.Descriptor.AuthorizedCapabilities, CapabilityChat);
+	}
+
+	bool FCompanionSession::CanChat(const FAgent& A) const
+	{
+		// And only on a relay that serves the chat route at all (none at 7e5e1e30: contract:46,139).
+		return bChatServed && bProjectOk && IsChatAuthorized(A);
+	}
+
+	void FCompanionSession::Recompute(FAgent& A)
+	{
+		FAgentView V;
+		const bool bReadable = A.Fault == EAgentSlotFault::None && !A.bIdentityChanged;
+		const bool bReal = IsReal(A);
+		V.AgentId = A.Descriptor.AgentId;
+		V.DisplayName = bReadable ? A.Descriptor.DisplayName : std::string();
+		V.Kind = bReadable ? A.Descriptor.Kind : EAgentKind::Unknown;
+		V.AdapterVersion = bReadable ? A.Descriptor.AdapterVersion : std::string();
+		V.Connection = bReadable ? A.Descriptor.Connection : EAgentConnection::Error;
+		V.bMalformed = !bReadable;
+		// Only authorized capabilities, only while really connected. Declared ones are never shown.
+		V.AuthorizedCapabilities = bReal ? A.Descriptor.AuthorizedCapabilities : std::vector<std::string>();
+		V.bVerified = false; // no descriptor carries "verified" (registry.ts:28-37); a key that claims it faults the slot
 		V.bShowSimulatedBanner = !bReal;
-		V.RetryNotBeforeMs = RetryNotBefore;
+		V.RetryNotBeforeMs = A.RetryNotBefore;
 		const auto Offline = [&](EOfflineReason Why, const char* Line, bool bCanConnect) {
 			V.State = ECompanionState::Offline;
 			V.Offline = Why;
 			V.StatusLine = Line;
 			V.bCanConnect = bCanConnect;
 		};
-		if (!bOriginOk) { Offline(EOfflineReason::RelayNotLoopback, LineNotLoopback, false); }
-		else if (!bProvidersOk) { Offline(EOfflineReason::ProvidersUnknown, LineProvidersUnknown, false); }
-		else if (!bApiKeyModeAvailable) { Offline(EOfflineReason::ModeUnavailable, LineModeUnavailable, false); }
-		else if (bConnecting)
-		{
-			V.State = ECompanionState::Connecting;
-			V.Offline = EOfflineReason::None;
-			V.StatusLine = LineConnecting;
-		}
-		else if (bKeyRejected || ConnState == "invalid") { Offline(EOfflineReason::KeyRejected, LineRejected, true); }
-		else if (ConnState == "error")
-		{
+		const auto Errored = [&](const char* Line, bool bCanConnect) {
 			V.State = ECompanionState::Error;
 			V.Offline = EOfflineReason::None;
-			V.StatusLine = LineConnError;
-			V.bCanConnect = true;
-		}
-		else if (ConnState == "revoked") { Offline(EOfflineReason::Revoked, LineConnect, true); }
+			V.StatusLine = Line;
+			V.bCanConnect = bCanConnect;
+		};
+		if (!bOriginOk) { Offline(EOfflineReason::RelayNotLoopback, LineNotLoopback, false); }
+		else if (!bProjectOk) { Offline(EOfflineReason::NoProject, LineNoProject, false); }
+		else if (A.bIdentityChanged) { Errored(LineIdentityChanged, false); } // permanent for this session: reconnecting cannot clear it
+		else if (A.Fault != EAgentSlotFault::None) { Errored(LineUnreadable, false); }
+		else if (A.Descriptor.Connection == EAgentConnection::Unsupported) { Offline(EOfflineReason::Unsupported, LineUnsupported, false); }
+		else if (A.bKeyRejected) { Offline(EOfflineReason::KeyRejected, LineRejected, true); }
+		else if (A.Descriptor.Connection == EAgentConnection::Error) { Errored(LineConnError, true); }
 		else if (!bReal) { Offline(EOfflineReason::NotConnected, LineConnect, true); }
-		else if (bStreaming)
+		else if (!IsChatAuthorized(A)) { Offline(EOfflineReason::NotAuthorized, LineNotAuthorized, true); }
+		else if (!CanChat(A)) { Offline(EOfflineReason::ChatNotServed, LineChatNotServed, false); }
+		else if (A.bStreaming)
 		{
 			V.State = ECompanionState::Streaming;
 			V.Offline = EOfflineReason::None;
-			V.PartialReply = Decoder.ReplyForDisplay();
+			V.PartialReply = A.Decoder.ReplyForDisplay();
 		}
 		else
 		{
-			V.State = Transient;
+			V.State = A.Transient;
 			V.Offline = EOfflineReason::None;
-			V.StatusLine = TransientLine != nullptr ? TransientLine : "";
-			V.RefusalText = Transient == ECompanionState::Refused ? Refusal : std::string();
+			V.StatusLine = A.TransientLine != nullptr ? A.TransientLine : "";
+			V.RefusalText = A.Transient == ECompanionState::Refused ? A.Refusal : std::string();
 			V.bCanConnect = true;
 			V.bCanSend = true;
-			V.bCanResend = bResendAllowed && !PendingKey.empty();
+			V.bCanResend = A.bResendAllowed && !A.PendingKey.empty();
 		}
-		if (ConnectNotice != nullptr && V.bCanConnect
-			&& (V.State == ECompanionState::Offline || (V.State == ECompanionState::Ready && V.StatusLine.empty())))
+		A.View = std::move(V);
+	}
+
+	void FCompanionSession::RecomputeSession()
+	{
+		FCompanionSessionView S;
+		S.bOriginOk = bOriginOk;
+		S.bProjectOk = bProjectOk;
+		S.bConnecting = bConnecting;
+		S.bCanConnect = bOriginOk && bProjectOk && !bConnecting;
+		if (!bOriginOk) { S.StatusLine = LineNotLoopback; }
+		else if (!bProjectOk) { S.StatusLine = LineNoProject; }
+		else if (bConnecting) { S.StatusLine = LineConnecting; }
+		else if (Notice != nullptr) { S.StatusLine = Notice; }
+		S.AgentCount = Agents.size();
+		S.UnreadableSlots = UnreadableSlots;
+		for (const std::unique_ptr<FAgent>& A : Agents)
 		{
-			V.StatusLine = ConnectNotice; // Q14: a refused PUT leaves the old connection, so Ready shows it too
+			if (IsReal(*A)) { S.bShowSimulatedBanner = false; }
 		}
-		ViewState = std::move(V);
+		SessionViewState = std::move(S);
 	}
 
 	/* ---------------------------------------------------------------- idempotency keys */
@@ -1704,18 +1983,6 @@ namespace WonderlandCompanionLogic
 				if (Row.first == W) { Out = Row.second; return true; }
 			}
 			return false;
-		}
-
-		// 1-64 of [A-Za-z0-9_-]: safe in a query string without escaping.
-		bool IsQuerySafeProjectId(std::string_view Text)
-		{
-			if (Text.empty() || Text.size() > 64) { return false; }
-			for (const char C : Text)
-			{
-				const bool bOk = (C >= 'a' && C <= 'z') || (C >= 'A' && C <= 'Z') || (C >= '0' && C <= '9') || C == '_' || C == '-';
-				if (!bOk) { return false; }
-			}
-			return true;
 		}
 	}
 
@@ -1970,7 +2237,7 @@ namespace WonderlandCompanionLogic
 		return EPinVerdict::Applied;
 	}
 
-	/* ---------------------------------------------------------------- Grok Bot result and provenance */
+	/* ---------------------------------------------------------------- agent result and provenance */
 
 	const char* ResultParseName(EResultParse Result)
 	{
@@ -1989,9 +2256,9 @@ namespace WonderlandCompanionLogic
 		return "?";
 	}
 
-	EResultParse ParseCompanionResultV0(std::string_view Body, std::string_view OwnWljRunId, FCompanionResultView& Out)
+	EResultParse ParseAgentResult(std::string_view Body, std::string_view OwnWljRunId, FAgentResultView& Out)
 	{
-		Out = FCompanionResultView();
+		Out = FAgentResultView();
 		if (Body.size() > CompanionResultMaxBytes) { return EResultParse::TooLarge; } // before any parsing
 		FJsonValue Root;
 		if (!ParseJson(Body, Root) || !Root.IsObject()) { return EResultParse::BadJson; }
@@ -2033,12 +2300,13 @@ namespace WonderlandCompanionLogic
 
 	namespace
 	{
-		EProvenanceParse ParseProvenanceObject(const FJsonValue& Root, FCompanionProvenanceView& Out)
+		EProvenanceParse ParseProvenanceObject(const FJsonValue& Root, FAgentProvenanceView& Out)
 		{
-			Out = FCompanionProvenanceView();
+			Out = FAgentProvenanceView();
 			if (!Root.IsObject()) { return EProvenanceParse::BadJson; }
 			const FJsonValue* Source = FindString(Root, "source");
-			if (Source == nullptr || (Source->Text != "grok_bot" && Source->Text != "simulated")) { return EProvenanceParse::BadSource; }
+			// A8: BRIDGE's closed set (route.ts:108): "companion_port" or "simulated". No provider is ever a source.
+			if (Source == nullptr || (Source->Text != "simulated" && Source->Text != "companion_port")) { return EProvenanceParse::BadSource; }
 			const FJsonValue* Simulated = Root.Find("simulated");
 			if (Simulated == nullptr || Simulated->Kind != FJsonValue::EKind::Bool) { return EProvenanceParse::BadFields; }
 			const bool bSimSource = Source->Text == "simulated";
@@ -2066,18 +2334,40 @@ namespace WonderlandCompanionLogic
 			Out.ResultSha256 = Sha;
 			return EProvenanceParse::Ok;
 		}
+
+		// The mission route's provenance (route.ts:107-112, provenanceOf 593-611). Every key is required; verified /
+		// verifiedBy refused; nothing in it is a verification.
+		bool ParseMissionProvenance(const FJsonValue& P, FAgentProvenanceView& Out)
+		{
+			Out = FAgentProvenanceView();
+			if (!P.IsObject()) { return false; }
+			const FJsonValue* Source = FindString(P, "source");
+			if (Source == nullptr || (Source->Text != "companion_port" && Source->Text != "simulated")) { return false; }
+			const FJsonValue* Wake = P.Find("wakeId");
+			if (Wake == nullptr || !(Wake->IsNull() || (Wake->IsString() && Wake->Text.size() <= ProvenanceWakeIdMaxBytes))) { return false; }
+			const FJsonValue* Digest = P.Find("bodyDigest");
+			if (Digest == nullptr || !(Digest->IsNull() || (Digest->IsString() && WonderlandJuliusMissionLogic::IsLowerHex64(Digest->Text)))) { return false; }
+			const FJsonValue* Content = FindString(P, "contentSha256");
+			if (Content == nullptr || !WonderlandJuliusMissionLogic::IsLowerHex64(Content->Text)) { return false; }
+			if (P.Find("verified") != nullptr || P.Find("verifiedBy") != nullptr) { return false; }
+			Out.bSimulated = Source->Text == "simulated";
+			Out.ResultSha256 = Content->Text;
+			Out.WakeId = Wake->IsNull() ? std::string() : SanitizeUntrustedText(Wake->Text);
+			Out.BodyDigest = Digest->IsNull() ? std::string() : Digest->Text;
+			return true;
+		}
 	}
 
-	EProvenanceParse ParseCompanionProvenanceV0(std::string_view Body, FCompanionProvenanceView& Out)
+	EProvenanceParse ParseAgentProvenance(std::string_view Body, FAgentProvenanceView& Out)
 	{
-		Out = FCompanionProvenanceView();
+		Out = FAgentProvenanceView();
 		if (Body.size() > ListMaxBodyBytes) { return EProvenanceParse::TooLarge; }
 		FJsonValue Root;
 		if (!ParseJson(Body, Root) || !Root.IsObject()) { return EProvenanceParse::BadJson; }
 		return ParseProvenanceObject(Root, Out);
 	}
 
-	/* ---------------------------------------------------------------- Grok Bot result read route (contract v0.1 3.7) */
+	/* ---------------------------------------------------------------- mission companion read route (contract v0.1 3.7 + v0.2 agents[]) */
 
 	bool IsTerminalCompanionState(ECompanionTaskState State)
 	{
@@ -2128,6 +2418,7 @@ namespace WonderlandCompanionLogic
 		case ECompanionMissionParse::BadProvenance: return "bad_provenance";
 		case ECompanionMissionParse::ResultTooEarly: return "result_too_early";
 		case ECompanionMissionParse::BadUpdatedAt: return "bad_updated_at";
+		case ECompanionMissionParse::BadVerified: return "bad_verified";
 		}
 		return "?";
 	}
@@ -2146,6 +2437,13 @@ namespace WonderlandCompanionLogic
 		{
 			return ECompanionMissionParse::RunIdMismatch;
 		}
+
+		// v0.2 agents[]: read per slot, fail closed per slot, before (and independent of) the v0.1 checks below.
+		Out.AgentsParse = ParseAgentList(Root, Out.Agents);
+
+		// route.ts:249: verified is the literal false, whatever the row says. Absent or anything else: not this route.
+		const FJsonValue* Verified = Root.Find("verified");
+		if (Verified == nullptr || Verified->Kind != FJsonValue::EKind::Bool || Verified->bBool) { return ECompanionMissionParse::BadVerified; }
 
 		const FJsonValue* Task = Root.Find("taskId");
 		if (Task == nullptr || (!Task->IsNull() && !(Task->IsString() && IsCompanionTaskId(Task->Text)))) { return ECompanionMissionParse::BadTaskId; }
@@ -2188,16 +2486,15 @@ namespace WonderlandCompanionLogic
 		const FJsonValue* Provenance = Root.Find("provenance");
 		if (Provenance == nullptr) { return ECompanionMissionParse::BadProvenance; }
 		const bool bHasProvenance = !Provenance->IsNull();
-		FCompanionProvenanceView ProvenanceView;
-		if (bHasProvenance && ParseProvenanceObject(*Provenance, ProvenanceView) != EProvenanceParse::Ok)
-		{
-			return ECompanionMissionParse::BadProvenance;
-		}
+		FAgentProvenanceView ProvenanceView;
+		if (bHasProvenance && !ParseMissionProvenance(*Provenance, ProvenanceView)) { return ECompanionMissionParse::BadProvenance; }
 
 		// v0.1 3.7: result and provenance stay null until result_received.
 		const bool bResultAllowed = State == ECompanionTaskState::ResultReceived || State == ECompanionTaskState::Integrated
 			|| State == ECompanionTaskState::Rejected;
 		if ((bHasResult || bHasProvenance) && !bResultAllowed) { return ECompanionMissionParse::ResultTooEarly; }
+		// route.ts:246: provenance only alongside a result; route.ts:603: it names the artifact's own sha256.
+		if (bHasProvenance && (!bHasResult || ProvenanceView.ResultSha256 != Sha)) { return ECompanionMissionParse::BadProvenance; }
 
 		std::uint64_t UpdatedAt = 0;
 		const FJsonValue* At = FindString(Root, "updatedAt");
@@ -2213,7 +2510,7 @@ namespace WonderlandCompanionLogic
 		Out.ArtifactByteLength = ByteLength;
 		Out.bHasProvenance = bHasProvenance;
 		Out.Provenance = ProvenanceView;
-		Out.bShowVerified = bHasProvenance && !ProvenanceView.bSimulated && ProvenanceView.bVerifiedByTokenRoundTrip;
+		Out.bShowVerified = false; // route.ts:249: never verified
 		Out.UpdatedAtMs = UpdatedAt;
 		return ECompanionMissionParse::Ok;
 	}

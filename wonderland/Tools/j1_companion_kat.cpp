@@ -15,9 +15,11 @@ using namespace WonderlandCompanionLogic;
 namespace
 {
 	int Failures = 0;
-	int Checks[16] = {};
-	enum ESection { Json, Sse, Chat, Session, Key, Status, Pin, History, Result, Route, Answers, Mint, SectionCount };
-	const char* SectionNames[SectionCount] = {"json", "sse", "chat", "session", "key", "status", "pin", "history", "result", "route", "answers", "mint"};
+	enum ESection { Json, Sse, Chat, Session, Key, Status, Pin, History, Result, Route, Answers, Mint, Agents, Multi, Unsupported, Isolation, Caps,
+		Verified, Bridge, SectionCount };
+	int Checks[SectionCount] = {};
+	const char* SectionNames[SectionCount] = {"json", "sse", "chat", "session", "key", "status", "pin", "history", "result", "route", "answers", "mint",
+		"agents", "multi", "unsupported", "isolation", "caps", "verified", "bridge"};
 
 	void Expect(ESection S, bool bOk, const char* What, int Line)
 	{
@@ -49,9 +51,36 @@ namespace
 
 	std::string Ev(const std::string& Name, const std::string& Data) { return "event: " + Name + "\ndata: " + Data + "\n\n"; }
 
+	// BRIDGE 7e5e1e30 agentIds are "agt_" + a canonical UUIDv4 (registry.ts:21). Test ids are a fixed function of a tag.
+	std::string Ag(const std::string& Tag)
+	{
+		static const char* Hex = "0123456789abcdef";
+		std::string U;
+		for (std::uint64_t Seed : {1469598103934665603ULL, 1099511628211ULL})
+		{
+			std::uint64_t H = Seed;
+			for (const char C : Tag) { H = (H ^ static_cast<unsigned char>(C)) * 1099511628211ULL; }
+			for (int I = 0; I < 16; ++I) { U += Hex[(H >> (4 * I)) & 0xF]; }
+		}
+		U[12] = '4';
+		U[16] = Hex[8 + (U[16] % 4)];
+		return "agt_" + U.substr(0, 8) + "-" + U.substr(8, 4) + "-" + U.substr(12, 4) + "-" + U.substr(16, 4) + "-" + U.substr(20, 12);
+	}
+	// The paired project every companion route names (?projectId=, admission-route.ts:288).
+	const std::string Project = "project-1";
+	const std::string PQ = "?projectId=" + Project;
+
+	// Test data only: providerIds are opaque strings to the core. The default test agent's provider, and a second one.
+	const std::string TestProvider = "openai";
+	const std::string OtherProvider = "acme.local:v2";
+
+	std::string MetaFor(const std::string& Provider, const std::string& ConvId = Conv, const std::string& Extra = "", const std::string& MsgId = Msg1)
+	{
+		return Ev("meta", "{\"conversationId\":\"" + ConvId + "\",\"messageId\":\"" + MsgId + "\",\"provider\":\"" + Provider + "\",\"mode\":\"api_key\",\"model\":\"srv-model-x\"" + Extra + "}");
+	}
 	std::string Meta(const std::string& ConvId = Conv, const std::string& Extra = "", const std::string& MsgId = Msg1)
 	{
-		return Ev("meta", "{\"conversationId\":\"" + ConvId + "\",\"messageId\":\"" + MsgId + "\",\"provider\":\"openai\",\"mode\":\"api_key\",\"model\":\"srv-model-x\"" + Extra + "}");
+		return MetaFor(TestProvider, ConvId, Extra, MsgId);
 	}
 	std::string Replayed(const std::string& ConvId = Conv, const std::string& MsgId = Msg1) { return Meta(ConvId, ",\"replayed\":true", MsgId); }
 	std::string Delta(const std::string& Text) { return Ev("delta", "{\"text\":\"" + Text + "\"}"); }
@@ -109,7 +138,7 @@ namespace
 	FChatRun RunChat(const std::string& Stream, const std::string& Expected = "", bool bReplay = false, std::size_t Split = std::string::npos,
 		const std::string& ExpectedMsg = "")
 	{
-		FChatStreamDecoder D(Expected, bReplay, ExpectedMsg);
+		FChatStreamDecoder D(TestProvider, Expected, bReplay, ExpectedMsg);
 		if (Split == std::string::npos) { D.Feed(Stream); }
 		else
 		{
@@ -223,7 +252,7 @@ namespace
 	{
 		const std::string Good = Meta() + ": ping\n\n" + Delta("Hel") + Delta("lo") + Done();
 		{
-			FChatStreamDecoder D("", false);
+			FChatStreamDecoder D(TestProvider, "", false);
 			D.Feed(Good);
 			EXPECT(Chat, D.Outcome() == EChatStreamOutcome::Done && D.ReplyForDisplay() == "Hello" && D.Model() == "srv-model-x");
 			EXPECT(Chat, D.ConversationId() == Conv && D.MessageId() == Msg1 && D.FinishReason() == "stop");
@@ -248,6 +277,18 @@ namespace
 		std::string WrongProvider = Meta();
 		WrongProvider.replace(WrongProvider.find("\"openai\""), 8, "\"xai\"");
 		EXPECT(Chat, RunChat(WrongProvider + Done()).Fault == EChatProtocolFault::MetaWrongProvider);
+		// A7: meta "provider" must equal THIS agent's providerId (opaque); an empty expectation never matches.
+		{
+			FChatStreamDecoder D(OtherProvider, "", false);
+			D.Feed(MetaFor(OtherProvider) + Delta("x") + Done());
+			EXPECT(Chat, D.Outcome() == EChatStreamOutcome::Done);
+			FChatStreamDecoder E(OtherProvider, "", false);
+			E.Feed(Meta() + Delta("x") + Done());
+			EXPECT(Chat, E.Fault() == EChatProtocolFault::MetaWrongProvider);
+			FChatStreamDecoder Z("", "", false);
+			Z.Feed(MetaFor("") + Delta("x") + Done());
+			EXPECT(Chat, Z.Fault() == EChatProtocolFault::MetaWrongProvider);
+		}
 		std::string WrongMode = Meta();
 		WrongMode.replace(WrongMode.find("\"api_key\""), 9, "\"siwc_plan\"");
 		EXPECT(Chat, RunChat(WrongMode + Done()).Fault == EChatProtocolFault::MetaWrongMode);
@@ -265,13 +306,13 @@ namespace
 		EXPECT(Chat, Cut.Outcome == EChatStreamOutcome::ProtocolError && Cut.Fault == EChatProtocolFault::Truncated && Cut.Reply.empty());
 		EXPECT(Chat, RunChat(Meta() + Delta("x") + "event: done\ndata: {").Fault == EChatProtocolFault::Truncated);
 		{
-			FChatStreamDecoder D("", false);
+			FChatStreamDecoder D(TestProvider, "", false);
 			D.Feed(Meta() + Delta("partial") + Err("provider_rate_limited", "slow", ",\"retryAfterMs\":2500"));
 			EXPECT(Chat, D.Outcome() == EChatStreamOutcome::ProviderError && D.ErrorKind() == EChatErrorKind::ProviderRateLimited);
 			EXPECT(Chat, D.HasRetryAfter() && D.RetryAfterMs() == 2500 && D.ReplyForDisplay().empty());
 		}
 		{
-			FChatStreamDecoder D("", false);
+			FChatStreamDecoder D(TestProvider, "", false);
 			D.Feed(Meta() + Err("provider_refused", "No.\\u202e evil\\r\\nline"));
 			EXPECT(Chat, D.ErrorKind() == EChatErrorKind::ProviderRefused && D.ErrorMessage() == "No. evil\nline");
 		}
@@ -294,10 +335,10 @@ namespace
 				Stream += Delta(std::string(N, 'r'));
 				Left -= N;
 			}
-			FChatStreamDecoder D("", false);
+			FChatStreamDecoder D(TestProvider, "", false);
 			D.Feed(Stream + Done());
 			EXPECT(Chat, D.Outcome() == EChatStreamOutcome::Done && D.ReplyBytes() == ChatMaxReplyBytes);
-			FChatStreamDecoder E("", false);
+			FChatStreamDecoder E(TestProvider, "", false);
 			E.Feed(Stream + Delta("r") + Done());
 			EXPECT(Chat, E.Fault() == EChatProtocolFault::ReplyTooLarge && E.ReplyBytes() == 0);
 		}
@@ -308,53 +349,148 @@ namespace
 
 	/* ------------------------------------------------------------ session helpers */
 	const std::string OddLabel = "Lbl-From-Server \xE2\x9C\x93 #7";
-	// Q10: labels per mode; the deprecated "label" carries a decoy so a client that still reads it is caught.
-	std::string Providers(const std::string& ApiKeyAvail = "available", const std::string& Label = OddLabel)
-	{
-		return "{\"providers\":[{\"provider\":\"openai\",\"label\":\"DEPRECATED-LABEL\",\"labels\":{\"api_key\":\"" + Label
-			+ "\",\"siwc_plan\":\"Plan label P\"},\"modes\":[\"api_key\",\"siwc_plan\"],"
-			"\"modeAvailability\":{\"api_key\":\"" + ApiKeyAvail + "\",\"siwc_plan\":\"not_eligible\"}},"
-			"{\"provider\":\"grok_bot\",\"label\":\"Bot label B\",\"labels\":{\"agent_webhook\":\"Bot label B\"},\"modes\":[\"agent_webhook\"],"
-			"\"modeAvailability\":{\"agent_webhook\":\"available\"}}]}";
-	}
-	std::string Connections(const std::string& State, const std::string& LastError = "null")
-	{
-		return "{\"connections\":[{\"provider\":\"openai\",\"mode\":\"api_key\",\"state\":\"" + State + "\",\"connectedAt\":null,\"verifiedAt\":null,\"lastErrorKind\":" + LastError + "}]}";
-	}
-	// Q14: 200 {provider, mode, state, connectedAt, verifiedAt}; "connected" carries a verifiedAt instant.
-	const std::string ConnectOk = "{\"provider\":\"openai\",\"mode\":\"api_key\",\"state\":\"connected\",\"connectedAt\":\"2026-10-23T22:00:00Z\",\"verifiedAt\":\"2026-10-23T22:00:01.250Z\"}";
-	const std::string ConnectUnverified = "{\"provider\":\"openai\",\"mode\":\"api_key\",\"state\":\"connected_unverified\",\"connectedAt\":\"2026-10-23T22:00:00Z\",\"verifiedAt\":null}";
-	const std::string Sentinel = "sk-SENTINEL-9f8e7d-KEYMATERIAL";
+	const std::string TestAgent = Ag("main");
+	const std::string DeclaredDefault = "[\"chat\",\"history\"]";
+	const std::string AuthorizedDefault = "[\"chat\"]";
+	const std::string Auto = "<auto>";
 
-	std::string Everything(const FOpenAiCompanionSession& S)
+	std::string JsonOrNull(const std::string& V) { return V == "null" ? V : "\"" + V + "\""; }
+
+	/**
+	 * One AgentDescriptor as BRIDGE publishes it (registry.ts:28-37, 189-214). Auto: unsupported / error carry no kind
+	 * and no capability, unsupported no adapterVersion; otherwise kind "single" and the default capabilities.
+	 * Name or Kind "null" emits JSON null.
+	 */
+	std::string Descriptor(const std::string& AgentId, const std::string& Provider, const std::string& Connection = "connected",
+		const std::string& Declared = Auto, const std::string& Authorized = Auto, const std::string& Extra = "",
+		const std::string& Name = "Agent One", const std::string& Kind = Auto)
+	{
+		const bool bHidden = Connection == "unsupported" || Connection == "error";
+		const std::string D = Declared != Auto ? Declared : (bHidden ? "[]" : DeclaredDefault);
+		const std::string A = Authorized != Auto ? Authorized : (bHidden ? "[]" : AuthorizedDefault);
+		const std::string K = Kind != Auto ? Kind : (bHidden ? "null" : "single");
+		const std::string V = Connection == "unsupported" ? "null" : "\"1.4.2\"";
+		return "{\"agentId\":\"" + AgentId + "\",\"providerId\":\"" + Provider + "\",\"displayName\":" + JsonOrNull(Name) + ",\"kind\":" + JsonOrNull(K)
+			+ ",\"adapterVersion\":" + V + ",\"declaredCapabilities\":" + D + ",\"authorizedCapabilities\":" + A
+			+ ",\"connection\":\"" + Connection + "\"" + Extra + "}";
+	}
+	const std::string ConnectOk = Descriptor(TestAgent, TestProvider);
+	const std::string Sentinel = "sk-SENTINEL-9f8e7d-KEYMATERIAL";
+	std::string Gone(const std::string& Id, const std::string& Provider = TestProvider) { return Descriptor(Id, Provider, "disconnected", DeclaredDefault, "[]"); }
+
+	FAgentSlot SlotOf(const std::string& Json)
+	{
+		FJsonValue V;
+		if (!ParseJson(Json, V)) { return FAgentSlot(); }
+		return ParseAgentDescriptor(V);
+	}
+
+	/** {"agents": <ListJson>} through ParseAgentList. */
+	std::vector<FAgentSlot> Slots(const std::string& ListJson)
+	{
+		FJsonValue V;
+		std::vector<FAgentSlot> Out;
+		if (ParseJson("{\"agents\":" + ListJson + "}", V)) { ParseAgentList(V, Out); }
+		return Out;
+	}
+
+	const FAgentView& MissingView()
+	{
+		static const FAgentView V = [] {
+			FAgentView M;
+			M.StatusLine = "<no such agent>";
+			return M;
+		}();
+		return V;
+	}
+	const FTurnHistory& EmptyHistory()
+	{
+		static const FTurnHistory H;
+		return H;
+	}
+
+	/** Test-side view of ONE agent of a registry session (the v0.1 tests' single-companion calls, per agentId). */
+	struct FOneAgent
+	{
+		FCompanionSession S;
+		std::string Id = TestAgent;
+		std::string Provider = TestProvider;
+
+		// The v0.1 chat tests drive a relay that serves the (not yet served) chat route.
+		explicit FOneAgent(const std::string& RelayOrigin) : S(RelayOrigin, Project, true) {}
+		bool Has() const { return S.View(Id) != nullptr; }
+		const FAgentView& View() const
+		{
+			const FAgentView* V = S.View(Id);
+			return V != nullptr ? *V : MissingView();
+		}
+		const FCompanionSessionView& SessionView() const { return S.SessionView(); }
+		bool BeginConnect(FRelayRequest& Out, const std::string& Run = "", const std::string& Label = "") { return S.BeginConnect(Provider, Run, Label, Out); }
+		void ApplyConnectAnswer(int Status, const std::string& Body, std::uint64_t Now) { S.ApplyConnectAnswer(Status, Body, Now); }
+		FRelayRequest BeginDisconnect() { return S.BeginDisconnect(Id); }
+		void ApplyDisconnectAnswer(int Status, const std::string& Body) { S.ApplyDisconnectAnswer(Id, Status, Body); }
+		void ApplyKeyMintFailure() { S.ApplyKeyMintFailure(Id); }
+		bool BeginMessage(const std::string& M, const std::string& K, const std::string& Run, std::uint64_t Now, FRelayRequest& Out)
+		{
+			return S.BeginMessage(Id, M, K, Run, Now, Out);
+		}
+		void ApplyChatHttpAnswer(int Status, const std::string& RetryAfter, const std::string& Body, std::uint64_t Now)
+		{
+			S.ApplyChatHttpAnswer(Id, Status, RetryAfter, Body, Now);
+		}
+		void FeedChatBytes(const std::string& Chunk, std::uint64_t Now) { S.FeedChatBytes(Id, Chunk, Now); }
+		void FinishChatStream(std::uint64_t Now) { S.FinishChatStream(Id, Now); }
+		void ApplyChatTransportFailure(std::uint64_t Now) { S.ApplyChatTransportFailure(Id, Now); }
+		bool BeginResend(std::uint64_t Now, FRelayRequest& Out) { return S.BeginResend(Id, Now, Out); }
+		const FTurnHistory& History() const
+		{
+			const FTurnHistory* H = S.History(Id);
+			return H != nullptr ? *H : EmptyHistory();
+		}
+		FRelayRequest BeginDeleteHistory() { return S.BeginDeleteHistory(Id); }
+		void ApplyDeleteHistoryAnswer(int Status) { S.ApplyDeleteHistoryAnswer(Id, Status); }
+		std::string ConversationId() const { return S.ConversationId(Id); }
+		const std::vector<std::string>& Trace() const { return S.Trace(); }
+	};
+
+	std::string Everything(const FCompanionSession& S)
 	{
 		std::string All;
 		for (const std::string& L : S.Trace()) { All += L + "\n"; }
-		const FCompanionView& V = S.View();
-		All += V.ProviderLabel + V.StatusLine + V.RefusalText + V.PartialReply + S.ConversationId();
-		for (std::size_t I = 0; I < S.History().Size(); ++I)
+		All += S.SessionView().StatusLine;
+		for (const std::string& Id : S.AgentIds())
 		{
-			const FTurn& T = S.History().At(I);
-			All += T.PlayerText + T.ReplyText + T.MessageId + T.Model + T.FinishReason;
+			const FAgentView& V = *S.View(Id);
+			All += V.DisplayName + V.AdapterVersion + V.StatusLine + V.RefusalText + V.PartialReply + S.ConversationId(Id);
+			for (const std::string& C : V.AuthorizedCapabilities) { All += C; }
+			const FTurnHistory& H = *S.History(Id);
+			for (std::size_t I = 0; I < H.Size(); ++I)
+			{
+				const FTurn& T = H.At(I);
+				All += T.PlayerText + T.ReplyText + T.MessageId + T.Model + T.FinishReason;
+			}
 		}
 		return All;
 	}
+	std::string Everything(const FOneAgent& A) { return Everything(A.S); }
 
-	// A session that reached Ready with the sentinel key. Returns false if any step misbehaved.
-	bool MakeReady(FOpenAiCompanionSession& S, int KeyBase = 900)
+	// Connect Provider (no key: BRIDGE refuses credentials); the answer is Answer. Returns false if BeginConnect refused.
+	bool ConnectAs(FCompanionSession& S, const std::string& Provider, int Status, const std::string& Answer)
 	{
-		S.ApplyProvidersAnswer(200, Providers());
-		S.ApplyConnectionsAnswer(200, Connections("not_connected"));
-		FMaskedKeyField F;
-		F.Append(Sentinel);
-		FKeyHandoff H;
-		if (!S.BeginConnect(F, Idem(KeyBase), H)) { return false; }
-		H.MarkSent();
-		S.ApplyConnectAnswer(200, ConnectOk, 0);
-		return S.View().State == ECompanionState::Ready;
+		FRelayRequest R;
+		if (!S.BeginConnect(Provider, "", "", R)) { return false; }
+		S.ApplyConnectAnswer(Status, Answer, 0);
+		return true;
 	}
 
-	bool Send(FOpenAiCompanionSession& S, const std::string& Msg, int K, std::uint64_t Now = 0, const std::string& Run = "", FRelayRequest* Out = nullptr)
+	// The test agent reached Ready. Returns false if any step misbehaved.
+	bool MakeReady(FOneAgent& S)
+	{
+		if (!ConnectAs(S.S, S.Provider, 201, Descriptor(S.Id, S.Provider))) { return false; }
+		return S.View().State == ECompanionState::Ready && S.S.LastConnectedAgentId() == S.Id;
+	}
+
+	bool Send(FOneAgent& S, const std::string& Msg, int K, std::uint64_t Now = 0, const std::string& Run = "", FRelayRequest* Out = nullptr)
 	{
 		FRelayRequest R;
 		const bool bOk = S.BeginMessage(Msg, Idem(K), Run, Now, R);
@@ -362,7 +498,25 @@ namespace
 		return bOk;
 	}
 
-	/* ------------------------------------------------------------ key handling */
+	bool SendTo(FCompanionSession& S, const std::string& Agent, const std::string& Msg, int K, std::uint64_t Now = 0, FRelayRequest* Out = nullptr)
+	{
+		FRelayRequest R;
+		const bool bOk = S.BeginMessage(Agent, Msg, Idem(K), "", Now, R);
+		if (Out != nullptr) { *Out = R; }
+		return bOk;
+	}
+
+	std::string KindBody0(const std::string& Kind) { return "{\"error\":{\"kind\":\"" + Kind + "\",\"message\":\"x\"}}"; }
+	bool TraceHas0(const FCompanionSession& S, const std::string& Word)
+	{
+		for (const std::string& L : S.Trace())
+		{
+			if (L == Word) { return true; }
+		}
+		return false;
+	}
+
+	/* ------------------------------------------------------------ key handling and connect */
 	void TestKey()
 	{
 		EXPECT(Key, IsLoopbackRelayOrigin("http://127.0.0.1:1") && IsLoopbackRelayOrigin("http://127.0.0.1:65535"));
@@ -386,70 +540,73 @@ namespace
 			EXPECT(Key, A.IsEmpty());
 		}
 		{
-			FOpenAiCompanionSession S(Origin);
-			S.ApplyProvidersAnswer(200, Providers());
-			S.ApplyConnectionsAnswer(200, Connections("not_connected"));
-			FMaskedKeyField F;
-			F.Append("  " + Sentinel + "\n");
-			FKeyHandoff H;
-			EXPECT(Key, S.BeginConnect(F, Idem(1), H) && H.IsValid());
-			EXPECT(Key, F.IsEmpty() && F.MaskText().empty());
-			EXPECT(Key, H.Method() == "PUT" && H.TargetUrl() == Origin + "/relay-api/wonderland/companions/connections/openai");
-			EXPECT(Key, H.IdempotencyKey() == Idem(1));
-			EXPECT(Key, H.Body() == "{\"mode\":\"api_key\",\"apiKey\":\"" + Sentinel + "\"}");
-			EXPECT(Key, S.View().State == ECompanionState::Connecting);
-			FKeyHandoff Moved(std::move(H));
-			EXPECT(Key, H.Body().empty() && Contains(std::string(Moved.Body()), Sentinel));
-			Moved.MarkSent();
-			EXPECT(Key, Moved.Body().empty());
-			S.ApplyConnectAnswer(200, ConnectOk, 0);
-			EXPECT(Key, S.View().State == ECompanionState::Ready && !S.View().bShowSimulatedBanner);
+			// Connect (route.ts:288-319, contract:111-131): providerId only, no credential, no idempotency key, 201.
+			FOneAgent S(Origin);
 			FRelayRequest R;
-			EXPECT(Key, S.BeginMessage("hi", Idem(2), "", 0, R) && !Contains(R.Body, Sentinel) && !Contains(R.Body, "apiKey"));
+			EXPECT(Key, S.BeginConnect(R) && R.Method == "POST" && R.Url == Origin + "/relay-api/wonderland/companions/agents" + PQ);
+			EXPECT(Key, R.Body == "{\"providerId\":\"" + TestProvider + "\"}" && R.IdempotencyKey.empty());
+			for (const char* Word : {"apiKey", "key", "token", "password", "secret", "mode", "agentId"}) { EXPECT(Key, !Contains(R.Body, std::string("\"") + Word + "\"")); }
+			EXPECT(Key, S.SessionView().bConnecting && S.SessionView().StatusLine == "Connecting" && !S.SessionView().bCanConnect);
+			S.ApplyConnectAnswer(201, ConnectOk, 0);
+			EXPECT(Key, S.View().State == ECompanionState::Ready && !S.View().bShowSimulatedBanner && !S.SessionView().bShowSimulatedBanner);
+			EXPECT(Key, S.BeginMessage("hi", Idem(2), "", 0, R) && !Contains(R.Body, "apiKey"));
 			S.FeedChatBytes(Meta() + Delta("ok") + Done(), 0);
-			EXPECT(Key, !Contains(Everything(S), Sentinel) && !Contains(Everything(S), "SENTINEL"));
+			EXPECT(Key, !Contains(Everything(S), TestAgent) && !Contains(Everything(S), TestProvider + "\n")); // trace words carry no ids
 		}
 		{
-			FOpenAiCompanionSession S(Origin);
-			S.ApplyProvidersAnswer(200, Providers());
-			FMaskedKeyField F;
-			F.Append("sk-has space");
-			FKeyHandoff H;
-			EXPECT(Key, !S.BeginConnect(F, Idem(3), H) && F.IsEmpty() && !H.IsValid());
-			F.Append("sk-\"quote\\");
-			EXPECT(Key, S.BeginConnect(F, Idem(4), H) && H.Body() == "{\"mode\":\"api_key\",\"apiKey\":\"sk-\\\"quote\\\\\"}");
+			// Optional wljRunId (wlj_ only) and displayName (non-blank, <= 200 UTF-16 units), JSON-escaped.
+			FOneAgent S(Origin);
+			FRelayRequest R;
+			EXPECT(Key, S.BeginConnect(R, Wlj, "My \"agent\" \\ \xE2\x9C\x93"));
+			EXPECT(Key, R.Body == "{\"providerId\":\"" + TestProvider + "\",\"wljRunId\":\"" + Wlj + "\",\"displayName\":\"My \\\"agent\\\" \\\\ \xE2\x9C\x93\"}");
 			FJsonValue V;
-			EXPECT(Key, ParseJson(H.Body(), V) && V.Find("apiKey")->Text == "sk-\"quote\\");
-			// Otherwise a valid Q14 body, so only the last4 echo refuses it.
-			S.ApplyConnectAnswer(200, "{\"provider\":\"openai\",\"mode\":\"api_key\",\"state\":\"connected\",\"connectedAt\":\"2026-10-23T22:00:00Z\",\"verifiedAt\":\"2026-10-23T22:00:01Z\",\"last4\":\"uote\"}", 0);
-			EXPECT(Key, S.View().State == ECompanionState::Offline && S.View().StatusLine == "Could not connect the key");
-			F.Append("sk-x");
-			EXPECT(Key, !S.BeginConnect(F, Idem(4), H)); // idempotency key reused
-			F.Append(std::string(ApiKeyMaxBytes + 1, 'k'));
-			EXPECT(Key, !S.BeginConnect(F, Idem(5), H) && F.IsEmpty());
-			F.Append("sk-y");
-			EXPECT(Key, !S.BeginConnect(F, "not-a-uuid", H) && F.IsEmpty());
-			F.Append("   ");
-			EXPECT(Key, !S.BeginConnect(F, Idem(6), H));
-			F.Append("sk-\xC3\xA9");
-			EXPECT(Key, !S.BeginConnect(F, Idem(7), H));
+			EXPECT(Key, ParseJson(R.Body, V) && V.Find("displayName")->Text == "My \"agent\" \\ \xE2\x9C\x93");
+			S.ApplyConnectAnswer(503, KindBody0("julius_dispatch_unavailable"), 0);
+			EXPECT(Key, !S.Has() && S.SessionView().StatusLine == "Retry later" && S.SessionView().bCanConnect);
+			EXPECT(Key, !S.BeginConnect(R, "run:0123456789abcdef01234567") && R.Method.empty() && !S.BeginConnect(R, "WLJ_" + U1) && !S.BeginConnect(R, "wlj_" + U1 + " "));
+			EXPECT(Key, !S.BeginConnect(R, "", "   ") && !S.BeginConnect(R, "", std::string(201, 'n')) && !S.BeginConnect(R, "", "bad\xFF"));
+			std::string Emoji100;
+			for (int I = 0; I < 100; ++I) { Emoji100 += "\xF0\x9F\x98\x80"; }
+			EXPECT(Key, !S.BeginConnect(R, "", Emoji100 + "n"));
+			EXPECT(Key, S.BeginConnect(R, "", Emoji100) && Contains(R.Body, Emoji100));
+			S.ApplyConnectAnswer(400, KindBody0("companion_request_invalid"), 0);
+			EXPECT(Key, S.BeginConnect(R, "", std::string(200, 'n')));
+			S.ApplyConnectAnswer(400, KindBody0("companion_request_invalid"), 0);
+			EXPECT(Key, S.SessionView().StatusLine == "Could not connect the agent" && TraceHas0(S.S, "connect_failed"));
 		}
 		{
-			FOpenAiCompanionSession S("http://localhost:47123");
-			S.ApplyProvidersAnswer(200, Providers());
-			FMaskedKeyField F;
-			F.Append(Sentinel);
-			FKeyHandoff H;
-			EXPECT(Key, !S.BeginConnect(F, Idem(8), H) && F.IsEmpty() && !H.IsValid());
-			EXPECT(Key, S.View().Offline == EOfflineReason::RelayNotLoopback && S.ProvidersRequest().Method.empty());
+			// providerId is opaque (route.ts:60,292-294): any non-blank string of <= 200 UTF-16 units; blank by JS trim().
+			FCompanionSession S(Origin, Project, true);
+			FRelayRequest R;
+			for (const std::string& Bad : {std::string(), std::string("   "), std::string("\t\n\r"), std::string("\xC2\xA0\xE3\x80\x80"), std::string("\xEF\xBB\xBF"),
+					 std::string("\xE2\x80\xA8\xE2\x80\x8A"), std::string(201, 'p'), std::string("p\xFF")})
+			{
+				EXPECT(Key, !S.BeginConnect(Bad, "", "", R) && R.Method.empty());
+			}
+			std::string Long;
+			for (int I = 0; I < 100; ++I) { Long += "\xF0\x9F\x98\x80"; }
+			for (const std::string& Good : {std::string(200, 'p'), std::string("has space"), std::string("../x"), std::string(" x "), Long, std::string("\xC2\x85")})
+			{
+				EXPECT(Key, S.BeginConnect(Good, "", "", R) && Contains(R.Body, Good));
+				S.ApplyConnectAnswer(503, "", 0);
+			}
+			EXPECT(Key, !S.BeginConnect(Long + "p", "", "", R));
 		}
 		{
-			FOpenAiCompanionSession S(Origin);
-			S.ApplyProvidersAnswer(200, Providers("not_eligible"));
-			FMaskedKeyField F;
-			F.Append(Sentinel);
-			FKeyHandoff H;
-			EXPECT(Key, !S.BeginConnect(F, Idem(9), H) && F.IsEmpty());
+			FOneAgent S("http://localhost:47123");
+			FRelayRequest R;
+			EXPECT(Key, !S.BeginConnect(R) && R.Method.empty());
+			EXPECT(Key, !S.SessionView().bOriginOk && S.SessionView().StatusLine == "Companion relay must be on this machine" && !S.SessionView().bCanConnect);
+			S.S.ApplyAgentSlots(Slots("[" + ConnectOk + "]"));
+			EXPECT(Key, S.View().Offline == EOfflineReason::RelayNotLoopback && !S.BeginMessage("hi", Idem(12), "", 0, R) && R.Method.empty());
+		}
+		{
+			// One connect at a time: a second BeginConnect while the first is in flight sends nothing.
+			FOneAgent S(Origin);
+			FRelayRequest R;
+			FRelayRequest R2;
+			EXPECT(Key, S.BeginConnect(R));
+			EXPECT(Key, !S.BeginConnect(R2) && R2.Method.empty());
 		}
 	}
 
@@ -457,49 +614,45 @@ namespace
 	void TestSession()
 	{
 		{
-			FOpenAiCompanionSession S(Origin);
-			EXPECT(Session, S.View().State == ECompanionState::Offline && S.View().Offline == EOfflineReason::ProvidersUnknown);
-			EXPECT(Session, S.View().bShowSimulatedBanner && !S.View().bCanSend && !S.View().bCanConnect && S.View().ProviderLabel.empty());
-			EXPECT(Session, S.ProvidersRequest().Url == Origin + "/relay-api/wonderland/companions/providers");
-			EXPECT(Session, S.ConnectionsRequest().Url == Origin + "/relay-api/wonderland/companions/connections");
+			FOneAgent S(Origin);
+			EXPECT(Session, !S.Has() && S.S.AgentIds().empty() && S.SessionView().AgentCount == 0);
+			EXPECT(Session, S.SessionView().bShowSimulatedBanner && S.SessionView().bCanConnect && S.SessionView().StatusLine.empty());
 			FRelayRequest R;
 			EXPECT(Session, !S.BeginMessage("hi", Idem(1), "", 0, R) && R.Method.empty());
-			S.ApplyProvidersAnswer(200, Providers());
-			EXPECT(Session, S.View().ProviderLabel == OddLabel && S.LabelFor("grok_bot", "agent_webhook") == "Bot label B");
-			EXPECT(Session, S.View().Offline == EOfflineReason::NotConnected && S.View().StatusLine == "Connect your OpenAI key");
-			S.ApplyConnectionsAnswer(200, Connections("not_connected"));
-			EXPECT(Session, S.View().State == ECompanionState::Offline && S.View().bCanConnect && !S.View().bCanSend && S.View().bShowSimulatedBanner);
-			S.ApplyConnectionsAnswer(200, Connections("connected_unverified"));
-			EXPECT(Session, S.View().State == ECompanionState::Ready && S.View().bCanSend && !S.View().bShowSimulatedBanner);
-			S.ApplyConnectionsAnswer(200, Connections("revoked"));
-			EXPECT(Session, S.View().Offline == EOfflineReason::Revoked && S.View().bShowSimulatedBanner && !S.View().bCanSend);
-			S.ApplyConnectionsAnswer(200, Connections("telepathic"));
-			EXPECT(Session, S.View().State == ECompanionState::Error && !S.View().bCanSend);
-			S.ApplyConnectionsAnswer(500, "{}");
-			EXPECT(Session, S.View().State == ECompanionState::Offline && !S.View().bCanSend);
-			S.ApplyConnectionsAnswer(200, "{\"connections\":[]}");
-			EXPECT(Session, S.View().Offline == EOfflineReason::NotConnected);
-			S.ApplyProvidersAnswer(200, Providers("available", "bad\\u202elabel"));
-			EXPECT(Session, S.View().Offline == EOfflineReason::ProvidersUnknown && S.View().ProviderLabel.empty());
-			S.ApplyProvidersAnswer(200, "{\"providers\":[{\"provider\":\"grok_bot\",\"label\":\"B\",\"modeAvailability\":{}}]}");
-			EXPECT(Session, S.View().Offline == EOfflineReason::ProvidersUnknown);
-			S.ApplyProvidersAnswer(200, Providers("not_in_v0"));
-			EXPECT(Session, S.View().Offline == EOfflineReason::ModeUnavailable && !S.View().bCanConnect);
+			S.S.ApplyAgentSlots(Slots("[" + Descriptor(TestAgent, TestProvider, "disconnected", DeclaredDefault, "[]") + "]"));
+			EXPECT(Session, S.View().State == ECompanionState::Offline && S.View().Offline == EOfflineReason::NotConnected && S.View().StatusLine == "Connect your agent");
+			EXPECT(Session, S.View().bCanConnect && !S.View().bCanSend && S.View().bShowSimulatedBanner && S.View().DisplayName == "Agent One");
+			EXPECT(Session, S.SessionView().AgentCount == 1 && S.SessionView().bShowSimulatedBanner && S.S.ProviderIdOf(TestAgent) == TestProvider);
+			S.S.ApplyAgentSlots(Slots("[" + ConnectOk + "]"));
+			EXPECT(Session, S.View().State == ECompanionState::Ready && S.View().bCanSend && !S.View().bShowSimulatedBanner && !S.SessionView().bShowSimulatedBanner);
+			EXPECT(Session, S.View().AdapterVersion == "1.4.2" && S.View().Kind == EAgentKind::Single && S.View().Connection == EAgentConnection::Connected);
+			S.S.ApplyAgentSlots(Slots("[" + Descriptor(TestAgent, TestProvider, "error") + "]"));
+			EXPECT(Session, S.View().State == ECompanionState::Error && S.View().StatusLine == "Connection error; reconnect your agent");
+			EXPECT(Session, !S.View().bCanSend && S.View().bCanConnect && S.View().bShowSimulatedBanner);
+			S.S.ApplyAgentSlots(Slots("[" + Descriptor(TestAgent, TestProvider, "disconnected") + "]"));
+			EXPECT(Session, S.View().Offline == EOfflineReason::NotConnected && !S.View().bCanSend);
+			S.S.ApplyAgentSlots(Slots("[]"));
+			EXPECT(Session, S.Has() && S.View().Offline == EOfflineReason::NotConnected); // upsert only: absent from a list is not removed
 		}
 		{
-			// The label is the server's, verbatim, whatever it says.
-			FOpenAiCompanionSession S(Origin);
-			S.ApplyProvidersAnswer(200, Providers("available", "ChatGPT via your OpenAI key"));
-			EXPECT(Session, S.View().ProviderLabel == "ChatGPT via your OpenAI key");
-			S.ApplyProvidersAnswer(200, Providers("available", "zzz"));
-			EXPECT(Session, S.View().ProviderLabel == "zzz");
+			// displayName is the server's, verbatim, whatever it says (A10; replaces the v0.1 Q10 labels).
+			FOneAgent S(Origin);
+			S.S.ApplyAgentSlots(Slots("[" + Descriptor(TestAgent, TestProvider, "connected", DeclaredDefault, AuthorizedDefault, "", OddLabel) + "]"));
+			EXPECT(Session, S.View().DisplayName == OddLabel);
+			S.S.ApplyAgentSlots(Slots("[" + Descriptor(TestAgent, TestProvider, "connected", DeclaredDefault, AuthorizedDefault, "", "zzz") + "]"));
+			EXPECT(Session, S.View().DisplayName == "zzz");
+			S.S.ApplyAgentSlots(Slots("[" + Descriptor(TestAgent, TestProvider, "connected", DeclaredDefault, AuthorizedDefault, "", "bad\\u202elabel") + "]"));
+			EXPECT(Session, !S.View().bMalformed && S.View().DisplayName == "badlabel" && S.View().State == ECompanionState::Ready);
+			S.S.ApplyAgentSlots(Slots("[" + Descriptor(TestAgent, TestProvider, "connected", DeclaredDefault, AuthorizedDefault, "", "   ") + "]"));
+			EXPECT(Session, S.View().bMalformed && S.View().DisplayName.empty() && S.View().State == ECompanionState::Error);
+			EXPECT(Session, S.View().StatusLine == "Agent details could not be read" && !S.View().bCanSend && !S.View().bCanConnect);
 		}
 		{
-			FOpenAiCompanionSession S(Origin);
+			FOneAgent S(Origin);
 			EXPECT(Session, MakeReady(S));
 			FRelayRequest R;
 			EXPECT(Session, Send(S, "Hello there", 10, 0, Wlj, &R));
-			EXPECT(Session, R.Method == "POST" && R.Url == Origin + "/relay-api/wonderland/companions/openai/chat" && R.IdempotencyKey == Idem(10));
+			EXPECT(Session, R.Method == "POST" && R.Url == Origin + "/relay-api/wonderland/companions/agents/" + TestAgent + "/chat" + PQ && R.IdempotencyKey == Idem(10));
 			EXPECT(Session, R.Body == "{\"conversationId\":null,\"wljRunId\":\"" + Wlj + "\",\"message\":\"Hello there\"}");
 			EXPECT(Session, !Contains(R.Body, "model"));
 			EXPECT(Session, S.View().State == ECompanionState::Streaming && !S.View().bCanSend);
@@ -542,7 +695,7 @@ namespace
 			struct FRow { std::string Stream; ECompanionState State; const char* Line; bool bOffline; };
 			const FRow Rows[] = {
 				{Err("provider_auth_failed", "bad key"), ECompanionState::Offline, "Your key was rejected", true},
-				{Err("provider_quota_exhausted", "pay"), ECompanionState::OutOfCredit, "Your OpenAI account is out of credit", false},
+				{Err("provider_quota_exhausted", "pay"), ECompanionState::OutOfCredit, "Your provider account is out of credit", false},
 				{Err("provider_rate_limited", "wait", ",\"retryAfterMs\":5000"), ECompanionState::RetryLater, "Retry later", false},
 				{Err("provider_unavailable", "down"), ECompanionState::RetryLater, "Retry later", false},
 				{Err("provider_refused", "I can't help with that."), ECompanionState::Refused, "The provider refused this message", false},
@@ -551,8 +704,8 @@ namespace
 			int K = 100;
 			for (const FRow& Row : Rows)
 			{
-				FOpenAiCompanionSession S(Origin);
-				EXPECT(Session, MakeReady(S, K++));
+				FOneAgent S(Origin);
+				EXPECT(Session, MakeReady(S));
 				EXPECT(Session, Send(S, "q", K++, 1000));
 				S.FeedChatBytes(Meta() + Delta("partial") + Row.Stream, 1000);
 				EXPECT(Session, S.View().State == Row.State && S.View().StatusLine == Row.Line);
@@ -563,13 +716,11 @@ namespace
 				{
 					// No fallback: nothing can be sent until the player reconnects their own key.
 					EXPECT(Session, !Send(S, "again", K++, 1000) && S.View().bCanConnect && !S.View().bCanSend);
-					S.ApplyConnectionsAnswer(200, Connections("connected"));
+					S.S.ApplyAgentSlots(Slots("[" + ConnectOk + "]")); // a list never clears a rejection (Q12)
 					EXPECT(Session, S.View().State == ECompanionState::Offline);
-					FMaskedKeyField F;
-					F.Append("sk-new");
-					FKeyHandoff H;
-					EXPECT(Session, S.BeginConnect(F, Idem(K++), H));
-					S.ApplyConnectAnswer(200, ConnectOk, 0);
+					FRelayRequest C;
+					EXPECT(Session, S.BeginConnect(C));
+					S.ApplyConnectAnswer(201, ConnectOk, 0);
 					EXPECT(Session, S.View().State == ECompanionState::Ready);
 				}
 				if (Row.Stream.find("retryAfterMs") != std::string::npos)
@@ -579,7 +730,7 @@ namespace
 			}
 		}
 		{
-			FOpenAiCompanionSession S(Origin);
+			FOneAgent S(Origin);
 			EXPECT(Session, MakeReady(S));
 			EXPECT(Session, Send(S, "q", 30, 10000));
 			S.ApplyChatHttpAnswer(429, "7", "{\"error\":{\"kind\":\"companion_rate_limited\",\"message\":\"x\"}}", 10000);
@@ -597,32 +748,30 @@ namespace
 			EXPECT(Session, S.View().RetryNotBeforeMs == 82000 && !S.BeginResend(81999, Re));
 			EXPECT(Session, S.BeginResend(82000, Re) && Re.IdempotencyKey == Idem(33));
 			S.ApplyChatHttpAnswer(409, "", "{\"error\":{\"kind\":\"companion_not_connected\",\"message\":\"x\"}}", 82000);
-			EXPECT(Session, S.View().State == ECompanionState::Offline && S.View().StatusLine == "Connect your OpenAI key" && S.View().bShowSimulatedBanner);
+			EXPECT(Session, S.View().State == ECompanionState::Offline && S.View().StatusLine == "Connect your agent" && S.View().bShowSimulatedBanner);
 		}
 		{
-			FOpenAiCompanionSession S(Origin);
-			S.ApplyProvidersAnswer(200, Providers());
-			FMaskedKeyField F;
-			F.Append("sk-z");
-			FKeyHandoff H;
-			EXPECT(Session, S.BeginConnect(F, Idem(40), H));
-			S.ApplyConnectAnswer(403, "{\"error\":{\"kind\":\"companion_mode_not_eligible\",\"message\":\"x\"}}", 0);
-			EXPECT(Session, S.View().Offline == EOfflineReason::ModeUnavailable);
-			S.ApplyProvidersAnswer(200, Providers());
-			F.Append("sk-z");
-			EXPECT(Session, S.BeginConnect(F, Idem(41), H));
-			S.ApplyConnectAnswer(429, "{}", 0);
-			EXPECT(Session, S.View().StatusLine == "Slow down" && S.View().State == ECompanionState::Offline);
-			F.Append("sk-z");
-			EXPECT(Session, S.BeginConnect(F, Idem(42), H));
-			S.ApplyConnectAnswer(200, "{\"provider\":\"openai\",\"mode\":\"api_key\",\"state\":\"invalid\"}", 0);
-			EXPECT(Session, S.View().State == ECompanionState::Offline);
-			S.ApplyConnectionsAnswer(200, Connections("connected"));
+			FOneAgent S(Origin);
+			FRelayRequest C;
+			EXPECT(Session, S.BeginConnect(C));
+			S.ApplyConnectAnswer(429, "{}", 0); // BRIDGE never answers connect 429; any non-201 is a plain failure
+			EXPECT(Session, S.SessionView().StatusLine == "Could not connect the agent" && !S.Has() && S.SessionView().bCanConnect);
+			EXPECT(Session, S.BeginConnect(C));
+			S.ApplyConnectAnswer(503, "{}", 0);
+			EXPECT(Session, S.SessionView().StatusLine == "Retry later" && !S.Has());
+			EXPECT(Session, S.BeginConnect(C));
+			S.ApplyConnectAnswer(201, Gone(TestAgent), 0);
+			EXPECT(Session, S.View().State == ECompanionState::Offline && S.SessionView().StatusLine == "Could not connect the agent");
+			S.S.ApplyAgentSlots(Slots("[" + ConnectOk + "]"));
 			EXPECT(Session, S.View().State == ECompanionState::Ready);
 			const FRelayRequest D = S.BeginDisconnect();
-			EXPECT(Session, D.Method == "DELETE" && D.Url == Origin + "/relay-api/wonderland/companions/connections/openai");
-			S.ApplyDisconnectAnswer(204);
-			EXPECT(Session, S.View().State == ECompanionState::Offline && S.View().bShowSimulatedBanner);
+			EXPECT(Session, D.Method == "DELETE" && D.Url == Origin + "/relay-api/wonderland/companions/agents/" + TestAgent + PQ);
+			S.ApplyDisconnectAnswer(200, Gone(TestAgent));
+			EXPECT(Session, S.View().State == ECompanionState::Offline && S.View().Offline == EOfflineReason::NotConnected && S.View().bShowSimulatedBanner);
+			EXPECT(Session, S.View().AuthorizedCapabilities.empty() && S.SessionView().bShowSimulatedBanner);
+			S.ApplyConnectAnswer(201, ConnectOk, 0);
+			EXPECT(Session, S.View().State == ECompanionState::Offline && S.Trace().back() == "connect_answer_unexpected");
+			EXPECT(Session, S.S.BeginDisconnect(Ag("nobody")).Method.empty());
 		}
 	}
 
@@ -952,7 +1101,7 @@ namespace
 			EXPECT(History, H.Size() == 0);
 		}
 		{
-			FOpenAiCompanionSession S(Origin);
+			FOneAgent S(Origin);
 			EXPECT(History, MakeReady(S));
 			for (int I = 0; I < 21; ++I)
 			{
@@ -964,7 +1113,7 @@ namespace
 			EXPECT(History, S.BeginDeleteHistory().Method.empty() && S.History().Size() == 20);
 			S.FeedChatBytes(Meta() + Done(), 0);
 			FRelayRequest D = S.BeginDeleteHistory();
-			EXPECT(History, D.Method == "DELETE" && D.Url == Origin + "/relay-api/wonderland/companions/openai/conversations/" + Conv);
+			EXPECT(History, D.Method == "DELETE" && D.Url == Origin + "/relay-api/wonderland/companions/agents/" + TestAgent + "/conversations/" + Conv + PQ);
 			EXPECT(History, S.History().Size() == 0 && S.ConversationId().empty() && !S.View().bCanResend);
 			S.ApplyDeleteHistoryAnswer(503);
 			D = S.BeginDeleteHistory();
@@ -976,7 +1125,7 @@ namespace
 		}
 	}
 
-	/* ------------------------------------------------------------ Grok Bot result and provenance */
+	/* ------------------------------------------------------------ agent result and provenance */
 	std::string ResultBody(const std::string& Content, const std::string& Run = Wlj, const std::string& Summary = "did it",
 		const std::string& Kind = "patch", const std::string& Schema = "wonderland.companion_result.v0")
 	{
@@ -986,57 +1135,67 @@ namespace
 
 	void TestResult()
 	{
-		FCompanionResultView V;
-		EXPECT(Result, ParseCompanionResultV0(ResultBody("diff --git a b"), Wlj, V) == EResultParse::Ok);
+		FAgentResultView V;
+		EXPECT(Result, ParseAgentResult(ResultBody("diff --git a b"), Wlj, V) == EResultParse::Ok);
 		EXPECT(Result, V.bUntrusted && V.ArtifactKind == EArtifactKind::Patch && V.SelfReportedName == "Grok Bot (self)" && V.TaskId == "cmp_" + U3);
 		const std::size_t Overhead = ResultBody("").size();
 		const std::string Exact = ResultBody(std::string(CompanionResultMaxBytes - Overhead, 'c'));
-		EXPECT(Result, Exact.size() == CompanionResultMaxBytes && ParseCompanionResultV0(Exact, Wlj, V) == EResultParse::Ok);
+		EXPECT(Result, Exact.size() == CompanionResultMaxBytes && ParseAgentResult(Exact, Wlj, V) == EResultParse::Ok);
 		const std::string Over = ResultBody(std::string(CompanionResultMaxBytes - Overhead + 1, 'c'));
-		EXPECT(Result, ParseCompanionResultV0(Over, Wlj, V) == EResultParse::TooLarge && V.ArtifactContent.empty());
-		EXPECT(Result, ParseCompanionResultV0(std::string(CompanionResultMaxBytes + 1, '{'), Wlj, V) == EResultParse::TooLarge);
-		EXPECT(Result, ParseCompanionResultV0(ResultBody("x", OtherWlj), Wlj, V) == EResultParse::RunIdMismatch);
-		EXPECT(Result, ParseCompanionResultV0(ResultBody("x", Legacy), Wlj, V) == EResultParse::RunIdMismatch);
-		EXPECT(Result, ParseCompanionResultV0(ResultBody("x"), "WLJ_" + U1, V) == EResultParse::RunIdMismatch);
-		EXPECT(Result, ParseCompanionResultV0(ResultBody("x", Wlj, std::string(CompanionSummaryMaxBytes, 's')), Wlj, V) == EResultParse::Ok);
-		EXPECT(Result, ParseCompanionResultV0(ResultBody("x", Wlj, std::string(CompanionSummaryMaxBytes + 1, 's')), Wlj, V) == EResultParse::BadSummary);
-		EXPECT(Result, ParseCompanionResultV0(ResultBody("x", Wlj, "s", "exe"), Wlj, V) == EResultParse::BadArtifact);
-		EXPECT(Result, ParseCompanionResultV0(ResultBody("x", Wlj, "s", "text", "wonderland.companion_result.v1"), Wlj, V) == EResultParse::BadSchema);
+		EXPECT(Result, ParseAgentResult(Over, Wlj, V) == EResultParse::TooLarge && V.ArtifactContent.empty());
+		EXPECT(Result, ParseAgentResult(std::string(CompanionResultMaxBytes + 1, '{'), Wlj, V) == EResultParse::TooLarge);
+		EXPECT(Result, ParseAgentResult(ResultBody("x", OtherWlj), Wlj, V) == EResultParse::RunIdMismatch);
+		EXPECT(Result, ParseAgentResult(ResultBody("x", Legacy), Wlj, V) == EResultParse::RunIdMismatch);
+		EXPECT(Result, ParseAgentResult(ResultBody("x"), "WLJ_" + U1, V) == EResultParse::RunIdMismatch);
+		EXPECT(Result, ParseAgentResult(ResultBody("x", Wlj, std::string(CompanionSummaryMaxBytes, 's')), Wlj, V) == EResultParse::Ok);
+		EXPECT(Result, ParseAgentResult(ResultBody("x", Wlj, std::string(CompanionSummaryMaxBytes + 1, 's')), Wlj, V) == EResultParse::BadSummary);
+		EXPECT(Result, ParseAgentResult(ResultBody("x", Wlj, "s", "exe"), Wlj, V) == EResultParse::BadArtifact);
+		EXPECT(Result, ParseAgentResult(ResultBody("x", Wlj, "s", "text", "wonderland.companion_result.v1"), Wlj, V) == EResultParse::BadSchema);
 		std::string BadTask = ResultBody("x");
 		BadTask.replace(BadTask.find("cmp_"), 4, "tsk_");
-		EXPECT(Result, ParseCompanionResultV0(BadTask, Wlj, V) == EResultParse::BadTaskId);
-		EXPECT(Result, ParseCompanionResultV0(ResultBody("rm -rf \\u202e/\\u0007"), Wlj, V) == EResultParse::Ok && V.ArtifactContent == "rm -rf /");
+		EXPECT(Result, ParseAgentResult(BadTask, Wlj, V) == EResultParse::BadTaskId);
+		EXPECT(Result, ParseAgentResult(ResultBody("rm -rf \\u202e/\\u0007"), Wlj, V) == EResultParse::Ok && V.ArtifactContent == "rm -rf /");
 
-		FCompanionProvenanceView P;
-		const std::string Real = "{\"source\":\"grok_bot\",\"connectionMode\":\"agent_webhook\",\"simulated\":false,\"resultSha256\":\""
+		FAgentProvenanceView P;
+		const std::string Real = "{\"source\":\"companion_port\",\"connectionMode\":\"agent_webhook\",\"simulated\":false,\"resultSha256\":\""
 			+ std::string(64, 'a') + "\",\"verifiedBy\":\"task_token_round_trip\",\"selfReported\":{\"name\":\"Bot\",\"runUrl\":null}}";
-		EXPECT(Result, ParseCompanionProvenanceV0(Real, P) == EProvenanceParse::Ok && !P.bSimulated && P.bVerifiedByTokenRoundTrip && P.SelfReportedName == "Bot");
-		EXPECT(Result, ParseCompanionProvenanceV0("{\"source\":\"simulated\",\"simulated\":true}", P) == EProvenanceParse::Ok && P.bSimulated && !P.bVerifiedByTokenRoundTrip);
-		EXPECT(Result, ParseCompanionProvenanceV0("{\"source\":\"simulated\",\"simulated\":true,\"verifiedBy\":\"task_token_round_trip\"}", P) == EProvenanceParse::SimulatedVerified && P.bSimulated);
-		EXPECT(Result, ParseCompanionProvenanceV0("{\"source\":\"grok_bot\",\"simulated\":true}", P) == EProvenanceParse::SimulatedInconsistent);
-		EXPECT(Result, ParseCompanionProvenanceV0("{\"source\":\"simulated\",\"simulated\":false}", P) == EProvenanceParse::SimulatedInconsistent);
-		EXPECT(Result, ParseCompanionProvenanceV0("{\"source\":\"grok_bot\"}", P) == EProvenanceParse::BadFields && P.bSimulated);
-		EXPECT(Result, ParseCompanionProvenanceV0("{\"source\":\"openai\",\"simulated\":false}", P) == EProvenanceParse::BadSource);
-		EXPECT(Result, ParseCompanionProvenanceV0("{\"source\":\"grok_bot\",\"simulated\":false,\"verifiedBy\":\"vibes\"}", P) == EProvenanceParse::BadFields);
-		EXPECT(Result, ParseCompanionProvenanceV0("{\"source\":\"grok_bot\",\"simulated\":false}", P) == EProvenanceParse::Ok && !P.bVerifiedByTokenRoundTrip);
+		EXPECT(Result, ParseAgentProvenance(Real, P) == EProvenanceParse::Ok && !P.bSimulated && P.bVerifiedByTokenRoundTrip && P.SelfReportedName == "Bot");
+		EXPECT(Result, ParseAgentProvenance("{\"source\":\"simulated\",\"simulated\":true}", P) == EProvenanceParse::Ok && P.bSimulated && !P.bVerifiedByTokenRoundTrip);
+		EXPECT(Result, ParseAgentProvenance("{\"source\":\"simulated\",\"simulated\":true,\"verifiedBy\":\"task_token_round_trip\"}", P) == EProvenanceParse::SimulatedVerified && P.bSimulated);
+		EXPECT(Result, ParseAgentProvenance("{\"source\":\"companion_port\",\"simulated\":true}", P) == EProvenanceParse::SimulatedInconsistent);
+		EXPECT(Result, ParseAgentProvenance("{\"source\":\"simulated\",\"simulated\":false}", P) == EProvenanceParse::SimulatedInconsistent);
+		EXPECT(Result, ParseAgentProvenance("{\"source\":\"companion_port\"}", P) == EProvenanceParse::BadFields && P.bSimulated);
+		// A8: source is BRIDGE's closed set, "companion_port" | "simulated" (route.ts:108). A providerId is never a source.
+		EXPECT(Result, ParseAgentProvenance("{\"source\":\"companion_port\",\"simulated\":false}", P) == EProvenanceParse::Ok && !P.bSimulated);
+		for (const char* Bad : {"openai", "grok_bot", "acme.local:v2", "", "has space", "Companion_port", "companion_port "})
+		{
+			EXPECT(Result, ParseAgentProvenance(std::string("{\"source\":\"") + Bad + "\",\"simulated\":false}", P) == EProvenanceParse::BadSource);
+		}
+		EXPECT(Result, ParseAgentProvenance("{\"source\":7,\"simulated\":false}", P) == EProvenanceParse::BadSource);
+		EXPECT(Result, ParseAgentProvenance("{\"source\":\"companion_port\",\"simulated\":false,\"verifiedBy\":\"vibes\"}", P) == EProvenanceParse::BadFields);
+		EXPECT(Result, ParseAgentProvenance("{\"source\":\"companion_port\",\"simulated\":false}", P) == EProvenanceParse::Ok && !P.bVerifiedByTokenRoundTrip);
 		EXPECT(Result, IsCompanionTaskId("cmp_" + U3) && !IsCompanionTaskId("cmp_" + U3 + " "));
 		EXPECT(Result, std::strcmp(ResultParseName(EResultParse::RunIdMismatch), "run_id_mismatch") == 0);
 	}
 
-	/* ------------------------------------------------------------ Grok Bot result read route (contract v0.1 3.7) */
-	const std::string RealProvenance = "{\"source\":\"grok_bot\",\"connectionMode\":\"agent_webhook\",\"simulated\":false,\"resultSha256\":\""
-		+ std::string(64, 'a') + "\",\"verifiedBy\":\"task_token_round_trip\",\"selfReported\":{\"name\":\"Bot\",\"runUrl\":null}}";
+	/* ------------------------------------------------------------ mission companion read route (contract v0.1 3.7) */
 	const std::string ArtifactOk = "{\"kind\":\"patch\",\"sha256\":\"" + std::string(64, 'b') + "\",\"byteLength\":1234}";
+	std::string Prov(const std::string& Source = "\"companion_port\"", const std::string& Wake = "\"wake-7\"", const std::string& Digest = "\"" + std::string(64, 'c') + "\"",
+		const std::string& Content = "\"" + std::string(64, 'b') + "\"", const std::string& Extra = "")
+	{
+		return "{\"source\":" + Source + ",\"wakeId\":" + Wake + ",\"bodyDigest\":" + Digest + ",\"contentSha256\":" + Content + Extra + "}";
+	}
+	const std::string RealProvenance = Prov();
 
 	std::string CompanionResult(const std::string& Summary = "did it", const std::string& Artifact = ArtifactOk, const std::string& Untrusted = "true")
 	{
 		return "{\"untrusted\":" + Untrusted + ",\"summary\":\"" + Summary + "\",\"artifact\":" + Artifact + "}";
 	}
 	std::string MissionBody(const std::string& State, const std::string& Result = "null", const std::string& Provenance = "null",
-		const std::string& Run = Wlj, const std::string& Task = "\"cmp_" + U3 + "\"")
+		const std::string& Run = Wlj, const std::string& Task = "\"cmp_" + U3 + "\"", const std::string& Verified = ",\"verified\":false")
 	{
-		return "{\"wljRunId\":\"" + Run + "\",\"taskId\":" + Task + ",\"companion\":{\"state\":\"" + State + "\"},\"result\":" + Result
-			+ ",\"provenance\":" + Provenance + ",\"updatedAt\":\"" + T0 + "\"}";
+		return "{\"wljRunId\":\"" + Run + "\",\"legacyRunId\":null,\"taskId\":" + Task + ",\"companion\":{\"state\":\"" + State + "\"},\"result\":" + Result
+			+ ",\"provenance\":" + Provenance + ",\"updatedAt\":\"" + T0 + "\"" + Verified + "}";
 	}
 
 	void TestRoute()
@@ -1064,20 +1223,52 @@ namespace
 		EXPECT(Route, V.State == ECompanionTaskState::Delivered && !V.bHasResult && !V.bHasProvenance && !V.bShowVerified && V.TaskId == "cmp_" + U3);
 		EXPECT(Route, ParseCompanionMission(200, MissionBody("none", "null", "null", Wlj, "null"), Wlj, V) == ECompanionMissionParse::Ok && V.TaskId.empty());
 		EXPECT(Route, ParseCompanionMission(200, MissionBody("no_result"), Wlj, V) == ECompanionMissionParse::Ok && V.State == ECompanionTaskState::NoResult);
-		// A real, verified result.
+		// A result with BRIDGE's provenance: shown, never verified (route.ts:249).
 		EXPECT(Route, ParseCompanionMission(200, MissionBody("result_received", CompanionResult(), RealProvenance), Wlj, V) == ECompanionMissionParse::Ok);
 		EXPECT(Route, V.bHasResult && V.Summary == "did it" && V.ArtifactKind == EArtifactKind::Patch && V.ArtifactSha256 == std::string(64, 'b'));
-		EXPECT(Route, V.ArtifactByteLength == 1234 && V.bHasProvenance && V.bShowVerified && V.Provenance.SelfReportedName == "Bot");
-		EXPECT(Route, ParseCompanionMission(200, MissionBody("integrated", CompanionResult(), RealProvenance), Wlj, V) == ECompanionMissionParse::Ok && V.bShowVerified);
+		EXPECT(Route, V.ArtifactByteLength == 1234 && V.bHasProvenance && !V.bShowVerified && !V.Provenance.bSimulated && !V.Provenance.bVerifiedByTokenRoundTrip);
+		EXPECT(Route, V.Provenance.WakeId == "wake-7" && V.Provenance.BodyDigest == std::string(64, 'c') && V.Provenance.ResultSha256 == std::string(64, 'b'));
+		EXPECT(Route, ParseCompanionMission(200, MissionBody("integrated", CompanionResult(), RealProvenance), Wlj, V) == ECompanionMissionParse::Ok && !V.bShowVerified);
 		EXPECT(Route, ParseCompanionMission(200, MissionBody("rejected", CompanionResult(), RealProvenance), Wlj, V) == ECompanionMissionParse::Ok);
-		// Never "verified" without the round trip, or when simulated.
-		EXPECT(Route, ParseCompanionMission(200, MissionBody("result_received", CompanionResult(), "{\"source\":\"grok_bot\",\"simulated\":false}"), Wlj, V) == ECompanionMissionParse::Ok);
-		EXPECT(Route, V.bHasProvenance && !V.bShowVerified);
-		EXPECT(Route, ParseCompanionMission(200, MissionBody("result_received", CompanionResult(), "{\"source\":\"simulated\",\"simulated\":true}"), Wlj, V) == ECompanionMissionParse::Ok);
-		EXPECT(Route, V.Provenance.bSimulated && !V.bShowVerified);
-		EXPECT(Route, ParseCompanionMission(200, MissionBody("result_received", CompanionResult(), "{\"source\":\"simulated\",\"simulated\":true,\"verifiedBy\":\"task_token_round_trip\"}"), Wlj, V) == ECompanionMissionParse::BadProvenance);
-		EXPECT(Route, !V.bHasAnswer && !V.bShowVerified);
-		EXPECT(Route, ParseCompanionMission(200, MissionBody("result_received", CompanionResult(), "\"verified\""), Wlj, V) == ECompanionMissionParse::BadProvenance);
+		EXPECT(Route, ParseCompanionMission(200, MissionBody("result_received", CompanionResult(), Prov("\"simulated\"", "null", "null")), Wlj, V) == ECompanionMissionParse::Ok);
+		EXPECT(Route, V.Provenance.bSimulated && !V.bShowVerified && V.Provenance.WakeId.empty() && V.Provenance.BodyDigest.empty());
+		EXPECT(Route, ParseCompanionMission(200, MissionBody("result_received", CompanionResult(), Prov("\"companion_port\"", "\"" + std::string(ProvenanceWakeIdMaxBytes, 'w') + "\"")), Wlj, V) == ECompanionMissionParse::Ok);
+		EXPECT(Route, ParseCompanionMission(200, MissionBody("result_received", CompanionResult(), Prov("\"companion_port\"", "\"w\\u202ex\"")), Wlj, V) == ECompanionMissionParse::Ok && V.Provenance.WakeId == "wx");
+		EXPECT(Route, ParseCompanionMission(200, MissionBody("result_received", CompanionResult()), Wlj, V) == ECompanionMissionParse::Ok && !V.bHasProvenance);
+		// provenanceOf (route.ts:593-611): every key, closed source, hex digests, the artifact's own sha, no verified / verifiedBy.
+		{
+			const std::string B64 = "\"" + std::string(64, 'b') + "\"";
+			const std::string Bad[] = {
+				Prov("\"grok_bot\""), Prov("\"openai\""), Prov("\"Simulated\""), Prov("null"), Prov("7"),
+				Prov("\"companion_port\"", "7"), Prov("\"companion_port\"", "\"" + std::string(ProvenanceWakeIdMaxBytes + 1, 'w') + "\""),
+				Prov("\"companion_port\"", "\"w\"", "\"" + std::string(64, 'C') + "\""), Prov("\"companion_port\"", "\"w\"", "\"abc\""), Prov("\"companion_port\"", "\"w\"", "1"),
+				Prov("\"companion_port\"", "\"w\"", "null", "null"), Prov("\"companion_port\"", "\"w\"", "null", "\"" + std::string(64, 'a') + "\""),
+				Prov("\"companion_port\"", "\"w\"", "null", B64, ",\"verified\":false"),
+				Prov("\"companion_port\"", "\"w\"", "null", B64, ",\"verifiedBy\":null"),
+				Prov("\"simulated\"", "null", "null", B64, ",\"verifiedBy\":\"task_token_round_trip\""),
+				"{\"source\":\"companion_port\",\"bodyDigest\":null,\"contentSha256\":" + B64 + "}",
+				"{\"source\":\"companion_port\",\"wakeId\":null,\"contentSha256\":" + B64 + "}",
+				"\"verified\"", "[]",
+			};
+			int Row = 0;
+			for (const std::string& P : Bad)
+			{
+				const bool bRefused = ParseCompanionMission(200, MissionBody("result_received", CompanionResult(), P), Wlj, V) == ECompanionMissionParse::BadProvenance && !V.bHasAnswer;
+				if (!bRefused) { std::printf("  provenance row %d accepted\n", Row); }
+				EXPECT(Route, bRefused);
+				++Row;
+			}
+		}
+		// route.ts:246: provenance only with a result.
+		EXPECT(Route, ParseCompanionMission(200, MissionBody("result_received", "null", RealProvenance), Wlj, V) == ECompanionMissionParse::BadProvenance && !V.bHasAnswer);
+		// route.ts:249: verified is the literal false; absent or anything else is not this route.
+		for (const std::string& Verified : {std::string(), std::string(",\"verified\":true"), std::string(",\"verified\":\"false\""), std::string(",\"verified\":null"),
+				 std::string(",\"verified\":0")})
+		{
+			EXPECT(Route, ParseCompanionMission(200, MissionBody("delivered", "null", "null", Wlj, "\"cmp_" + U3 + "\"", Verified), Wlj, V) == ECompanionMissionParse::BadVerified);
+			EXPECT(Route, !V.bHasAnswer && !V.bShowVerified);
+		}
+		EXPECT(Route, std::strcmp(CompanionMissionParseName(ECompanionMissionParse::BadVerified), "bad_verified") == 0);
 		// Results only after result_received.
 		for (const char* Early : {"none", "invited", "delivered", "delivery_failed", "timed_out", "no_result", "cancelled"})
 		{
@@ -1132,7 +1323,7 @@ namespace
 	/* ------------------------------------------------------------ BRIDGE chat answers Q1-Q15 */
 	const std::string KindBody(const std::string& Kind) { return "{\"error\":{\"kind\":\"" + Kind + "\",\"message\":\"x\"}}"; }
 
-	bool TraceHas(const FOpenAiCompanionSession& S, const std::string& Word)
+	bool TraceHas(const FCompanionSession& S, const std::string& Word)
 	{
 		for (const std::string& L : S.Trace())
 		{
@@ -1141,16 +1332,9 @@ namespace
 		return false;
 	}
 
-	bool ConnectWith(FOpenAiCompanionSession& S, int K, int Status, const std::string& Body)
-	{
-		FMaskedKeyField F;
-		F.Append(Sentinel);
-		FKeyHandoff H;
-		if (!S.BeginConnect(F, Idem(K), H)) { return false; }
-		H.MarkSent();
-		S.ApplyConnectAnswer(Status, Body, 0);
-		return true;
-	}
+	bool TraceHas(const FOneAgent& S, const std::string& Word) { return TraceHas(S.S, Word); }
+
+	bool ConnectWith(FOneAgent& S, int Status, const std::string& Body) { return ConnectAs(S.S, S.Provider, Status, Body); }
 
 	void TestAnswers()
 	{
@@ -1165,7 +1349,7 @@ namespace
 		EXPECT(Answers, RunChat(Replayed(Conv, Msg1) + Delta("x") + Done(), Conv, true, std::string::npos, Msg1).Outcome == EChatStreamOutcome::Done);
 		{
 			// The resend's replay must carry the messageId the first attempt's meta showed.
-			FOpenAiCompanionSession S(Origin);
+			FOneAgent S(Origin);
 			EXPECT(Answers, MakeReady(S));
 			EXPECT(Answers, Send(S, "q1", 1001));
 			S.FeedChatBytes(Meta(Conv, "", Msg2) + Delta("part"), 0);
@@ -1178,7 +1362,7 @@ namespace
 		}
 		{
 			// A first message has no conversationId to send; the replay must match the one the first meta showed.
-			FOpenAiCompanionSession S(Origin);
+			FOneAgent S(Origin);
 			EXPECT(Answers, MakeReady(S));
 			EXPECT(Answers, Send(S, "q1b", 1002));
 			S.FeedChatBytes(Meta(Conv, "", Msg2), 0);
@@ -1227,11 +1411,11 @@ namespace
 		EXPECT(Answers, RunChat(Replayed() + Delta("a") + Err("provider_unavailable", "x"), Conv, true).Fault == EChatProtocolFault::ReplaySequence);
 		EXPECT(Answers, RunChat(Replayed() + Err("provider_unavailable", "x"), Conv, true).Outcome == EChatStreamOutcome::ProviderError);
 		{
-			FChatStreamDecoder D(Conv, true, Msg1);
+			FChatStreamDecoder D(TestProvider, Conv, true, Msg1);
 			D.Feed(Replayed() + Delta("whole reply") + Done());
 			D.Finish();
 			EXPECT(Answers, D.IsReplayed() && D.Outcome() == EChatStreamOutcome::Done && D.ReplyForDisplay() == "whole reply");
-			FChatStreamDecoder L(Conv, true, Msg1);
+			FChatStreamDecoder L(TestProvider, Conv, true, Msg1);
 			L.Feed(Meta() + Delta("a") + Done());
 			EXPECT(Answers, !L.IsReplayed() && L.Outcome() == EChatStreamOutcome::Done);
 		}
@@ -1241,13 +1425,13 @@ namespace
 
 		/* Q5: finishReason max_length is a complete reply with a fixed line. */
 		{
-			FChatStreamDecoder D("", false);
+			FChatStreamDecoder D(TestProvider, "", false);
 			D.Feed(Meta() + Delta("long") + Done(Msg1, "max_length"));
 			EXPECT(Answers, D.Outcome() == EChatStreamOutcome::Done && D.HitLengthLimit() && D.FinishReason() == "max_length");
-			FChatStreamDecoder E("", false);
+			FChatStreamDecoder E(TestProvider, "", false);
 			E.Feed(Meta() + Delta("short") + Done());
 			EXPECT(Answers, E.Outcome() == EChatStreamOutcome::Done && !E.HitLengthLimit());
-			FOpenAiCompanionSession S(Origin);
+			FOneAgent S(Origin);
 			EXPECT(Answers, MakeReady(S) && Send(S, "q5", 1050));
 			S.FeedChatBytes(Meta() + Delta("long") + Done(Msg1, "max_length"), 0);
 			EXPECT(Answers, S.View().State == ECompanionState::Ready && S.View().StatusLine == "The reply reached the length limit");
@@ -1261,7 +1445,7 @@ namespace
 
 		/* Q6: 413 too large, 400 body invalid; the worst-case 8000-unit body fits the 64 KiB server cap. */
 		{
-			FOpenAiCompanionSession S(Origin);
+			FOneAgent S(Origin);
 			EXPECT(Answers, MakeReady(S) && Send(S, "q6", 1060));
 			S.ApplyChatHttpAnswer(413, "", KindBody("companion_message_too_large"), 0);
 			EXPECT(Answers, S.View().State == ECompanionState::Error && S.View().StatusLine == "Message too long" && TraceHas(S, "chat_too_large"));
@@ -1280,7 +1464,7 @@ namespace
 
 		/* Q7: DELETE history 409 (a turn in flight server-side) stays pending; the next delete re-sends. */
 		{
-			FOpenAiCompanionSession S(Origin);
+			FOneAgent S(Origin);
 			EXPECT(Answers, MakeReady(S) && Send(S, "q7", 1070));
 			S.FeedChatBytes(Meta() + Delta("r") + Done(), 0);
 			FRelayRequest D = S.BeginDeleteHistory();
@@ -1294,7 +1478,7 @@ namespace
 
 		/* Q8: Retry-After is a positive delta-seconds without leading zero, else 60 s; retryAfterMs absent -> 60 s. */
 		{
-			FOpenAiCompanionSession S(Origin);
+			FOneAgent S(Origin);
 			EXPECT(Answers, MakeReady(S));
 			const std::pair<const char*, std::uint64_t> Rows[] = {{"0", 60000}, {"05", 60000}, {"1", 1000}, {"", 60000}, {"-1", 60000}, {"1.5", 60000}};
 			int K = 1080;
@@ -1309,7 +1493,7 @@ namespace
 			}
 		}
 		{
-			FOpenAiCompanionSession S(Origin);
+			FOneAgent S(Origin);
 			EXPECT(Answers, MakeReady(S) && Send(S, "q8b", 1090, 5000));
 			S.FeedChatBytes(Meta() + Err("provider_rate_limited", "slow"), 5000);
 			EXPECT(Answers, S.View().State == ECompanionState::RetryLater && S.View().RetryNotBeforeMs == 5000 + DefaultRetryWaitMs);
@@ -1329,182 +1513,106 @@ namespace
 		EXPECT(Answers, RelayOriginFromJ1Endpoint("http://localhost:47123").empty() && RelayOriginFromJ1Endpoint("").empty() && RelayOriginFromJ1Endpoint("/").empty());
 		EXPECT(Answers, RelayOriginFromJ1Endpoint("https://127.0.0.1:47123").empty());
 		{
-			FOpenAiCompanionSession S(RelayOriginFromJ1Endpoint("http://localhost:47123/"));
-			EXPECT(Answers, S.View().Offline == EOfflineReason::RelayNotLoopback && S.ProvidersRequest().Method.empty());
+			FOneAgent S(RelayOriginFromJ1Endpoint("http://localhost:47123/"));
+			EXPECT(Answers, !S.SessionView().bOriginOk && S.SessionView().StatusLine == "Companion relay must be on this machine");
 		}
 
-		/* Q10: label = labels[mode]; "label" is deprecated and never read; one bad entry -> the list is untrusted. */
-		{
-			FOpenAiCompanionSession S(Origin);
-			S.ApplyProvidersAnswer(200, Providers());
-			EXPECT(Answers, S.View().ProviderLabel == OddLabel && !Contains(Everything(S), "DEPRECATED"));
-			EXPECT(Answers, S.LabelFor("openai", "siwc_plan") == "Plan label P" && S.LabelFor("openai", "agent_webhook").empty());
-			EXPECT(Answers, S.LabelFor("grok_bot", "api_key").empty() && S.LabelFor("nobody", "api_key").empty());
-		}
-		{
-			const std::string Bad[] = {
-				// a listed mode with no label
-				"{\"providers\":[{\"provider\":\"openai\",\"labels\":{\"api_key\":\"A\"},\"modes\":[\"api_key\",\"siwc_plan\"],\"modeAvailability\":{\"api_key\":\"available\",\"siwc_plan\":\"not_eligible\"}}]}",
-				// the v0 shape: "label" only
-				"{\"providers\":[{\"provider\":\"openai\",\"label\":\"A\",\"modes\":[\"api_key\"],\"modeAvailability\":{\"api_key\":\"available\"}}]}",
-				// no modes
-				"{\"providers\":[{\"provider\":\"openai\",\"labels\":{\"api_key\":\"A\"},\"modeAvailability\":{\"api_key\":\"available\"}}]}",
-				// duplicate mode
-				"{\"providers\":[{\"provider\":\"openai\",\"labels\":{\"api_key\":\"A\"},\"modes\":[\"api_key\",\"api_key\"],\"modeAvailability\":{\"api_key\":\"available\"}}]}",
-				// empty label
-				"{\"providers\":[{\"provider\":\"openai\",\"labels\":{\"api_key\":\"\"},\"modes\":[\"api_key\"],\"modeAvailability\":{\"api_key\":\"available\"}}]}",
-				// a bad label on ANOTHER provider still poisons the list
-				"{\"providers\":[{\"provider\":\"openai\",\"labels\":{\"api_key\":\"A\"},\"modes\":[\"api_key\"],\"modeAvailability\":{\"api_key\":\"available\"}},"
-				"{\"provider\":\"grok_bot\",\"labels\":{\"agent_webhook\":7},\"modes\":[\"agent_webhook\"],\"modeAvailability\":{\"agent_webhook\":\"available\"}}]}",
-				// non-snake mode
-				"{\"providers\":[{\"provider\":\"openai\",\"labels\":{\"Api-Key\":\"A\"},\"modes\":[\"Api-Key\"],\"modeAvailability\":{\"Api-Key\":\"available\"}}]}",
-			};
-			int Row = 0;
-			for (const std::string& Body : Bad)
-			{
-				FOpenAiCompanionSession S(Origin);
-				S.ApplyProvidersAnswer(200, Body);
-				const bool bRefused = S.View().Offline == EOfflineReason::ProvidersUnknown && S.View().ProviderLabel.empty() && S.LabelFor("openai", "api_key").empty();
-				if (!bRefused) { std::printf("  q10 row %d accepted\n", Row); }
-				EXPECT(Answers, bRefused);
-				++Row;
-			}
-		}
+		/* Q10 (labels per mode) is retired in v0.2: the agent's displayName replaces it (A10); see the session and agents sections. */
 
 		/* Q11: v0 never sends simulated:true; it is a protocol fault, never shown as a reply. */
 		EXPECT(Answers, RunChat(Meta(Conv, ",\"simulated\":true") + Delta("fake") + Done()).Fault == EChatProtocolFault::MetaSimulatedTrue);
 		EXPECT(Answers, RunChat(Meta(Conv, ",\"simulated\":false") + Delta("real") + Done()).Outcome == EChatStreamOutcome::Done);
 		EXPECT(Answers, RunChat(Meta(Conv, ",\"simulated\":\"no\"") + Delta("x") + Done()).Fault == EChatProtocolFault::MetaBadSimulated);
 		{
-			FOpenAiCompanionSession S(Origin);
+			FOneAgent S(Origin);
 			EXPECT(Answers, MakeReady(S) && Send(S, "q11", 1110));
 			S.FeedChatBytes(Meta(Conv, ",\"simulated\":true") + Delta("FAKE-REPLY") + Done(), 0);
 			EXPECT(Answers, S.History().Size() == 0 && !Contains(Everything(S), "FAKE-REPLY") && TraceHas(S, "chat_fault_meta_simulated_true"));
 			EXPECT(Answers, S.View().PartialReply.empty() && S.View().State == ECompanionState::Error);
 		}
 
-		/* Q12: a rejection survives disconnect; only a successful PUT clears it. */
+		/* Q12: a rejection survives disconnect and agent lists; only a successful connect answer for that agent clears it. */
 		{
-			FOpenAiCompanionSession S(Origin);
+			FOneAgent S(Origin);
 			EXPECT(Answers, MakeReady(S) && Send(S, "q12", 1120));
 			S.FeedChatBytes(Meta() + Err("provider_auth_failed", "bad key"), 0);
 			EXPECT(Answers, S.View().Offline == EOfflineReason::KeyRejected);
 			EXPECT(Answers, !S.BeginDisconnect().Method.empty());
-			S.ApplyDisconnectAnswer(204);
+			S.ApplyDisconnectAnswer(200, Gone(TestAgent));
 			EXPECT(Answers, S.View().Offline == EOfflineReason::KeyRejected && S.View().StatusLine == "Your key was rejected" && S.View().bShowSimulatedBanner);
-			S.ApplyConnectionsAnswer(200, Connections("connected"));
+			S.S.ApplyAgentSlots(Slots("[" + ConnectOk + "]"));
 			EXPECT(Answers, S.View().Offline == EOfflineReason::KeyRejected && !S.View().bCanSend);
-			EXPECT(Answers, ConnectWith(S, 1121, 422, KindBody("companion_credential_rejected")));
+			EXPECT(Answers, ConnectWith(S, 400, KindBody("companion_credentials_rejected")));
 			EXPECT(Answers, S.View().Offline == EOfflineReason::KeyRejected);
-			EXPECT(Answers, ConnectWith(S, 1122, 200, ConnectOk));
+			EXPECT(Answers, ConnectWith(S, 201, ConnectOk));
 			EXPECT(Answers, S.View().State == ECompanionState::Ready && S.View().Offline == EOfflineReason::None && S.View().bCanSend);
 		}
 
-		/* Q13: DELETE connection carries no idempotency key and no body. */
+		/* Q13: DELETE agent carries no idempotency key and no body. */
 		{
-			FOpenAiCompanionSession S(Origin);
+			FOneAgent S(Origin);
 			EXPECT(Answers, MakeReady(S));
 			const FRelayRequest D = S.BeginDisconnect();
 			EXPECT(Answers, D.Method == "DELETE" && D.IdempotencyKey.empty() && D.Body.empty());
 		}
 
-		/* Q14: 422 credential_rejected leaves the old connection; the 200 shape is strict. */
+		/* Q14: a refused connect (400 companion_credentials_rejected, route.ts:288) leaves the old connection; the 201 answer is strict. */
 		{
-			FOpenAiCompanionSession S(Origin);
+			FOneAgent S(Origin);
 			EXPECT(Answers, MakeReady(S));
-			EXPECT(Answers, ConnectWith(S, 1140, 422, KindBody("companion_credential_rejected")));
-			EXPECT(Answers, S.View().State == ECompanionState::Ready && S.View().StatusLine == "Your key was rejected" && S.View().bCanSend);
+			EXPECT(Answers, ConnectWith(S, 400, KindBody("companion_credentials_rejected")));
+			EXPECT(Answers, S.View().State == ECompanionState::Ready && S.SessionView().StatusLine == "Could not connect the agent" && S.View().bCanSend);
 			EXPECT(Answers, !S.View().bShowSimulatedBanner && TraceHas(S, "connect_failed"));
 			EXPECT(Answers, Send(S, "q14", 1141));
 			S.FeedChatBytes(Meta() + Delta("ok") + Done(), 0);
-			EXPECT(Answers, S.View().State == ECompanionState::Ready && S.View().StatusLine.empty() && S.History().Size() == 1);
+			EXPECT(Answers, S.View().State == ECompanionState::Ready && S.SessionView().StatusLine.empty() && S.History().Size() == 1);
 		}
 		{
-			FOpenAiCompanionSession S(Origin);
-			S.ApplyProvidersAnswer(200, Providers());
-			S.ApplyConnectionsAnswer(200, Connections("not_connected"));
-			EXPECT(Answers, ConnectWith(S, 1142, 422, KindBody("companion_credential_rejected")));
-			EXPECT(Answers, S.View().Offline == EOfflineReason::NotConnected && S.View().StatusLine == "Your key was rejected");
-			EXPECT(Answers, ConnectWith(S, 1143, 422, KindBody("companion_body_invalid")));
-			EXPECT(Answers, S.View().StatusLine == "Could not connect the key");
+			FOneAgent S(Origin);
+			EXPECT(Answers, ConnectWith(S, 400, KindBody("companion_credentials_rejected")));
+			EXPECT(Answers, !S.Has() && S.SessionView().StatusLine == "Could not connect the agent");
+			for (int Code : {200, 202, 204, 400, 401, 403, 404, 405, 409, 422, 429, 500, 0})
+			{
+				EXPECT(Answers, ConnectWith(S, Code, ConnectOk) && !S.Has() && S.SessionView().StatusLine == "Could not connect the agent");
+			}
+			EXPECT(Answers, ConnectWith(S, 503, KindBody("julius_dispatch_unavailable")) && !S.Has() && S.SessionView().StatusLine == "Retry later");
 		}
 		{
-			const std::string Head = "{\"provider\":\"openai\",\"mode\":\"api_key\",";
 			const std::string Bad[] = {
-				Head + "\"state\":\"connected\",\"verifiedAt\":\"2026-10-23T22:00:01Z\"}",
-				Head + "\"state\":\"connected\",\"connectedAt\":\"2026-10-23T22:00:00Z\",\"verifiedAt\":null}",
-				Head + "\"state\":\"connected\",\"connectedAt\":\"2026-10-23T22:00:00Z\"}",
-				Head + "\"state\":\"connected_unverified\",\"connectedAt\":\"2026-10-23T22:00:00Z\",\"verifiedAt\":\"2026-10-23T22:00:01Z\"}",
-				Head + "\"state\":\"connected_unverified\",\"connectedAt\":\"2026-10-23T22:00:00Z\"}",
-				Head + "\"state\":\"connected\",\"connectedAt\":\"2026-10-23 22:00:00\",\"verifiedAt\":\"2026-10-23T22:00:01Z\"}",
-				Head + "\"state\":\"connected\",\"connectedAt\":null,\"verifiedAt\":\"2026-10-23T22:00:01Z\"}",
-				Head + "\"state\":\"connected\",\"connectedAt\":\"2026-10-23T22:00:00Z\",\"verifiedAt\":\"yesterday\"}",
+				"{\"providerId\":\"openai\",\"displayName\":\"A\",\"kind\":\"single\",\"adapterVersion\":\"1\",\"declaredCapabilities\":[],\"authorizedCapabilities\":[],\"connection\":\"connected\"}",
+				Descriptor("agt main", TestProvider),
+				Descriptor(TestAgent, "open ai"),
+				Descriptor(TestAgent, TestProvider, "connected", DeclaredDefault, AuthorizedDefault, "", ""),
+				Descriptor(TestAgent, TestProvider, "connected", DeclaredDefault, AuthorizedDefault, "", "Agent One", "triple"),
+				Descriptor(TestAgent, TestProvider, "connected", "\"chat\"", AuthorizedDefault),
+				Descriptor(TestAgent, TestProvider, "connected", DeclaredDefault, "[\"tools.run\"]"),
+				Descriptor(TestAgent, TestProvider, "connected_unverified"),
+				Descriptor(TestAgent, TestProvider, "connected", DeclaredDefault, AuthorizedDefault, ",\"verified\":\"yes\""),
+				Descriptor(TestAgent, OtherProvider), // answered for another provider: never substituted
+				Descriptor(TestAgent, TestProvider, "connected", DeclaredDefault, AuthorizedDefault, ",\"apiKey\":\"sk-x\""),
+				Descriptor(TestAgent, TestProvider, "connected", DeclaredDefault, AuthorizedDefault, ",\"token\":\"t\""),
+				Descriptor(TestAgent, TestProvider, "connected", DeclaredDefault, AuthorizedDefault, ",\"password\":\"p\""),
+				Descriptor(TestAgent, TestProvider, "connected", DeclaredDefault, AuthorizedDefault, ",\"last4\":\"1234\""),
+				Descriptor(TestAgent, TestProvider, "connected", DeclaredDefault, AuthorizedDefault, ",\"verified\":false"),
+				Descriptor(TestAgent, TestProvider, "connected", DeclaredDefault, AuthorizedDefault, "", "null"),
+				Descriptor(TestAgent, TestProvider, "connected", DeclaredDefault, AuthorizedDefault, "", "Agent One", "null"),
+				Descriptor(TestAgent, TestProvider, "unsupported", "[]", "[]", "", "Agent One", "single"),
+				"[" + ConnectOk + "]",
 			};
 			int Row = 0;
 			for (const std::string& Body : Bad)
 			{
-				FOpenAiCompanionSession S(Origin);
-				S.ApplyProvidersAnswer(200, Providers());
-				S.ApplyConnectionsAnswer(200, Connections("not_connected"));
-				const bool bSent = ConnectWith(S, 1150 + Row, 200, Body);
-				const bool bRefused = bSent && S.View().State == ECompanionState::Offline && S.View().StatusLine == "Could not connect the key";
+				FOneAgent S(Origin);
+				const bool bSent = ConnectWith(S, 201, Body);
+				const bool bRefused = bSent && !S.Has() && S.S.AgentIds().empty() && S.SessionView().StatusLine == "Could not connect the agent";
 				if (!bRefused) { std::printf("  q14 row %d accepted\n", Row); }
 				EXPECT(Answers, bRefused);
 				++Row;
 			}
-			FOpenAiCompanionSession S(Origin);
-			S.ApplyProvidersAnswer(200, Providers());
-			S.ApplyConnectionsAnswer(200, Connections("not_connected"));
-			EXPECT(Answers, ConnectWith(S, 1160, 200, ConnectUnverified) && S.View().State == ECompanionState::Ready && !S.View().bShowSimulatedBanner);
+			FOneAgent S(Origin);
+			EXPECT(Answers, ConnectWith(S, 201, ConnectOk) && S.View().State == ECompanionState::Ready && !S.View().bShowSimulatedBanner);
 		}
-
-		/* Q15: lastErrorKind shown only as its fixed line; unknown words show nothing (traced). */
-		{
-			const std::pair<const char*, const char*> Rows[] = {
-				{"provider_auth_failed", "Your key was rejected"},
-				{"provider_quota_exhausted", "Your OpenAI account is out of credit"},
-				{"provider_rate_limited", "Retry later"},
-				{"provider_unavailable", "Retry later"},
-				{"provider_refused", "The provider refused this message"},
-				{"companion_internal", "Companion error"},
-				{"delivery_failed", "Companion delivery failed"},
-			};
-			for (const auto& Row : Rows)
-			{
-				FOpenAiCompanionSession S(Origin);
-				S.ApplyProvidersAnswer(200, Providers());
-				S.ApplyConnectionsAnswer(200, Connections("connected", std::string("\"") + Row.first + "\""));
-				const bool bOk = S.View().LastErrorLine == Row.second && S.View().State == ECompanionState::Ready
-					&& !Contains(S.View().LastErrorLine, "provider_") && !Contains(S.View().LastErrorLine, "companion_");
-				if (!bOk) { std::printf("  q15 %s -> '%s'\n", Row.first, S.View().LastErrorLine.c_str()); }
-				EXPECT(Answers, bOk);
-			}
-			for (const char* Odd : {"\"fallback_used\"", "5", "null", "\"\"", "\"Provider_Auth_Failed\""})
-			{
-				FOpenAiCompanionSession S(Origin);
-				S.ApplyProvidersAnswer(200, Providers());
-				S.ApplyConnectionsAnswer(200, Connections("connected", Odd));
-				const bool bQuiet = S.View().LastErrorLine.empty() && S.View().State == ECompanionState::Ready && !Contains(Everything(S), "fallback_used");
-				if (!bQuiet) { std::printf("  q15 odd %s -> '%s'\n", Odd, S.View().LastErrorLine.c_str()); }
-				EXPECT(Answers, bQuiet);
-			}
-			{
-				FOpenAiCompanionSession S(Origin);
-				S.ApplyProvidersAnswer(200, Providers());
-				S.ApplyConnectionsAnswer(200, Connections("connected", "\"fallback_used\""));
-				EXPECT(Answers, TraceHas(S, "connections_last_error_unknown"));
-			}
-			{
-				FOpenAiCompanionSession S(Origin);
-				S.ApplyProvidersAnswer(200, Providers());
-				S.ApplyConnectionsAnswer(200, Connections("connected", "\"provider_quota_exhausted\""));
-				EXPECT(Answers, !S.BeginDisconnect().Method.empty());
-				S.ApplyDisconnectAnswer(204);
-				EXPECT(Answers, S.View().LastErrorLine.empty());
-				S.ApplyConnectionsAnswer(200, Connections("connected", "\"provider_quota_exhausted\""));
-				EXPECT(Answers, ConnectWith(S, 1170, 200, ConnectOk) && S.View().LastErrorLine.empty());
-			}
-		}
+		/* Q15 (lastErrorKind on the connections list) is retired with that route in v0.2 (open question). */
 	}
 
 	/* ------------------------------------------------------------ idempotency-key minting */
@@ -1598,7 +1706,7 @@ namespace
 			}
 			EXPECT(Mint, bAll && Seen.size() == 10000 && M.IssuedCount() == 10000);
 			// Minted keys are accepted by the session as idempotency keys.
-			FOpenAiCompanionSession S(Origin);
+			FOneAgent S(Origin);
 			EXPECT(Mint, MakeReady(S));
 			std::string K;
 			EXPECT(Mint, M.Mint(Src, K) == EKeyMint::Minted);
@@ -1607,18 +1715,470 @@ namespace
 		}
 		{
 			// The failure path in the session: a fixed error, nothing sent, and an empty key is refused.
-			FOpenAiCompanionSession S(Origin);
+			FOneAgent S(Origin);
 			EXPECT(Mint, MakeReady(S));
 			S.ApplyKeyMintFailure();
 			EXPECT(Mint, S.View().State == ECompanionState::Error && S.View().StatusLine == "Secure random unavailable; try again");
-			EXPECT(Mint, TraceHas(S, "key_mint_failed") && S.View().bCanSend);
+			EXPECT(Mint, TraceHas(S, "key_mint_failed") && S.View().bCanSend && S.SessionView().StatusLine == "Secure random unavailable; try again");
 			FRelayRequest R;
 			EXPECT(Mint, !S.BeginMessage("hi", "", "", 0, R) && R.Method.empty());
-			FMaskedKeyField F;
-			F.Append(Sentinel);
-			FKeyHandoff H;
-			EXPECT(Mint, !S.BeginConnect(F, "", H) && F.IsEmpty() && !H.IsValid());
-			EXPECT(Mint, Send(S, "after", 1200) && S.View().State == ECompanionState::Streaming);
+			EXPECT(Mint, Send(S, "after", 1200) && S.View().State == ECompanionState::Streaming && S.SessionView().StatusLine.empty());
+		}
+		{
+			// A connect-path mint failure (no agent yet): the session line shows it, nothing is registered.
+			FCompanionSession S(Origin, Project, true);
+			S.ApplyKeyMintFailure();
+			EXPECT(Mint, S.SessionView().StatusLine == "Secure random unavailable; try again" && S.AgentIds().empty());
+		}
+	}
+
+	/* ------------------------------------------------------------ v0.2 agents[]: descriptor and list parsing */
+	std::string MissionWithAgents(const std::string& AgentsJson, const std::string& State = "delivered", const std::string& Run = Wlj)
+	{
+		return "{\"agents\":" + AgentsJson + "," + MissionBody(State, "null", "null", Run).substr(1);
+	}
+
+	void TestAgents()
+	{
+		{
+			const FAgentSlot G = SlotOf(Descriptor(Ag("A-1"), OtherProvider, "connected", "[\"chat\",\"history\",\"tools.run\"]", "[\"chat\",\"history\"]",
+				"", "Agent \xE2\x9C\x93", "compound"));
+			EXPECT(Agents, G.Fault == EAgentSlotFault::None && G.Descriptor.AgentId == Ag("A-1") && G.Descriptor.ProviderId == OtherProvider);
+			EXPECT(Agents, G.Descriptor.DisplayName == "Agent \xE2\x9C\x93" && G.Descriptor.Kind == EAgentKind::Compound && G.Descriptor.AdapterVersion == "1.4.2");
+			EXPECT(Agents, G.Descriptor.DeclaredCapabilities.size() == 3 && G.Descriptor.AuthorizedCapabilities.size() == 2);
+			EXPECT(Agents, G.Descriptor.Connection == EAgentConnection::Connected);
+			EXPECT(Agents, SlotOf(Descriptor(TestAgent, TestProvider)).Descriptor.Kind == EAgentKind::Single);
+			// Nullable fields (registry.ts:31-33): null displayName / kind / adapterVersion where BRIDGE publishes them.
+			const FAgentSlot U = SlotOf(Descriptor(TestAgent, "zz", "unsupported", Auto, Auto, "", "null"));
+			EXPECT(Agents, U.Fault == EAgentSlotFault::None && U.Descriptor.DisplayName.empty() && U.Descriptor.Kind == EAgentKind::Unknown && U.Descriptor.AdapterVersion.empty());
+			const FAgentSlot E = SlotOf(Descriptor(TestAgent, TestProvider, "error", Auto, Auto, "", "Label"));
+			EXPECT(Agents, E.Fault == EAgentSlotFault::None && E.Descriptor.Kind == EAgentKind::Unknown && E.Descriptor.AdapterVersion == "1.4.2" && E.Descriptor.DisplayName == "Label");
+			const FAgentSlot D = SlotOf(Descriptor(TestAgent, TestProvider, "disconnected", DeclaredDefault, "[]", "", "null", "null"));
+			EXPECT(Agents, D.Fault == EAgentSlotFault::None && D.Descriptor.Kind == EAgentKind::Unknown && D.Descriptor.DeclaredCapabilities.size() == 2);
+			std::string NullVersion = Descriptor(TestAgent, TestProvider);
+			NullVersion.replace(NullVersion.find("\"1.4.2\""), 7, "null");
+			EXPECT(Agents, SlotOf(NullVersion).Fault == EAgentSlotFault::None && SlotOf(NullVersion).Descriptor.AdapterVersion.empty());
+		}
+		{
+			struct FRow { std::string Json; EAgentSlotFault Fault; bool bKeepsId; };
+			const std::string A = TestAgent;
+			const std::string P = TestProvider;
+			std::string SixtyFive = "[";
+			for (int I = 0; I < 65; ++I) { SixtyFive += std::string(I ? "," : "") + "\"c" + std::to_string(I) + "\""; }
+			SixtyFive += "]";
+			const FRow Rows[] = {
+				{"[]", EAgentSlotFault::NotObject, false},
+				{"\"agt\"", EAgentSlotFault::NotObject, false},
+				{Descriptor("", P), EAgentSlotFault::BadAgentId, false},
+				{Descriptor("agt main", P), EAgentSlotFault::BadAgentId, false},
+				{Descriptor("agt/x", P), EAgentSlotFault::BadAgentId, false},
+				{Descriptor("agt.x", P), EAgentSlotFault::BadAgentId, false},
+				{Descriptor("agt_main", P), EAgentSlotFault::BadAgentId, false},
+				{Descriptor("agt_" + U1.substr(0, 14) + "1" + U1.substr(15), P), EAgentSlotFault::BadAgentId, false},
+				{Descriptor("agt_" + U1.substr(0, 35) + "A", P), EAgentSlotFault::BadAgentId, false},
+				{Descriptor("AGT_" + U1, P), EAgentSlotFault::BadAgentId, false},
+				{Descriptor(A + " ", P), EAgentSlotFault::BadAgentId, false},
+				{Descriptor(A, ""), EAgentSlotFault::BadProviderId, true},
+				{Descriptor(A, "  "), EAgentSlotFault::BadProviderId, true},
+				{Descriptor(A, std::string(201, 'p')), EAgentSlotFault::BadProviderId, true},
+				{"{\"agentId\":\"" + A + "\",\"providerId\":7,\"displayName\":\"N\",\"kind\":\"single\",\"adapterVersion\":\"1\",\"declaredCapabilities\":[],\"authorizedCapabilities\":[],\"connection\":\"connected\"}",
+					EAgentSlotFault::BadProviderId, true},
+				{Descriptor(A, P, "connected", DeclaredDefault, AuthorizedDefault, "", ""), EAgentSlotFault::BadDisplayName, true},
+				{Descriptor(A, P, "connected", DeclaredDefault, AuthorizedDefault, "", " \\t "), EAgentSlotFault::BadDisplayName, true},
+				{Descriptor(A, P, "connected", DeclaredDefault, AuthorizedDefault, "", std::string(201, 'n')), EAgentSlotFault::BadDisplayName, true},
+				{"{\"agentId\":\"" + A + "\",\"providerId\":\"" + P + "\",\"kind\":\"single\",\"adapterVersion\":\"1\",\"declaredCapabilities\":[],\"authorizedCapabilities\":[],\"connection\":\"disconnected\"}",
+					EAgentSlotFault::BadDisplayName, true},
+				{Descriptor(A, P, "connected", DeclaredDefault, AuthorizedDefault, "", "Agent One", "Single"), EAgentSlotFault::BadKind, true},
+				{Descriptor(A, P, "connected", DeclaredDefault, AuthorizedDefault, "", "Agent One", ""), EAgentSlotFault::BadKind, true},
+				{"{\"agentId\":\"" + A + "\",\"providerId\":\"" + P + "\",\"displayName\":\"N\",\"kind\":\"single\",\"declaredCapabilities\":[],\"authorizedCapabilities\":[],\"connection\":\"connected\"}",
+					EAgentSlotFault::BadAdapterVersion, true},
+				{Descriptor(A, P).replace(Descriptor(A, P).find("1.4.2"), 5, std::string(AdapterVersionMaxBytes + 1, 'v')), EAgentSlotFault::BadAdapterVersion, true},
+				{Descriptor(A, P, "connected", "{}", "[]"), EAgentSlotFault::BadDeclaredCapabilities, true},
+				{Descriptor(A, P, "connected", "[\"chat\",7]", "[]"), EAgentSlotFault::BadDeclaredCapabilities, true},
+				{Descriptor(A, P, "connected", "[\"chat\",\"chat\"]", "[]"), EAgentSlotFault::BadDeclaredCapabilities, true},
+				{Descriptor(A, P, "connected", "[\"chat\",\"tools/run\"]", "[]"), EAgentSlotFault::BadDeclaredCapabilities, true}, // O2: client grammar
+				{Descriptor(A, P, "connected", "[\"ch at\"]", "[]"), EAgentSlotFault::BadDeclaredCapabilities, true},
+				{Descriptor(A, P, "connected", SixtyFive, "[]"), EAgentSlotFault::BadDeclaredCapabilities, true},
+				{Descriptor(A, P, "connected", DeclaredDefault, "null"), EAgentSlotFault::BadAuthorizedCapabilities, true},
+				{Descriptor(A, P, "connected", DeclaredDefault, "[\"chat\",\"chat\"]"), EAgentSlotFault::BadAuthorizedCapabilities, true},
+				{Descriptor(A, P, "connected", "[\"history\"]", "[\"chat\"]"), EAgentSlotFault::AuthorizedNotDeclared, true},
+				{Descriptor(A, P, "connecting"), EAgentSlotFault::BadConnection, true},
+				{Descriptor(A, P, "Connected"), EAgentSlotFault::BadConnection, true},
+				{Descriptor(A, P, "connected", DeclaredDefault, AuthorizedDefault, ",\"verified\":\"true\""), EAgentSlotFault::BadVerified, true},
+				{Descriptor(A, P, "connected", DeclaredDefault, AuthorizedDefault, ",\"verified\":1"), EAgentSlotFault::BadVerified, true},
+				{Descriptor(A, P, "connected", DeclaredDefault, AuthorizedDefault, ",\"verified\":false"), EAgentSlotFault::BadVerified, true},
+				{Descriptor(A, P, "connected", DeclaredDefault, AuthorizedDefault, ",\"verified\":true"), EAgentSlotFault::BadVerified, true},
+				// publishAgentDescriptor's guarantees (registry.ts:198-212).
+				{Descriptor(A, P, "connected", DeclaredDefault, AuthorizedDefault, "", "null"), EAgentSlotFault::InconsistentConnection, true},
+				{Descriptor(A, P, "connected", DeclaredDefault, AuthorizedDefault, "", "Agent One", "null"), EAgentSlotFault::InconsistentConnection, true},
+				{Descriptor(A, P, "unsupported", "[]", "[]", "", "Agent One", "single"), EAgentSlotFault::InconsistentConnection, true},
+				{Descriptor(A, P, "error", "[]", "[]", "", "Agent One", "compound"), EAgentSlotFault::InconsistentConnection, true},
+				{Descriptor(A, P, "unsupported", "[\"chat\"]", "[]"), EAgentSlotFault::InconsistentConnection, true},
+				{Descriptor(A, P, "error", "[\"chat\"]", "[\"chat\"]"), EAgentSlotFault::InconsistentConnection, true},
+				{Descriptor(A, P, "error", "[\"chat\"]", "[]"), EAgentSlotFault::InconsistentConnection, true},
+				{Descriptor(A, P, "unsupported").replace(Descriptor(A, P, "unsupported").find("\"adapterVersion\":null"), 21, "\"adapterVersion\":\"1\""),
+					EAgentSlotFault::InconsistentConnection, true},
+			};
+			int Row = 0;
+			for (const FRow& R : Rows)
+			{
+				const FAgentSlot S = SlotOf(R.Json);
+				const bool bOk = S.Fault == R.Fault && (S.Descriptor.AgentId == (R.bKeepsId ? A : std::string()))
+					&& S.Descriptor.Connection == EAgentConnection::Error && S.Descriptor.AuthorizedCapabilities.empty() && S.Descriptor.ProviderId.empty();
+				if (!bOk) { std::printf("  agents row %d -> %s\n", Row, AgentSlotFaultName(S.Fault)); }
+				EXPECT(Agents, bOk);
+				++Row;
+			}
+			std::string SixtyFour = "[";
+			for (int I = 0; I < 64; ++I) { SixtyFour += std::string(I ? "," : "") + "\"c" + std::to_string(I) + "\""; }
+			SixtyFour += "]";
+			EXPECT(Agents, SlotOf(Descriptor(A, P, "connected", SixtyFour, "[]")).Fault == EAgentSlotFault::None);
+			std::string Emoji100;
+			for (int I = 0; I < 100; ++I) { Emoji100 += "\xF0\x9F\x98\x80"; }
+			EXPECT(Agents, SlotOf(Descriptor(A, std::string(200, 'p'), "connected", Auto, Auto, "", Emoji100)).Fault == EAgentSlotFault::None);
+			EXPECT(Agents, SlotOf(Descriptor(A, Emoji100, "connected", Auto, Auto, "", std::string(200, 'n'))).Fault == EAgentSlotFault::None);
+			EXPECT(Agents, SlotOf(Descriptor(A, Emoji100 + "p")).Fault == EAgentSlotFault::BadProviderId);
+			EXPECT(Agents, SlotOf(Descriptor(A, "a/b c")).Fault == EAgentSlotFault::None); // opaque: any non-blank string
+		}
+		{
+			EXPECT(Agents, IsAgentId(Ag("1-A")) && IsAgentId("agt_" + U1) && !IsAgentId(U1) && !IsAgentId("agt_1-A") && !IsAgentId("agt:1") && !IsAgentId("") && !IsAgentId("agt%2F"));
+			EXPECT(Agents, IsProviderId("acme.local:v2") && IsProviderId("x") && IsProviderId("a b") && IsProviderId("a/b") && !IsProviderId("") && !IsProviderId(" \t"));
+			EXPECT(Agents, IsAgentDisplayName("A") && !IsAgentDisplayName("") && !IsAgentDisplayName("\xE3\x80\x80") && IsAgentDisplayName(std::string(200, 'n')) && !IsAgentDisplayName(std::string(201, 'n')));
+			EXPECT(Agents, ProviderIdMaxUtf16Units == 200 && DisplayNameMaxUtf16Units == 200);
+			EXPECT(Agents, std::strcmp(AgentSlotFaultName(EAgentSlotFault::InconsistentConnection), "inconsistent_connection") == 0);
+			EXPECT(Agents, IsCapabilityWord("tools.run") && !IsCapabilityWord(std::string(CapabilityMaxBytes + 1, 'c')) && IsCapabilityWord(std::string(CapabilityMaxBytes, 'c')));
+			EXPECT(Agents, std::strcmp(AgentSlotFaultName(EAgentSlotFault::AuthorizedNotDeclared), "authorized_not_declared") == 0);
+			EXPECT(Agents, std::strcmp(AgentListParseName(EAgentListParse::NotArray), "not_array") == 0);
+		}
+		{
+			std::vector<FAgentSlot> Out(3);
+			FJsonValue V;
+			EXPECT(Agents, ParseJson("{\"x\":1}", V) && ParseAgentList(V, Out) == EAgentListParse::Absent && Out.empty());
+			EXPECT(Agents, ParseJson("{\"agents\":{}}", V) && ParseAgentList(V, Out) == EAgentListParse::NotArray && Out.empty());
+			EXPECT(Agents, ParseJson("{\"agents\":null}", V) && ParseAgentList(V, Out) == EAgentListParse::NotArray);
+			EXPECT(Agents, ParseJson("{\"agents\":[]}", V) && ParseAgentList(V, Out) == EAgentListParse::Ok && Out.empty());
+			// One bad entry never poisons the others.
+			const std::vector<FAgentSlot> Mixed = Slots("[" + Descriptor(Ag("a"), TestProvider) + ",{\"agentId\":7}," + Descriptor(Ag("b"), OtherProvider, "bogus") + ","
+				+ Descriptor(Ag("c"), OtherProvider) + "]");
+			EXPECT(Agents, Mixed.size() == 4 && Mixed[0].Fault == EAgentSlotFault::None && Mixed[1].Fault == EAgentSlotFault::BadAgentId);
+			EXPECT(Agents, Mixed[2].Fault == EAgentSlotFault::BadConnection && Mixed[2].Descriptor.AgentId == Ag("b") && Mixed[3].Fault == EAgentSlotFault::None);
+			// The same agentId twice: both entries are faulted, never "the first wins".
+			const std::vector<FAgentSlot> Dup = Slots("[" + Descriptor(Ag("a"), TestProvider) + "," + Descriptor(Ag("x"), TestProvider) + "," + Descriptor(Ag("a"), OtherProvider) + "]");
+			EXPECT(Agents, Dup.size() == 3 && Dup[0].Fault == EAgentSlotFault::DuplicateAgentId && Dup[2].Fault == EAgentSlotFault::DuplicateAgentId);
+			EXPECT(Agents, Dup[1].Fault == EAgentSlotFault::None && Dup[0].Descriptor.AgentId == Ag("a") && Dup[0].Descriptor.ProviderId.empty());
+			std::string Many = "[";
+			for (std::size_t I = 0; I < AgentListMaxEntries + 1; ++I) { Many += std::string(I ? "," : "") + Descriptor(Ag(std::to_string(I)), TestProvider); }
+			Many += "]";
+			const std::vector<FAgentSlot> Capped = Slots(Many);
+			EXPECT(Agents, Capped.size() == AgentListMaxEntries + 1 && Capped.back().Fault == EAgentSlotFault::TooMany && Capped.back().Descriptor.AgentId.empty());
+			EXPECT(Agents, Capped[AgentListMaxEntries - 1].Fault == EAgentSlotFault::None && Capped[AgentListMaxEntries - 1].Descriptor.AgentId == Ag("63"));
+			EXPECT(Agents, AgentListMaxEntries == 64 && AgentRegistryMaxSlots == 32);
+		}
+		{
+			// The mission route: agents[] read per slot, independent of (and never changing) the v0.1 result.
+			FCompanionMissionView V;
+			const std::string Two = "[" + Descriptor(Ag("a"), TestProvider) + "," + Descriptor(Ag("b"), OtherProvider, "unsupported", "[]", "[]") + "]";
+			EXPECT(Agents, ParseCompanionMission(200, MissionWithAgents(Two), Wlj, V) == ECompanionMissionParse::Ok && V.AgentsParse == EAgentListParse::Ok);
+			EXPECT(Agents, V.Agents.size() == 2 && V.Agents[1].Descriptor.Connection == EAgentConnection::Unsupported && V.State == ECompanionTaskState::Delivered);
+			EXPECT(Agents, ParseCompanionMission(200, MissionBody("delivered"), Wlj, V) == ECompanionMissionParse::Ok && V.AgentsParse == EAgentListParse::Absent && V.Agents.empty());
+			EXPECT(Agents, ParseCompanionMission(200, MissionWithAgents("{}"), Wlj, V) == ECompanionMissionParse::Ok && V.AgentsParse == EAgentListParse::NotArray);
+			EXPECT(Agents, ParseCompanionMission(200, MissionWithAgents("[{\"agentId\":1}]"), Wlj, V) == ECompanionMissionParse::Ok && V.Agents.size() == 1);
+			EXPECT(Agents, ParseCompanionMission(200, MissionWithAgents(Two, "paid"), Wlj, V) == ECompanionMissionParse::BadState && V.Agents.size() == 2);
+			EXPECT(Agents, ParseCompanionMission(200, MissionWithAgents(Two, "delivered", OtherWlj), Wlj, V) == ECompanionMissionParse::RunIdMismatch && V.Agents.empty());
+			EXPECT(Agents, ParseCompanionMission(404, MissionWithAgents(Two), Wlj, V) == ECompanionMissionParse::NotOk && V.Agents.empty());
+		}
+		{
+			// Registry: upsert per agentId; a slot with no id, or past the cap, is counted unreadable and touches nobody.
+			FCompanionSession S(Origin, Project, true);
+			S.ApplyAgentSlots(Slots("[" + Descriptor(Ag("a"), TestProvider) + ",{\"agentId\":\"bad id\"}," + Descriptor(Ag("b"), OtherProvider) + "]"));
+			EXPECT(Agents, S.AgentIds() == std::vector<std::string>({Ag("a"), Ag("b")}) && S.SessionView().UnreadableSlots == 1 && S.SessionView().AgentCount == 2);
+			EXPECT(Agents, TraceHas(S, "agent_slot_unreadable_bad_agent_id"));
+			S.ApplyAgentSlots(Slots("[" + Descriptor(Ag("b"), OtherProvider, "disconnected") + "]"));
+			EXPECT(Agents, S.SessionView().UnreadableSlots == 0 && S.AgentIds().size() == 2 && S.View(Ag("a"))->State == ECompanionState::Ready);
+			EXPECT(Agents, S.View(Ag("b"))->Offline == EOfflineReason::NotConnected && S.View(Ag("nobody")) == nullptr && S.History(Ag("nobody")) == nullptr);
+			std::string Many = "[";
+			for (std::size_t I = 0; I < AgentRegistryMaxSlots; ++I) { Many += std::string(I ? "," : "") + Descriptor(Ag("n" + std::to_string(I)), TestProvider); }
+			Many += "]";
+			S.ApplyAgentSlots(Slots(Many));
+			EXPECT(Agents, S.AgentIds().size() == AgentRegistryMaxSlots && S.SessionView().UnreadableSlots == 2 && TraceHas(S, "agent_registry_full"));
+			EXPECT(Agents, S.View(Ag("a")) != nullptr && S.View(Ag("n29")) != nullptr && S.View(Ag("n30")) == nullptr);
+		}
+	}
+
+	/* ------------------------------------------------------------ several agents at once */
+	void TestMulti()
+	{
+		FCompanionSession S(Origin, Project, true);
+		EXPECT(Multi, ConnectAs(S, TestProvider, 201, Descriptor(Ag("a"), TestProvider)) && S.LastConnectedAgentId() == Ag("a"));
+		EXPECT(Multi, ConnectAs(S, OtherProvider, 201, Descriptor(Ag("b"), OtherProvider, "connected", DeclaredDefault, AuthorizedDefault, "", "Second")));
+		EXPECT(Multi, S.LastConnectedAgentId() == Ag("b") && S.AgentIds().size() == 2);
+		// The same provider twice (two accounts): two agents, each its own identity.
+		EXPECT(Multi, ConnectAs(S, TestProvider, 201, Descriptor(Ag("c"), TestProvider)) && S.AgentIds().size() == 3);
+		EXPECT(Multi, S.View(Ag("a"))->State == ECompanionState::Ready && S.View(Ag("b"))->State == ECompanionState::Ready && S.View(Ag("c"))->bCanSend);
+		EXPECT(Multi, S.View(Ag("b"))->DisplayName == "Second" && S.ProviderIdOf(Ag("b")) == OtherProvider && S.ProviderIdOf(Ag("c")) == TestProvider);
+		EXPECT(Multi, !S.SessionView().bShowSimulatedBanner);
+		FRelayRequest Ra;
+		FRelayRequest Rb;
+		EXPECT(Multi, SendTo(S, Ag("a"), "to a", 3010, 0, &Ra) && SendTo(S, Ag("b"), "to b", 3011, 0, &Rb));
+		EXPECT(Multi, Ra.Url == Origin + "/relay-api/wonderland/companions/agents/" + Ag("a") + "/chat" + PQ && Rb.Url == Origin + "/relay-api/wonderland/companions/agents/" + Ag("b") + "/chat" + PQ);
+		EXPECT(Multi, !Contains(Ra.Url, TestProvider) && !Contains(Rb.Url, OtherProvider) && !Contains(Ra.Body, TestProvider));
+		// Idempotency keys are session-wide: one agent can never reuse another's.
+		EXPECT(Multi, !SendTo(S, Ag("c"), "dup key", 3010));
+		// Interleaved streams; each agent's decoder expects its own providerId.
+		S.FeedChatBytes(Ag("a"), MetaFor(TestProvider) + Delta("A1"), 0);
+		S.FeedChatBytes(Ag("b"), MetaFor(OtherProvider, "cnv_" + U3) + Delta("B1"), 0);
+		EXPECT(Multi, S.View(Ag("a"))->PartialReply == "A1" && S.View(Ag("b"))->PartialReply == "B1");
+		S.FeedChatBytes(Ag("b"), Done(), 0);
+		S.FeedChatBytes(Ag("a"), Delta("A2") + Done(), 0);
+		EXPECT(Multi, S.History(Ag("a"))->Size() == 1 && S.History(Ag("a"))->At(0).ReplyText == "A1A2" && S.ConversationId(Ag("a")) == Conv);
+		EXPECT(Multi, S.History(Ag("b"))->Size() == 1 && S.History(Ag("b"))->At(0).ReplyText == "B1" && S.ConversationId(Ag("b")) == "cnv_" + U3);
+		EXPECT(Multi, S.History(Ag("c"))->Size() == 0);
+		// A stream that claims another agent's provider is a fault for that agent only.
+		EXPECT(Multi, SendTo(S, Ag("a"), "x", 3012) && SendTo(S, Ag("b"), "y", 3013));
+		S.FeedChatBytes(Ag("a"), MetaFor(OtherProvider) + Delta("spoof") + Done(), 0);
+		EXPECT(Multi, S.View(Ag("a"))->State == ECompanionState::Error && TraceHas(S, "chat_fault_meta_wrong_provider") && S.History(Ag("a"))->Size() == 1);
+		EXPECT(Multi, S.View(Ag("b"))->State == ECompanionState::Streaming);
+		// A connect while another agent streams is fine.
+		EXPECT(Multi, ConnectAs(S, "made.up", 201, Descriptor(Ag("d"), "made.up", "unsupported", "[]", "[]")) && S.View(Ag("b"))->State == ECompanionState::Streaming);
+		S.FeedChatBytes(Ag("b"), MetaFor(OtherProvider, "cnv_" + U3, "", Msg2) + Delta("ok") + Done(Msg2), 0);
+		EXPECT(Multi, S.History(Ag("b"))->Size() == 2 && S.View(Ag("b"))->State == ECompanionState::Ready);
+		// Answers for the wrong agent are not taken.
+		S.ApplyChatHttpAnswer(Ag("c"), 503, "", "", 0);
+		EXPECT(Multi, S.View(Ag("c"))->State == ECompanionState::Ready && TraceHas(S, "chat_answer_unexpected"));
+		EXPECT(Multi, !SendTo(S, Ag("nobody"), "x", 3015));
+	}
+
+	/* ------------------------------------------------------------ an unknown provider is an unsupported slot */
+	void TestUnsupported()
+	{
+		{
+			FCompanionSession S(Origin, Project, true);
+			EXPECT(Unsupported, ConnectAs(S, TestProvider, 201, Descriptor(Ag("a"), TestProvider)));
+			EXPECT(Unsupported, ConnectAs(S, "never.heard-of:it", 201, Descriptor(Ag("u"), "never.heard-of:it", "unsupported", "[]", "[]", "", "Unknown agent")));
+			const FAgentView* U = S.View(Ag("u"));
+			EXPECT(Unsupported, U != nullptr && U->State == ECompanionState::Offline && U->Offline == EOfflineReason::Unsupported);
+			EXPECT(Unsupported, U->StatusLine == "This agent is not supported yet" && !U->bCanSend && !U->bCanConnect && !U->bMalformed && U->bShowSimulatedBanner);
+			EXPECT(Unsupported, S.SessionView().StatusLine == "This agent is not supported yet" && TraceHas(S, "connect_unsupported") && !TraceHas(S, "connect_answer_refused"));
+			EXPECT(Unsupported, S.LastConnectedAgentId() == Ag("u") && U->Connection == EAgentConnection::Unsupported && U->DisplayName == "Unknown agent");
+			EXPECT(Unsupported, S.View(Ag("a"))->State == ECompanionState::Ready && S.View(Ag("a"))->bCanSend && !S.SessionView().bShowSimulatedBanner);
+			EXPECT(Unsupported, !SendTo(S, Ag("u"), "hello?", 3102) && SendTo(S, Ag("a"), "hello", 3103));
+			// A later connect for a supported agent replaces the notice.
+			EXPECT(Unsupported, ConnectAs(S, OtherProvider, 201, Descriptor(Ag("b"), OtherProvider)) && S.SessionView().StatusLine.empty());
+		}
+		{
+			// From a list: unsupported is a state, not a fault; claims of chat are not honoured for it.
+			FCompanionSession S(Origin, Project, true);
+			S.ApplyAgentSlots(Slots("[" + Descriptor(Ag("u"), "zz", "unsupported") + "," + Descriptor(Ag("a"), TestProvider) + "]"));
+			EXPECT(Unsupported, S.View(Ag("u"))->Offline == EOfflineReason::Unsupported && !S.View(Ag("u"))->bMalformed && S.SessionView().UnreadableSlots == 0);
+			EXPECT(Unsupported, S.View(Ag("u"))->AuthorizedCapabilities.empty() && !SendTo(S, Ag("u"), "x", 3110));
+			EXPECT(Unsupported, S.View(Ag("a"))->bCanSend && SendTo(S, Ag("a"), "y", 3111));
+			EXPECT(Unsupported, S.BeginDisconnect(Ag("u")).Method == "DELETE");
+		}
+		{
+			// Only the server's word: a 4xx on connect is a connect failure, never an invented unsupported slot.
+			FCompanionSession S(Origin, Project, true);
+			EXPECT(Unsupported, ConnectAs(S, "zz", 404, KindBody("companion_provider_unknown")));
+			EXPECT(Unsupported, S.AgentIds().empty() && S.SessionView().StatusLine == "Could not connect the agent");
+		}
+	}
+
+	/* ------------------------------------------------------------ one agent never breaks another */
+	void TestIsolation()
+	{
+		FCompanionSession S(Origin, Project, true);
+		EXPECT(Isolation, ConnectAs(S, TestProvider, 201, Descriptor(Ag("a"), TestProvider)));
+		EXPECT(Isolation, ConnectAs(S, OtherProvider, 201, Descriptor(Ag("b"), OtherProvider)));
+		const auto AOk = [&S] { const FAgentView* A = S.View(Ag("a")); return A != nullptr && A->State == ECompanionState::Ready && A->bCanSend && !A->bShowSimulatedBanner; };
+		// 409 not_connected on B disconnects B only.
+		EXPECT(Isolation, SendTo(S, Ag("b"), "b1", 3210));
+		S.ApplyChatHttpAnswer(Ag("b"), 409, "", KindBody("companion_not_connected"), 0);
+		EXPECT(Isolation, S.View(Ag("b"))->Offline == EOfflineReason::NotConnected && AOk() && !S.SessionView().bShowSimulatedBanner);
+		// A key rejection on B is B's alone.
+		EXPECT(Isolation, ConnectAs(S, OtherProvider, 201, Descriptor(Ag("b"), OtherProvider)) && SendTo(S, Ag("b"), "b2", 3212));
+		S.FeedChatBytes(Ag("b"), MetaFor(OtherProvider) + Err("provider_auth_failed", "bad"), 0);
+		EXPECT(Isolation, S.View(Ag("b"))->Offline == EOfflineReason::KeyRejected && AOk());
+		// A malformed slot for B in a later list: B fails closed, A untouched, B keeps its identity.
+		S.ApplyAgentSlots(Slots("[" + Descriptor(Ag("a"), TestProvider) + "," + Descriptor(Ag("b"), OtherProvider, "connected", DeclaredDefault, "[\"nope\"]") + "]"));
+		EXPECT(Isolation, S.View(Ag("b"))->bMalformed && S.View(Ag("b"))->State == ECompanionState::Error && S.View(Ag("b"))->StatusLine == "Agent details could not be read");
+		EXPECT(Isolation, S.ProviderIdOf(Ag("b")) == OtherProvider && AOk() && S.AgentIds().size() == 2 && S.SessionView().UnreadableSlots == 0);
+		// An anonymous bad slot touches nobody.
+		S.ApplyAgentSlots(Slots("[{\"agentId\":\"\"}]"));
+		EXPECT(Isolation, AOk() && S.View(Ag("b"))->bMalformed && S.SessionView().UnreadableSlots == 1);
+		// Connection error on B, then B disconnected: A still fine; B's DELETE names B.
+		EXPECT(Isolation, ConnectAs(S, OtherProvider, 201, Descriptor(Ag("b"), OtherProvider)) && !S.View(Ag("b"))->bMalformed && S.View(Ag("b"))->bCanSend);
+		S.ApplyAgentSlots(Slots("[" + Descriptor(Ag("b"), OtherProvider, "error") + "]"));
+		EXPECT(Isolation, S.View(Ag("b"))->StatusLine == "Connection error; reconnect your agent" && AOk());
+		const FRelayRequest D = S.BeginDisconnect(Ag("b"));
+		EXPECT(Isolation, D.Url == Origin + "/relay-api/wonderland/companions/agents/" + Ag("b") + PQ);
+		S.ApplyDisconnectAnswer(Ag("b"), 200, Gone(Ag("b"), OtherProvider));
+		EXPECT(Isolation, S.View(Ag("b"))->Offline == EOfflineReason::NotConnected && AOk());
+		// A's rate limit or history delete never blocks or clears B, and the reverse.
+		EXPECT(Isolation, ConnectAs(S, OtherProvider, 201, Descriptor(Ag("b"), OtherProvider)));
+		EXPECT(Isolation, SendTo(S, Ag("b"), "b3", 3215, 1000));
+		S.FeedChatBytes(Ag("b"), MetaFor(OtherProvider) + Delta("kept") + Done(), 1000);
+		EXPECT(Isolation, SendTo(S, Ag("a"), "a1", 3216, 1000));
+		S.ApplyChatHttpAnswer(Ag("a"), 429, "30", KindBody("companion_rate_limited"), 1000);
+		EXPECT(Isolation, S.View(Ag("a"))->State == ECompanionState::SlowDown && SendTo(S, Ag("b"), "b4", 3217, 1001));
+		S.ApplyChatTransportFailure(Ag("b"), 1001);
+		const FRelayRequest H = S.BeginDeleteHistory(Ag("a"));
+		EXPECT(Isolation, H.Method.empty() && S.History(Ag("b"))->Size() == 1);
+		// Identity: the same agentId later claiming another provider is refused for that agent only, never shown as it.
+		S.ApplyAgentSlots(Slots("[" + Descriptor(Ag("b"), "impostor") + "]"));
+		EXPECT(Isolation, S.View(Ag("b"))->State == ECompanionState::Error && S.View(Ag("b"))->StatusLine == "Agent identity changed; this agent is not used");
+		EXPECT(Isolation, !S.View(Ag("b"))->bCanSend && !S.View(Ag("b"))->bCanConnect && S.ProviderIdOf(Ag("b")) == OtherProvider && TraceHas(S, "agent_identity_changed"));
+		EXPECT(Isolation, S.View(Ag("a"))->State == ECompanionState::SlowDown && !S.View(Ag("a"))->bMalformed);
+		S.ApplyAgentSlots(Slots("[" + Descriptor(Ag("b"), OtherProvider) + "]"));
+		EXPECT(Isolation, S.View(Ag("b"))->State == ECompanionState::Error && !S.View(Ag("b"))->bCanSend); // sticky
+		EXPECT(Isolation, ConnectAs(S, "impostor", 201, Descriptor(Ag("b"), "impostor")) && S.SessionView().StatusLine == "Could not connect the agent");
+	}
+
+	/* ------------------------------------------------------------ authorized vs declared; nothing inferred */
+	void TestCaps()
+	{
+		FCompanionSession S(Origin, Project, true);
+		S.ApplyAgentSlots(Slots("[" + Descriptor(Ag("a"), TestProvider, "connected", "[\"chat\",\"history\",\"tools.run\"]", "[\"chat\",\"history\"]") + "]"));
+		EXPECT(Caps, S.View(Ag("a"))->AuthorizedCapabilities == std::vector<std::string>({"chat", "history"}) && S.View(Ag("a"))->bCanSend);
+		EXPECT(Caps, !Contains(Everything(S), "tools.run")); // declared-only is never shown
+		// Declared chat without authorized chat: no sending, and nothing claims it is authorized.
+		S.ApplyAgentSlots(Slots("[" + Descriptor(Ag("b"), TestProvider, "connected", "[\"chat\",\"history\"]", "[\"history\"]") + "]"));
+		const FAgentView* B = S.View(Ag("b"));
+		EXPECT(Caps, B->State == ECompanionState::Offline && B->Offline == EOfflineReason::NotAuthorized && B->StatusLine == "This agent has not authorized chat");
+		EXPECT(Caps, !B->bCanSend && B->bCanConnect && B->AuthorizedCapabilities == std::vector<std::string>({"history"}) && !SendTo(S, Ag("b"), "x", 3300));
+		S.ApplyAgentSlots(Slots("[" + Descriptor(Ag("c"), TestProvider, "connected", "[\"chat\"]", "[]") + "]"));
+		EXPECT(Caps, S.View(Ag("c"))->Offline == EOfflineReason::NotAuthorized && S.View(Ag("c"))->AuthorizedCapabilities.empty());
+		// No normalisation and no inference from kind, name or provider.
+		S.ApplyAgentSlots(Slots("[" + Descriptor(Ag("d"), TestProvider, "connected", "[\"Chat\"]", "[\"Chat\"]") + "]"));
+		EXPECT(Caps, S.View(Ag("d"))->Offline == EOfflineReason::NotAuthorized);
+		S.ApplyAgentSlots(Slots("[" + Descriptor(Ag("e"), TestProvider, "connected", "[\"chat.v2\"]", "[\"chat.v2\"]", "", "Chat Agent", "compound") + "]"));
+		EXPECT(Caps, S.View(Ag("e"))->Offline == EOfflineReason::NotAuthorized && !S.View(Ag("e"))->bCanSend);
+		// Capabilities show only while really connected.
+		S.ApplyAgentSlots(Slots("[" + Descriptor(Ag("f"), TestProvider, "disconnected") + "," + Descriptor(Ag("g"), TestProvider, "error") + "]"));
+		EXPECT(Caps, S.View(Ag("f"))->AuthorizedCapabilities.empty() && S.View(Ag("g"))->AuthorizedCapabilities.empty());
+		EXPECT(Caps, SendTo(S, Ag("a"), "q", 3301));
+		S.FeedChatBytes(Ag("a"), Meta() + Err("provider_auth_failed", "bad"), 0);
+		EXPECT(Caps, S.View(Ag("a"))->Offline == EOfflineReason::KeyRejected && S.View(Ag("a"))->AuthorizedCapabilities.empty());
+		// A later descriptor narrowing the authorization takes effect at once.
+		S.ApplyAgentSlots(Slots("[" + Descriptor(Ag("h"), TestProvider) + "]"));
+		EXPECT(Caps, S.View(Ag("h"))->bCanSend);
+		S.ApplyAgentSlots(Slots("[" + Descriptor(Ag("h"), TestProvider, "connected", DeclaredDefault, "[]") + "]"));
+		EXPECT(Caps, !S.View(Ag("h"))->bCanSend && S.View(Ag("h"))->Offline == EOfflineReason::NotAuthorized);
+		EXPECT(Caps, CapabilityChat == std::string_view("chat") && HasCapability({"a", "chat"}, "chat") && !HasCapability({"chats"}, "chat"));
+	}
+
+	/* ------------------------------------------------------------ verified stays false */
+	void TestVerified()
+	{
+		EXPECT(Verified, !bAgentVerificationAvailable);
+		// No AgentDescriptor carries "verified" (registry.ts:28-37): any such key is refused, whatever its value.
+		for (const char* Claim : {",\"verified\":true", ",\"verified\":false", ",\"verified\":\"yes\""})
+		{
+			EXPECT(Verified, SlotOf(Descriptor(TestAgent, TestProvider, "connected", DeclaredDefault, AuthorizedDefault, Claim)).Fault == EAgentSlotFault::BadVerified);
+		}
+		FCompanionSession S(Origin, Project, true);
+		EXPECT(Verified, ConnectAs(S, TestProvider, 201, Descriptor(Ag("a"), TestProvider, "connected", DeclaredDefault, AuthorizedDefault, ",\"verified\":true")));
+		EXPECT(Verified, S.View(Ag("a")) == nullptr && S.SessionView().StatusLine == "Could not connect the agent");
+		EXPECT(Verified, ConnectAs(S, TestProvider, 201, Descriptor(Ag("a"), TestProvider)) && S.View(Ag("a"))->State == ECompanionState::Ready && !S.View(Ag("a"))->bVerified);
+		S.ApplyAgentSlots(Slots("[" + Descriptor(Ag("a"), TestProvider, "connected", DeclaredDefault, AuthorizedDefault, ",\"verified\":true") + "]"));
+		EXPECT(Verified, S.View(Ag("a"))->bMalformed && !S.View(Ag("a"))->bVerified && !S.View(Ag("a"))->bCanSend);
+		EXPECT(Verified, S.View(Ag("a"))->State == ECompanionState::Error && !Contains(S.View(Ag("a"))->StatusLine, "erified") && !Contains(S.SessionView().StatusLine, "erified"));
+		EXPECT(Verified, SlotOf(Descriptor(TestAgent, TestProvider, "connected", DeclaredDefault, AuthorizedDefault, ",\"verified\":null")).Fault == EAgentSlotFault::BadVerified);
+	}
+
+	/* ------------------------------------------------------------ BRIDGE 7e5e1e30 as served: routes, project, chat */
+	void TestBridge()
+	{
+		{
+			// Only POST / GET / DELETE agents[/{agentId}] are served (route.ts:55-57); chat is not (contract:46,139).
+			FCompanionSession S(Origin, Project);
+			EXPECT(Bridge, S.SessionView().bProjectOk && S.SessionView().bCanConnect);
+			EXPECT(Bridge, ConnectAs(S, TestProvider, 201, ConnectOk));
+			const FAgentView* V = S.View(TestAgent);
+			EXPECT(Bridge, V->State == ECompanionState::Offline && V->Offline == EOfflineReason::ChatNotServed);
+			EXPECT(Bridge, V->StatusLine == "Chat with agents is not available on this relay yet" && !V->bCanSend && !V->bCanConnect);
+			EXPECT(Bridge, !V->bShowSimulatedBanner); // the agent IS connected per the relay; only the chat route is missing
+			EXPECT(Bridge, V->AuthorizedCapabilities == std::vector<std::string>({"chat"}) && V->Connection == EAgentConnection::Connected);
+			FRelayRequest R;
+			EXPECT(Bridge, !SendTo(S, TestAgent, "hi", 4000, 0, &R) && R.Method.empty() && S.BeginDeleteHistory(TestAgent).Method.empty());
+			EXPECT(Bridge, !S.SessionView().bShowSimulatedBanner);
+			// Not authorized still reads as not authorized first.
+			S.ApplyAgentSlots(Slots("[" + Descriptor(TestAgent, TestProvider, "connected", DeclaredDefault, "[]") + "]"));
+			EXPECT(Bridge, S.View(TestAgent)->Offline == EOfflineReason::NotAuthorized);
+			// GET and DELETE are served and work without chat.
+			EXPECT(Bridge, S.BeginReadAgent(TestAgent).Method == "GET" && S.BeginDisconnect(TestAgent).Method == "DELETE");
+		}
+		{
+			// No paired project: nothing is sent and the HUD says why (admission-route.ts:288 requires projectId).
+			for (const std::string& Bad : {std::string(), std::string("a b"), std::string("p/q"), std::string("p?x=1"), std::string(65, 'p')})
+			{
+				FCompanionSession S(Origin, Bad, true);
+				FRelayRequest R;
+				EXPECT(Bridge, !S.SessionView().bProjectOk && !S.SessionView().bCanConnect && S.SessionView().StatusLine == "Companion needs a paired project");
+				EXPECT(Bridge, !S.BeginConnect(TestProvider, "", "", R) && R.Method.empty());
+				S.ApplyAgentSlots(Slots("[" + ConnectOk + "]"));
+				EXPECT(Bridge, S.View(TestAgent)->Offline == EOfflineReason::NoProject && !S.View(TestAgent)->bCanSend && !S.View(TestAgent)->bCanConnect);
+				EXPECT(Bridge, S.BeginReadAgent(TestAgent).Method.empty() && S.BeginDisconnect(TestAgent).Method.empty() && !SendTo(S, TestAgent, "x", 4010));
+			}
+			FCompanionSession S(Origin, std::string(64, 'p'), true);
+			FRelayRequest R;
+			EXPECT(Bridge, S.SessionView().bProjectOk && S.BeginConnect(TestProvider, "", "", R) && R.Url == Origin + "/relay-api/wonderland/companions/agents?projectId=" + std::string(64, 'p'));
+		}
+		{
+			// GET /agents/{agentId} (route.ts:325-337): 200 one descriptor for THAT agent; 404 not here.
+			FCompanionSession S(Origin, Project, true);
+			EXPECT(Bridge, ConnectAs(S, TestProvider, 201, ConnectOk));
+			FRelayRequest G = S.BeginReadAgent(TestAgent);
+			EXPECT(Bridge, G.Method == "GET" && G.Url == Origin + "/relay-api/wonderland/companions/agents/" + TestAgent + PQ && G.Body.empty() && G.IdempotencyKey.empty());
+			EXPECT(Bridge, S.BeginReadAgent(Ag("nobody")).Method.empty());
+			S.ApplyReadAgentAnswer(TestAgent, 200, Descriptor(TestAgent, TestProvider, "connected", DeclaredDefault, "[]"));
+			EXPECT(Bridge, S.View(TestAgent)->Offline == EOfflineReason::NotAuthorized && !S.View(TestAgent)->bMalformed);
+			S.ApplyReadAgentAnswer(TestAgent, 200, ConnectOk);
+			EXPECT(Bridge, S.View(TestAgent)->State == ECompanionState::Ready);
+			S.ApplyReadAgentAnswer(TestAgent, 503, "");
+			S.ApplyReadAgentAnswer(TestAgent, 401, KindBody("sign_in_required"));
+			EXPECT(Bridge, S.View(TestAgent)->State == ECompanionState::Ready && TraceHas(S, "agent_read_failed"));
+			S.ApplyReadAgentAnswer(TestAgent, 200, Descriptor(Ag("other"), TestProvider)); // answered for another agent
+			EXPECT(Bridge, S.View(TestAgent)->bMalformed && !S.View(TestAgent)->bCanSend && S.View(Ag("other")) == nullptr);
+			EXPECT(Bridge, ConnectAs(S, TestProvider, 201, Descriptor(Ag("two"), TestProvider)));
+			S.ApplyReadAgentAnswer(Ag("two"), 200, Descriptor(Ag("two"), TestProvider, "connected", DeclaredDefault, AuthorizedDefault, ",\"token\":\"t\""));
+			EXPECT(Bridge, S.View(Ag("two"))->bMalformed);
+			// route.ts:58,367-375: /^(apikey|token|password)$/i at any depth; the client refuses the same in every answer.
+			for (const char* Extra : {",\"APIKEY\":\"x\"", ",\"Token\":1", ",\"PassWord\":null", ",\"meta\":{\"apiKey\":\"x\"}", ",\"meta\":[{\"ok\":1},{\"token\":\"t\"}]",
+				",\"meta\":{\"inner\":{\"Last4\":\"1234\"}}", ",\"HINT\":\"x\""})
+			{
+				EXPECT(Bridge, ConnectAs(S, TestProvider, 201, Descriptor(Ag("cred"), TestProvider, "connected", DeclaredDefault, AuthorizedDefault, Extra)));
+				EXPECT(Bridge, S.View(Ag("cred")) == nullptr && S.SessionView().StatusLine == "Could not connect the agent");
+			}
+			EXPECT(Bridge, ConnectAs(S, TestProvider, 201, Descriptor(Ag("cred"), TestProvider, "connected", DeclaredDefault, AuthorizedDefault, ",\"meta\":{\"tokens\":1,\"apiKeyId\":2}")));
+			EXPECT(Bridge, S.View(Ag("cred")) != nullptr && S.View(Ag("cred"))->State == ECompanionState::Ready); // whole-name match only
+			EXPECT(Bridge, ConnectAs(S, TestProvider, 201, Descriptor(Ag("three"), TestProvider)));
+			S.ApplyReadAgentAnswer(Ag("three"), 404, KindBody("not_found"));
+			EXPECT(Bridge, S.View(Ag("three"))->Offline == EOfflineReason::NotConnected && S.View(Ag("three"))->AuthorizedCapabilities.empty() && TraceHas(S, "agent_read_not_found"));
+			S.ApplyReadAgentAnswer(Ag("nobody"), 200, ConnectOk);
+			EXPECT(Bridge, TraceHas(S, "agent_read_unexpected") && S.View(Ag("nobody")) == nullptr);
+		}
+		{
+			// DELETE (route.ts:339-351): 200 + the descriptor, disconnected for good; 404 unknown; else nothing changes.
+			FCompanionSession S(Origin, Project, true);
+			for (const char* Tag : {"d1", "d2", "d3", "d4", "d5", "d6"}) { EXPECT(Bridge, ConnectAs(S, TestProvider, 201, Descriptor(Ag(Tag), TestProvider))); }
+			S.ApplyDisconnectAnswer(Ag("d1"), 200, Gone(Ag("d1")));
+			EXPECT(Bridge, S.View(Ag("d1"))->Offline == EOfflineReason::NotConnected && TraceHas(S, "disconnect_ok"));
+			S.ApplyDisconnectAnswer(Ag("d2"), 200, Descriptor(Ag("d2"), TestProvider)); // odd: "connected" in a DELETE answer
+			EXPECT(Bridge, S.View(Ag("d2"))->Offline == EOfflineReason::NotConnected && !S.View(Ag("d2"))->bCanSend && TraceHas(S, "disconnect_answer_refused"));
+			S.ApplyDisconnectAnswer(Ag("d3"), 200, "not json");
+			EXPECT(Bridge, S.View(Ag("d3"))->Offline == EOfflineReason::NotConnected && !S.View(Ag("d3"))->bCanSend);
+			S.ApplyDisconnectAnswer(Ag("d4"), 404, KindBody("not_found"));
+			EXPECT(Bridge, S.View(Ag("d4"))->Offline == EOfflineReason::NotConnected && TraceHas(S, "disconnect_not_found"));
+			for (int Code : {204, 202, 401, 403, 405, 500, 503, 0})
+			{
+				S.ApplyDisconnectAnswer(Ag("d5"), Code, Gone(Ag("d5")));
+				EXPECT(Bridge, S.View(Ag("d5"))->State == ECompanionState::Ready && S.View(Ag("d5"))->bCanSend);
+			}
+			EXPECT(Bridge, TraceHas(S, "disconnect_failed"));
+			S.ApplyDisconnectAnswer(Ag("d6"), 200, Gone(Ag("other")));
+			EXPECT(Bridge, S.View(Ag("d6"))->Offline == EOfflineReason::NotConnected && S.View(Ag("other")) == nullptr);
+			// The server keeps a deleted slot disconnected (registry.ts:272-283); the client reads what it publishes.
+			S.ApplyAgentSlots(Slots("[" + Gone(Ag("d1")) + "]"));
+			EXPECT(Bridge, S.View(Ag("d1"))->Offline == EOfflineReason::NotConnected);
 		}
 	}
 }
@@ -1637,12 +2197,20 @@ int main()
 	TestRoute();
 	TestAnswers();
 	TestMint();
+	TestAgents();
+	TestMulti();
+	TestUnsupported();
+	TestIsolation();
+	TestCaps();
+	TestVerified();
+	TestBridge();
 	if (Failures != 0)
 	{
 		std::printf("J1 COMPANION KAT FAIL failures=%d\n", Failures);
 		return 1;
 	}
-	std::printf("J1 COMPANION KAT PASS json=%d sse=%d chat=%d session=%d key=%d status=%d pin=%d history=%d result=%d route=%d answers=%d mint=%d\n",
-		Checks[Json], Checks[Sse], Checks[Chat], Checks[Session], Checks[Key], Checks[Status], Checks[Pin], Checks[History], Checks[Result], Checks[Route], Checks[Answers], Checks[Mint]);
+	std::string Line = "J1 COMPANION KAT PASS";
+	for (int I = 0; I < SectionCount; ++I) { Line += std::string(" ") + SectionNames[I] + "=" + std::to_string(Checks[I]); }
+	std::printf("%s\n", Line.c_str());
 	return 0;
 }

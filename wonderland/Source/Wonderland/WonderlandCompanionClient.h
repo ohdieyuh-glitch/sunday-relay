@@ -5,10 +5,15 @@
 // Julius/WonderlandJuliusRandomBytes.h. No UMG widget asset exists for it yet.
 //
 // RULES (all enforced by the pure core WonderlandCompanionLogic, which this file only feeds):
-//   - BYOAI only. The only server this talks to is the loopback relay origin it is given; there is no i.Wonder key,
-//     no provider URL and no fallback anywhere in this file.
-//   - The API key goes from the masked field to ONE FKeyHandoff request and is wiped. This adapter never copies it
-//     into an FString, a log line, a widget, a save game or a config value. UE_LOG calls print trace words only.
+//   - BYOAI only, provider-agnostic. The only server this talks to is the loopback relay origin it is given; there is
+//     no i.Wonder key, no provider URL, no provider name and no fallback anywhere in this file. Every agent is addressed
+//     by its server-issued agentId; a providerId is an opaque string the player's UI chose and the server's adapter owns.
+//   - Several agents can be connected at once; one agent's failure or disconnect never touches another.
+//   - Capabilities shown are the agent's authorizedCapabilities from the server only; nothing is inferred.
+//   - No API key is collected or sent: BRIDGE's connect route (7e5e1e30) refuses credentials and no route takes one.
+//     Where the player's provider auth happens is an OPEN question for BRIDGE. UE_LOG calls print trace words only.
+//   - OPEN: BRIDGE's dispatch guard needs "authorization: Relay-Session <token>" on every companion route
+//     (admission-route.ts:255-295). This seam does not set it yet; it must reuse #433's native session, never copy it.
 //   - Idempotency keys come from the J1 random path: #433's FWonderlandJuliusPlatformCryptoRandom (IPlatformCrypto
 //     CreateRandomBytes, no fallback) -> FIdempotencyKeyMinter -> canonical lowercase UUIDv4. Never FGuid::NewGuid
 //     (FGuid is not a v4 UUID by construction). A failed source sends nothing (ApplyKeyMintFailure).
@@ -38,45 +43,51 @@ public:
 	 * which #433 accepts, keeps the companion Offline.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
-	void Start(const FString& J1RelayBaseUrl);
+	void Start(const FString& J1RelayBaseUrl, const FString& ProjectId);
 
-	/** Masked key entry: the widget forwards key presses here; it never holds the text itself. */
+	/** v0.2: GET the mission companion route and upsert its agents[] slots (per slot, fail closed per slot). */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
-	void KeyFieldAppend(const FString& Typed);
+	void RefreshMissionAgents(const FString& WljRunId, const FString& ProjectId);
+
+	/** POST /companions/agents?projectId= {providerId (opaque)[, wljRunId][, displayName]}. 201 only; an unknown providerId answers an unsupported slot. */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
-	void KeyFieldBackspace();
+	void ConnectAgent(const FString& ProviderId, const FString& WljRunIdOrEmpty, const FString& DisplayLabelOrEmpty);
+	/** GET /companions/agents/{agentId}?projectId=. */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
-	FString KeyFieldMask() const;
+	void RefreshAgent(const FString& AgentId);
+	/** DELETE /companions/agents/{agentId}?projectId= (200 + the disconnected descriptor). */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
-	void ConnectKey();
-	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
-	void Disconnect();
+	void Disconnect(const FString& AgentId);
 
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
-	void SendMessage(const FString& Message, const FString& WljRunIdOrEmpty);
+	void SendMessage(const FString& AgentId, const FString& Message, const FString& WljRunIdOrEmpty);
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
-	void Resend();
+	void Resend(const FString& AgentId);
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
-	void DeleteHistory();
+	void DeleteHistory(const FString& AgentId);
 
-	/** View for the terminal widget: state, server label (verbatim), status line, partial reply, banner flags. */
-	const WonderlandCompanionLogic::FCompanionView& GetView() const { return Session->View(); }
-	const WonderlandCompanionLogic::FTurnHistory& GetHistory() const { return Session->History(); }
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
+	TArray<FString> GetAgentIds() const;
+	/** Per-agent view: displayName, authorized capabilities only, state, status line, partial reply, banner. nullptr if unknown. */
+	const WonderlandCompanionLogic::FAgentView* GetAgentView(const FString& AgentId) const;
+	const WonderlandCompanionLogic::FTurnHistory* GetHistory(const FString& AgentId) const;
+	/** Session-wide: origin, project, connect in flight, the last connect notice, unreadable slots, the SIMULATED banner. */
+	const WonderlandCompanionLogic::FCompanionSessionView& GetSessionView() const { return Session->SessionView(); }
 
 	UPROPERTY(BlueprintAssignable, Category = "Wonderland|Companion")
 	FOnWonderlandCompanionViewChanged OnViewChanged;
 
 private:
 	void Issue(const WonderlandCompanionLogic::FRelayRequest& Request, TFunction<void(int32, const FString&, const TArray<uint8>&)> OnDone);
-	void StartChatRequest(const WonderlandCompanionLogic::FRelayRequest& Request);
+	void StartChatRequest(const FString& AgentId, const WonderlandCompanionLogic::FRelayRequest& Request);
 	/** Empty when the random source failed or repeated; the session has then been told (ApplyKeyMintFailure). */
-	FString NewIdempotencyKey();
+	FString NewIdempotencyKey(const FString& AgentIdOrEmpty);
 	uint64 NowMs() const;
 	void Changed();
 
-	TUniquePtr<WonderlandCompanionLogic::FOpenAiCompanionSession> Session;
-	WonderlandCompanionLogic::FMaskedKeyField KeyField;
+	TUniquePtr<WonderlandCompanionLogic::FCompanionSession> Session;
 	FWonderlandJuliusPlatformCryptoRandom Random;
 	WonderlandCompanionLogic::FIdempotencyKeyMinter KeyMinter;
-	TSharedPtr<IHttpRequest, ESPMode::ThreadSafe> ChatRequest;
+	/** One chat stream per agent, keyed by agentId. */
+	TMap<FString, TSharedPtr<IHttpRequest, ESPMode::ThreadSafe>> ChatRequests;
 };

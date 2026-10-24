@@ -1,4 +1,6 @@
 // WONDERLAND -- companion UE adapter seam. NOT COMPILED; Unreal APIs UNVERIFIED (see the header).
+// Provider-agnostic: every call names an agentId (or, to connect, an opaque providerId); nothing here switches on either.
+// Routes as served by BRIDGE 7e5e1e30: POST / GET / DELETE /relay-api/wonderland/companions/agents[/{agentId}]?projectId=.
 #include "WonderlandCompanionClient.h"
 
 #include "HttpModule.h"
@@ -20,103 +22,104 @@ namespace
 		const FUTF8ToTCHAR Conv(Text.data(), static_cast<int32>(Text.size()));
 		return FString(Conv.Length(), Conv.Get());
 	}
+
+	std::string_view BytesView(const TArray<uint8>& Bytes)
+	{
+		return std::string_view(reinterpret_cast<const char*>(Bytes.GetData()), Bytes.Num());
+	}
 }
 
 void UWonderlandCompanionClient::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
-	Session = MakeUnique<FOpenAiCompanionSession>(std::string()); // Offline until Start() gets a loopback origin
+	Session = MakeUnique<FCompanionSession>(std::string()); // Offline until Start() gets a loopback origin
 }
 
 void UWonderlandCompanionClient::Deinitialize()
 {
-	if (ChatRequest.IsValid()) { ChatRequest->CancelRequest(); }
-	KeyField.Clear();
+	for (TPair<FString, TSharedPtr<IHttpRequest, ESPMode::ThreadSafe>>& Pair : ChatRequests)
+	{
+		if (Pair.Value.IsValid()) { Pair.Value->CancelRequest(); }
+	}
+	ChatRequests.Empty();
 	Session.Reset();
 	Super::Deinitialize();
 }
 
-void UWonderlandCompanionClient::Start(const FString& J1RelayBaseUrl)
+void UWonderlandCompanionClient::Start(const FString& J1RelayBaseUrl, const FString& ProjectId)
 {
-	Session = MakeUnique<FOpenAiCompanionSession>(RelayOriginFromJ1Endpoint(ToUtf8(J1RelayBaseUrl))); // Q9
-	Issue(Session->ProvidersRequest(), [this](int32 Status, const FString&, const TArray<uint8>& Body) {
-		Session->ApplyProvidersAnswer(Status, std::string_view(reinterpret_cast<const char*>(Body.GetData()), Body.Num()));
-		Issue(Session->ConnectionsRequest(), [this](int32 S2, const FString&, const TArray<uint8>& B2) {
-			Session->ApplyConnectionsAnswer(S2, std::string_view(reinterpret_cast<const char*>(B2.GetData()), B2.Num()));
+	// No providers / connections fetch. Agents arrive as slots (RefreshMissionAgents), a connect answer or a GET.
+	// The chat route is not served at 7e5e1e30, so the session is built with bChatRouteServed = false (the default).
+	Session = MakeUnique<FCompanionSession>(RelayOriginFromJ1Endpoint(ToUtf8(J1RelayBaseUrl)), ToUtf8(ProjectId)); // Q9
+	Changed();
+}
+
+void UWonderlandCompanionClient::RefreshMissionAgents(const FString& WljRunId, const FString& ProjectId)
+{
+	const std::string Wlj = ToUtf8(WljRunId);
+	Issue(CompanionMissionRequest(Session->RelayOrigin(), Wlj, ToUtf8(ProjectId)),
+		[this, Wlj](int32 Status, const FString&, const TArray<uint8>& Body) {
+			FCompanionMissionView Mission;
+			ParseCompanionMission(Status, BytesView(Body), Wlj, Mission); // agents[] are read even if a v0.1 field fails
+			if (Mission.AgentsParse == EAgentListParse::Ok) { Session->ApplyAgentSlots(Mission.Agents); }
 			Changed();
 		});
-		Changed();
-	});
-	Changed();
 }
 
-void UWonderlandCompanionClient::KeyFieldAppend(const FString& Typed)
+void UWonderlandCompanionClient::ConnectAgent(const FString& ProviderId, const FString& WljRunIdOrEmpty, const FString& DisplayLabelOrEmpty)
 {
-	// UNVERIFIED: FTCHARToUTF8 keeps a temporary buffer; it is short-lived but not wiped. Prefer feeding raw key
-	// events (one ASCII char at a time) from the widget so no full-key FString ever exists.
-	const FTCHARToUTF8 Conv(*Typed);
-	KeyField.Append(std::string_view(Conv.Get(), Conv.Length()));
-	Changed();
-}
-
-void UWonderlandCompanionClient::KeyFieldBackspace() { KeyField.Backspace(); Changed(); }
-
-FString UWonderlandCompanionClient::KeyFieldMask() const { return FromUtf8(KeyField.MaskText()); }
-
-void UWonderlandCompanionClient::ConnectKey()
-{
-	FKeyHandoff Handoff;
-	const FString IdemKey = NewIdempotencyKey();
-	if (IdemKey.IsEmpty()) { KeyField.Clear(); Changed(); return; } // fail closed: no secure key, nothing sent
-	if (!Session->BeginConnect(KeyField, ToUtf8(IdemKey), Handoff)) { Changed(); return; }
-	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
-	Request->SetVerb(TEXT("PUT"));
-	Request->SetURL(FromUtf8(Handoff.TargetUrl()));
-	Request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
-	Request->SetHeader(TEXT("x-relay-idempotency-key"), FromUtf8(Handoff.IdempotencyKey()));
-	const std::string_view Body = Handoff.Body();
-	Request->SetContent(TArray<uint8>(reinterpret_cast<const uint8*>(Body.data()), static_cast<int32>(Body.size())));
-	Handoff.MarkSent(); // UNVERIFIED: the engine's request keeps its own copy of the content until it is destroyed.
-	Request->OnProcessRequestComplete().BindWeakLambda(this, [this](FHttpRequestPtr, FHttpResponsePtr Response, bool bOk) {
-		const int32 Status = (bOk && Response.IsValid()) ? Response->GetResponseCode() : 0;
-		const TArray<uint8> Empty;
-		const TArray<uint8>& Bytes = Response.IsValid() ? Response->GetContent() : Empty;
-		Session->ApplyConnectAnswer(Status, std::string_view(reinterpret_cast<const char*>(Bytes.GetData()), Bytes.Num()), NowMs());
-		Changed();
-	});
-	Request->ProcessRequest();
-	Changed();
-}
-
-void UWonderlandCompanionClient::Disconnect()
-{
-	Issue(Session->BeginDisconnect(), [this](int32 Status, const FString&, const TArray<uint8>&) {
-		Session->ApplyDisconnectAnswer(Status);
-		Changed();
-	});
-}
-
-void UWonderlandCompanionClient::SendMessage(const FString& Message, const FString& WljRunIdOrEmpty)
-{
+	// No key, no idempotency key: every POST mints a new slot (registry.ts:246), so it is never resent.
 	FRelayRequest Request;
-	const FString IdemKey = NewIdempotencyKey();
-	if (IdemKey.IsEmpty()) { Changed(); return; } // fail closed: no secure key, nothing sent
-	if (Session->BeginMessage(ToUtf8(Message), ToUtf8(IdemKey), ToUtf8(WljRunIdOrEmpty), NowMs(), Request))
+	if (Session->BeginConnect(ToUtf8(ProviderId), ToUtf8(WljRunIdOrEmpty), ToUtf8(DisplayLabelOrEmpty), Request))
 	{
-		StartChatRequest(Request);
+		Issue(Request, [this](int32 Status, const FString&, const TArray<uint8>& Body) {
+			Session->ApplyConnectAnswer(Status, BytesView(Body), NowMs());
+			Changed();
+		});
 	}
 	Changed();
 }
 
-void UWonderlandCompanionClient::Resend()
+void UWonderlandCompanionClient::RefreshAgent(const FString& AgentId)
+{
+	const std::string Id = ToUtf8(AgentId);
+	Issue(Session->BeginReadAgent(Id), [this, Id](int32 Status, const FString&, const TArray<uint8>& Body) {
+		Session->ApplyReadAgentAnswer(Id, Status, BytesView(Body));
+		Changed();
+	});
+}
+
+void UWonderlandCompanionClient::Disconnect(const FString& AgentId)
+{
+	const std::string Id = ToUtf8(AgentId);
+	Issue(Session->BeginDisconnect(Id), [this, Id](int32 Status, const FString&, const TArray<uint8>& Body) {
+		Session->ApplyDisconnectAnswer(Id, Status, BytesView(Body));
+		Changed();
+	});
+}
+
+void UWonderlandCompanionClient::SendMessage(const FString& AgentId, const FString& Message, const FString& WljRunIdOrEmpty)
 {
 	FRelayRequest Request;
-	if (Session->BeginResend(NowMs(), Request)) { StartChatRequest(Request); }
+	const FString IdemKey = NewIdempotencyKey(AgentId);
+	if (IdemKey.IsEmpty()) { Changed(); return; } // fail closed: no secure key, nothing sent
+	if (Session->BeginMessage(ToUtf8(AgentId), ToUtf8(Message), ToUtf8(IdemKey), ToUtf8(WljRunIdOrEmpty), NowMs(), Request))
+	{
+		StartChatRequest(AgentId, Request);
+	}
 	Changed();
 }
 
-void UWonderlandCompanionClient::StartChatRequest(const FRelayRequest& In)
+void UWonderlandCompanionClient::Resend(const FString& AgentId)
 {
+	FRelayRequest Request;
+	if (Session->BeginResend(ToUtf8(AgentId), NowMs(), Request)) { StartChatRequest(AgentId, Request); }
+	Changed();
+}
+
+void UWonderlandCompanionClient::StartChatRequest(const FString& AgentId, const FRelayRequest& In)
+{
+	const std::string Id = ToUtf8(AgentId);
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
 	Request->SetVerb(TEXT("POST"));
 	Request->SetURL(FromUtf8(In.Url));
@@ -127,37 +130,47 @@ void UWonderlandCompanionClient::StartChatRequest(const FRelayRequest& In)
 	// UNVERIFIED: UE 5.4+ streaming body delegate name and signature. Bytes arrive on the HTTP thread; they are
 	// marshalled to the game thread before touching the session.
 	Request->SetResponseBodyReceiveStreamDelegateV2(FHttpRequestStreamDelegateV2::CreateWeakLambda(this,
-		[this](void* Data, int64& Length) {
+		[this, Id](void* Data, int64& Length) {
 			std::string Chunk(static_cast<const char*>(Data), static_cast<size_t>(Length));
-			AsyncTask(ENamedThreads::GameThread, [this, Chunk = MoveTemp(Chunk)]() {
-				if (Session) { Session->FeedChatBytes(Chunk, NowMs()); Changed(); }
+			AsyncTask(ENamedThreads::GameThread, [this, Id, Chunk = MoveTemp(Chunk)]() {
+				if (Session) { Session->FeedChatBytes(Id, Chunk, NowMs()); Changed(); }
 			});
 		}));
-	Request->OnProcessRequestComplete().BindWeakLambda(this, [this](FHttpRequestPtr, FHttpResponsePtr Response, bool bOk) {
-		ChatRequest.Reset();
-		if (!bOk || !Response.IsValid()) { Session->ApplyChatTransportFailure(NowMs()); Changed(); return; }
+	Request->OnProcessRequestComplete().BindWeakLambda(this, [this, Id, AgentId](FHttpRequestPtr, FHttpResponsePtr Response, bool bOk) {
+		ChatRequests.Remove(AgentId);
+		if (!bOk || !Response.IsValid()) { Session->ApplyChatTransportFailure(Id, NowMs()); Changed(); return; }
 		const int32 Status = Response->GetResponseCode();
-		if (Status == 200 && Response->GetContentType().StartsWith(TEXT("text/event-stream"))) { Session->FinishChatStream(NowMs()); }
+		if (Status == 200 && Response->GetContentType().StartsWith(TEXT("text/event-stream"))) { Session->FinishChatStream(Id, NowMs()); }
 		else
 		{
-			const TArray<uint8>& Bytes = Response->GetContent();
-			Session->ApplyChatHttpAnswer(Status, ToUtf8(Response->GetHeader(TEXT("Retry-After"))),
-				std::string_view(reinterpret_cast<const char*>(Bytes.GetData()), Bytes.Num()), NowMs());
+			Session->ApplyChatHttpAnswer(Id, Status, ToUtf8(Response->GetHeader(TEXT("Retry-After"))), BytesView(Response->GetContent()), NowMs());
 		}
 		Changed();
 	});
-	ChatRequest = Request;
+	ChatRequests.Add(AgentId, Request);
 	Request->ProcessRequest();
 }
 
-void UWonderlandCompanionClient::DeleteHistory()
+void UWonderlandCompanionClient::DeleteHistory(const FString& AgentId)
 {
-	Issue(Session->BeginDeleteHistory(), [this](int32 Status, const FString&, const TArray<uint8>&) {
-		Session->ApplyDeleteHistoryAnswer(Status);
+	const std::string Id = ToUtf8(AgentId);
+	Issue(Session->BeginDeleteHistory(Id), [this, Id](int32 Status, const FString&, const TArray<uint8>&) {
+		Session->ApplyDeleteHistoryAnswer(Id, Status);
 		Changed();
 	});
 	Changed();
 }
+
+TArray<FString> UWonderlandCompanionClient::GetAgentIds() const
+{
+	TArray<FString> Out;
+	for (const std::string& Id : Session->AgentIds()) { Out.Add(FromUtf8(Id)); }
+	return Out;
+}
+
+const FAgentView* UWonderlandCompanionClient::GetAgentView(const FString& AgentId) const { return Session->View(ToUtf8(AgentId)); }
+
+const FTurnHistory* UWonderlandCompanionClient::GetHistory(const FString& AgentId) const { return Session->History(ToUtf8(AgentId)); }
 
 void UWonderlandCompanionClient::Issue(const FRelayRequest& In, TFunction<void(int32, const FString&, const TArray<uint8>&)> OnDone)
 {
@@ -180,14 +193,14 @@ void UWonderlandCompanionClient::Issue(const FRelayRequest& In, TFunction<void(i
 	Request->ProcessRequest();
 }
 
-FString UWonderlandCompanionClient::NewIdempotencyKey()
+FString UWonderlandCompanionClient::NewIdempotencyKey(const FString& AgentIdOrEmpty)
 {
 	// #433's IPlatformCrypto source; the pure minter formats a canonical UUIDv4 and refuses a failed or repeating source.
 	std::string Key;
 	const EKeyMint Result = KeyMinter.Mint(Random, Key);
 	if (Result != EKeyMint::Minted)
 	{
-		Session->ApplyKeyMintFailure();
+		Session->ApplyKeyMintFailure(ToUtf8(AgentIdOrEmpty));
 		return FString();
 	}
 	return FromUtf8(Key);
