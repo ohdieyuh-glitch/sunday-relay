@@ -1435,8 +1435,17 @@ jobs:
           rm -rf julius-learning-store "$render"
           mkdir -p julius-learning-store "$render"
           # THE RUN THIS STORE IS, in the entrypoint's own words: its one `Run ... accepted` line.
-          run_id=$(sed -n 's/^Run \(run:[0-9a-f]\{24\}\) accepted in state READY; driving the Julius run loop\.$/\1/p' live-mission.log | sort -u)
-          [ "$(printf '%s\n' "$run_id" | grep -c .)" = 1 ] || { echo 'learning_store_run_unnamed: not exactly one accepted run in the live log' >&2; exit 1; }
+          # The shared admission parser accepts one canonical wlj_ id or one legacy run: id.
+          # Zero lines, more than one distinct token, or a token that parser refuses are the same failure.
+          accepted_run=$(sed -n 's/^Run \(.*\) accepted in state READY; driving the Julius run loop\.$/\1/p' live-mission.log | sort -u)
+          [ "$(printf '%s\n' "$accepted_run" | grep -c .)" = 1 ] || { echo 'learning_store_run_unnamed: not exactly one accepted run in the live log' >&2; exit 1; }
+          derived=$(JULIUS_RUN_ID="$accepted_run" node scripts/julius-admission-run-id.mjs derive) || { echo 'learning_store_run_unnamed: the accepted run is not an admission id' >&2; exit 1; }
+          run_id=$(printf '%s\n' "$derived" | sed -n 's/^run_id=//p')
+          form=$(printf '%s\n' "$derived" | sed -n 's/^form=//p')
+          case "$form" in
+            wlj|legacy) [ "$run_id" = "$accepted_run" ] || { echo 'learning_store_run_unnamed: the accepted run is not an admission id' >&2; exit 1; } ;;
+            *) echo 'learning_store_run_unnamed: the accepted run is not an admission id' >&2; exit 1 ;;
+          esac
           # THE DATABASE COMMANDS ARE THE STORE SCRIPT'S (.github/julius-learning-store.sh, pinned by its sha256 in the
           # registration; the test that proves the round trip runs the same file): the dump, its rendering kept for the
           # scan below, the WITHOUT record found in it, the digest and the manifest. This step adds what only GitHub knows.

@@ -47,6 +47,7 @@ import { hostedChildEnv, hostedChildEnvKeys } from './hosted-coding-agent/hosted
 // on PATH in this process's environment, which a GitHub runner does not have.
 import { observeCoderLogin, resolveCoderClaudeExecutable } from './hosted-coding-agent/hosted-login-probe';
 import { readFileSync } from 'node:fs';
+import { parseJuliusAdmissionRunId } from '../scripts/julius-admission-run-id.mjs';
 import { createPublicKey, type KeyObject } from 'node:crypto';
 import { Pool } from 'pg';
 import { listenJuliusPool } from '../src/relay/persistence/julius-pg-held';
@@ -579,6 +580,35 @@ export async function observeResearchCommand(input: {
   return 0;
 }
 
+/**
+ * THE RUN THE SPEND-TAG JOB ALREADY LOCKED.
+ *
+ * `JULIUS_RUN_ID` and `JULIUS_SERVER_RUN_ID` are both that job's `run_id`
+ * output. This reads them only through `parseJuliusAdmissionRunId`. A missing
+ * value, a shape that parser refuses, or two values that are not the same id
+ * refuse the start. A legacy `run:` id is read-only: nothing in this entry
+ * starts a mission on one. This function never mints.
+ */
+export function admitLiveJuliusRunId(env: {
+  readonly JULIUS_RUN_ID?: string;
+  readonly JULIUS_SERVER_RUN_ID?: string;
+}): { readonly ok: true; readonly runId: string } | {
+  readonly ok: false;
+  readonly reason: 'admission_run_id_required' | 'admission_run_id_malformed' | 'admission_run_id_mismatch' | 'admission_run_id_legacy_read_only';
+} {
+  const presented = parseJuliusAdmissionRunId(env.JULIUS_RUN_ID ?? '');
+  const spent = parseJuliusAdmissionRunId(env.JULIUS_SERVER_RUN_ID ?? '');
+  if (!presented.ok) return presented;
+  if (!spent.ok) {
+    return spent.reason === 'admission_run_id_required' ? spent : { ok: false, reason: 'admission_run_id_mismatch' };
+  }
+  if (presented.runId !== spent.runId) return { ok: false, reason: 'admission_run_id_mismatch' };
+  if (presented.form === 'legacy' || spent.form === 'legacy') {
+    return { ok: false, reason: 'admission_run_id_legacy_read_only' };
+  }
+  return { ok: true, runId: presented.runId };
+}
+
 /* ------------------------------------------------------------------ main */
 
 async function main(argv: readonly string[]): Promise<number> {
@@ -618,6 +648,16 @@ async function main(argv: readonly string[]): Promise<number> {
 
   const env = process.env as Record<string, string | undefined>;
   const cardRevision = env.RELAY_JULIUS_CARD_REVISION?.trim() || 'card:julius-live:1';
+  /**
+   * BEFORE PREFLIGHT. A confirmed start with no admitted `wlj_` id must not
+   * observe a login, open a database, or submit a run. Preflight without
+   * `--confirm-live` does not start a mission and does not require the id.
+   */
+  const admittedRun = flag('confirm-live') ? admitLiveJuliusRunId(env) : null;
+  if (admittedRun !== null && !admittedRun.ok) {
+    out(`RESULT: BLOCKED — ${admittedRun.reason}. Nothing was submitted and no provider was contacted.`);
+    return 1;
+  }
 
   /**
    * THE OPERATOR'S OBSERVATIONS, CHECKED BEFORE ANYTHING IS SUBMITTED.
@@ -936,6 +976,10 @@ async function main(argv: readonly string[]): Promise<number> {
      */
     const bootstrapRuns = new JuliusPostgresRepository(pool);
     const bootstrapContracts = new JuliusContractPostgresRepository(pool);
+    if (admittedRun === null || !admittedRun.ok) {
+      out('RESULT: BLOCKED — admission_run_id_required. Nothing was submitted and no provider was contacted.');
+      return 1;
+    }
     const bootstrap = createLiveJuliusBootstrapPort({
       runs: {
         loadRun: bootstrapRuns.loadRun.bind(bootstrapRuns),
@@ -959,6 +1003,7 @@ async function main(argv: readonly string[]): Promise<number> {
         : {}),
       tenantId: contract.tenantId,
       executionId,
+      admittedRunId: admittedRun.runId,
     });
     const submitted = await bootstrap.submit(request);
     if (!submitted.accepted) {

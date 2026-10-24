@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
 
@@ -652,5 +652,68 @@ describe('one spent tag per admission run id, before any provider call', () => {
     expect(missing.status).not.toBe(0);
     expect(missing.stderr).toContain('SPENT_TAG_UNVERIFIED');
     expect(missing.curlLog).toBe('');
+  });
+});
+
+describe('the WITHOUT-arm log parser admits one id through the shared module', () => {
+  const WLJ = 'wlj_01234567-89ab-4cde-8fab-0123456789ab';
+  const LEGACY = 'run:0123456789abcdef01234567';
+  const accepted = (runId: string): string => `Run ${runId} accepted in state READY; driving the Julius run loop.\n`;
+
+  function parseLog(log: string): { readonly status: number; readonly stdout: string; readonly stderr: string } {
+    const block = step(job('first-live-mission'), "'Learning pair arm WITHOUT: dump this run''s store, restorable, for its WITH arm'");
+    const full = script(block);
+    const from = full.indexOf('accepted_run=$(');
+    const at = full.indexOf('JULIUS_PG_CONTAINER=');
+    expect(from, 'the parser names the accepted run').toBeGreaterThan(0);
+    expect(at, 'the parser stops before the store dump').toBeGreaterThan(from);
+    const logPath = join(ROOT, 'live-mission.log');
+    writeFileSync(logPath, log);
+    try {
+      const stdout = execFileSync('bash', [...GITHUB_BASH, `set -euo pipefail\n${full.slice(from, at)}\nprintf '%s\\n' "$run_id"\n`], {
+        cwd: ROOT, encoding: 'utf8',
+      });
+      return { status: 0, stdout, stderr: '' };
+    } catch (error) {
+      const failed = error as { status?: number; stdout?: string; stderr?: string };
+      return { status: failed.status ?? 1, stdout: failed.stdout ?? '', stderr: failed.stderr ?? '' };
+    } finally {
+      rmSync(logPath, { force: true });
+    }
+  }
+
+  it('calls the shared parser and no longer captures only a legacy run id', () => {
+    const block = script(step(job('first-live-mission'), "'Learning pair arm WITHOUT: dump this run''s store, restorable, for its WITH arm'"));
+    expect(block).toContain('node scripts/julius-admission-run-id.mjs derive');
+    expect(block).not.toContain('run:[0-9a-f]\\{24\\}');
+    expect(block.indexOf('node scripts/julius-admission-run-id.mjs derive')).toBeLessThan(block.indexOf('JULIUS_PG_CONTAINER='));
+  });
+
+  it('accepts one canonical wlj_ id', () => {
+    const parsed = parseLog(accepted(WLJ));
+    expect(parsed.status, parsed.stderr).toBe(0);
+    expect(parsed.stdout).toBe(`${WLJ}\n`);
+  });
+
+  it('still accepts one legacy run: id', () => {
+    const parsed = parseLog(accepted(LEGACY));
+    expect(parsed.status, parsed.stderr).toBe(0);
+    expect(parsed.stdout).toBe(`${LEGACY}\n`);
+  });
+
+  it('fails closed when the log names both forms, two ids, none, or a token the parser refuses', () => {
+    for (const log of [
+      accepted(WLJ) + accepted(LEGACY),
+      accepted(WLJ) + accepted('wlj_aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'),
+      '',
+      'Run not-an-id accepted in state READY; driving the Julius run loop.\n',
+      accepted('wlj_01234567-89AB-4CDE-8FAB-0123456789AB'),
+      accepted(`run:${'A'.repeat(24)}`),
+      'RESULT: COMPLETED\n',
+    ]) {
+      const parsed = parseLog(log);
+      expect(parsed.status, log).not.toBe(0);
+      expect(parsed.stderr, log).toContain('learning_store_run_unnamed');
+    }
   });
 });

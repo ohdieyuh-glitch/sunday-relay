@@ -37,6 +37,7 @@ import {
   type JuliusBootstrapRequest,
 } from '../../src/relay/integration/julius/julius-port';
 import { createHash } from 'node:crypto';
+import { parseJuliusAdmissionRunId } from '../../scripts/julius-admission-run-id.mjs';
 import { parseJuliusMissionActiveError } from '../../src/relay/persistence/julius-postgres';
 import { seedJuliusTaskContract, type JuliusMissionState, type JuliusTask, type JuliusTaskContract } from '../../src/relay/mission/julius';
 import type { JuliusKnowledgeCarryOutcome } from '../../src/relay/mission/julius/julius-claim-ledger';
@@ -116,6 +117,15 @@ export function createLiveJuliusBootstrapPort(deps: {
   readonly tenantId: string;
   readonly executionId: string;
   readonly now?: () => string;
+  /**
+   * THE RUN THE SPEND TAG ALREADY NAMED. Present only on the paid live entry,
+   * and only after `parseJuliusAdmissionRunId` accepted it as `wlj_`. This is
+   * the row id; nothing here mints a replacement. A legacy `run:` value is
+   * refused. Absent, the existing path below still names the row
+   * `run:` plus the contract identity — that path is what a caller uses when
+   * it presents no admission id at all.
+   */
+  readonly admittedRunId?: string;
 }): JuliusBootstrapPort {
   const now = deps.now ?? (() => new Date().toISOString());
   const refuse = (reasonCode: string, safeMessage: string, retryable = false): JuliusBootstrapOutcome =>
@@ -165,7 +175,14 @@ export function createLiveJuliusBootstrapPort(deps: {
           + 'Send one stable token per intended rerun.');
       }
       const identity = juliusBootstrapIdentity(request);
-      const runId = `run:${identity}`;
+      const admitted = deps.admittedRunId === undefined ? null : parseJuliusAdmissionRunId(deps.admittedRunId);
+      if (admitted !== null && (!admitted.ok || admitted.form !== 'wlj')) {
+        return refuse(
+          admitted.ok ? 'admission_run_id_legacy_read_only' : admitted.reason,
+          'The live run was not admitted on a canonical wlj id, so no run was created.',
+        );
+      }
+      const runId = admitted === null ? `run:${identity}` : admitted.runId;
       const projectBrainRevision = Number.parseInt(request.projectBrain.revision, 10);
       try {
         await deps.seeds.ensureBase({
