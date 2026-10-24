@@ -995,15 +995,31 @@ describe('J1 HTTP edge', () => {
     expect(accepted.includes('run:')).toBe(false);
     const rejected = [
       'run:abc123',
+      'run:0123456789abcdef01234567',
       '11111111-1111-4111-8111-111111111111',
       RUN.toUpperCase(),
+      `  ${RUN}`,
+      `${RUN} `,
       'wlj_11111111-1111-1111-8111-111111111111',
+      'wlj_11111111-1111-5111-8111-111111111111',
       'wlj_11111111-1111-4111-c111-111111111111',
+      'WLJ_11111111-1111-4111-8111-111111111111',
+      '',
       '../x',
+      `${RUN}\n`,
     ];
     for (const runId of rejected) {
-      const bad = await handleJuliusDispatchRoute(post({ rawBody: body({ runId }) }), ports(harness()));
+      const gate = harness();
+      const bad = await handleJuliusDispatchRoute(post({ rawBody: body({ runId }) }), ports(gate));
+      expect(bad, runId).toMatchObject({ status: 400, body: { error: { kind: 'julius_dispatch_run_invalid' } } });
+      expect(gate.calls, runId).toHaveLength(0);
+      expect(await rowsOf(gate), runId).toHaveLength(0);
+    }
+    for (const runId of [1, null, true]) {
+      const gate = harness();
+      const bad = await handleJuliusDispatchRoute(post({ rawBody: body({ runId }) }), ports(gate));
       expect(bad).toMatchObject({ status: 400, body: { error: { kind: 'julius_dispatch_run_invalid' } } });
+      expect(gate.calls).toHaveLength(0);
     }
     const getBad = await handleJuliusDispatchRoute(post({
       method: 'GET', path: '/wonderland/julius/dispatch/result',
@@ -1011,7 +1027,28 @@ describe('J1 HTTP edge', () => {
       rawBody: undefined,
     }), ports(h));
     expect(getBad).toMatchObject({ status: 400, body: { error: { kind: 'julius_dispatch_run_invalid' } } });
+    const eventsBad = await handleJuliusDispatchRoute(post({
+      method: 'GET', path: '/wonderland/julius/dispatch/events',
+      url: `/wonderland/julius/dispatch/events?projectId=${PROJECT}&runId=${encodeURIComponent('wlj_11111111-1111-1111-8111-111111111111')}`,
+      rawBody: undefined,
+    }), ports(h));
+    expect(eventsBad).toMatchObject({ status: 400, body: { error: { kind: 'julius_dispatch_run_invalid' } } });
     await h.controller.whenIdle();
+  });
+
+  it('a replayed dispatch of the same client run id does not start a second chain', async () => {
+    const h = harness();
+    const first = await handleJuliusDispatchRoute(post(), ports(h));
+    expect(first).toMatchObject({ status: 202, body: { data: { runId: RUN, replayed: false } } });
+    const replay = await handleJuliusDispatchRoute(post(), ports(h));
+    expect(replay).toMatchObject({ status: 200, body: { data: { runId: RUN, replayed: true } } });
+    const otherKey = await handleJuliusDispatchRoute(post({ idempotencyKey: 'key-0000002' }), ports(h));
+    expect(otherKey).toMatchObject({ status: 403, body: { error: { kind: 'julius_dispatch_run_creator_mismatch' } } });
+    await h.controller.whenIdle();
+    expect(h.calls).toHaveLength(3);
+    const starts = (await rowsOf(h)).filter((row) => row.phase === 'run_start' && row.runId === RUN);
+    expect(starts).toHaveLength(1);
+    expect(h.calls.every((call) => call.runId === RUN)).toBe(true);
   });
 
   it('another player cannot read a run they did not dispatch; an unknown run is 404 and an unfinished result 409', async () => {
