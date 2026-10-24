@@ -272,3 +272,144 @@ describe('julius-run-spent tags are the durable $60 record', () => {
     })).toEqual({ readable: false });
   });
 });
+
+const WLJ = 'wlj_01234567-89ab-4cde-8fab-0123456789ab';
+const WLJ_HEX = '0123456789ab4cde8fab0123456789ab';
+const PAIR = 'julius-live-mission-5';
+
+describe('a wlj spent tag counts toward the $60 cap', () => {
+  it('sums a wlj reservation into the cap at its reserved micros', () => {
+    const message = juliusSpentTagMessage({
+      runId: WLJ, namespace: PAIR, reservedUsdMicros: 30_000_000,
+    });
+    const ledger = interpretJuliusSpentTags({
+      namespace: PAIR,
+      tags: [{ ref: `refs/tags/julius-run-spent-${WLJ_HEX}`, message }],
+    });
+    expect(ledger).toEqual({
+      readable: true,
+      durableRecord: 'PRESENT',
+      priorRuns: [{
+        runId: WLJ,
+        knownUsdMicros: 30_000_000,
+        unknownCostComponents: 0,
+        unverifiableApiSpend: false,
+        spendVerified: true,
+      }],
+    });
+    // 30_000_000 prior + 30_000_000 contract = 60_000_000. Equality stays inside the cap.
+    expect(authorizeJuliusLiveSpend({
+      namespace: PAIR, spendUsd: 30, repairCycles: 3, ledger,
+    })).toEqual({ authorized: true, spendCeilingUsdMicros: 30_000_000, maxRepairRounds: 3 });
+    expect(JULIUS_QUALIFYING_PAIR_CAP_USD_MICROS).toBe(60_000_000);
+  });
+
+  it('refuses when the wlj reservation plus this contract passes the cap', () => {
+    const message = juliusSpentTagMessage({
+      runId: WLJ, namespace: PAIR, reservedUsdMicros: 30_000_001,
+    });
+    const ledger = interpretJuliusSpentTags({
+      namespace: PAIR,
+      tags: [{ ref: `refs/tags/julius-run-spent-${WLJ_HEX}`, message }],
+    });
+    expect(ledger.readable).toBe(true);
+    if (!ledger.readable) return;
+    expect(ledger.priorRuns[0]?.knownUsdMicros).toBe(30_000_001);
+    const refused = authorizeJuliusLiveSpend({
+      namespace: PAIR, spendUsd: 30, repairCycles: 3, ledger,
+    });
+    expect(refused.authorized).toBe(false);
+    if (!refused.authorized) {
+      expect(refused.reasonCode).toBe('qualifying_pair_spend_exceeded');
+      expect(refused.safeMessage).toContain('Known prior spend 30000001');
+      expect(refused.safeMessage).toContain(String(JULIUS_QUALIFYING_PAIR_CAP_USD_MICROS));
+    }
+  });
+
+  it('counts a mixed legacy and wlj listing, and does not drop either reservation', () => {
+    const legacy = juliusSpentTagMessage({
+      runId: RUN_A, namespace: PAIR, reservedUsdMicros: 20_000_000,
+    });
+    const wlj = juliusSpentTagMessage({
+      runId: WLJ, namespace: PAIR, reservedUsdMicros: 10_000_000,
+    });
+    const mixed = interpretJuliusSpentTags({
+      namespace: PAIR,
+      tags: [
+        { ref: `refs/tags/julius-run-spent-${WLJ_HEX}`, message: wlj },
+        { ref: `refs/tags/julius-run-spent-${HEX_A}`, message: legacy },
+      ],
+    });
+    expect(mixed.readable).toBe(true);
+    if (!mixed.readable) return;
+    expect(mixed.priorRuns.map((run) => [run.runId, run.knownUsdMicros])).toEqual([
+      [RUN_A, 20_000_000],
+      [WLJ, 10_000_000],
+    ]);
+    expect(mixed.priorRuns.reduce((sum, run) => sum + run.knownUsdMicros, 0)).toBe(30_000_000);
+    const third = authorizeJuliusLiveSpend({
+      namespace: PAIR, spendUsd: 1, repairCycles: 0, ledger: mixed,
+    });
+    expect(third.authorized).toBe(false);
+    if (!third.authorized) expect(third.reasonCode).toBe('qualifying_pair_third_run_refused');
+
+    const legacyOver = juliusSpentTagMessage({
+      runId: RUN_A, namespace: PAIR, reservedUsdMicros: 30_000_001,
+    });
+    const held = interpretJuliusSpentTags({
+      namespace: PAIR,
+      excludeRunId: WLJ,
+      tags: [
+        { ref: `refs/tags/julius-run-spent-${WLJ_HEX}`, message: wlj },
+        { ref: `refs/tags/julius-run-spent-${HEX_A}`, message: legacyOver },
+      ],
+    });
+    expect(held.readable).toBe(true);
+    if (!held.readable) return;
+    expect(held.priorRuns).toEqual([{
+      runId: RUN_A,
+      knownUsdMicros: 30_000_001,
+      unknownCostComponents: 0,
+      unverifiableApiSpend: false,
+      spendVerified: true,
+    }]);
+    const exceeded = authorizeJuliusLiveSpend({
+      namespace: PAIR, spendUsd: 30, repairCycles: 3, ledger: held,
+    });
+    expect(exceeded.authorized).toBe(false);
+    if (!exceeded.authorized) expect(exceeded.reasonCode).toBe('qualifying_pair_spend_exceeded');
+
+    const unread = interpretJuliusSpentTags({
+      namespace: PAIR,
+      tags: [
+        { ref: `refs/tags/julius-run-spent-${WLJ_HEX}`, message: wlj },
+        { ref: 'refs/tags/julius-run-spent-not-hex', message: wlj },
+      ],
+    });
+    expect(unread).toEqual({ readable: false });
+    const closed = authorizeJuliusLiveSpend({
+      namespace: PAIR, spendUsd: 30, repairCycles: 3, ledger: unread,
+    });
+    expect(closed.authorized).toBe(false);
+    if (!closed.authorized) expect(closed.reasonCode).toBe('spend_ledger_unreadable');
+
+    const badBody = interpretJuliusSpentTags({
+      namespace: PAIR,
+      tags: [{ ref: `refs/tags/julius-run-spent-${WLJ_HEX}`, message: 'server_run_id=nope' }],
+    });
+    expect(badBody.readable).toBe(true);
+    if (!badBody.readable) return;
+    expect(badBody.priorRuns).toEqual([{
+      runId: WLJ,
+      knownUsdMicros: 0,
+      unknownCostComponents: 1,
+      unverifiableApiSpend: false,
+      spendVerified: false,
+    }]);
+    const unknown = authorizeJuliusLiveSpend({
+      namespace: PAIR, spendUsd: 30, repairCycles: 3, ledger: badBody,
+    });
+    expect(unknown.authorized).toBe(false);
+    if (!unknown.authorized) expect(unknown.reasonCode).toBe('qualifying_pair_spend_unverified');
+  });
+});
