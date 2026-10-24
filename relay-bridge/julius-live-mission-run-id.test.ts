@@ -17,6 +17,10 @@ const request = () => compileBootstrapRequest({
   requirements: ['Normalize a mission label.'], constraints: ['Touch only the fixture.'],
   acceptanceCriteria: [{ id: 'AC-1', text: 'The fixture test passes.', blocking: true }],
   testCommand: 'npm run mission-test', workspacePath: '/workspace/mission',
+  // Stated, so this case still reaches createRun once an omitted ceiling is a
+  // refusal rather than a filled-in 5 dollars and 1 repair. The assertion is
+  // the admitted id.
+  limits: { spendUsd: 5, repairCycles: 1 },
 }, [
   { role: 'PROMPT_ARCHITECT', integrationId: 'a', adapterId: 'openai-architect-live', independenceGroup: 'openai', requiredCapabilities: ['plan'] },
   { role: 'CODING_AGENT', integrationId: 'b', adapterId: 'claude-agent-sdk-hosted-live', independenceGroup: 'anthropic', requiredCapabilities: ['implement'] },
