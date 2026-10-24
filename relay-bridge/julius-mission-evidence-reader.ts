@@ -1,38 +1,37 @@
 /**
  * YUJI's reader for one admitted Julius mission.
  *
- * `read` takes the run id, reads the `julius-run-spent.v1` tag (the spend
- * record), and matches that tag's `workflow_run_id` and attempt to the
- * Actions run behind an injected {@link JuliusMissionGitHub}. GitHub is not
- * called from this module. A legacy `run:` id is read the same way and is
- * never rewritten into a `wlj_` id. A `preflight:` id and any other string
- * are not a mission: the reader does not call GitHub and does not invent a
- * tag, a cost, a receipt, or a trace id.
+ * The interface is `JuliusMissionEvidenceReader` from BRIDGE
+ * `7e71a122` `relay-bridge/julius-mission-evidence.ts`:
+ * `read(wljRunId)` returns the object `acceptJuliusMissionEvidence` accepts,
+ * or null. This module does not copy that check, the test double, or the
+ * Wonderland routes, and it does not call GitHub. The Actions read is the
+ * injected {@link JuliusMissionGitHub}.
  *
- * Fail closed. The state stays `dispatched` unless the tag and the workflow
- * run agree and the next state is itself on that run. A missing cost is
- * null. Trace ids are derived from the admitted `wlj_` id by
- * `scripts/julius-mission-trace.mjs`. A trace id in the tag, the diagnostics,
- * or the dispatch is not read. This module does not mount a route.
+ * Null is the fail-closed answer. Completion is `juliusFinalState: "COMPLETED"`
+ * plus the spend tag whose `run` is the requested `wlj_` id, and only when
+ * the tagged workflow run succeeded, its completion marker matches that run,
+ * the evidence has one `RESULT: COMPLETED` line for this id, and `runs.tsv`
+ * is absent or agrees. A missing section on that object is null.
+ *
+ * `traceId` is derived here from the admitted id. `acceptJuliusMissionEvidence`
+ * derives it again and ignores this field. `traceparent` is null because the
+ * mission is not a span.
  */
 
 import { createHash } from 'node:crypto';
 
 import { deriveJuliusSpentTag } from '../scripts/julius-admission-run-id.mjs';
-import {
-  juliusMissionSpanId,
-  juliusMissionTraceId,
-  juliusMissionTraceparent,
-} from '../scripts/julius-mission-trace.mjs';
+import { juliusMissionTraceId } from '../scripts/julius-mission-trace.mjs';
 
 export const JULIUS_SPEND_TAG_SCHEMA = 'julius-run-spent.v1' as const;
-export const JULIUS_MISSION_EVIDENCE_ARTIFACT = 'julius-live-evidence' as const;
-
-export const JULIUS_MISSION_EVIDENCE_STATES = ['dispatched', 'running', 'completed', 'failed'] as const;
-export type JuliusMissionEvidenceState = (typeof JULIUS_MISSION_EVIDENCE_STATES)[number];
+const EVIDENCE_ARTIFACT = 'julius-live-evidence';
 
 export const JULIUS_MISSION_PHASE_ROLES = ['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER'] as const;
 export type JuliusMissionPhaseRole = (typeof JULIUS_MISSION_PHASE_ROLES)[number];
+
+export const JULIUS_MISSION_SLOT_STATES = ['NEVER_DISPATCHED', 'ACTIVE', 'IDLE', 'FAILED'] as const;
+export type JuliusMissionSlotState = (typeof JULIUS_MISSION_SLOT_STATES)[number];
 
 export const JULIUS_MISSION_PHASE_STAGES = ['plan', 'build', 'repair:plan', 'repair:build'] as const;
 export type JuliusMissionPhaseStage = (typeof JULIUS_MISSION_PHASE_STAGES)[number];
@@ -49,17 +48,6 @@ export type JuliusMissionRequestAvailability = (typeof JULIUS_MISSION_REQUEST_AV
 export const JULIUS_MISSION_ARCHIVE_FILE_KINDS = ['table', 'text'] as const;
 export type JuliusMissionArchiveFileKind = (typeof JULIUS_MISSION_ARCHIVE_FILE_KINDS)[number];
 
-export const JULIUS_MISSION_WORKFLOW_STATUSES = ['queued', 'in_progress', 'completed'] as const;
-export type JuliusMissionWorkflowStatus = (typeof JULIUS_MISSION_WORKFLOW_STATUSES)[number];
-
-export const JULIUS_MISSION_WORKFLOW_CONCLUSIONS = [
-  'success', 'failure', 'cancelled', 'timed_out', 'startup_failure', 'skipped', 'neutral', 'action_required', 'stale',
-] as const;
-export type JuliusMissionWorkflowConclusion = (typeof JULIUS_MISSION_WORKFLOW_CONCLUSIONS)[number];
-
-const FAILURE_CONCLUSIONS = ['failure', 'cancelled', 'timed_out', 'startup_failure'] as const;
-type FailureConclusion = (typeof FAILURE_CONCLUSIONS)[number];
-
 /** The `julius-run-spent.v1` message. A reservation record, not a settled bill. */
 export interface JuliusMissionSpendTagEvidence {
   readonly schema: typeof JULIUS_SPEND_TAG_SCHEMA;
@@ -71,11 +59,7 @@ export interface JuliusMissionSpendTagEvidence {
   readonly headSha: string;
 }
 
-/**
- * Cap reading. This reader does not invent `spendVerified` or a zero
- * component count. The fields stay null until a source that carries them is
- * part of the evidence this reader is given.
- */
+/** Cap reading of one verified tag. Present only when this reader can supply it. */
 export interface JuliusMissionSpendAccounting {
   readonly knownUsdMicros: number | null;
   readonly unknownCostComponents: number | null;
@@ -83,7 +67,7 @@ export interface JuliusMissionSpendAccounting {
   readonly spendVerified: boolean | null;
 }
 
-/** Settled coder cost. Every field null means the section is absent. */
+/** Settled coder cost. `costUsdMicros` null means the provider reported no bill. */
 export interface JuliusMissionCoderCost {
   readonly costUsdMicros: number | null;
   readonly costBasis: JuliusMissionCoderCostBasis | null;
@@ -91,7 +75,7 @@ export interface JuliusMissionCoderCost {
   readonly billingPath: JuliusMissionBillingPath | null;
 }
 
-/** Mission-level cost. `complete: false` means the total is a floor. */
+/** Mission-level cost projection. `complete: false` means the total is a floor. */
 export interface JuliusMissionCostEvidence {
   readonly knownUsdMicros: number | null;
   readonly unknownComponents: number | null;
@@ -99,8 +83,8 @@ export interface JuliusMissionCostEvidence {
 }
 
 /**
- * Provider receipt. `CAPTURED` is the provider request id itself.
- * `providerMessageId` is not a field: a message id does not capture a request.
+ * Provider receipt. `CAPTURED` is the provider `request_id` itself.
+ * `providerMessageId` is not a field here: a message id does not capture a request.
  */
 export interface JuliusMissionProviderReceipt {
   readonly providerRequestId: string | null;
@@ -109,18 +93,14 @@ export interface JuliusMissionProviderReceipt {
   readonly providerRequestUnavailableReason: string | null;
 }
 
-export interface JuliusMissionObservedReceipt extends JuliusMissionProviderReceipt {
-  readonly role: JuliusMissionPhaseRole;
-  readonly stage: JuliusMissionPhaseStage | null;
-  readonly attempt: number | null;
-}
-
+/** One file row from the paid-run archive. */
 export interface JuliusMissionArchiveFile {
   readonly path: string;
   readonly sha256: string;
   readonly kind: JuliusMissionArchiveFileKind;
 }
 
+/** Archive columns for the run this reader matched. `conclusion` is the workflow conclusion. */
 export interface JuliusMissionArchiveEvidence {
   readonly artifactName: string | null;
   readonly artifactDigest: string | null;
@@ -131,38 +111,56 @@ export interface JuliusMissionArchiveEvidence {
   readonly files: readonly JuliusMissionArchiveFile[] | null;
 }
 
-/** The Actions artifact named `julius-live-evidence`, when that run lists it. */
-export interface JuliusMissionArtifactReference {
-  readonly name: typeof JULIUS_MISSION_EVIDENCE_ARTIFACT;
-  readonly digest: string | null;
-  readonly fileCount: number | null;
-  readonly totalBytes: number | null;
-}
-
 /**
- * The completion marker. `workflowRunId` is the Actions run id on the marker,
- * the same number the spend tag recorded. It is not the `wlj_` id.
+ * One C.A.R.D. peer. Repair is a `stage` on that peer, not a fourth role.
+ * This reader does not supply `spanId` or `traceparent`. The bridge derives both.
  */
-export interface JuliusMissionCompletedMarker {
-  readonly artifactName: string;
-  readonly completedAt: string;
-  readonly workflowRunId: string;
-  readonly commit: string;
-  readonly workflowRef: string;
-}
-
-/**
- * A phase span derived from the admitted `wlj_` id. The mission itself is not
- * a span. Slot state is not on the evidence bundle, so this list is not a
- * C.A.R.D. slot projection.
- */
-export interface JuliusMissionSpanEvidence {
+export interface JuliusMissionPhaseEvidence {
   readonly role: JuliusMissionPhaseRole;
-  readonly stage: JuliusMissionPhaseStage;
-  readonly attempt: number;
-  readonly spanId: string;
-  readonly traceparent: string;
+  readonly state: JuliusMissionSlotState;
+  readonly stage: JuliusMissionPhaseStage | null;
+  readonly attempt: number | null;
+  readonly spanId: string | null;
+  readonly traceparent: string | null;
+  readonly knownUsdMicros: number | null;
+  readonly costComplete: boolean | null;
 }
+
+/**
+ * What `read` returns for a run whose own record says COMPLETED.
+ * Anything short of this shape is null, which is not completion.
+ */
+export interface JuliusMissionCompletionEvidence {
+  readonly juliusFinalState: 'COMPLETED';
+  readonly spendTag: JuliusMissionSpendTagEvidence;
+  readonly spendAccounting: JuliusMissionSpendAccounting | null;
+  readonly coderCost: JuliusMissionCoderCost | null;
+  readonly missionCost: JuliusMissionCostEvidence | null;
+  readonly providerReceipt: JuliusMissionProviderReceipt | null;
+  readonly archive: JuliusMissionArchiveEvidence | null;
+  readonly workArtifactRefs: readonly string[] | null;
+  readonly projectBrainRevision: number | null;
+  readonly phases: readonly JuliusMissionPhaseEvidence[] | null;
+  readonly traceId: string | null;
+  readonly traceparent: null;
+}
+
+/**
+ * `read` matches the spend tag's `workflow_run_id` to the workflow run and
+ * returns that run's completion evidence, or null when there is none.
+ * Null is not completion. A thrown error is not completion.
+ */
+export interface JuliusMissionEvidenceReader {
+  read(wljRunId: string): Promise<unknown>;
+}
+
+export const JULIUS_MISSION_WORKFLOW_STATUSES = ['queued', 'in_progress', 'completed'] as const;
+export type JuliusMissionWorkflowStatus = (typeof JULIUS_MISSION_WORKFLOW_STATUSES)[number];
+
+export const JULIUS_MISSION_WORKFLOW_CONCLUSIONS = [
+  'success', 'failure', 'cancelled', 'timed_out', 'startup_failure', 'skipped', 'neutral', 'action_required', 'stale',
+] as const;
+export type JuliusMissionWorkflowConclusion = (typeof JULIUS_MISSION_WORKFLOW_CONCLUSIONS)[number];
 
 export interface JuliusMissionWorkflowArtifactFile {
   readonly path: string;
@@ -193,42 +191,6 @@ export interface JuliusMissionWorkflowRun {
 export interface JuliusMissionGitHub {
   readAnnotatedTagMessage(tagRef: string): Promise<string | null>;
   readWorkflowRun(workflowRunId: string, workflowRunAttempt: string): Promise<JuliusMissionWorkflowRun | null>;
-}
-
-/**
- * What {@link JuliusMissionEvidenceReader.read} returns.
- *
- * `state` is the only progression claim. `dispatched` is the fail-closed
- * ceiling: the tag may still be present. `cause` is set only for `failed`.
- * `juliusFinalState` is `COMPLETED` only when `state` is `completed`.
- * `traceparent` on the mission is null. Phase spans are `spans`.
- */
-export interface JuliusMissionEvidenceResult {
-  readonly admissionForm: 'wlj' | 'legacy' | null;
-  readonly runId: string | null;
-  readonly state: JuliusMissionEvidenceState;
-  readonly cause: string | null;
-  readonly juliusFinalState: 'COMPLETED' | null;
-  readonly spendTag: JuliusMissionSpendTagEvidence | null;
-  readonly spendAccounting: JuliusMissionSpendAccounting | null;
-  readonly coderCost: JuliusMissionCoderCost | null;
-  readonly missionCost: JuliusMissionCostEvidence | null;
-  readonly providerReceipt: JuliusMissionProviderReceipt | null;
-  readonly providerReceipts: readonly JuliusMissionObservedReceipt[] | null;
-  readonly archive: JuliusMissionArchiveEvidence | null;
-  readonly artifact: JuliusMissionArtifactReference | null;
-  readonly workArtifactRefs: readonly string[] | null;
-  readonly projectBrainRevision: number | null;
-  readonly phases: null;
-  readonly spans: readonly JuliusMissionSpanEvidence[] | null;
-  readonly completedMarker: JuliusMissionCompletedMarker | null;
-  readonly resultLine: string | null;
-  readonly traceId: string | null;
-  readonly traceparent: null;
-}
-
-export interface JuliusMissionEvidenceReader {
-  read(wljRunId: string): Promise<JuliusMissionEvidenceResult>;
 }
 
 const NAMESPACE = /^[a-z][a-z0-9-]{2,48}$/u;
@@ -273,47 +235,6 @@ function bundleDigest(files: readonly JuliusMissionArchiveFile[]): string {
   return sha256([...files].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)).map((file) => `${file.path}\0${file.sha256}`).join('\n'));
 }
 
-function blank(): JuliusMissionEvidenceResult {
-  return {
-    admissionForm: null,
-    runId: null,
-    state: 'dispatched',
-    cause: null,
-    juliusFinalState: null,
-    spendTag: null,
-    spendAccounting: null,
-    coderCost: null,
-    missionCost: null,
-    providerReceipt: null,
-    providerReceipts: null,
-    archive: null,
-    artifact: null,
-    workArtifactRefs: null,
-    projectBrainRevision: null,
-    phases: null,
-    spans: null,
-    completedMarker: null,
-    resultLine: null,
-    traceId: null,
-    traceparent: null,
-  };
-}
-
-function withRun(form: 'wlj' | 'legacy', runId: string, rest: Partial<JuliusMissionEvidenceResult>): JuliusMissionEvidenceResult {
-  const traceId = form === 'wlj' ? juliusMissionTraceId(runId) : null;
-  return {
-    ...blank(),
-    ...rest,
-    admissionForm: form,
-    runId,
-    traceId,
-    traceparent: null,
-    phases: null,
-    juliusFinalState: rest.state === 'completed' ? 'COMPLETED' : null,
-    cause: rest.state === 'failed' ? rest.cause ?? null : null,
-  };
-}
-
 function parseSpendTag(message: string, runId: string): JuliusMissionSpendTagEvidence | null {
   const lines = message.split('\n');
   if (lines.at(-1) === '') lines.pop();
@@ -346,10 +267,6 @@ function parseSpendTag(message: string, runId: string): JuliusMissionSpendTagEvi
     workflowRunAttempt,
     headSha,
   };
-}
-
-function isFailureConclusion(value: JuliusMissionWorkflowConclusion | null): value is FailureConclusion {
-  return value !== null && (FAILURE_CONCLUSIONS as readonly string[]).includes(value);
 }
 
 function normalizeRun(value: JuliusMissionWorkflowRun | null): JuliusMissionWorkflowRun | null {
@@ -421,17 +338,15 @@ function rowsForRun(text: string | null, runId: string): readonly Record<string,
   return table.rows.filter((row) => row.run_id === runId);
 }
 
-function receiptFromRow(row: Record<string, string>): JuliusMissionObservedReceipt | null {
-  const role = oneOf(row.role ?? '', JULIUS_MISSION_PHASE_ROLES);
-  if (role === null) return null;
-  const stage = row.stage === undefined || row.stage === '' ? null : oneOf(row.stage, JULIUS_MISSION_PHASE_STAGES);
-  const attempt = row.dispatch_attempt === undefined || row.dispatch_attempt === '' ? null : nonNegative(row.dispatch_attempt);
+function receiptFromRow(row: Record<string, string>): JuliusMissionProviderReceipt | null {
   const rawId = row.provider_request_id ?? '';
   const stated = oneOf(row.provider_request_availability ?? '', JULIUS_MISSION_REQUEST_AVAILABILITY);
+  if (rawId.length === 0 && stated === null) return null;
   const shaped = rawId.length > 0 && credentialShaped(rawId);
   const requestId = rawId.length > 0 && !shaped ? plain(rawId, 200) : null;
-  const captured = requestId !== null && (stated === 'CAPTURED' || stated === null);
-  if (rawId.length === 0 && stated === null) return null;
+  const captured = stated === 'CAPTURED' && requestId !== null;
+  const responseRaw = row.response_id ?? '';
+  const responseId = captured && responseRaw.length > 0 && !credentialShaped(responseRaw) ? plain(responseRaw, 200) : null;
   const statedReason = REASON.test(row.provider_request_unavailable_reason ?? '') ? row.provider_request_unavailable_reason : null;
   const reason = captured
     ? null
@@ -441,56 +356,43 @@ function receiptFromRow(row: Record<string, string>): JuliusMissionObservedRecei
         ? 'provider_request_id_unusable'
         : statedReason;
   return {
-    role,
-    stage,
-    attempt,
     providerRequestId: captured ? requestId : null,
-    responseId: captured ? requestId : null,
+    responseId,
     providerRequestAvailability: captured ? 'CAPTURED' : 'UNAVAILABLE',
     providerRequestUnavailableReason: reason,
   };
 }
 
-function spansFrom(rows: readonly Record<string, string>[] | null, wljRunId: string): readonly JuliusMissionSpanEvidence[] | null {
+function coderReceipt(rows: readonly Record<string, string>[] | null): JuliusMissionProviderReceipt | null {
   if (rows === null) return null;
-  const traceId = juliusMissionTraceId(wljRunId);
-  const seen = new Set<string>();
-  const spans: JuliusMissionSpanEvidence[] = [];
+  const receipts: JuliusMissionProviderReceipt[] = [];
   for (const row of rows) {
-    const role = oneOf(row.role ?? '', JULIUS_MISSION_PHASE_ROLES);
-    const stage = oneOf(row.stage ?? '', JULIUS_MISSION_PHASE_STAGES);
-    const attempt = nonNegative(row.dispatch_attempt ?? '');
-    if (role === null || stage === null || attempt === null) continue;
-    const key = `${role}\0${stage}\0${String(attempt)}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const spanId = juliusMissionSpanId(wljRunId, role, stage, attempt);
-    const traceparent = juliusMissionTraceparent(traceId, spanId);
-    if (spanId === null || traceparent === null) continue;
-    spans.push({ role, stage, attempt, spanId, traceparent });
+    if (row.role !== 'CODING_AGENT') continue;
+    const receipt = receiptFromRow(row);
+    if (receipt !== null) receipts.push(receipt);
   }
-  return spans;
+  return receipts.length === 1 ? receipts[0] : null;
 }
 
-function coderCostFrom(receiptsRows: readonly Record<string, string>[] | null): JuliusMissionCoderCost | null {
-  if (receiptsRows === null) return null;
-  const rows = receiptsRows.filter((row) => row.role === 'CODING_AGENT');
-  if (rows.length === 0) return null;
+function coderCostFrom(rows: readonly Record<string, string>[] | null): JuliusMissionCoderCost | null {
+  if (rows === null) return null;
+  const coderRows = rows.filter((row) => row.role === 'CODING_AGENT');
+  if (coderRows.length === 0) return null;
   const cost = (row: Record<string, string>): JuliusMissionCoderCost => ({
     costUsdMicros: row.cost_usd_micros === '' || row.cost_usd_micros === undefined ? null : nonNegative(row.cost_usd_micros),
     costBasis: oneOf(row.cost_basis ?? '', JULIUS_MISSION_CODER_COST_BASES),
     executionCostUsdMicros: row.execution_cost_usd_micros === '' || row.execution_cost_usd_micros === undefined ? null : nonNegative(row.execution_cost_usd_micros),
     billingPath: oneOf(row.billing_path ?? '', JULIUS_MISSION_BILLING_PATHS),
   });
-  const first = cost(rows[0]);
-  if (rows.some((row) => JSON.stringify(cost(row)) !== JSON.stringify(first))) return null;
+  const first = cost(coderRows[0]);
+  if (coderRows.some((row) => JSON.stringify(cost(row)) !== JSON.stringify(first))) return null;
   if (first.costUsdMicros === null && first.costBasis === null && first.executionCostUsdMicros === null && first.billingPath === null) return null;
   return first;
 }
 
-function costsFrom(text: string | null, runId: string): { readonly spend: JuliusMissionSpendAccounting | null; readonly mission: JuliusMissionCostEvidence | null } {
+function missionCostFrom(text: string | null, runId: string): JuliusMissionCostEvidence | null {
   const rows = rowsForRun(text, runId);
-  if (rows === null || rows.length === 0) return { spend: null, mission: null };
+  if (rows === null || rows.length === 0) return null;
   let known = 0;
   let unknown = 0;
   let estimated = 0;
@@ -500,17 +402,14 @@ function costsFrom(text: string | null, runId: string): { readonly spend: Julius
     const unknownCell = nonNegative(row.unknown_components ?? '');
     const estimatedCell = nonNegative(row.estimated_components ?? '');
     const unsettledCell = nonNegative(row.unsettled_components ?? '');
-    if (knownCell === null || unknownCell === null || estimatedCell === null || unsettledCell === null) return { spend: null, mission: null };
+    if (knownCell === null || unknownCell === null || estimatedCell === null || unsettledCell === null) return null;
     known += knownCell;
     unknown += unknownCell;
     estimated += estimatedCell;
     unsettled += unsettledCell;
   }
-  if (!Number.isSafeInteger(known)) return { spend: null, mission: null };
-  return {
-    spend: { knownUsdMicros: known, unknownCostComponents: unknown, unverifiableApiSpend: null, spendVerified: null },
-    mission: { knownUsdMicros: known, unknownComponents: unknown, complete: unknown === 0 && estimated === 0 && unsettled === 0 },
-  };
+  if (!Number.isSafeInteger(known)) return null;
+  return { knownUsdMicros: known, unknownComponents: unknown, complete: unknown === 0 && estimated === 0 && unsettled === 0 };
 }
 
 function workRefsFrom(text: string | null, runId: string): readonly string[] | null {
@@ -531,152 +430,111 @@ function runtimeAgrees(text: string | null, runId: string): boolean {
   return rows[0].state === 'COMPLETED';
 }
 
-function completedMarker(artifact: JuliusMissionWorkflowArtifact | undefined, tag: JuliusMissionSpendTagEvidence): JuliusMissionCompletedMarker | null {
-  if (artifact === undefined || artifact.name !== `${tag.namespace}-completed`) return null;
+function markerAgrees(artifact: JuliusMissionWorkflowArtifact | undefined, tag: JuliusMissionSpendTagEvidence): boolean {
+  if (artifact === undefined || artifact.name !== `${tag.namespace}-completed`) return false;
   const text = fileText(artifact, 'marker.txt');
-  if (text === null) return null;
+  if (text === null) return false;
   const lines = text.split('\n');
   if (lines.at(-1) === '') lines.pop();
-  if (lines.length !== 4) return null;
+  if (lines.length !== 4) return false;
   const fields = new Map<string, string>();
   for (const line of lines) {
     const cut = line.indexOf('=');
-    if (cut <= 0) return null;
+    if (cut <= 0) return false;
     fields.set(line.slice(0, cut), line.slice(cut + 1));
   }
   const completedAt = fields.get('completed_at');
-  const workflowRunId = fields.get('run_id');
-  const commit = fields.get('commit');
   const workflowRef = fields.get('workflow_ref');
-  if (completedAt === undefined || !STAMP.test(completedAt)) return null;
-  if (workflowRunId !== tag.workflowRunId || commit !== tag.headSha) return null;
-  if (workflowRef === undefined || plain(workflowRef, 300) !== workflowRef) return null;
-  return { artifactName: artifact.name, completedAt, workflowRunId, commit, workflowRef };
+  if (completedAt === undefined || !STAMP.test(completedAt)) return false;
+  if (fields.get('run_id') !== tag.workflowRunId || fields.get('commit') !== tag.headSha) return false;
+  return workflowRef !== undefined && plain(workflowRef, 300) === workflowRef;
 }
 
-function resultLineFor(text: string | null, runId: string): { readonly line: string; readonly word: string } | null {
-  if (text === null) return null;
+function resultCompleted(text: string | null, runId: string): boolean {
+  if (text === null) return false;
   const lines = text.split('\n').map((line) => line.replace(/\r$/u, ''));
-  const pairs: { readonly line: string; readonly word: string }[] = [];
+  let count = 0;
   for (let index = 0; index < lines.length - 1; index += 1) {
     const line = lines[index];
-    if (!line.startsWith('RESULT: ')) continue;
-    if (lines[index + 1] !== `  run: ${runId}`) continue;
+    if (!line.startsWith('RESULT: ') || lines[index + 1] !== `  run: ${runId}`) continue;
     const word = line.slice('RESULT: '.length).split(' ')[0] ?? '';
-    if (word.length === 0) continue;
-    pairs.push({ line, word });
+    if (word === 'COMPLETED') count += 1;
   }
-  return pairs.length === 1 ? pairs[0] : null;
+  return count === 1;
 }
 
 function evidenceFiles(artifact: JuliusMissionWorkflowArtifact | undefined): readonly JuliusMissionArchiveFile[] | null {
   if (artifact?.files == null) return null;
-  return artifact.files.map((file) => {
-    const digest = sha256(file.text);
-    return { path: file.path, sha256: digest, kind: file.path.endsWith('.tsv') ? 'table' as const : 'text' as const };
-  });
+  return artifact.files.map((file) => ({
+    path: file.path,
+    sha256: sha256(file.text),
+    kind: file.path.endsWith('.tsv') ? 'table' as const : 'text' as const,
+  }));
 }
 
-function failureCause(run: JuliusMissionWorkflowRun): string | null {
-  if (!isFailureConclusion(run.conclusion)) return null;
-  if (run.failedSteps.length === 0) return run.conclusion;
-  return `${run.conclusion}: ${run.failedSteps.join('; ')}`;
+function archiveFrom(evidence: JuliusMissionWorkflowArtifact | undefined, run: JuliusMissionWorkflowRun): JuliusMissionArchiveEvidence | null {
+  if (evidence === undefined) return null;
+  const files = evidenceFiles(evidence);
+  return {
+    artifactName: evidence.name,
+    artifactDigest: files === null ? null : bundleDigest(files),
+    fileCount: files === null ? null : files.length,
+    totalBytes: evidence.files === null ? null : evidence.files.reduce((sum, file) => sum + Buffer.byteLength(file.text, 'utf8'), 0),
+    conclusion: run.conclusion,
+    failedSteps: run.failedSteps,
+    files,
+  };
 }
 
 export function createJuliusMissionEvidenceReader(github: JuliusMissionGitHub): JuliusMissionEvidenceReader {
   return {
-    async read(wljRunId: string): Promise<JuliusMissionEvidenceResult> {
+    async read(wljRunId: string): Promise<unknown> {
       const derived = deriveJuliusSpentTag(wljRunId);
-      if (!derived.ok) return blank();
+      if (!derived.ok || derived.form !== 'wlj') return null;
       let message: string | null;
       try {
         message = await github.readAnnotatedTagMessage(derived.tag);
       } catch {
-        return withRun(derived.form, derived.runId, { state: 'dispatched' });
+        return null;
       }
-      if (message === null) return withRun(derived.form, derived.runId, { state: 'dispatched' });
+      if (message === null) return null;
       const spendTag = parseSpendTag(message, derived.runId);
-      if (spendTag === null) return withRun(derived.form, derived.runId, { state: 'dispatched' });
+      if (spendTag === null) return null;
       let observed: JuliusMissionWorkflowRun | null;
       try {
         observed = normalizeRun(await github.readWorkflowRun(spendTag.workflowRunId, spendTag.workflowRunAttempt));
       } catch {
-        return withRun(derived.form, derived.runId, { state: 'dispatched', spendTag });
+        return null;
       }
       if (observed === null
         || observed.workflowRunId !== spendTag.workflowRunId
         || observed.workflowRunAttempt !== spendTag.workflowRunAttempt
-        || observed.headSha !== spendTag.headSha) {
-        return withRun(derived.form, derived.runId, { state: 'dispatched', spendTag });
+        || observed.headSha !== spendTag.headSha
+        || observed.status !== 'completed'
+        || observed.conclusion !== 'success') {
+        return null;
       }
-      const evidence = observed.artifacts.find((artifact) => artifact.name === JULIUS_MISSION_EVIDENCE_ARTIFACT);
-      const files = evidenceFiles(evidence);
-      const artifact: JuliusMissionArtifactReference | null = evidence === undefined ? null : {
-        name: JULIUS_MISSION_EVIDENCE_ARTIFACT,
-        digest: files === null ? null : bundleDigest(files),
-        fileCount: files === null ? null : files.length,
-        totalBytes: files === null || evidence?.files == null ? null : evidence.files.reduce((sum, file) => sum + Buffer.byteLength(file.text, 'utf8'), 0),
-      };
-      const archive: JuliusMissionArchiveEvidence = {
-        artifactName: artifact?.name ?? null,
-        artifactDigest: artifact?.digest ?? null,
-        fileCount: artifact?.fileCount ?? null,
-        totalBytes: artifact?.totalBytes ?? null,
-        conclusion: observed.conclusion,
-        failedSteps: observed.failedSteps,
-        files,
-      };
-      const diagnosticText = fileText(evidence, 'worker-diagnostics.tsv');
-      const diagnosticRows = rowsForRun(diagnosticText, derived.runId);
-      const spans = derived.form === 'wlj' ? spansFrom(diagnosticRows, derived.runId) : null;
-      const providerReceipts = diagnosticRows === null ? null : diagnosticRows.flatMap((row) => {
-        const receipt = receiptFromRow(row);
-        return receipt === null ? [] : [receipt];
-      });
-      const coderReceipts = (providerReceipts ?? []).filter((receipt) => receipt.role === 'CODING_AGENT');
-      const providerReceipt = coderReceipts.length === 1
-        ? {
-          providerRequestId: coderReceipts[0].providerRequestId,
-          responseId: coderReceipts[0].responseId,
-          providerRequestAvailability: coderReceipts[0].providerRequestAvailability,
-          providerRequestUnavailableReason: coderReceipts[0].providerRequestUnavailableReason,
-        }
-        : null;
-      const costs = costsFrom(fileText(evidence, 'cost-accounting.tsv'), derived.runId);
-      const held = withRun(derived.form, derived.runId, {
-        state: 'dispatched',
+      const evidence = observed.artifacts.find((artifact) => artifact.name === EVIDENCE_ARTIFACT);
+      const marker = observed.artifacts.find((artifact) => artifact.name === `${spendTag.namespace}-completed`);
+      if (!markerAgrees(marker, spendTag)) return null;
+      if (!resultCompleted(fileText(evidence, 'live-mission.evidence.txt'), derived.runId)) return null;
+      if (!runtimeAgrees(fileText(evidence, 'runs.tsv'), derived.runId)) return null;
+      const diagnosticRows = rowsForRun(fileText(evidence, 'worker-diagnostics.tsv'), derived.runId);
+      const completion: JuliusMissionCompletionEvidence = {
+        juliusFinalState: 'COMPLETED',
         spendTag,
-        spendAccounting: costs.spend,
+        spendAccounting: null,
         coderCost: coderCostFrom(diagnosticRows),
-        missionCost: costs.mission,
-        providerReceipt,
-        providerReceipts,
-        archive,
-        artifact,
+        missionCost: missionCostFrom(fileText(evidence, 'cost-accounting.tsv'), derived.runId),
+        providerReceipt: coderReceipt(diagnosticRows),
+        archive: archiveFrom(evidence, observed),
         workArtifactRefs: workRefsFrom(fileText(evidence, 'evidence.tsv'), derived.runId),
-        spans,
-      });
-      if (observed.status === 'in_progress') return { ...held, state: 'running' };
-      if (observed.status !== 'completed') return held;
-      const marker = completedMarker(observed.artifacts.find((item) => item.name === `${spendTag.namespace}-completed`), spendTag);
-      const result = resultLineFor(fileText(evidence, 'live-mission.evidence.txt'), derived.runId);
-      const runtime = runtimeAgrees(fileText(evidence, 'runs.tsv'), derived.runId);
-      if (observed.conclusion === 'success' && marker !== null && result !== null && result.word === 'COMPLETED' && runtime) {
-        return { ...held, state: 'completed', juliusFinalState: 'COMPLETED', completedMarker: marker, resultLine: result.line };
-      }
-      if (marker !== null || (result !== null && result.word === 'COMPLETED' && observed.conclusion !== 'success')) {
-        return held;
-      }
-      const cause = failureCause(observed);
-      if (cause !== null && observed.conclusion !== 'success') {
-        return {
-          ...held,
-          state: 'failed',
-          cause,
-          resultLine: result?.line ?? null,
-        };
-      }
-      return held;
+        projectBrainRevision: null,
+        phases: null,
+        traceId: juliusMissionTraceId(derived.runId),
+        traceparent: null,
+      };
+      return completion;
     },
   };
 }
