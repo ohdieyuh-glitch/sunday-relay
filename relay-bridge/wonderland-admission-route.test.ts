@@ -5,8 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { classifyDispatchAnswer, createMemoryAdmissionLedger, errorKindOf } from '../src/relay/integration/wonderland-admission';
-import type { AdmissionLedger, AdmissionLedgerRow } from '../src/relay/integration/wonderland-admission';
+import { classifyDispatchAnswer, createMemoryAdmissionLedger, errorKindOf, PAID_SLOT_SCRIPT, PAID_WORKFLOW_FILE } from '../src/relay/integration/wonderland-admission';
+import type { AdmissionLedger, AdmissionLedgerRow, AdmissionRun } from '../src/relay/integration/wonderland-admission';
 import { createFileAdmissionLedger } from '../src/relay/integration/wonderland-admission/admission-file';
 import { createBrowserSessionStore } from './browser-session/grants';
 import { handleJuliusMissionRoute, isJuliusMissionRoute } from './julius-mission-routes';
@@ -15,6 +15,7 @@ import {
   createWonderlandAdmissionService,
   handleWonderlandAdmissionRoute,
   isWonderlandAdmissionRoute,
+  toHttp,
   WONDERLAND_ADMISSION_PATH,
   type WonderlandAdmissionRouteRequest,
 } from './wonderland-admission-route';
@@ -250,11 +251,15 @@ describe('POST /wonderland/julius/dispatch', () => {
     expect(secondKind.hasError).toBe(false);
     expect(classifyDispatchAnswer(first?.status ?? 0, firstKind.hasError, firstKind.kind)).toBe('Accepted');
     expect(classifyDispatchAnswer(second?.status ?? 0, secondKind.hasError, secondKind.kind)).toBe('Accepted');
-    const created = (first?.body as { data: { dispatchId: string; serverRunId: string; dispatched: boolean; confirmLive: string; submittedToPaidWorkflow: boolean; state: string } }).data;
-    const replayed = (second?.body as { data: { dispatchId: string; serverRunId: string; state: string; replayed: boolean; correlation: { resultSha256: null; requestId: string } } }).data;
+    const created = (first?.body as { data: { dispatchId: string; serverRunId: string; legacyRunId: string | null; dispatchedAt: string | null; dispatched: boolean; confirmLive: string; submittedToPaidWorkflow: boolean; state: string } }).data;
+    const replayed = (second?.body as { data: { dispatchId: string; serverRunId: string; legacyRunId: string | null; dispatchedAt: string | null; state: string; replayed: boolean; correlation: { resultSha256: null; requestId: string } } }).data;
     expect(replayed.dispatchId).toBe(created.dispatchId);
     expect(created.serverRunId).toMatch(/^run:[0-9a-f]{24}$/);
+    expect(created.legacyRunId).toBe(created.serverRunId);
+    expect(created.dispatchedAt).toBeNull();
     expect(replayed.serverRunId).toBe(created.serverRunId);
+    expect(replayed.legacyRunId).toBe(created.serverRunId);
+    expect(replayed.dispatchedAt).toBeNull();
     expect(replayed.replayed).toBe(true);
     expect(replayed.state).toBe('ADMISSION_HELD');
     expect(created.dispatched).toBe(false);
@@ -264,6 +269,51 @@ describe('POST /wonderland/julius/dispatch', () => {
     expect(replayed.correlation.requestId).toBe('trigger_01');
     const expectedHash = createHash('sha256').update(KEY).digest('hex');
     expect((first?.body as { data: { correlation: { idempotencyKeyHash: string } } }).data.correlation.idempotencyKeyHash).toBe(expectedHash);
+  });
+
+  it('dispatch data keeps serverRunId, copies a legacy run id, and has no dispatch time yet', () => {
+    const pins = { architectModel: null, codingModel: null, reviewerProvider: null, reviewerModel: null } as const;
+    const ticket = {
+      workflowFile: PAID_WORKFLOW_FILE,
+      admissionScript: PAID_SLOT_SCRIPT,
+      confirmLive: '',
+      dispatchKey: 'a'.repeat(64),
+      mission: null,
+      lane: '',
+      submitted: false,
+      gatesRemaining: [],
+    } as const;
+    const row = (serverRunId: string): AdmissionRun => ({
+      runId: RUN,
+      serverRunId,
+      keyHash: 'a'.repeat(64),
+      dispatchId: 'adm_fixed',
+      missionId: null,
+      requestId: 'trigger_01',
+      clientLogSha256: LOG,
+      clientUiActionUtc: WHEN,
+      receivedAt: WHEN,
+      ledgerRef: 'ledger',
+      modelPins: pins,
+      paidWorkflow: ticket,
+      state: 'ADMISSION_HELD',
+      ledgerAttempted: true,
+      ledgerWritten: true,
+      resultSha256: null,
+      resultHashConflicts: 0,
+    });
+    const legacy = `run:${'ab'.repeat(12)}`;
+    const held = toHttp({ ok: true, httpStatus: 202, replayed: false, run: row(legacy) });
+    const data = (held.body as { data: { serverRunId: string; legacyRunId: string | null; dispatchedAt: string | null; dispatched: boolean } }).data;
+    expect(data.serverRunId).toBe(legacy);
+    expect(data.legacyRunId).toBe(legacy);
+    expect(data.dispatchedAt).toBeNull();
+    expect(data.dispatched).toBe(false);
+    const other = toHttp({ ok: true, httpStatus: 202, replayed: false, run: row('not-a-legacy-id') });
+    const plain = (other.body as { data: { serverRunId: string; legacyRunId: string | null; dispatchedAt: string | null } }).data;
+    expect(plain.serverRunId).toBe('not-a-legacy-id');
+    expect(plain.legacyRunId).toBeNull();
+    expect(plain.dispatchedAt).toBeNull();
   });
 
   it('a concurrent resend during the ledger write returns the one run', async () => {

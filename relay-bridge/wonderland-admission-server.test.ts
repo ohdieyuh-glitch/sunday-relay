@@ -244,6 +244,8 @@ describe('admission through createBridgeServer', () => {
     expect(ok.body).toEqual({
       wljRunId: 'wlj_dddddddd-eeee-4fff-8aaa-bbbbbbbbbbbb',
       serverRunId,
+      legacyRunId: serverRunId,
+      dispatchedAt: null,
       state: 'awaiting_operator',
       updatedAt: expect.any(String),
     });
@@ -407,6 +409,8 @@ describe('admission through createBridgeServer', () => {
     expect(running.body).toEqual({
       wljRunId: 'wlj_dddddddd-eeee-4fff-8aaa-bbbbbbbbbbbb',
       serverRunId,
+      legacyRunId: serverRunId,
+      dispatchedAt: null,
       state: 'unknown',
       updatedAt: '2026-10-23T18:00:00.000Z',
     });

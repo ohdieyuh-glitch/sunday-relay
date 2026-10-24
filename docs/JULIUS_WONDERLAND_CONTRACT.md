@@ -242,7 +242,11 @@ This copy is the same pattern. YUJI: confirm bootstrap will require this id.
 The mint is a CSPRNG (`node:crypto` `randomBytes(12)`), called inside the
 admission store's reservation, before any ledger write. `randomUUID` does not
 match that 24-hex shape, so it is not the mint. The 202 and the same-pair 200
-both return the id as `serverRunId`. A resend returns the same id. The mapping
+both return the id as `serverRunId`. `legacyRunId` is also on `data`, and it is
+that same `run:` id when the row has one, or `null` when it does not.
+`serverRunId` is not renamed and the mint is unchanged. `dispatchedAt` is
+on `data` as well. This response has not dispatched, so it is `null`. A
+resend returns the same id. The mapping
 lives only in the admission store. YUJI's paid-dispatch and bootstrap will
 later refuse anything that does not match an admitted pair. That refusal goes
 through G6 after #404 and the migration, and it is not in this change.
@@ -302,8 +306,12 @@ or a child path stays on the Wonderland catch-all.
 
 The guards are the admission guards: loopback peer and Host, no forwarding
 header, a native session, the founder player, and the paired project. The
-route then reads the file and returns `{ wljRunId, serverRunId, state, cause?,
-updatedAt }`. `state` and `cause` are closed. The route checks the stored
+route then reads the file and returns `{ wljRunId, serverRunId, legacyRunId,
+dispatchedAt, state, cause?, updatedAt }`. `legacyRunId` is always present.
+It is the row's `run:` plus 24 lowercase hex id, or `null` when the row has
+no such id. `serverRunId` is the same field it was. `dispatchedAt` is the
+ISO timestamp of the first recorded operator dispatch, or `null` when that
+dispatch has not been recorded. `state` and `cause` are closed. The route checks the stored
 value against those unions. A stored state outside the union, or a stored
 cause outside the union, is returned as `state: "unknown"` with no cause.
 The stored token is not copied into the answer. `unknown` is never terminal.

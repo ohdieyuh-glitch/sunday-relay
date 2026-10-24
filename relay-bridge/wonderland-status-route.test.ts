@@ -137,7 +137,14 @@ describe('wonderland status', () => {
       const status = await handleWonderlandStatusRoute(statusRequest(SERVER), restarted);
       expect(status).toEqual({
         status: 200,
-        body: { wljRunId: RUN, serverRunId: SERVER, state: 'awaiting_operator', updatedAt: WHEN },
+        body: {
+          wljRunId: RUN,
+          serverRunId: SERVER,
+          legacyRunId: SERVER,
+          dispatchedAt: null,
+          state: 'awaiting_operator',
+          updatedAt: WHEN,
+        },
       });
       expect(readAdmissionDocument(storePath).claims).toEqual([]);
       expect(readFileSync(storePath, 'utf8')).toBe(held);
@@ -166,6 +173,8 @@ describe('wonderland status', () => {
       expect(open?.body).toEqual({
         wljRunId: RUN,
         serverRunId: SERVER,
+        legacyRunId: SERVER,
+        dispatchedAt: null,
         state: 'awaiting_operator',
         updatedAt: WHEN,
       });
@@ -181,6 +190,8 @@ describe('wonderland status', () => {
       const expiredBody = {
         wljRunId: RUN,
         serverRunId: SERVER,
+        legacyRunId: SERVER,
+        dispatchedAt: null,
         state: 'failed',
         cause: 'AWAITING_OPERATOR_EXPIRED',
         updatedAt: new Date(expiredAtMs).toISOString(),
@@ -250,7 +261,13 @@ describe('wonderland status', () => {
         }];
         writeFileSync(journalPath, `${JSON.stringify(journal)}\n`);
         const status = await handleWonderlandStatusRoute(statusRequest(SERVER), ports);
-        expect(status?.body, state).toMatchObject({ state: 'dispatched', updatedAt: WHEN });
+        expect(status?.body, state).toMatchObject({
+          state: 'dispatched',
+          serverRunId: SERVER,
+          legacyRunId: SERVER,
+          dispatchedAt: WHEN,
+          updatedAt: WHEN,
+        });
         expect(status?.body, state).not.toHaveProperty('cause');
         expect(readFileSync(storePath, 'utf8')).toBe(admissionBytes);
       }
@@ -309,6 +326,8 @@ describe('wonderland status', () => {
         body: {
           wljRunId: RUN,
           serverRunId: SERVER,
+          legacyRunId: SERVER,
+          dispatchedAt: null,
           state: 'unknown',
           updatedAt: '2026-10-23T18:00:00.000Z',
         },
@@ -372,7 +391,14 @@ describe('wonderland status', () => {
         const status = await handleWonderlandStatusRoute(statusRequest(SERVER), ports);
         expect(status, state).toEqual({
           status: 200,
-          body: { wljRunId: RUN, serverRunId: SERVER, state, updatedAt: '2026-10-23T18:00:00.000Z' },
+          body: {
+            wljRunId: RUN,
+            serverRunId: SERVER,
+            legacyRunId: SERVER,
+            dispatchedAt: null,
+            state,
+            updatedAt: '2026-10-23T18:00:00.000Z',
+          },
         });
         expect(status?.body, state).not.toHaveProperty('cause');
         expect(readFileSync(storePath, 'utf8')).toBe(before);
@@ -386,6 +412,8 @@ describe('wonderland status', () => {
           body: {
             wljRunId: RUN,
             serverRunId: SERVER,
+            legacyRunId: SERVER,
+            dispatchedAt: null,
             state: 'dispatch_failed',
             cause,
             updatedAt: '2026-10-23T18:00:00.000Z',
@@ -398,6 +426,8 @@ describe('wonderland status', () => {
       expect(badCause?.body).toEqual({
         wljRunId: RUN,
         serverRunId: SERVER,
+        legacyRunId: SERVER,
+        dispatchedAt: null,
         state: 'unknown',
         updatedAt: '2026-10-23T18:00:00.000Z',
       });

@@ -395,11 +395,12 @@ function statusView(
   document: OperatorDocument,
   serverRunId: string,
   nowMs: number,
-): Record<string, string> {
+): Record<string, string | null> {
   const dispatched = document.claims.some((event) =>
     event.serverRunId === serverRunId
     && event.wonderlandRunId === admission.runId
     && (event.state === 'dispatched' || event.dispatchAttempted));
+  const dispatchedAt = recordedDispatchAt(document, serverRunId, admission.runId);
   const progress = [...(document.progress ?? [])].reverse().find((note) => note.serverRunId === serverRunId) ?? null;
   if (progress !== null) {
     const decision = applyWonderlandStatusTransition({
@@ -407,7 +408,7 @@ function statusView(
       proposedState: progress.state,
       proposedCause: progress.cause,
     });
-    if (decision.ok) return statusBody(admission.runId, serverRunId, decision.projection, progress.updatedAt);
+    if (decision.ok) return statusBody(admission.runId, serverRunId, decision.projection, progress.updatedAt, dispatchedAt);
   }
   const claim = [...document.claims].reverse().find((event) => event.serverRunId === serverRunId && event.wonderlandRunId === admission.runId) ?? null;
   if (claim !== null) {
@@ -416,12 +417,13 @@ function statusView(
       serverRunId,
       projectWonderlandStatus({ state: claim.state, cause: claimCause(claim) }),
       claim.at,
+      dispatchedAt,
     );
   }
   if (admission.admissionState === 'ADMISSION_HELD') {
     const phase = projectUnclaimedHeldPhase(admission.receivedAt, nowMs);
     if (phase.kind === 'operator_expired') noteAwaitingOperatorExpiry(storePath, serverRunId, phase.updatedAt);
-    return statusBody(admission.runId, serverRunId, phase.projection, phase.updatedAt);
+    return statusBody(admission.runId, serverRunId, phase.projection, phase.updatedAt, dispatchedAt);
   }
   return statusBody(
     admission.runId,
@@ -431,7 +433,17 @@ function statusView(
       cause: null,
     }),
     admission.receivedAt,
+    dispatchedAt,
   );
+}
+
+/** The first recorded operator dispatch. A claim that never dispatched stays null. */
+function recordedDispatchAt(document: OperatorDocument, serverRunId: string, wonderlandRunId: string): string | null {
+  for (const event of document.claims) {
+    if (event.serverRunId !== serverRunId || event.wonderlandRunId !== wonderlandRunId) continue;
+    if (event.state === 'dispatched' || event.dispatchAttempted) return event.at;
+  }
+  return null;
 }
 
 function claimCause(claim: ClaimEvent): string | null {
@@ -444,8 +456,16 @@ function statusBody(
   serverRunId: string,
   projected: WonderlandStatusProjection,
   updatedAt: string,
-): Record<string, string> {
-  const body: Record<string, string> = { wljRunId, serverRunId, state: projected.state, updatedAt };
+  dispatchedAt: string | null,
+): Record<string, string | null> {
+  const body: Record<string, string | null> = {
+    wljRunId,
+    serverRunId,
+    legacyRunId: JULIUS_BOOTSTRAP_RUN_ID.test(serverRunId) ? serverRunId : null,
+    dispatchedAt,
+    state: projected.state,
+    updatedAt,
+  };
   if (projected.cause !== undefined) body.cause = projected.cause;
   return body;
 }
@@ -459,6 +479,8 @@ export function toHttp(outcome: AdmissionOutcome): { status: number; body: unkno
       data: {
         runId: run.runId,
         serverRunId: run.serverRunId,
+        legacyRunId: JULIUS_BOOTSTRAP_RUN_ID.test(run.serverRunId) ? run.serverRunId : null,
+        dispatchedAt: null,
         dispatchId: run.dispatchId,
         state: run.state,
         replayed: outcome.replayed,
