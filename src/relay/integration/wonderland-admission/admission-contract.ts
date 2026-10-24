@@ -201,11 +201,36 @@ export function paidWorkflowTicket(input: { dispatchKey: string; mission: string
 }
 
 /**
+ * GitHub's hosted-job cap. It is not the admission clock. A job that can
+ * spend starts when the operator claim records dispatch, and this cap is
+ * measured from that dispatch.
+ */
+export const GITHUB_HOSTED_JOB_CAP_MS = 360 * 60_000;
+
+/**
+ * The paid-slot wait (`timeout-minutes: 350` on the `paid-slot` job).
+ * It starts at the recorded dispatch time. It does not start at Accepted.
+ */
+export const PAID_SLOT_WINDOW_MS = 350 * 60_000;
+
+/**
+ * The held phase before the operator claim (L-6).
+ *
+ * A single 360-minute admission window that started at Accepted also had to
+ * cover the manual claim and this 350-minute slot wait, which left about
+ * 5 minutes. This window is that held phase alone. It starts at Accepted
+ * (`receivedAt`). It does not contain the slot wait, and it spends nothing.
+ */
+export const AWAITING_OPERATOR_WINDOW_MS = GITHUB_HOSTED_JOB_CAP_MS;
+
+/**
  * Closed status `state` values the status route may return.
  *
  * Writers:
  * - the admission store: `RESERVED`, `ADMISSION_HELD`, `LEDGER_UNWRITTEN`,
  *   `INTERRUPTED`, `FAILED` (projected below)
+ * - the held phase before the claim: `awaiting_operator`, until
+ *   `AWAITING_OPERATOR_WINDOW_MS` after Accepted
  * - the operator claim: `dispatched`, `dispatch_failed`, `already_spent`
  * - `status --watch`: only a member of this list other than `unknown`
  *
@@ -215,6 +240,7 @@ export function paidWorkflowTicket(input: { dispatchKey: string; mission: string
 export const WONDERLAND_STATUS_STATES = [
   'held',
   'reserved',
+  'awaiting_operator',
   'ledger_unwritten',
   'interrupted',
   'failed',
@@ -229,19 +255,23 @@ export type WonderlandStatusState = (typeof WONDERLAND_STATUS_STATES)[number];
 /**
  * Closed status `cause` values. The claim tool records
  * `RUN_ID_ALREADY_SPENT`, `SPENT_TAG_UNVERIFIED`, and
- * `gh_workflow_run_failed`. `status --watch` may record only one of these.
+ * `gh_workflow_run_failed`. `AWAITING_OPERATOR_EXPIRED` is the non-paid end
+ * of the held phase: the workflow was not started. `status --watch` may
+ * record only a member of this list, and only through the transition below.
  */
 export const WONDERLAND_STATUS_CAUSES = [
   'RUN_ID_ALREADY_SPENT',
   'SPENT_TAG_UNVERIFIED',
   'gh_workflow_run_failed',
+  'AWAITING_OPERATOR_EXPIRED',
 ] as const;
 
 export type WonderlandStatusCause = (typeof WONDERLAND_STATUS_CAUSES)[number];
 
 /**
  * States a record does not leave. `unknown` is absent on purpose: an
- * unrecognized stored token is not a finished run.
+ * unrecognized stored token is not a finished run. `awaiting_operator` is
+ * absent on purpose: the operator can still claim.
  */
 export const WONDERLAND_STATUS_TERMINAL_STATES = [
   'ledger_unwritten',
@@ -306,4 +336,131 @@ export function projectWonderlandStatus(input: {
   if (input.cause === null || input.cause === '') return { state: input.state };
   if (!isWonderlandStatusCause(input.cause)) return { state: 'unknown' };
   return { state: input.state, cause: input.cause };
+}
+
+/**
+ * Admission terminals, in both spellings. After a recorded dispatch these
+ * states, and a cause of the same name, are not a legal write.
+ */
+export const POST_DISPATCH_ADMISSION_TERMINAL_STATES = [
+  'INTERRUPTED',
+  'FAILED',
+  'interrupted',
+  'failed',
+] as const;
+
+export const POST_DISPATCH_ADMISSION_TERMINAL_CAUSES = [
+  'INTERRUPTED',
+  'FAILED',
+  'interrupted',
+  'failed',
+] as const;
+
+/** Terminal outcomes the slot and the spent-tag path may still record after dispatch. */
+export const SLOT_SPENT_TAG_TERMINAL_STATES = [
+  'dispatch_failed',
+  'already_spent',
+] as const satisfies readonly WonderlandStatusTerminalState[];
+
+const POST_DISPATCH_ADMISSION_STATE_SET: ReadonlySet<string> = new Set(POST_DISPATCH_ADMISSION_TERMINAL_STATES);
+const POST_DISPATCH_ADMISSION_CAUSE_SET: ReadonlySet<string> = new Set(POST_DISPATCH_ADMISSION_TERMINAL_CAUSES);
+const SLOT_SPENT_TAG_TERMINAL_SET: ReadonlySet<string> = new Set(SLOT_SPENT_TAG_TERMINAL_STATES);
+
+export type WonderlandStatusTransitionRefusal = 'post_dispatch_admission_terminal_refused';
+
+export type WonderlandStatusTransition =
+  | { readonly ok: true; readonly projection: WonderlandStatusProjection }
+  | { readonly ok: false; readonly reason: WonderlandStatusTransitionRefusal };
+
+/**
+ * The only write of a status. Once the operator claim has recorded dispatch,
+ * `INTERRUPTED` / `FAILED` (either spelling) and a cause of those names are
+ * refused. A terminal write after that point has to be a slot or spent-tag
+ * outcome (`dispatch_failed`, `already_spent`). The awaiting-operator expiry
+ * is not one of those: it is a pre-claim, non-paid cause.
+ */
+export function applyWonderlandStatusTransition(input: {
+  readonly dispatched: boolean;
+  readonly proposedState: string;
+  readonly proposedCause: string | null;
+}): WonderlandStatusTransition {
+  const cause = input.proposedCause === '' ? null : input.proposedCause;
+  const admissionTerminal = POST_DISPATCH_ADMISSION_STATE_SET.has(input.proposedState)
+    || (cause !== null && POST_DISPATCH_ADMISSION_CAUSE_SET.has(cause));
+  const normalized = normalizeProposedState(input.proposedState);
+  const projection = projectWonderlandStatus({ state: normalized, cause });
+  const slotTerminal = SLOT_SPENT_TAG_TERMINAL_SET.has(projection.state);
+  const operatorExpiry = cause === 'AWAITING_OPERATOR_EXPIRED' || projection.cause === 'AWAITING_OPERATOR_EXPIRED';
+  if (input.dispatched && (admissionTerminal || operatorExpiry || (isWonderlandStatusTerminal(projection.state) && !slotTerminal))) {
+    return { ok: false, reason: 'post_dispatch_admission_terminal_refused' };
+  }
+  return { ok: true, projection };
+}
+
+function normalizeProposedState(state: string): string {
+  switch (state) {
+    case 'INTERRUPTED':
+      return 'interrupted';
+    case 'FAILED':
+      return 'failed';
+    case 'RESERVED':
+      return 'reserved';
+    case 'ADMISSION_HELD':
+      return 'held';
+    case 'LEDGER_UNWRITTEN':
+      return 'ledger_unwritten';
+    default:
+      return state;
+  }
+}
+
+export type WonderlandAdmissionClock =
+  | { readonly kind: 'awaiting_operator'; readonly expiresAtMs: number }
+  | {
+    readonly kind: 'operator_expired';
+    readonly projection: WonderlandStatusProjection;
+    readonly expiredAtMs: number;
+  }
+  | {
+    readonly kind: 'slot';
+    readonly startsAtMs: number;
+    readonly endsAtMs: number;
+    readonly elapsed: boolean;
+  }
+  | { readonly kind: 'unreadable' };
+
+/**
+ * Two clocks. Before the claim, the held phase is `awaiting_operator` from
+ * Accepted until `AWAITING_OPERATOR_WINDOW_MS`. The comparison is the slot
+ * script's: still open at exactly the window, expired on the next millisecond.
+ * After the claim, the slot window starts at the recorded dispatch time.
+ * A dispatch wins over an awaiting-operator expiry: the claim was recorded.
+ */
+export function evaluateWonderlandAdmissionClock(input: {
+  readonly acceptedAtMs: number;
+  readonly nowMs: number;
+  readonly dispatchedAtMs: number | null;
+}): WonderlandAdmissionClock {
+  if (input.dispatchedAtMs !== null) {
+    if (!Number.isFinite(input.dispatchedAtMs) || !Number.isFinite(input.nowMs)) return { kind: 'unreadable' };
+    const endsAtMs = input.dispatchedAtMs + PAID_SLOT_WINDOW_MS;
+    return {
+      kind: 'slot',
+      startsAtMs: input.dispatchedAtMs,
+      endsAtMs,
+      elapsed: input.nowMs - input.dispatchedAtMs > PAID_SLOT_WINDOW_MS,
+    };
+  }
+  if (!Number.isFinite(input.acceptedAtMs) || !Number.isFinite(input.nowMs)) return { kind: 'unreadable' };
+  const expiresAtMs = input.acceptedAtMs + AWAITING_OPERATOR_WINDOW_MS;
+  if (input.nowMs - input.acceptedAtMs > AWAITING_OPERATOR_WINDOW_MS) {
+    const transition = applyWonderlandStatusTransition({
+      dispatched: false,
+      proposedState: 'failed',
+      proposedCause: 'AWAITING_OPERATOR_EXPIRED',
+    });
+    if (!transition.ok) return { kind: 'unreadable' };
+    return { kind: 'operator_expired', projection: transition.projection, expiredAtMs: expiresAtMs + 1 };
+  }
+  return { kind: 'awaiting_operator', expiresAtMs };
 }

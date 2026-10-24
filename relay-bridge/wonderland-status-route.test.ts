@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import type { AdmissionState } from '../src/relay/integration/wonderland-admission/admission-store';
 import { readAdmissionDocument, type DispatchError, type OperatorClaimState, type WorkflowHalt } from '../src/relay/integration/wonderland-admission/admission-file';
 import {
+  AWAITING_OPERATOR_WINDOW_MS,
   WONDERLAND_STATUS_CAUSES,
   WONDERLAND_STATUS_STATES,
   WONDERLAND_STATUS_TERMINAL_STATES,
@@ -136,11 +137,95 @@ describe('wonderland status', () => {
       const status = await handleWonderlandStatusRoute(statusRequest(SERVER), restarted);
       expect(status).toEqual({
         status: 200,
-        body: { wljRunId: RUN, serverRunId: SERVER, state: 'held', updatedAt: WHEN },
+        body: { wljRunId: RUN, serverRunId: SERVER, state: 'awaiting_operator', updatedAt: WHEN },
       });
       expect(readAdmissionDocument(storePath).claims).toEqual([]);
       expect(readFileSync(storePath, 'utf8')).toBe(held);
       restarted.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('awaiting_operator is open on the last millisecond of its window and expired on the next, and neither read writes the file', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wlj-status-'));
+    const storePath = join(dir, 'admission.json');
+    try {
+      const admitted = service(storePath, () => SERVER);
+      await handleWonderlandAdmissionRoute(admitRequest(), admitted);
+      admitted.close();
+      const ports = service(storePath, () => { throw new Error('status must not mint'); });
+      const acceptedAtMs = Date.parse(WHEN);
+      const before = readFileSync(storePath, 'utf8');
+      const open = await handleWonderlandStatusRoute(
+        statusRequest(SERVER, { nowMs: acceptedAtMs + AWAITING_OPERATOR_WINDOW_MS }),
+        ports,
+      );
+      expect(open?.body).toEqual({
+        wljRunId: RUN,
+        serverRunId: SERVER,
+        state: 'awaiting_operator',
+        updatedAt: WHEN,
+      });
+      const expiredAtMs = acceptedAtMs + AWAITING_OPERATOR_WINDOW_MS + 1;
+      const closed = await handleWonderlandStatusRoute(statusRequest(SERVER, { nowMs: expiredAtMs }), ports);
+      expect(closed?.body).toEqual({
+        wljRunId: RUN,
+        serverRunId: SERVER,
+        state: 'failed',
+        cause: 'AWAITING_OPERATOR_EXPIRED',
+        updatedAt: new Date(expiredAtMs).toISOString(),
+      });
+      expect(readFileSync(storePath, 'utf8')).toBe(before);
+      expect(readAdmissionDocument(storePath).claims).toEqual([]);
+      ports.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('a recorded dispatch keeps a later INTERRUPTED or FAILED progress note off the answer', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wlj-status-'));
+    const storePath = join(dir, 'admission.json');
+    try {
+      const admitted = service(storePath, () => SERVER);
+      await handleWonderlandAdmissionRoute(admitRequest(), admitted);
+      admitted.close();
+      const ports = service(storePath, () => { throw new Error('status must not mint'); });
+      const journalPath = `${storePath}.operator.json`;
+      const journal = JSON.parse(readFileSync(journalPath, 'utf8')) as {
+        schemaVersion: number;
+        revision: number;
+        claims: unknown[];
+        progress: unknown[];
+        owners: Record<string, string>;
+      };
+      const admissionBytes = readFileSync(storePath, 'utf8');
+      journal.claims = [{
+        wonderlandRunId: RUN,
+        serverRunId: SERVER,
+        state: 'dispatched',
+        spentTag: `julius-run-spent-${'a'.repeat(24)}`,
+        spentTagState: 'absent',
+        at: WHEN,
+        dispatchAttempted: true,
+        dispatchError: null,
+        halt: null,
+      }];
+      for (const state of ['interrupted', 'failed'] as const) {
+        journal.progress = [{
+          serverRunId: SERVER,
+          state,
+          cause: state,
+          updatedAt: '2026-10-23T18:00:00.000Z',
+        }];
+        writeFileSync(journalPath, `${JSON.stringify(journal)}\n`);
+        const status = await handleWonderlandStatusRoute(statusRequest(SERVER), ports);
+        expect(status?.body, state).toMatchObject({ state: 'dispatched', updatedAt: WHEN });
+        expect(status?.body, state).not.toHaveProperty('cause');
+        expect(readFileSync(storePath, 'utf8')).toBe(admissionBytes);
+      }
+      ports.close();
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -186,7 +271,7 @@ describe('wonderland status', () => {
       admitted.close();
       const ports = service(storePath, () => { throw new Error('status must not mint'); });
       const held = await handleWonderlandStatusRoute(statusRequest(SERVER), ports);
-      expect(held?.body).toMatchObject({ state: 'held' });
+      expect(held?.body).toMatchObject({ state: 'awaiting_operator' });
       writeProgress(storePath, 'providers_running', 'watch');
       const before = readFileSync(storePath, 'utf8');
       const running = await handleWonderlandStatusRoute(statusRequest(SERVER), ports);
@@ -231,12 +316,17 @@ describe('wonderland status', () => {
       SPENT_TAG_UNVERIFIED: 'SPENT_TAG_UNVERIFIED',
       gh_workflow_run_failed: 'gh_workflow_run_failed',
     };
+    const clockCauses: readonly WonderlandStatusCause[] = ['AWAITING_OPERATOR_EXPIRED'];
     for (const [stored, state] of Object.entries(admissionStatus) as Array<[AdmissionState, WonderlandStatusState]>) {
       expect(wonderlandStatusStateFromAdmission(stored)).toBe(state);
     }
-    const writerStates = new Set<WonderlandStatusState>([...Object.values(admissionStatus), ...Object.values(claimStatus)]);
+    const writerStates = new Set<WonderlandStatusState>([
+      ...Object.values(admissionStatus),
+      ...Object.values(claimStatus),
+      'awaiting_operator',
+    ]);
     expect([...WONDERLAND_STATUS_STATES].filter((state) => state !== 'unknown').sort()).toEqual([...writerStates].sort());
-    expect(Object.values(writerCauses).sort()).toEqual([...WONDERLAND_STATUS_CAUSES].sort());
+    expect([...Object.values(writerCauses), ...clockCauses].sort()).toEqual([...WONDERLAND_STATUS_CAUSES].sort());
     expect(new Set(WONDERLAND_STATUS_STATES.filter(isWonderlandStatusTerminal))).toEqual(new Set(WONDERLAND_STATUS_TERMINAL_STATES));
     expect(WONDERLAND_STATUS_TERMINAL_STATES).not.toContain('unknown');
 
@@ -294,7 +384,7 @@ describe('wonderland status', () => {
       expect(JSON.parse(admissionBytes)).toMatchObject({ schemaVersion: 2 });
       expect(JSON.parse(admissionBytes)).not.toHaveProperty('claims');
       const fromRow = await handleWonderlandStatusRoute(statusRequest(SERVER), ports);
-      expect(fromRow?.body).toMatchObject({ state: 'held', updatedAt: WHEN });
+      expect(fromRow?.body).toMatchObject({ state: 'awaiting_operator', updatedAt: WHEN });
       expect(fromRow?.body).not.toHaveProperty('cause');
       expect(readFileSync(storePath, 'utf8')).toBe(admissionBytes);
       expect(readFileSync(journalPath, 'utf8')).toBe(cleared);
@@ -310,6 +400,7 @@ function coverStatusState(state: WonderlandStatusState): WonderlandStatusState {
   switch (state) {
     case 'held':
     case 'reserved':
+    case 'awaiting_operator':
     case 'ledger_unwritten':
     case 'interrupted':
     case 'failed':
@@ -331,6 +422,7 @@ function coverStatusCause(cause: WonderlandStatusCause): WonderlandStatusCause {
     case 'RUN_ID_ALREADY_SPENT':
     case 'SPENT_TAG_UNVERIFIED':
     case 'gh_workflow_run_failed':
+    case 'AWAITING_OPERATOR_EXPIRED':
       return cause;
     default: {
       const leftover: never = cause;

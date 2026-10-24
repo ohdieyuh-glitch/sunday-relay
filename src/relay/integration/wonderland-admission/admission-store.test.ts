@@ -255,6 +255,16 @@ describe('one admission per pair', () => {
     expect(admissions.admissionCount()).toBe(1);
   });
 
+  it('a recorded dispatch refuses INTERRUPTED and FAILED and leaves the run held', async () => {
+    const admissions = store();
+    const created = await admissions.admit(request());
+    if (!created.ok) throw new Error('expected an admission');
+    expect(admissions.markTerminal(created.run.runId, 'INTERRUPTED', { dispatched: true })).toBeNull();
+    expect(admissions.markTerminal(created.run.runId, 'FAILED', { dispatched: true })).toBeNull();
+    const replay = await admissions.admit(request());
+    expect(replay.ok && replay.run.state).toBe('ADMISSION_HELD');
+  });
+
   it('a result hash binds once and a different hash does not open a run', async () => {
     const admissions = store();
     const created = await admissions.admit(request());

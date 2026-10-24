@@ -20,6 +20,7 @@ import {
   JULIUS_BOOTSTRAP_RUN_ID,
   SHA256_HEX,
   WONDERLAND_RUN_ID,
+  applyWonderlandStatusTransition,
   type CapRefusalKind,
   type PaidWorkflowTicket,
   type ReviewedModelPins,
@@ -187,9 +188,19 @@ class WonderlandAdmissionStore {
    * Record a terminal failure on the existing run. Same pair, same slot.
    * Returns null when the run was never reserved. Does not append, retry, or spend.
    */
-  markTerminal(runId: string, state: 'INTERRUPTED' | 'FAILED'): AdmissionRun | null {
+  markTerminal(
+    runId: string,
+    state: 'INTERRUPTED' | 'FAILED',
+    options?: { readonly dispatched?: boolean },
+  ): AdmissionRun | null {
     const run = this.byRunId.get(runId);
     if (run === undefined) return null;
+    const decision = applyWonderlandStatusTransition({
+      dispatched: options?.dispatched === true,
+      proposedState: state,
+      proposedCause: null,
+    });
+    if (!decision.ok) return null;
     if (run.state === 'INTERRUPTED' || run.state === 'FAILED') return run;
     run.state = state;
     return run;

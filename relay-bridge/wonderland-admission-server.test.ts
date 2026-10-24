@@ -244,7 +244,7 @@ describe('admission through createBridgeServer', () => {
     expect(ok.body).toEqual({
       wljRunId: 'wlj_dddddddd-eeee-4fff-8aaa-bbbbbbbbbbbb',
       serverRunId,
-      state: 'held',
+      state: 'awaiting_operator',
       updatedAt: expect.any(String),
     });
     expect(JSON.stringify(ok.body)).not.toMatch(/gh|operator-claim|child_process|api_key|token/i);
