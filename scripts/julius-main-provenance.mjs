@@ -44,6 +44,7 @@ import {
 import {
   EXTERNAL_ANCHOR_VARIABLE,
   TRUSTED_CHECKPOINT_SHA,
+  annotateChainLandings,
   applyTrustChain,
   attestedCheckpointFloor,
   evaluateTrustChain,
@@ -333,12 +334,27 @@ export function evaluateSignedLanding(input, tip) {
     success);
 }
 
-function withTrustChain(single, source) {
+async function withTrustChain(single, source) {
   if (single?.verdict !== 'provenant') return single;
   let commits = source?.chainCommits;
-  // Only the tip was verified as a signed landing. Do not infer that flag from an ancestor's message.
-  if (Array.isArray(commits) && commits.length > 0 && single.via === 'signed-landing') {
-    commits = commits.map((commit, index) => (index === commits.length - 1 ? { ...commit, signedLanding: true } : commit));
+  // Every ancestor landing is verified on its own. The tip's flag is kept only
+  // when that commit carries no landing block, because evaluateSignedLanding
+  // already judged it. A block on the tip is judged again here, including its window.
+  if (Array.isArray(commits) && commits.length > 0) {
+    const anchor = source && Object.prototype.hasOwnProperty.call(source, 'externalReviewerKeySha256')
+      ? source.externalReviewerKeySha256
+      : process.env[EXTERNAL_ANCHOR_VARIABLE];
+    commits = await annotateChainLandings(commits, {
+      pem: source?.reviewerKeyPem,
+      anchor,
+      now: typeof source?.now === 'number' ? source.now : Date.now(),
+    });
+    const last = commits.length - 1;
+    const tipMessage = commits[last]?.message;
+    const tipHasBlock = typeof tipMessage === 'string' && tipMessage.includes('BEGIN JULIUS LANDING');
+    if (single.via === 'signed-landing' && !tipHasBlock) {
+      commits = commits.map((commit, index) => (index === last ? { ...commit, signedLanding: true } : commit));
+    }
   }
   const chain = evaluateTrustChain({
     tipSha: single.mainSha,
@@ -361,8 +377,17 @@ function readFirstParentChain(gh, repo, tipSha, floorSha = TRUSTED_CHECKPOINT_SH
   let sha = tipSha;
   for (let i = 0; i < 30 && typeof sha === 'string' && sha !== floorSha; i += 1) {
     const commit = gh(`repos/${repo}/commits/${sha}`);
-    const paths = Array.isArray(commit?.files) ? commit.files.map((file) => file?.filename).filter((path) => typeof path === 'string') : undefined;
-    reversed.push({ sha: commit?.sha, tree: commit?.commit?.tree?.sha, paths });
+    const paths = Array.isArray(commit?.files)
+      ? commit.files.flatMap((file) => [file?.filename, file?.previous_filename].filter((path) => typeof path === 'string'))
+      : undefined;
+    reversed.push({
+      sha: commit?.sha,
+      tree: commit?.commit?.tree?.sha,
+      paths,
+      message: commit?.commit?.message,
+      parent: commit?.parents?.[0]?.sha,
+      parentCount: Array.isArray(commit?.parents) ? commit.parents.length : undefined,
+    });
     const parent = commit?.parents?.[0]?.sha;
     if (parent === floorSha) return reversed.reverse();
     sha = parent;
@@ -647,7 +672,7 @@ async function main(argv) {
     let evaluated;
     try {
       const evidence = await fromEvidenceFile(evidencePath);
-      evaluated = withTrustChain(evaluateMainProvenance({ ...evidence, branch, repo }), evidence); // v3.5b S-3: the command line's repository, never the file's
+      evaluated = await withTrustChain(evaluateMainProvenance({ ...evidence, branch, repo }), evidence); // v3.5b S-3: the command line's repository, never the file's
     } catch (error) {
       process.stderr.write(`main_provenance_indeterminate: ${error instanceof Error ? error.message : 'evidence unreadable'}\n`);
       return 1;
@@ -793,7 +818,7 @@ async function main(argv) {
         // A missing checkpoint key fails closed inside the chain pin.
       }
       const disk = attested ? readCheckpointAttestation(process.cwd()) : null;
-      result = withTrustChain(result, {
+      result = await withTrustChain(result, {
         chainCommits,
         reviewerKeyPem: chainKeyPem,
         attestationText: disk?.text,

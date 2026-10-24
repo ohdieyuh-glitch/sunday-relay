@@ -66,7 +66,41 @@ export declare function canonicalCheckpointAttestation(fields?: {
 export declare function attestationNonce(commits: readonly { readonly sha?: string; readonly tree?: string }[], tcb?: readonly { readonly path?: string; readonly sha256?: string }[]): string;
 export declare function attestationNonceProblems(fields: { readonly nonce?: string; readonly commits?: readonly { readonly sha?: string; readonly tree?: string }[]; readonly tcb?: readonly { readonly path?: string; readonly sha256?: string }[] } | undefined): string | null;
 export declare function judgeAttestationWindow(fields: { readonly issued?: string; readonly expires?: string } | undefined, now: number): string | null;
+export declare const CHECKPOINT_INSTALLER_EXACT_PATHS: readonly string[];
 export declare function isCheckpointInstallerDiff(paths: unknown): boolean;
+export declare function judgeClearanceWindow(fields: { readonly issued?: string; readonly expires?: string } | undefined, now: number): string | null;
+
+export interface LandingJudgement {
+  readonly ok: boolean;
+  readonly absent: boolean;
+  readonly reason: string;
+  readonly nonce?: string;
+  readonly pr?: string;
+  readonly head?: string;
+}
+
+export declare function judgeCommitLanding(commit: {
+  readonly message?: unknown;
+  readonly tree?: unknown;
+  readonly parent?: unknown;
+  readonly parentCount?: unknown;
+  readonly headTree?: unknown;
+  readonly headParent?: unknown;
+  readonly headParentCount?: unknown;
+  readonly paths?: unknown;
+}, options?: {
+  readonly pem?: unknown;
+  readonly anchor?: unknown;
+  readonly now?: unknown;
+  readonly seenNonces?: Set<string>;
+}): Promise<LandingJudgement>;
+
+export declare function annotateChainLandings<T>(commits: readonly T[], options?: {
+  readonly pem?: unknown;
+  readonly anchor?: unknown;
+  readonly now?: unknown;
+  readonly seenNonces?: Set<string>;
+}): Promise<T[]>;
 
 export interface ParsedCheckpoint {
   readonly problems: string[];

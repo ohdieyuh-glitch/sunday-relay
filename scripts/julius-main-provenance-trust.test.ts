@@ -32,6 +32,7 @@ import {
   commitsMatch,
   evaluateTrustChain,
   exactFingerprintMatch,
+  isCheckpointInstallerDiff,
   judgeAttestationWindow,
   parseCheckpointAttestation,
   requireTrustedVerifier,
@@ -326,6 +327,33 @@ describe('adversarial refusals', () => {
   });
 });
 
+describe('the founder installer diff is an exact path set', () => {
+  const installer = 'b994daebe511e3bbddcd18edb1a7caf221810387';
+  const afterCheckpoint = [
+    installer,
+    'bdd2194bb6d2a721da16e14546c7115915f5b5d3',
+    'f9b5b051b546787b486079f945ced851b1f46382',
+    '55beb365bef178bd4f717ee4b5ae9214dc124d59',
+    '03591462e046bd8f3b1ed7687400ac48846e8642',
+  ];
+
+  it('accepts the real installer commit and the four commits after it, and nothing outside that exact set', () => {
+    ensureCommit(installer, 1);
+    for (const sha of afterCheckpoint) {
+      const paths = git(['diff-tree', '--no-commit-id', '--name-only', '-r', sha]).trim().split('\n').filter((path) => path !== '');
+      expect(paths.length, sha).toBeGreaterThan(0);
+      expect(isCheckpointInstallerDiff(paths), `${sha} ${paths.join(' ')}`).toBe(true);
+    }
+    expect(isCheckpointInstallerDiff(['src/evil.ts'])).toBe(false);
+    expect(isCheckpointInstallerDiff(['docs/provenance/checkpoint-2528ac5c-f539cab2.unsigned.txt', 'src/evil.ts'])).toBe(false);
+    expect(isCheckpointInstallerDiff(['scripts/julius-main-provenance-trust.test.ts.bak'])).toBe(false);
+    expect(isCheckpointInstallerDiff(['scripts/not-an-installer-test.ts'])).toBe(false);
+    expect(isCheckpointInstallerDiff(['docs/provenance/other-attestation.txt'])).toBe(false);
+    expect(isCheckpointInstallerDiff(['README.md'])).toBe(false);
+    expect(isCheckpointInstallerDiff([])).toBe(false);
+  });
+});
+
 describe('the checkpoint workflow and the working tree', () => {
   const workflow = readFileSync(join(ROOT, '.github/workflows/julius-accept-main.yml'), 'utf8');
   const land = readFileSync(join(ROOT, '.github/workflows/julius-land.yml'), 'utf8');
@@ -339,6 +367,11 @@ describe('the checkpoint workflow and the working tree', () => {
     expect(workflow).toContain('was swapped and does not match HEAD');
     expect(workflow).toContain(EXTERNAL_ANCHOR_VARIABLE);
     expect(land.indexOf('actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510')).toBeGreaterThan(land.indexOf('--require-trusted-verifier'));
+    expect(land).toMatch(/fetch-depth:\s*0/u);
+    expect(workflow).toMatch(/fetch-depth:\s*0/u);
+    const provenance = readFileSync(join(ROOT, 'scripts/julius-main-provenance.mjs'), 'utf8');
+    expect(provenance).toContain('annotateChainLandings');
+    expect(provenance).not.toContain('index === commits.length - 1');
     const heredoc = workflow.split("done <<'EOF'\n")[1]?.split('\n          EOF')[0] ?? '';
     const listed = heredoc.split('\n').map((line) => line.trim()).filter((line) => line !== '');
     expect(listed).toEqual([...TRUSTED_COMPUTING_BASE]);
@@ -364,9 +397,21 @@ describe('the checkpoint workflow and the working tree', () => {
     expect(live.problems).toEqual([]);
     expect(live.fields.checkpoint).toBe(checkpoint);
     expect(live.fields.tcb.map((row) => row.path)).toEqual([...TRUSTED_COMPUTING_BASE]);
+    // The founder bootstrap regenerates this attestation. This repair does not
+    // edit it. Trusted files this repair changes no longer match; every other
+    // trusted file still does. The verifier still refuses a hash mismatch.
+    expect(createHash('sha256').update(readFileSync(livePath)).digest('hex')).toBe('a4fde0b67e790890fa58b2998d8ed88b436f67c2ff2bde49c98fd59f70cb8d25');
+    const founderRegenerates = new Set([
+      'scripts/julius-main-provenance-trust.mjs',
+      'scripts/julius-main-provenance-trust.d.mts',
+      'scripts/julius-main-provenance.mjs',
+      '.github/workflows/julius-land.yml',
+      '.github/workflows/julius-accept-main.yml',
+    ]);
     for (const row of live.fields.tcb) {
       const actual = createHash('sha256').update(readFileSync(join(ROOT, row.path!))).digest('hex');
-      expect(actual, row.path).toBe(row.sha256);
+      if (founderRegenerates.has(row.path!)) expect(actual, row.path).not.toBe(row.sha256);
+      else expect(actual, row.path).toBe(row.sha256);
     }
     expect(attestationNonceProblems(live.fields)).toBeNull();
     expect(existsSync(livePath.replace(/\.txt$/u, '.sig'))).toBe(false);
