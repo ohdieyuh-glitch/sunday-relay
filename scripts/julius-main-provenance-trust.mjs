@@ -662,7 +662,7 @@ export async function judgeCommitLanding(commit, options = {}) {
   if (typeof message !== 'string' || !message.includes('BEGIN JULIUS LANDING')) {
     return { ok: false, absent: true, reason: 'no landing block' };
   }
-  const { parseLandingCommitMessage, HARD_FORBIDDEN_PATH, EXCEPTION_ELIGIBLE, MAX_CLEARANCE_AGE_MS } = await landingLib();
+  const { parseLandingCommitMessage, MAX_CLEARANCE_AGE_MS, unauthorizedGovernedPaths, unusedProtectedPaths } = await landingLib();
   const parsed = parseLandingCommitMessage(withSingleTrailingNewline(message));
   const clearance = parsed.fields?.clearance;
   if (parsed.problems.length > 0 || !clearance) {
@@ -733,11 +733,13 @@ export async function judgeCommitLanding(commit, options = {}) {
   if (!Array.isArray(paths) || paths.length === 0 || !paths.every((path) => typeof path === 'string' && path !== '')) {
     return { ok: false, absent: false, nonce, reason: 'the paths this landing changes could not be read completely' };
   }
-  const exceptions = clearance['governed-exceptions'] === '-' ? [] : String(clearance['governed-exceptions']).split(',');
-  const governed = paths.filter((path) => HARD_FORBIDDEN_PATH.test(path)
-    || (EXCEPTION_ELIGIBLE.some((file) => file.toLowerCase() === path.toLowerCase()) && !exceptions.includes(path)));
+  const governed = unauthorizedGovernedPaths(paths, clearance);
   if (governed.length > 0) {
     return { ok: false, absent: false, nonce, reason: `a signed landing may not change founder-governed paths: ${governed.slice(0, 5).join(', ')}` };
+  }
+  const unused = unusedProtectedPaths(paths, clearance);
+  if (unused.length > 0) {
+    return { ok: false, absent: false, nonce, reason: `the signed clearance lists protected paths this landing does not change: ${unused.slice(0, 5).join(', ')}` };
   }
   return {
     ok: true,

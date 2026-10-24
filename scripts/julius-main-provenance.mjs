@@ -116,6 +116,7 @@ export const LANDING_BEGIN = '-----BEGIN JULIUS LANDING-----';
 export const LANDING_END = '-----END JULIUS LANDING-----';
 const LANDING_REPO = 'ohdieyuh-glitch/sunday-relay';
 const CLEARANCE_KEYS = ['pr', 'head', 'tree', 'base', 'kind', 'bot-comments-sha256', 'governed-exceptions', 'nonce', 'by', 'issued', 'expires'];
+const CLEARANCE_OPTIONAL_KEYS = ['protected-paths', 'landing-method', 'binds-draft', 'depends'];
 const EXCEPTION_ELIGIBLE = ['relay-bridge/julius/role-effort.test.ts', 'scripts/julius-live-contract-check.mjs'];
 const CANONICAL_BASE64 = /^[A-Za-z0-9+/]+={0,2}$/u;
 const isCanonicalBase64 = (text) => typeof text === 'string' && CANONICAL_BASE64.test(text)
@@ -172,7 +173,24 @@ export function parseSignedClearance(text, queriedRepo) {
     if (!line.startsWith(prefix)) problems.push(`line ${3 + i} must start with "${prefix}"`);
     else fields[key] = line.slice(prefix.length);
   });
-  if (lines.length !== 2 + CLEARANCE_KEYS.length + 1 || lines[lines.length - 1] !== '') problems.push('exactly one trailing newline and no extra lines');
+  let cursor = 0;
+  let index = 2 + CLEARANCE_KEYS.length;
+  while (index < lines.length - 1) {
+    const line = lines[index];
+    let matched = -1;
+    for (let keyIndex = cursor; keyIndex < CLEARANCE_OPTIONAL_KEYS.length; keyIndex += 1) {
+      if (line.startsWith(`${CLEARANCE_OPTIONAL_KEYS[keyIndex]}: `)) {
+        matched = keyIndex;
+        break;
+      }
+    }
+    if (matched < 0) break;
+    const key = CLEARANCE_OPTIONAL_KEYS[matched];
+    fields[key] = line.slice(key.length + 2);
+    cursor = matched + 1;
+    index += 1;
+  }
+  if (lines.length === 0 || lines[lines.length - 1] !== '' || index !== lines.length - 1) problems.push('exactly one trailing newline and no extra lines');
   for (const key of ['head', 'tree', 'base']) if (fields[key] !== undefined && !isSha(fields[key])) problems.push(`${key} must be a full 40-hex sha`);
   if (fields.pr !== undefined && !/^[1-9][0-9]{0,6}$/u.test(fields.pr)) problems.push('pr must be a positive integer');
   if (fields.kind !== undefined && !['CLEARED', 'CLEARED-TREE'].includes(fields.kind)) problems.push('kind must be CLEARED or CLEARED-TREE');
@@ -181,6 +199,26 @@ export function parseSignedClearance(text, queriedRepo) {
     const list = value === '-' ? [] : value.split(',');
     if (value !== '-' && (list.some((f) => !EXCEPTION_ELIGIBLE.includes(f)) || new Set(list).size !== list.length || [...list].sort().join(',') !== value)) {
       problems.push('governed-exceptions must be "-" or a sorted comma list of eligible files');
+    }
+  }
+  if (fields['protected-paths'] !== undefined) {
+    const value = fields['protected-paths'];
+    const list = value === '-' ? [] : value.split(',');
+    const safe = (path) => path !== '' && !path.includes('..') && !path.startsWith('/') && !/[*?[\]{}\s]/u.test(path) && /^[A-Za-z0-9._@/-]+$/u.test(path);
+    if (value !== '-' && (list.some((path) => !safe(path)) || new Set(list).size !== list.length || [...list].sort().join(',') !== value)) {
+      problems.push('protected-paths must be "-" or a sorted comma-separated path list');
+    }
+  }
+  if (fields['landing-method'] !== undefined && !['squash', 'fast-forward'].includes(fields['landing-method'])) {
+    problems.push('landing-method must be squash or fast-forward');
+  }
+  if (fields['binds-draft'] !== undefined && fields['binds-draft'] !== 'yes') problems.push('binds-draft must be yes');
+  if (fields.depends !== undefined) {
+    const value = fields.depends;
+    const parts = value === '-' ? [] : value.split(',');
+    const ids = parts.map((part) => (/^[1-9][0-9]{0,6}$/u.test(part) ? Number(part) : Number.NaN));
+    if (value !== '-' && (ids.some((id) => !Number.isInteger(id)) || new Set(parts).size !== parts.length || [...ids].sort((a, b) => a - b).join(',') !== value)) {
+      problems.push('depends must be "-" or a numerically sorted comma-separated list of pull request numbers');
     }
   }
   if (fields.nonce !== undefined && !/^[0-9a-f]{32}$/u.test(fields.nonce)) problems.push('nonce must be 32 hex characters');
@@ -229,9 +267,10 @@ export function readReviewerKey(pem) {
  * A reviewer-signed tip can reach this gate WITHOUT the lander: there is no branch protection, so a hand-pushed commit that
  * carries a genuine signed block is exactly as good as a landed one, unless the gate itself refuses what the lander would
  * have refused. These two constants are a deliberate COPY of the lander's HARD_FORBIDDEN_PATH and EXCEPTION_ELIGIBLE (this
- * file imports nothing from the lander it checks); a drift test keeps the copies equal. Founder-governed paths (workflows, the
- * landing system and its key, this gate, approver files, migrations, package manifests...) are never provenant through a
- * signature alone. The two exception-eligible files may change only when the SIGNED clearance names them exactly.
+ * file imports nothing from the lander it checks); a drift test keeps the copies equal. A hard-forbidden path is
+ * provenant only when the signed clearance's protected-paths lists that exact path. A historical clearance with no
+ * protected-paths line lists nothing, so those paths stay refused. The two exception-eligible files may change only
+ * when the SIGNED clearance names them in governed-exceptions.
  */
 const SIGNED_LANDING_HARD_FORBIDDEN = /^(\.github\/workflows\/|\.github\/julius-landing\/|\.github\/julius-mission-pins\.txt$|\.github\/julius-approvers\.json$|\.github\/CODEOWNERS$|CODEOWNERS$|docs\/CODEOWNERS$|CLAUDE\.md$|package\.json$|package-lock\.json$|scripts\/julius-approval-gates\.mjs$|scripts\/julius-live-evidence\.mjs$|scripts\/julius-main-provenance|scripts\/julius-review-currency|scripts\/julius-main-monotonicity|scripts\/julius-paid-slot|scripts\/julius-subscription-check|scripts\/julius-live-preflight-gates|scripts\/julius-accept|scripts\/relay-repository-boundary|scripts\/export-julius-harness|scripts\/relay-parity-gate|scripts\/wonderland-beta-gate|scripts\/julius-live-preflight-identity|scripts\/julius-derive-scoped-credentials|scripts\/julius-ci-callers|scripts\/ci-test-accounting|scripts\/julius-paid-dispatch|scripts\/julius-paid-run-archive|\.github\/julius-mission-pins\.sh$|\.github\/julius-executor-entrypoint\.sh$|scripts\/julius-docker-executor\.sh$|scripts\/julius-executor-ready\.mjs$|scripts\/julius-reviewer-isolation|scripts\/julius-reviewer-deadline\.mjs$|scripts\/julius-live-preflight\.ts$|scripts\/julius-usage-limit\.mjs$|\.github\/julius-learning-store\.sh$|\.github\/julius-phase\.sh$|\.github\/wait-for-executor\.sh$|\.github\/julius-live-|\.github\/actions\/|\.github\/julius-mission-slice\/|\.github\/julius-learning-registrations\/|scripts\/julius-landing|\.github\/julius-live-evidence-dump\.sh$|.*\bmigrations?\/)/iu;
 const SIGNED_LANDING_EXCEPTION_ELIGIBLE = ['relay-bridge/julius/role-effort.test.ts', 'scripts/julius-live-contract-check.mjs'];
@@ -313,7 +352,10 @@ export function evaluateSignedLanding(input, tip) {
   if (head.treeSha !== clearance.tree) {
     return signedVerdict('unprovenanced', `the cleared head ${head.sha} carries tree ${head.treeSha}, not the signed tree ${clearance.tree}`, base);
   }
-  if (!WORKER_AUTHOR_LOGINS.includes(head?.authorLogin)) {
+  // A governed landing names its method inside the signed clearance. Historical
+  // clearances do not, and those heads are still the coding worker's.
+  const governedMethod = clearance['landing-method'] === 'squash' || clearance['landing-method'] === 'fast-forward';
+  if (!governedMethod && !WORKER_AUTHOR_LOGINS.includes(head?.authorLogin)) {
     return signedVerdict('unprovenanced',
       `the cleared head was authored by ${typeof head?.authorLogin === 'string' ? head.authorLogin : 'an unreadable identity'}, not the coding worker`, base);
   }
@@ -323,10 +365,15 @@ export function evaluateSignedLanding(input, tip) {
     return signedVerdict('indeterminate', 'the paths the signed tip changes against its parent could not be read completely', base);
   }
   const exceptions = clearance['governed-exceptions'] === '-' ? [] : clearance['governed-exceptions'].split(',');
-  const governed = changed.filter((path) => SIGNED_LANDING_HARD_FORBIDDEN.test(path)
+  const protectedPaths = clearance['protected-paths'] === undefined || clearance['protected-paths'] === '-' ? [] : clearance['protected-paths'].split(',');
+  const governed = changed.filter((path) => (SIGNED_LANDING_HARD_FORBIDDEN.test(path) && !protectedPaths.includes(path))
     || (SIGNED_LANDING_EXCEPTION_ELIGIBLE.some((file) => file.toLowerCase() === path.toLowerCase()) && !exceptions.includes(path)));
   if (governed.length > 0) {
     return signedVerdict('unprovenanced', `a signed landing may not change founder-governed paths: ${governed.slice(0, 5).join(', ')}`, base);
+  }
+  const unusedProtected = protectedPaths.filter((path) => !changed.includes(path));
+  if (unusedProtected.length > 0) {
+    return signedVerdict('unprovenanced', `the signed clearance lists protected paths this landing does not change: ${unusedProtected.slice(0, 5).join(', ')}`, base);
   }
   const success = { ...base, prNumber: Number(clearance.pr), reviewedHeadSha: clearance.head, approvedBy: [clearance.by] };
   const pin = reviewerKeyPinRefusal(input?.reviewerKeyPem, externalAnchorOf(input));

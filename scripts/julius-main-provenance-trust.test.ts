@@ -406,6 +406,7 @@ describe('the checkpoint workflow and the working tree', () => {
       'scripts/julius-main-provenance-trust.d.mts',
       'scripts/julius-main-provenance.mjs',
       'scripts/julius-main-provenance.d.mts',
+      '.github/julius-landing/land-lib.mjs',
       '.github/workflows/julius-land.yml',
       '.github/workflows/julius-accept-main.yml',
     ]);
