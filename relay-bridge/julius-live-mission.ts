@@ -48,7 +48,7 @@ import { hostedChildEnv, hostedChildEnvKeys } from './hosted-coding-agent/hosted
 import { observeCoderLogin, resolveCoderClaudeExecutable } from './hosted-coding-agent/hosted-login-probe';
 import { readFileSync } from 'node:fs';
 import { parseJuliusAdmissionRunId } from '../scripts/julius-admission-run-id.mjs';
-import { createJuliusMissionEvidenceReader } from './julius-mission-evidence-reader';
+import { juliusMissionTraceId } from '../scripts/julius-mission-trace.mjs';
 import { createPublicKey, type KeyObject } from 'node:crypto';
 import { Pool } from 'pg';
 import { listenJuliusPool } from '../src/relay/persistence/julius-pg-held';
@@ -1129,18 +1129,7 @@ async function main(argv: readonly string[]): Promise<number> {
      */
     out(`RESULT: ${outcome.state}${outcome.stalled ? ' (stalled before terminal state)' : ''} after ${outcome.ticks} ticks`);
     out(`  run: ${submitted.runId}`);
-    const missionTrace = await createJuliusMissionEvidenceReader({
-      async phases(wljRunId) {
-        if (wljRunId !== submitted.runId) return null;
-        return tasks.map((task) => ({
-          role: task.role,
-          stage: task.taskType,
-          attempt: task.leaseGeneration,
-          state: task.state,
-        }));
-      },
-    }).read(submitted.runId);
-    out(`  mission trace: traceId=${missionTrace.traceId ?? 'null'} spanId=null traceparent=null`);
+    out(`  mission trace: traceId=${juliusMissionTraceId(submitted.runId) ?? 'null'} spanId=null traceparent=null`);
     if (outcome.haltCause !== null) out(`  cause: ${outcome.haltCause}`);
     if (outcome.tickAccount !== null) out(liveTickAccountLine(outcome.tickAccount));
     for (const task of tasks) out(`  task ${task.taskId} [${task.role}/${task.taskType}] → ${task.state}`);
