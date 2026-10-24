@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { createMemoryAdmissionStore, isClientRunId, isServerRunId, type AdmittedRecord } from './julius-dispatch-admission';
 import type { JuliusCompanionBinding } from './julius-companion-slot';
+import { createMemoryCompanionEvidenceStore, type CompanionEvidenceStore } from './julius-companion-evidence';
 import { createSharedSpendLedger, type JuliusSpendLedgerPort } from './julius-dispatch-spend';
 import { authorizeJuliusLiveSpend } from '../src/relay/mission/julius/julius-spend-ceiling';
 import type { KeyStore } from './julius-key-store';
@@ -105,6 +106,7 @@ function harness(options: {
   readonly autoAdmit?: boolean;
   readonly spendLedger?: JuliusSpendLedgerPort;
   readonly companion?: JuliusCompanionBinding;
+  readonly companionEvidence?: CompanionEvidenceStore;
 } = {}): Harness {
   const env: Record<string, string | undefined> = {
     JULIUS_J1_ENABLED: '1', JULIUS_J1_FOUNDER_PLAYER_ID: FOUNDER, JULIUS_J1_PROJECT_ID: PROJECT, JULIUS_J1_REVIEWER_PROVIDER: (options.providerIds ?? ['openai', 'anthropic', 'xai'])[2], JULIUS_J1_BUDGET_CAP_USD: '10', JULIUS_J1_LEG_ESTIMATE_USD: '1', ...(options.mode === 'live' && options.keyStore !== null ? {} : KEYS), ...options.env,
@@ -126,7 +128,7 @@ function harness(options: {
   const built = options.providers === null
     ? createUncomposedJuliusDispatch(() => env, () => clock)
     : createJuliusDispatch({
-      providers, ledger, claims, ...(options.spendLedger === undefined ? {} : { spendLedger: options.spendLedger }), ...(options.companion === undefined ? {} : { companion: options.companion }), ...(keyStore === null ? {} : { keyStore }), ...(options.mode === 'live' ? { briefSha256: (options.frozen ?? FROZEN).contractSha256 } : {}), ...(options.omitMode === true ? {} : { mode: options.mode ?? 'fake' }), env: () => env, now: () => (clock += 1000), log: (line) => logs.push(line),
+      providers, ledger, claims, ...(options.spendLedger === undefined ? {} : { spendLedger: options.spendLedger }), ...(options.companion === undefined ? {} : { companion: options.companion }), ...(options.companionEvidence === undefined ? {} : { companionEvidence: options.companionEvidence }), ...(keyStore === null ? {} : { keyStore }), ...(options.mode === 'live' ? { briefSha256: (options.frozen ?? FROZEN).contractSha256 } : {}), ...(options.omitMode === true ? {} : { mode: options.mode ?? 'fake' }), env: () => env, now: () => (clock += 1000), log: (line) => logs.push(line),
       newId: () => `disp_${(n += 1)}`,
       frozen: options.frozen ?? FROZEN,
       checker: { check: async () => ({ pass: options.checkerPass ?? true }) },
@@ -1417,6 +1419,36 @@ describe('companion slot beside the chain', () => {
     expect(authorizeJuliusLiveSpend({
       namespace: 'julius-inworld-data-1', spendUsd: 30, repairCycles: 3, ledger: read,
     })).toMatchObject({ authorized: true, spendCeilingUsdMicros: 30_000_000 });
+  });
+
+  it('persists the companion row on the wlj id and refuses a read by the legacy id', async () => {
+    const serverRunId = `run:${sha(RUN).slice(0, 24)}`;
+    const evidence = createMemoryCompanionEvidenceStore();
+    const planText = JSON.stringify({
+      objectiveSummary: 'Plan the fixture.',
+      companion_task: { subtask: 'Add the companion note.', acceptanceCriteria: ['The note is present.'] },
+    });
+    const h = harness({
+      companionEvidence: evidence,
+      behave: { architect: () => ({ ok: true, text: planText, responseId: 'resp_a_0011223344', model: 'm' }) },
+      companion: {
+        deadlineMs: 1_000,
+        port: { async wake() { return { wakeId: 'wake_01ABCDEF', outcome: 'missing', artifact: null }; } },
+        clock: { after: laterUnref },
+        integrate: { async submit() { return { accepted: true, reason: null }; } },
+        validate: { validate: () => ({ ok: true, reason: null }) },
+        review: { review: async () => ({ verdict: 'approve' }) },
+      },
+    });
+    expect(await h.controller.dispatch(input())).toMatchObject({ ok: true, status: 202 });
+    await h.controller.whenIdle();
+    expect(evidence.read(RUN)).toMatchObject({
+      ok: true,
+      result: { wljRunId: RUN, legacyRunId: serverRunId, companion: { state: 'no_result' }, result: null, provenance: null },
+    });
+    expect(evidence.read(serverRunId)).toEqual({ ok: false, reason: 'companion_legacy_read_only' });
+    const served = evidence.read(RUN);
+    expect(JSON.stringify(served)).not.toContain('verified');
   });
 });
 

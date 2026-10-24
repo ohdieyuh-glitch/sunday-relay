@@ -6,6 +6,7 @@ import { bearerMatches } from './bearer-auth';
 import { sessionTokenFrom } from './browser-session/routes';
 import { isAdmittedRunId, type AdmissionClaimStore } from './julius-dispatch-admission';
 import { runJuliusCompanionSlot, type JuliusCompanionBinding } from './julius-companion-slot';
+import type { CompanionEvidenceStore } from './julius-companion-evidence';
 import { preSpendDecision, spendRefusalCode, type JuliusSpendLedgerPort } from './julius-dispatch-spend';
 import { composeRoleProviders } from './julius-role-compose';
 import type { KeyStore } from './julius-key-store';
@@ -419,6 +420,12 @@ export interface JuliusDispatchDeps {
    * or rejection does not stop the coder. No spend row is written for the slot.
    */
   readonly companion?: JuliusCompanionBinding;
+  /**
+   * Optional store for the companion row BRIDGE's read route will serve.
+   * Absent means the slot still runs and nothing is persisted. A legacy id
+   * is not a key. The summary, when one is stored, stays unverified.
+   */
+  readonly companionEvidence?: CompanionEvidenceStore;
   readonly now: () => number;
   /** Safe lines only (ids, hashes, codes). Never a key, a body or provider text. */
   readonly log?: (line: string) => void;
@@ -683,6 +690,23 @@ export function createJuliusDispatch(deps: JuliusDispatchDeps): JuliusDispatchCo
                 },
               },
             });
+            const hash = slot.evidence.artifactHashes[0] ?? null;
+            if (deps.companionEvidence !== undefined) {
+              deps.companionEvidence.record({
+                wljRunId: slot.evidence.runId,
+                legacyRunId: slot.evidence.legacyRunId,
+                disposition: slot.evidence.disposition,
+                summary: null,
+                contentSha256: hash,
+                provenance: hash === null ? null : {
+                  source: 'companion_port',
+                  wakeId: slot.evidence.wakeId,
+                  bodyDigest: slot.evidence.bodyDigest,
+                  contentSha256: hash,
+                },
+                updatedAt: new Date(deps.now()).toISOString(),
+              });
+            }
             emit(rec, {
               type: 'companion.recorded',
               outcome: slot.evidence.disposition,
