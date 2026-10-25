@@ -1,9 +1,15 @@
 #include "WonderlandJuliusMissionSubsystem.h"
 
 #include "Wonderland/WonderlandJuliusMissionClient.h"
+#include "Wonderland/WonderlandJuliusStream.h"
 #include "WonderlandJuliusRandomBytes.h"
 
+#include "Engine/GameInstance.h"
+#include "Wonderland/WonderlandBeta.h"
+#include "Misc/Crc.h"
+
 #include "HttpModule.h"
+#include "Http.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
@@ -23,6 +29,12 @@ static TAutoConsoleVariable<FString> CVarJuliusJ1Endpoint(
 
 namespace
 {
+	/** REVIEW LOW (#456): engine HTTP logging above Log can print request headers. J1 requests carry Relay-Session. */
+	void ClampHttpLogging()
+	{
+		if (LogHttp.GetVerbosity() > ELogVerbosity::Log) { LogHttp.SetVerbosity(ELogVerbosity::Log); }
+	}
+
 	std::string ToStd(const FString& Text)
 	{
 		return std::string(TCHAR_TO_UTF8(*Text));
@@ -161,6 +173,7 @@ struct FJuliusJ1Transport
 			Self.NoteDetail(TEXT("endpoint is not loopback"));
 			return false;
 		}
+		ClampHttpLogging();
 		TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Http = FHttpModule::Get().CreateRequest();
 		Http->SetVerb(ToF(Request.Method));
 		Http->SetURL(ToF(Request.Url));
@@ -356,9 +369,188 @@ bool UWonderlandJuliusMissionSubsystem::HandleTick(float DeltaSeconds)
 	(void)DeltaSeconds;
 	if (Host == nullptr) { return true; }
 	ApplyConfiguredEndpoint();
+	SyncFromPairing();
 	const WonderlandJuliusMissionClient::FTickOutcome Outcome = Host->Session.Tick();
 	if (Outcome.bSend) { (void)FJuliusJ1Transport::Send(*this, Outcome.Request); }
+	PollMissionReads();
 	return true;
+}
+
+void UWonderlandJuliusMissionSubsystem::AdoptPairedSession(const FString& Token, const FString& InProjectId)
+{
+	if (Host == nullptr) { return; }
+	const uint32 Crc = FCrc::StrCrc32(*Token);
+	if (!bAdoptedToken || Crc != AdoptedTokenCrc)
+	{
+		bAdoptedToken = true;
+		AdoptedTokenCrc = Crc;
+		SetNativeSession(Token);
+	}
+	if (InProjectId != AdoptedProjectId)
+	{
+		AdoptedProjectId = InProjectId;
+		SetProjectId(InProjectId);
+		UE_LOG(LogJuliusJ1, Display, TEXT("project id adopted from pairing"));
+	}
+}
+
+void UWonderlandJuliusMissionSubsystem::SyncFromPairing()
+{
+	if (Host == nullptr) { return; }
+	const uint64 NowMs = Host->Clock.NowUtcMs();
+	if (NowMs < NextPairingSyncAtUtcMs) { return; }
+	NextPairingSyncAtUtcMs = NowMs + 1000;
+	UGameInstance* Instance = GetGameInstance();
+	const UWonderlandJuliusStreamSubsystem* Stream = Instance != nullptr ? Instance->GetSubsystem<UWonderlandJuliusStreamSubsystem>() : nullptr;
+	const bool bHanded = Stream != nullptr && Stream->HandNativeSessionToMission(*this);
+	if (!bHanded) { DropAdoptedSession(TEXT("pairing no longer hands this client a session")); }
+}
+
+void UWonderlandJuliusMissionSubsystem::DropAdoptedSession(const TCHAR* Why)
+{
+	// REVIEW M2 (#456): a revoked or expired session is forgotten here too, so nothing keeps sending it.
+	if (!bAdoptedToken || Host == nullptr) { return; }
+	bAdoptedToken = false;
+	AdoptedTokenCrc = 0;
+	Host->Session.SetNativeSessionToken(std::string());
+	UE_LOG(LogJuliusJ1, Display, TEXT("native session dropped: %s"), Why);
+}
+
+FString UWonderlandJuliusMissionSubsystem::EndpointBase() const
+{
+#if UE_BUILD_SHIPPING
+	return ToF(WonderlandJuliusMissionClient::DefaultBridgeBaseUrl);
+#else
+	return CVarJuliusJ1Endpoint.GetValueOnGameThread();
+#endif
+}
+
+FString UWonderlandJuliusMissionSubsystem::CurrentMissionId() const
+{
+	if (Host == nullptr) { return FString(); }
+	return ToF(Host->Session.CurrentMissionId());
+}
+
+FString UWonderlandJuliusMissionSubsystem::ClientRunId() const
+{
+	if (Host == nullptr) { return FString(); }
+	return ToF(Host->Session.RunId());
+}
+
+bool UWonderlandJuliusMissionSubsystem::LatestMissionReads(
+	int32& OutResultStatus,
+	FString& OutResultJson,
+	int32& OutProgressStatus,
+	FString& OutProgressJson) const
+{
+	OutResultStatus = 0;
+	OutProgressStatus = 0;
+	OutResultJson.Reset();
+	OutProgressJson.Reset();
+	if (MissionReadRunId.IsEmpty() || MissionReadRunId != ClientRunId()) { return false; }
+	OutResultStatus = ResultRead.Status;
+	OutResultJson = ResultRead.Body;
+	OutProgressStatus = ProgressRead.Status;
+	OutProgressJson = ProgressRead.Body;
+	return true;
+}
+
+void UWonderlandJuliusMissionSubsystem::PollMissionReads()
+{
+	if (Host == nullptr) { return; }
+	const FString RunId = ClientRunId();
+	if (RunId.IsEmpty()) { return; }
+	if (RunId != MissionReadRunId)
+	{
+		// A new attempt: nothing read for the previous run carries over.
+		MissionReadRunId = RunId;
+		ResultRead = FMissionReadSlot();
+		ProgressRead = FMissionReadSlot();
+		NextMissionReadAtUtcMs = 0;
+		MissionReadFailures = 0;
+		bFinalMissionReadSent = false;
+	}
+	// REVIEW LOW (#456): reads stop once the wrapper's run is terminal (one last read so the final answer shows),
+	// and back off on errors instead of hammering a bridge that is down.
+	const bool bTerminal = Host->Session.CanStartNewAttempt();
+	if (bTerminal && bFinalMissionReadSent) { return; }
+	const uint64 NowMs = Host->Clock.NowUtcMs();
+	if (NowMs < NextMissionReadAtUtcMs) { return; }
+	const uint64 Backoff = WonderlandJuliusMissionClient::MissionReadPeriodMs << FMath::Min(MissionReadFailures, 4);
+	NextMissionReadAtUtcMs = NowMs + FMath::Min<uint64>(Backoff, 60000);
+	bFinalMissionReadSent = bTerminal;
+	SendMissionRead(false);
+	SendMissionRead(true);
+}
+
+bool UWonderlandJuliusMissionSubsystem::CanStartNewMission() const
+{
+	return Host != nullptr && Host->Session.CanStartNewAttempt();
+}
+
+void UWonderlandJuliusMissionSubsystem::SendMissionRead(bool bProgress)
+{
+	FMissionReadSlot& Slot = bProgress ? ProgressRead : ResultRead;
+	if (Slot.bInFlight) { return; }
+	const WonderlandJuliusMissionClient::FCommandOutcome Outcome = Host->Session.MissionReadRequest(bProgress);
+	if (!Outcome.bSent) { return; }
+	ClampHttpLogging();
+	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Http = FHttpModule::Get().CreateRequest();
+	Http->SetVerb(ToF(Outcome.Request.Method));
+	Http->SetURL(ToF(Outcome.Request.Url));
+	for (const std::pair<std::string, std::string>& Header : Outcome.Request.Headers)
+	{
+		Http->SetHeader(ToF(Header.first), ToF(Header.second));
+	}
+	Http->SetDelegateThreadPolicy(EHttpRequestDelegateThreadPolicy::CompleteOnGameThread);
+	const FString ForRunId = MissionReadRunId;
+	TWeakObjectPtr<UWonderlandJuliusMissionSubsystem> Weak(this);
+	Http->OnProcessRequestComplete().BindLambda(
+		[Weak, bProgress, ForRunId](FHttpRequestPtr /*Request*/, FHttpResponsePtr Response, bool bConnected)
+		{
+			if (!Weak.IsValid()) { return; }
+			Weak->CompleteMissionRead(bProgress, ForRunId, bConnected, Response);
+		});
+	Slot.bInFlight = Http->ProcessRequest();
+}
+
+void UWonderlandJuliusMissionSubsystem::CompleteMissionRead(
+	bool bProgress,
+	const FString& ForRunId,
+	bool bConnected,
+	const TSharedPtr<IHttpResponse, ESPMode::ThreadSafe>& Response)
+{
+	if (ForRunId != MissionReadRunId) { return; }
+	FMissionReadSlot& Slot = bProgress ? ProgressRead : ResultRead;
+	Slot.bInFlight = false;
+	if (!bConnected || !Response.IsValid())
+	{
+		// A transport miss keeps the last answer; it is not a new state.
+		++MissionReadFailures;
+		return;
+	}
+	const int32 Status = Response->GetResponseCode();
+	if (Status == 401)
+	{
+		// The bridge refused the session: forget it here and in the stream, so the terminal says "pair again".
+		DropAdoptedSession(TEXT("bridge answered 401 on a mission read"));
+		UGameInstance* Instance = GetGameInstance();
+		if (UWonderlandJuliusStreamSubsystem* Stream = Instance != nullptr ? Instance->GetSubsystem<UWonderlandJuliusStreamSubsystem>() : nullptr)
+		{
+			Stream->NoteSessionRefused();
+		}
+	}
+	// REVIEW LOW (#456): a body past the cap is not handed on; the status alone stays visible.
+	const int32 Bytes = Response->GetContent().Num();
+	const FString Body = Bytes <= MissionReadMaxBytes ? Response->GetContentAsString() : FString();
+	if (Status != Slot.Status || Body != Slot.Body)
+	{
+		UE_LOG(LogJuliusJ1, Display, TEXT("{\"event\":\"mission_read\",\"route\":\"%s\",\"wlj_run_id\":\"%s\",\"status\":%d,\"bytes\":%d}"),
+			bProgress ? TEXT("progress") : TEXT("result"), *ForRunId, Status, Body.Len());
+	}
+	MissionReadFailures = Status == 200 ? 0 : MissionReadFailures + 1;
+	Slot.Status = Status;
+	Slot.Body = Body;
 }
 
 void UWonderlandJuliusMissionSubsystem::CompleteHttp(
@@ -444,8 +636,20 @@ void UWonderlandJuliusMissionSubsystem::DumpTraceCommand(FOutputDevice& Ar)
 	}
 }
 
+#if !UE_BUILD_SHIPPING
+// REVIEW H1 (#456): a console door that mints and POSTs a paid admission must never reach a player. Compiled out of
+// Shipping, and refused at runtime unless this is a developer session (editor or -wldev): Development packages are
+// handed to players too, and -ExecCmds reaches every command there. The player's door is the terminal's Confirm.
+static bool JuliusDeveloperDoor(const TCHAR* Name, FOutputDevice& Ar)
+{
+	if (WonderlandBeta::IsDeveloperSession()) { return true; }
+	Ar.Log(FString::Printf(TEXT("%s: developer sessions only (-wldev); a paid mission is sent from the terminal's Confirm"), Name));
+	return false;
+}
+
 static void JuliusDispatchCommand(const TArray<FString>& Args, UWorld* World, FOutputDevice& Ar)
 {
+	if (!JuliusDeveloperDoor(TEXT("wl.Julius.J1.Dispatch"), Ar)) { return; }
 	UWonderlandJuliusMissionSubsystem* Session = FindJulius(World);
 	if (Session == nullptr) { Ar.Log(TEXT("wl.Julius.J1.Dispatch: no session")); return; }
 	Session->DispatchCommand(Args, Ar);
@@ -454,10 +658,12 @@ static void JuliusDispatchCommand(const TArray<FString>& Args, UWorld* World, FO
 static void JuliusResendCommand(const TArray<FString>& Args, UWorld* World, FOutputDevice& Ar)
 {
 	(void)Args;
+	if (!JuliusDeveloperDoor(TEXT("wl.Julius.J1.Resend"), Ar)) { return; }
 	UWonderlandJuliusMissionSubsystem* Session = FindJulius(World);
 	if (Session == nullptr) { Ar.Log(TEXT("wl.Julius.J1.Resend: no session")); return; }
 	Session->ResendCommand(Ar);
 }
+#endif
 
 static void JuliusStatusCommand(const TArray<FString>& Args, UWorld* World, FOutputDevice& Ar)
 {
@@ -475,6 +681,7 @@ static void JuliusDumpTraceCommand(const TArray<FString>& Args, UWorld* World, F
 	Session->DumpTraceCommand(Ar);
 }
 
+#if !UE_BUILD_SHIPPING
 static FAutoConsoleCommandWithWorldArgsAndOutputDevice GJuliusDispatchCommand(
 	TEXT("wl.Julius.J1.Dispatch"),
 	TEXT("Dispatch a Julius mission on the open loopback bridge. Usage: wl.Julius.J1.Dispatch <missionId> [--pair <id>]"),
@@ -484,6 +691,7 @@ static FAutoConsoleCommandWithWorldArgsAndOutputDevice GJuliusResendCommand(
 	TEXT("wl.Julius.J1.Resend"),
 	TEXT("Resend the open Julius pair. Never mints a new pair."),
 	FConsoleCommandWithWorldArgsAndOutputDeviceDelegate::CreateStatic(&JuliusResendCommand));
+#endif
 
 static FAutoConsoleCommandWithWorldArgsAndOutputDevice GJuliusStatusCommand(
 	TEXT("wl.Julius.J1.Status"),

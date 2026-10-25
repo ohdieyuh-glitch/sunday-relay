@@ -82,8 +82,11 @@ namespace WonderlandJuliusMissionClient
 	inline constexpr const char* DispatchRelativePath = "/relay-api/wonderland/julius/dispatch";
 	/** GET status. The body is the top-level status route, not a data wrapper. */
 	inline constexpr const char* StatusRelativePath = "/relay-api/wonderland/julius/status";
+	/** GET {prefix}{wljRunId}/result?projectId= and .../progress?projectId= (BRIDGE #448). Bodies go to the flow panel unread here. */
+	inline constexpr const char* MissionReadRelativePrefix = "/relay-api/wonderland/julius/missions/";
 	inline constexpr std::uint64_t HeartbeatPeriodMs = 5000;
 	inline constexpr std::uint64_t StatusPollPeriodMs = 5000;
+	inline constexpr std::uint64_t MissionReadPeriodMs = 5000;
 	inline constexpr const char* UnmintedTraceName = "_unminted";
 
 	inline constexpr const char* LabelIdle = "no mission yet";
@@ -237,6 +240,11 @@ namespace WonderlandJuliusMissionClient
 		/** Resends the open pair only. Never mints. A closed, refused, or StillWaiting pair sends nothing. */
 		FCommandOutcome Resend();
 		FTickOutcome Tick();
+		/**
+		 * GET of the mission's /result (bProgress false) or /progress route under the current wlj_ run id.
+		 * Sends nothing with no run id, no native session, or a non-loopback base. Mints nothing, writes no trace.
+		 */
+		FCommandOutcome MissionReadRequest(bool bProgress) const;
 
 		void OnDispatchHttp(const FHttpResult& Http);
 		void OnStatusHttp(const FHttpResult& Http);
@@ -248,10 +256,13 @@ namespace WonderlandJuliusMissionClient
 		/** First 12 hex digits of a verified artifact digest. Empty unless the result completed the digest check. */
 		const std::string& ArtifactDigest12() const { return Digest12; }
 		const std::string& RunId() const { return CurrentRunId; }
+		const std::string& CurrentMissionId() const { return MissionId; }
 		const std::string& ServerRunId() const { return CurrentServerRunId; }
 		bool HasServerRunId() const { return bServerRunIdKnown; }
 		bool IsFailClosed() const { return bFailClosed; }
 		bool IsAdmitted() const { return bAdmitted; }
+		/** False while a pair is open, in flight, still waiting, fail-closed, or admitted and unfinished. */
+		bool CanStartNewAttempt() const { return !BlocksMint(); }
 
 		/** One JSON object, no newline. Includes server_run_id. Never includes the token or the idempotency key. */
 		std::string StatusJson() const;

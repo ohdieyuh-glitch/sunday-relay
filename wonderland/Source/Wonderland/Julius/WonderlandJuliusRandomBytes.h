@@ -5,10 +5,8 @@
 // module, returns false. There is no fallback: not CreatePseudoRandomBytes, not
 // RAND_bytes, not FGuid, not FMath.
 //
-// NOT COMPILED HERE. No Unreal Engine binary is available in this environment.
-// An Unreal build has to confirm that CreateContext() returns
-// TUniquePtr<FEncryptionContext> and that CreateRandomBytes takes TArrayView<uint8>
-// (Engine/Plugins/Experimental/PlatformCrypto, the shape documented for 5.4/5.7).
+// Compiled and run in UE 5.8.2 Win64 (#433, #456): CreateContext() returns
+// TUniquePtr<FEncryptionContext> and CreateRandomBytes takes TArrayView<uint8>.
 
 #pragma once
 

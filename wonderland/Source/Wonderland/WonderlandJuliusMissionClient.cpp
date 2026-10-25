@@ -531,7 +531,8 @@ namespace WonderlandJuliusMissionClient
 			else { Host.assign(HostPort.data(), HostPort.size()); }
 		}
 		if (!Port.empty() && !ParsePort(Port)) { return false; }
-		return Host == "127.0.0.1" || Host == "localhost" || Host == "::1";
+		// Literal addresses only (REVIEW #456 LOW): "localhost" is whatever the hosts file says.
+		return Host == "127.0.0.1" || Host == "::1";
 	}
 
 	std::string JuliusTraceFilePath(std::string_view ProjectSavedDir, std::string_view RunId)
@@ -975,6 +976,32 @@ namespace WonderlandJuliusMissionClient
 		Request.Url += PercentEncode(ProjectId);
 		Request.Headers.emplace_back("Authorization", std::string("Relay-Session ") + SessionToken);
 		return Request;
+	}
+
+	FCommandOutcome FJuliusMissionSession::MissionReadRequest(bool bProgress) const
+	{
+		FCommandOutcome Outcome;
+		if (CurrentRunId.empty()) { Outcome.Detail = "no run to read"; return Outcome; }
+		if (SessionToken.empty() || SessionToken.find_first_of(" \r\n\t") != std::string::npos)
+		{
+			Outcome.Detail = "native session is not set";
+			return Outcome;
+		}
+		if (!IsLoopbackBaseUrl(BaseUrl)) { Outcome.Detail = "endpoint is not loopback"; return Outcome; }
+		FWireRequest Request;
+		Request.Method = "GET";
+		Request.RunId = CurrentRunId;
+		Request.Url = JoinBase(BaseUrl, MissionReadRelativePrefix);
+		Request.Url += PercentEncode(CurrentRunId);
+		Request.Url += bProgress ? "/progress" : "/result";
+		// juliusLoopbackGuard (#448) checks ?projectId= against the paired project on every route, reads included;
+		// without it the bridge answers 403 julius_dispatch_wrong_project (seen in the loopback rehearsal).
+		Request.Url += "?projectId=";
+		Request.Url += PercentEncode(ProjectId);
+		Request.Headers.emplace_back("Authorization", std::string("Relay-Session ") + SessionToken);
+		Outcome.bSent = true;
+		Outcome.Request = std::move(Request);
+		return Outcome;
 	}
 
 	FCommandOutcome FJuliusMissionSession::SendOpenPair(bool bFromSchedule)

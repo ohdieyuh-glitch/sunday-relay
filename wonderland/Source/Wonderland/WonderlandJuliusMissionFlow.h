@@ -47,7 +47,9 @@ namespace WonderlandJuliusMissionFlow
 		"This client keeps the watch for 362 minutes: the bridge window plus one slow poll.";
 	inline constexpr const char* CopyNoResultYet = "No result reported yet";
 	/** The result route's state word, copied onto the panel only after the completion evidence verifies. */
-	inline constexpr const char* CopyStateCompleted = "state: completed";
+	/** The bridge's own completion check, not an independent verdict (REVIEW #456 M4). Becomes "state: completed" only
+	 *  once the hidden-checker verdict (Julius PR-B) is part of the read. */
+	inline constexpr const char* CopyStateCompleted = "state: completed (bridge-reported; not independently verified)";
 
 	enum class EFlowStep : std::uint8_t
 	{
@@ -227,10 +229,8 @@ namespace WonderlandJuliusMissionFlow
 		bool bRevisionMalformed = false;
 		bool bRevisionSplit = false;
 		FReportedString ProviderMessageId;
-		FReportedString SecretText;
-		/** Honest parse leaves both false. They exist so a display flip is observable. */
+		/** Honest parse leaves it false. It exists so a display flip is observable. Secrets have no display path at all. */
 		bool bEchoProviderMessageId = false;
-		bool bEchoSecret = false;
 	};
 
 	class IMissionResultReader
@@ -324,6 +324,17 @@ namespace WonderlandJuliusMissionFlow
 		/** Does not send. The host hands MissionId to the wrapper, then calls NoteDispatchHandedToWrapper. */
 		FDispatchIntent Confirm() const;
 		void NoteDispatchHandedToWrapper(bool bAccepted);
+		/**
+		 * The wrapper restored an open pair from its save (the game restarted after Confirm). Goes straight to Watching
+		 * for that offered mission without a second Confirm and without sending: the wrapper already owns the run.
+		 * False when the id is not offered or a dispatch was already handed in this flow.
+		 */
+		bool ResumeWatching(std::string_view MissionId);
+		/**
+		 * "New mission" after a terminal run (the wrapper allows a new mint): back to Choosing with nothing chosen,
+		 * no run id, no result. Only from Watching. Never sends.
+		 */
+		bool StartAgain();
 
 		void NoteClientRunId(std::string_view WljRunId);
 		void NoteProgress(WonderlandJuliusMissionLogic::EMissionProgress Meaning);

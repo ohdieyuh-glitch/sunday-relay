@@ -48,6 +48,11 @@ public:
 
 	/** Memory only. Never written to the save and never written to the log. */
 	void SetNativeSession(const FString& Token);
+	/**
+	 * From UWonderlandJuliusStreamSubsystem::HandNativeSessionToMission: the paired native session and the project it
+	 * was paired for. Changes the session only when either differs; logs that it changed, never the token.
+	 */
+	void AdoptPairedSession(const FString& Token, const FString& InProjectId);
 	void SetProjectId(const FString& InProjectId);
 	void SetPlayerNetId(const FString& InPlayerNetId);
 	void SetBuildIdentity(const FString& BuildSha, const FString& PackageId);
@@ -66,6 +71,24 @@ public:
 	FString ArtifactLabel() const;
 	FString ServerRunId() const;
 	bool HasServerRunId() const;
+	/** The loopback base J1 sends to (wl.Julius.J1.Endpoint; Shipping: http://127.0.0.1:8790). */
+	FString EndpointBase() const;
+	/** True once a paired native session was adopted (the token itself is never exposed). */
+	bool HasNativeSession() const { return bAdoptedToken; }
+	/** The mission id of the current attempt (restored from the save after a restart), or empty. */
+	FString CurrentMissionId() const;
+	/** True when the wrapper would mint a new attempt: no pair open and no admitted run still unfinished. */
+	bool CanStartNewMission() const;
+	/** The client-minted wlj_ id of the current attempt, or empty. */
+	FString ClientRunId() const;
+
+	/**
+	 * Last /result and /progress answers for the current wlj_ run, as BRIDGE sent them (status 0 = not read yet).
+	 * The subsystem polls both every MissionReadPeriodMs once a run exists. It parses nothing: the flow panel
+	 * owns the meaning. Returns false when no run exists.
+	 */
+	bool LatestMissionReads(int32& OutResultStatus, FString& OutResultJson, int32& OutProgressStatus, FString& OutProgressJson) const;
+	void CompleteMissionRead(bool bProgress, const FString& ForRunId, bool bConnected, const TSharedPtr<IHttpResponse, ESPMode::ThreadSafe>& Response);
 
 	/**
 	 * FORGE calls this when replicated mission state arrives. client_role=observer,
@@ -93,7 +116,31 @@ private:
 	FTSTicker::FDelegateHandle TickerHandle;
 	bool bHttpOutstanding = false;
 
+	struct FMissionReadSlot
+	{
+		int32 Status = 0;
+		FString Body;
+		bool bInFlight = false;
+	};
+	FString MissionReadRunId;
+	FMissionReadSlot ResultRead;
+	FMissionReadSlot ProgressRead;
+	uint64 NextMissionReadAtUtcMs = 0;
+	int32 MissionReadFailures = 0;
+	bool bFinalMissionReadSent = false;
+	uint32 AdoptedTokenCrc = 0;
+	bool bAdoptedToken = false;
+	FString AdoptedProjectId;
+	uint64 NextPairingSyncAtUtcMs = 0;
+
+	/** Once a second: take the paired session from the Julius stream subsystem, when it has one. */
+	void SyncFromPairing();
+	void DropAdoptedSession(const TCHAR* Why);
+	static constexpr int32 MissionReadMaxBytes = 256 * 1024;
+
 	bool HandleTick(float DeltaSeconds);
+	void PollMissionReads();
+	void SendMissionRead(bool bProgress);
 	void ApplyConfiguredEndpoint();
 	void NoteDetail(const FString& Detail) const;
 };

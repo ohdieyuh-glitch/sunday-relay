@@ -3,7 +3,10 @@
 #include "Wonderland/WonderlandJuliusMissionFlow.h"
 #include "WonderlandJuliusMissionSubsystem.h"
 
+#include "Styling/CoreStyle.h"
 #include "Widgets/Input/SButton.h"
+#include "Widgets/Layout/SBorder.h"
+#include "Widgets/Layout/SBox.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/Text/STextBlock.h"
 
@@ -33,23 +36,151 @@ namespace
 void SWonderlandJuliusMissionFlow::Construct(const FArguments& InArgs)
 {
 	Session = InArgs._Session;
+	OnRequestClose = InArgs._OnRequestClose;
 	ChildSlot
+	.HAlign(HAlign_Center)
+	.VAlign(VAlign_Center)
 	[
-		SAssignNew(Body, SVerticalBox)
+		SNew(SBox)
+		.WidthOverride(620.0f)
+		[
+			SNew(SBorder)
+			.BorderImage(FCoreStyle::Get().GetBrush(TEXT("GenericWhiteBox")))
+			.BorderBackgroundColor(FLinearColor(0.02f, 0.03f, 0.05f, 0.94f))
+			.ForegroundColor(FLinearColor::White)
+			.Padding(FMargin(24.0f, 18.0f))
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 8.0f)
+				[
+					SNew(STextBlock)
+					.Text(FText::FromString(TEXT("JULIUS MISSION TERMINAL")))
+					.Font(FCoreStyle::GetDefaultFontStyle("Bold", 16))
+				]
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					SAssignNew(Body, SVerticalBox)
+				]
+				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 12.0f, 0.0f, 0.0f)
+				[
+					SNew(SButton)
+					.OnClicked_Lambda([this]() { OnRequestClose.ExecuteIfBound(); return FReply::Handled(); })
+					[
+						SNew(STextBlock).Text(FText::FromString(TEXT("Close (Esc)")))
+					]
+				]
+			]
+		]
 	];
 	Rebuild();
+}
+
+FReply SWonderlandJuliusMissionFlow::OnKeyDown(const FGeometry& MyGeometry, const FKeyEvent& InKeyEvent)
+{
+	if (InKeyEvent.GetKey() == EKeys::Escape || InKeyEvent.GetKey() == EKeys::K)
+	{
+		OnRequestClose.ExecuteIfBound();
+		return FReply::Handled();
+	}
+	return SCompoundWidget::OnKeyDown(MyGeometry, InKeyEvent);
+}
+
+bool SWonderlandJuliusMissionFlow::QaPick(const FString& MissionId)
+{
+	PullMissionReads();
+	PullWrapper();
+	if (!Flow.View().bShowChoice) { return false; }
+	PickMission(MissionId);
+	return Flow.View().bShowConfirm;
+}
+
+bool SWonderlandJuliusMissionFlow::QaConfirm()
+{
+	if (!Flow.View().bShowConfirm) { return false; }
+	ConfirmMission();
+	return true;
+}
+
+FString SWonderlandJuliusMissionFlow::QaDescribe() const
+{
+	const WonderlandJuliusMissionFlow::FFlowView View = Flow.View();
+	const UWonderlandJuliusMissionSubsystem* Live = Session.Get();
+	FString Progress = MissionFlowUtf8(View.Progress.Line);
+	if (View.Progress.bUsesWrapperLabel && Live != nullptr) { Progress = Live->PlayerLabel(); }
+	FString Lines;
+	for (const std::string& Line : View.Result.Lines)
+	{
+		if (!Lines.IsEmpty()) { Lines += TEXT(" / "); }
+		Lines += MissionFlowUtf8(Line.c_str());
+	}
+	return FString::Printf(
+		TEXT("step=%d choice=%d confirm=%d progress=%d result=%d finished=%d verified=%d wlj=%s progress_line=\"%s\" result_line=\"%s\" result_lines=\"%s\""),
+		static_cast<int32>(View.Step),
+		View.bShowChoice ? 1 : 0,
+		View.bShowConfirm ? 1 : 0,
+		View.bShowProgress ? 1 : 0,
+		View.bShowResult ? 1 : 0,
+		View.Result.bFinished ? 1 : 0,
+		View.Result.bVerified ? 1 : 0,
+		Live != nullptr ? *Live->ClientRunId() : TEXT(""),
+		*Progress,
+		*MissionFlowUtf8(View.Result.Line),
+		*Lines);
 }
 
 void SWonderlandJuliusMissionFlow::Tick(const FGeometry& AllottedGeometry, double InCurrentTime, float InDeltaTime)
 {
 	SCompoundWidget::Tick(AllottedGeometry, InCurrentTime, InDeltaTime);
+	PullMissionReads();
 	PullWrapper();
 	Rebuild();
+}
+
+void SWonderlandJuliusMissionFlow::PullMissionReads()
+{
+	UWonderlandJuliusMissionSubsystem* Live = Session.Get();
+	if (Live == nullptr) { return; }
+	int32 ResultStatus = 0;
+	int32 ProgressStatus = 0;
+	FString ResultJson;
+	FString ProgressJson;
+	if (!Live->LatestMissionReads(ResultStatus, ResultJson, ProgressStatus, ProgressJson))
+	{
+		if (!PulledReadKey.IsEmpty())
+		{
+			// The run changed or ended: drop the old run's answers, back to the absent reader.
+			PulledReadKey.Reset();
+			bHaveMissionRead = false;
+			MissionRead.Clear();
+		}
+		return;
+	}
+	const FString Key = FString::Printf(TEXT("%s|%d|%d|%s|%s"), *Live->ClientRunId(), ResultStatus, ProgressStatus, *ResultJson, *ProgressJson);
+	if (Key == PulledReadKey) { return; }
+	PulledReadKey = Key;
+	bHaveMissionRead = ResultStatus != 0 || ProgressStatus != 0 || !ResultJson.IsEmpty() || !ProgressJson.IsEmpty();
+	MissionRead.Clear();
+	if (ResultStatus != 0 || !ResultJson.IsEmpty()) { MissionRead.SetResultResponse(ResultStatus, TCHAR_TO_UTF8(*ResultJson)); }
+	if (ProgressStatus != 0 || !ProgressJson.IsEmpty()) { MissionRead.SetProgressResponse(ProgressStatus, TCHAR_TO_UTF8(*ProgressJson)); }
 }
 
 void SWonderlandJuliusMissionFlow::NotifyTerminalUsed()
 {
 	Flow.InteractWithTerminal();
+	Rebuild();
+}
+
+void SWonderlandJuliusMissionFlow::Refresh()
+{
+	PullMissionReads();
+	PullWrapper();
+	Rebuild();
+}
+
+void SWonderlandJuliusMissionFlow::SetNotice(const FString& InNotice, bool bInUntilPaired)
+{
+	Notice = InNotice;
+	bNoticeUntilPaired = bInUntilPaired;
 	Rebuild();
 }
 
@@ -94,6 +225,18 @@ void SWonderlandJuliusMissionFlow::SetMissionResponses(
 void SWonderlandJuliusMissionFlow::PullWrapper()
 {
 	UWonderlandJuliusMissionSubsystem* Live = Session.Get();
+	if (Live != nullptr && !Live->ClientRunId().IsEmpty() && !Live->CanStartNewMission() && !Flow.View().bDispatchHanded)
+	{
+		// A LIVE run restored from the save after a restart: watch it, never offer a second paid Confirm over it.
+		// A terminal saved run is not resumed (REVIEW M4): an old result is never shown as the current mission.
+		Flow.ResumeWatching(TCHAR_TO_UTF8(*Live->CurrentMissionId()));
+	}
+	if (Live != nullptr && bNoticeUntilPaired && Live->HasNativeSession())
+	{
+		// The pairing hint is done once the J1 subsystem holds the paired session.
+		Notice.Reset();
+		bNoticeUntilPaired = false;
+	}
 	if (Live != nullptr)
 	{
 		Flow.NoteWrapperToken(TCHAR_TO_UTF8(*Live->UiStateToken()));
@@ -143,6 +286,8 @@ void SWonderlandJuliusMissionFlow::Rebuild()
 {
 	const WonderlandJuliusMissionFlow::FFlowView View = Flow.View();
 	UWonderlandJuliusMissionSubsystem* Live = Session.Get();
+	// REVIEW M4 (#456): after a terminal run the player can start again; while a run is live they cannot.
+	const bool bCanStartAgain = View.Step == WonderlandJuliusMissionFlow::EFlowStep::Watching && Live != nullptr && Live->CanStartNewMission();
 	const FString WrapperLabel = Live != nullptr ? Live->PlayerLabel() : FString();
 	FString ProgressLine = MissionFlowUtf8(View.Progress.Line);
 	if (View.Progress.bUsesWrapperLabel)
@@ -167,7 +312,7 @@ void SWonderlandJuliusMissionFlow::Rebuild()
 		*MissionFlowUtf8(View.PaidOnDispatch),
 		View.Result.bShowsArtifact ? 1 : 0,
 		View.Result.bFinished ? 1 : 0,
-		*Reported);
+		*Reported) + TEXT("|") + Notice + (bCanStartAgain ? TEXT("|again") : TEXT(""));
 	if (Key == ShownKey) { return; }
 	ShownKey = Key;
 
@@ -176,9 +321,13 @@ void SWonderlandJuliusMissionFlow::Rebuild()
 	{
 		Body->AddSlot().AutoHeight().Padding(0.0f, 4.0f)
 		[
-			SNew(STextBlock).Text(FText::FromString(Text))
+			SNew(STextBlock).Text(FText::FromString(Text)).AutoWrapText(true)
 		];
 	};
+	if (!Notice.IsEmpty())
+	{
+		AddText(Notice);
+	}
 
 	if (View.Step == WonderlandJuliusMissionFlow::EFlowStep::AtTerminal)
 	{
@@ -255,4 +404,29 @@ void SWonderlandJuliusMissionFlow::Rebuild()
 			AddText(MissionFlowUtf8(Line.c_str()));
 		}
 	}
+
+	if (bCanStartAgain)
+	{
+		Body->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)
+		[
+			SNew(SButton)
+			.OnClicked(this, &SWonderlandJuliusMissionFlow::StartAgain)
+			[
+				SNew(STextBlock).Text(FText::FromString(TEXT("New mission")))
+			]
+		];
+	}
+}
+
+FReply SWonderlandJuliusMissionFlow::StartAgain()
+{
+	UWonderlandJuliusMissionSubsystem* Live = Session.Get();
+	if (Live != nullptr && Live->CanStartNewMission() && Flow.StartAgain())
+	{
+		PulledReadKey.Reset();
+		bHaveMissionRead = false;
+		MissionRead.Clear();
+	}
+	Rebuild();
+	return FReply::Handled();
 }

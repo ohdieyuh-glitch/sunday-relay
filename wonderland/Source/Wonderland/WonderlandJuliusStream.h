@@ -289,6 +289,21 @@ public:
 	 */
 	void NoteSessionRefused();
 
+	/**
+	 * J1, THE PAID IN-WORLD MISSION, RIDES THIS SAME NATIVE SESSION to the same loopback bridge. The session goes from
+	 * this subsystem into the J1 subsystem's memory and nowhere else: it is not returned and not logged. False, and
+	 * nothing handed, when this client is not paired or this build's bridge is not loopback.
+	 */
+	bool HandNativeSessionToMission(class UWonderlandJuliusMissionSubsystem& Mission) const;
+
+	/**
+	 * J1 TOPOLOGY (MAIN JULIUS, docs/JULIUS_WONDERLAND_CONTRACT.md): paid J1 admission lives only on the founder's
+	 * local bridge. Opening the J1 terminal calls this. An UNPAIRED client whose bridge is not loopback is pointed at
+	 * LoopbackBase (wl.Julius.Bridge.Url), because there is no session to lose. A client PAIRED elsewhere keeps its
+	 * session and is told how to switch. Returns the line the terminal shows, or empty when J1 is paired on loopback.
+	 */
+	FString PreferLocalBridgeForMission(const FString& LoopbackBase);
+
 	/*
 	 * THE RUN'S USER RESULT (founder decision 5), read after each hydration and each change of Julius's state. For
 	 * surfaces and proofs; each reads the result for the run being FOLLOWED, and says nothing about any other.

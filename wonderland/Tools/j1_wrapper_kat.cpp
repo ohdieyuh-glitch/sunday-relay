@@ -482,7 +482,7 @@ int main()
 	Expect(FormatIso8601UtcMs(0) == "1970-01-01T00:00:00.000Z", "iso_epoch");
 	Expect(FormatIso8601UtcMs(1700000000000ull) == "2023-11-14T22:13:20.000Z", "iso_known_instant");
 	Expect(IsLoopbackBaseUrl("http://127.0.0.1:8790"), "loopback_ipv4");
-	Expect(IsLoopbackBaseUrl("http://localhost"), "loopback_localhost");
+	Expect(!IsLoopbackBaseUrl("http://localhost"), "localhost_is_not_a_literal_loopback");
 	Expect(IsLoopbackBaseUrl("https://[::1]:8790"), "loopback_ipv6");
 	Expect(!IsLoopbackBaseUrl("http://example.com"), "loopback_rejects_public");
 	Expect(!IsLoopbackBaseUrl("http://127.0.0.1.evil.com"), "loopback_rejects_suffix");

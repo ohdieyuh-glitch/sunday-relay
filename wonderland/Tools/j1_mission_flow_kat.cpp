@@ -1044,6 +1044,38 @@ int main()
 	Expect(Flow.View().Result.bFinished == false, "absent reader is not finished");
 	++FlowSteps;
 
+	// RESUME: the wrapper restored an open pair after a restart. Watch it; never offer a second paid Confirm.
+	FMissionFlow Resumed;
+	Resumed.SetOffers({FMissionOffer{"julius-inworld-data-1", "julius-inworld-data-1"}});
+	Expect(Resumed.ResumeWatching("other") == false && Resumed.View().Step == EFlowStep::AtTerminal, "resume refuses an unoffered id");
+	Expect(Resumed.ResumeWatching("") == false, "resume refuses an empty id");
+	++FlowSteps;
+	Expect(Resumed.ResumeWatching("julius-inworld-data-1"), "resume an offered id");
+	const FFlowView ResumedView = Resumed.View();
+	Expect(ResumedView.Step == EFlowStep::Watching && ResumedView.bDispatchHanded && ResumedView.bShowProgress, "resume watches");
+	Expect(!ResumedView.bShowConfirm && Resumed.Confirm().bSend == false, "resume offers no second confirm");
+	Expect(Same(ResumedView.Result.Line, CopyNoResultYet) && ResumedView.Result.bFinished == false, "resume invents no result");
+	++FlowSteps;
+	Expect(Resumed.ResumeWatching("julius-inworld-data-1") == false, "resume is once");
+	Expect(Flow.ResumeWatching("julius-first-live") == false, "no resume after a handed dispatch");
+	++FlowSteps;
+
+	// START AGAIN (REVIEW #456 M4): only from Watching; back to Choosing with nothing chosen and nothing sent.
+	FMissionFlow Again;
+	Again.SetOffers({FMissionOffer{"julius-inworld-data-1", "julius-inworld-data-1"}});
+	Expect(Again.StartAgain() == false, "start again refused at the terminal");
+	Again.InteractWithTerminal();
+	Expect(Again.StartAgain() == false, "start again refused while choosing");
+	Expect(Again.ResumeWatching("julius-inworld-data-1"), "watching before start again");
+	Again.NoteClientRunId(WljOk);
+	Expect(Again.StartAgain(), "start again from watching");
+	const FFlowView AgainView = Again.View();
+	Expect(AgainView.Step == EFlowStep::Choosing && AgainView.bShowChoice && !AgainView.bShowConfirm && !AgainView.bShowProgress, "start again shows the choice");
+	Expect(!AgainView.bDispatchHanded && !AgainView.bRunIdOk && Again.Confirm().bSend == false, "start again keeps no run and sends nothing");
+	Expect(Again.Offers().size() == 1 && Again.ChooseMission("julius-inworld-data-1") && Again.Confirm().bSend, "start again offers the mission again");
+	Expect(std::strstr(CopyStateCompleted, "not independently verified") != nullptr, "completed copy names its source");
+	++FlowSteps;
+
 	BridgeRouteFixtures();
 	PhaseFixtures();
 

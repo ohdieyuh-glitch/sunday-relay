@@ -1,5 +1,9 @@
 #include "WonderlandJuliusStream.h"
 #include "WonderlandCard.h"
+#include "Julius/WonderlandJuliusMissionSubsystem.h"
+#include "WonderlandJuliusMissionClient.h"
+
+#include <string>
 
 #include "CoreGlobals.h"
 #include "Dom/JsonObject.h"
@@ -452,6 +456,69 @@ UWonderlandJuliusSubsystem* UWonderlandJuliusStreamSubsystem::World() const
 {
 	const UGameInstance* Instance = GetGameInstance();
 	return Instance != nullptr ? Instance->GetSubsystem<UWonderlandJuliusSubsystem>() : nullptr;
+}
+
+namespace
+{
+	/** Same scheme, host and port, ignoring case and one trailing slash. Both are already loopback-checked. */
+	bool SameBridgeBase(FString A, FString B)
+	{
+		A.TrimStartAndEndInline();
+		B.TrimStartAndEndInline();
+		A.RemoveFromEnd(TEXT("/"));
+		B.RemoveFromEnd(TEXT("/"));
+		return !A.IsEmpty() && A.Equals(B, ESearchCase::IgnoreCase);
+	}
+}
+
+bool UWonderlandJuliusStreamSubsystem::HandNativeSessionToMission(UWonderlandJuliusMissionSubsystem& Mission) const
+{
+	if (!IsPaired())
+	{
+		return false;
+	}
+	const FString Base = BridgeUrl();
+	if (Base.IsEmpty() || !WonderlandJuliusMissionClient::IsLoopbackBaseUrl(std::string(TCHAR_TO_UTF8(*Base))))
+	{
+		return false;
+	}
+	// REVIEW M1 (#456): the session was minted by THIS bridge; it goes only to the same scheme, host and port. A J1
+	// endpoint on another loopback port (any process could listen there) never receives it.
+	if (!SameBridgeBase(Base, Mission.EndpointBase()))
+	{
+		return false;
+	}
+	Mission.AdoptPairedSession(TokenSource->CurrentToken(), PairedProjectId);
+	return true;
+}
+
+FString UWonderlandJuliusStreamSubsystem::PreferLocalBridgeForMission(const FString& LoopbackBase)
+{
+	// REVIEW M3 (#456): only ever point the stream at a loopback base.
+	if (!WonderlandJuliusMissionClient::IsLoopbackBaseUrl(std::string(TCHAR_TO_UTF8(*LoopbackBase))))
+	{
+		return TEXT("The J1 endpoint is not a loopback address, so this terminal cannot be used.");
+	}
+	const FString Base = BridgeUrl();
+	const bool bLoopback = !Base.IsEmpty() && WonderlandJuliusMissionClient::IsLoopbackBaseUrl(std::string(TCHAR_TO_UTF8(*Base)));
+	if (bLoopback)
+	{
+		return IsPaired() ? FString() : FString::Printf(TEXT("Pair this client with your local bridge (%s): wl.Julius.Pair <code>."), *Base);
+	}
+	if (IsPaired())
+	{
+		return FString::Printf(TEXT("Paid missions run on your local bridge (%s). This client is paired with another bridge; set wl.Julius.Bridge.Url %s and pair again."),
+			*LoopbackBase, *LoopbackBase);
+	}
+	// A bridge someone chose explicitly (wl.Julius.Bridge.Url) is theirs: say how to switch, never retarget it.
+	if (!WonderlandJuliusStreamTuning::CVarBridgeUrl.GetValueOnGameThread().TrimStartAndEnd().IsEmpty())
+	{
+		return FString::Printf(TEXT("Paid missions run on your local bridge (%s). This client is set to another bridge; set wl.Julius.Bridge.Url %s and pair."),
+			*LoopbackBase, *LoopbackBase);
+	}
+	WonderlandJuliusStreamTuning::CVarBridgeUrl->Set(*LoopbackBase, ECVF_SetByConsole);
+	UE_LOG(LogWonderlandJuliusStream, Display, TEXT("J1 terminal: unpaired client pointed at the local bridge %s"), *LoopbackBase);
+	return FString::Printf(TEXT("Pair this client with your local bridge (%s): wl.Julius.Pair <code>."), *LoopbackBase);
 }
 
 FString UWonderlandJuliusStreamSubsystem::BridgeUrl() const
