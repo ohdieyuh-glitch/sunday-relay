@@ -311,18 +311,30 @@ The bridge stays running while the founder claims; the client keeps polling
    record**. `/status` keeps answering `awaiting_operator`. A dry run never
    prevents a later real dispatch.
 3. Dispatch: the same command plus `--dispatch --confirm 'RUN LIVE MISSION'`.
-   The tool reads the spent tag (`gh api`), records `dispatching` under the
-   write lock, releases the lock, spawns `gh workflow run` once, and records
+   The dispatch runs `--ref main`, so the tool first reads, at `main`
+   (`gh api .../contents/<path>?ref=main`), the paid workflow, the mission's
+   `contract.json` and the lane grant (`MISSION_LANES` in
+   `scripts/julius-live-contract-check.mjs`). It refuses, writing nothing and
+   reading no spent tag, when the workflow lacks an input it passes or the
+   lane is not one the mission is granted (`lane_not_granted`). The workflow
+   writes the spent tag before its own lane check, so a lane it refused would
+   burn the `wlj_` id. A mission absent from `MISSION_LANES`, J1 among them,
+   is granted `lab` only. The checked-out workflow is not read on a dispatch.
+   The tool then reads the spent tag (`gh api --include`) and keeps GitHub's
+   `Date:` header from that response as the claim's `githubDate`; without a
+   readable `Date:` it claims nothing (`github_clock_unreadable`). It records
+   `dispatching` under the write lock, releases the lock, spawns `gh workflow run` once, and records
    the outcome under the write lock: `dispatched` only when that spawn
    exited 0 with no halt, else `dispatch_failed` or `already_spent`. The
    lock is never held across a `gh` spawn, so the bridge keeps admitting and
    answering `/status` during dispatch. The argv is
    `gh workflow run julius-first-live-mission.yml --repo <owner/name> --ref main -f mission=<slug> -f lane=<lane> -f dispatch_key=<key> -f 'confirm_live=RUN LIVE MISSION' -f run_id=<wlj_>`.
    `confirm_live` is passed only with `--confirm 'RUN LIVE MISSION'`.
-   `run_id` is PR #459's input. While the checked-out workflow does not
-   declare `run_id` (or any other input above), the tool refuses with
-   `workflow_run_id_input_missing` (or `workflow_dispatch_input_missing`),
-   writes nothing, and spawns no `gh`.
+   `run_id` is PR #459's input. While the workflow does not declare `run_id`
+   (or any other input above), the tool refuses with
+   `workflow_run_id_input_missing` (or `workflow_dispatch_input_missing`) and
+   writes nothing: a dry run checks the checked-out file and spawns no `gh`;
+   a dispatch checks `main` and reads nothing past the workflow.
 4. If the claim tool prints `admission_file_lock_held`, a writer held the
    lock for longer than 2000 ms. Nothing was recorded and nothing was
    spawned (unless the record already says `dispatching`; see below). Run
@@ -331,8 +343,35 @@ The bridge stays running while the founder claims; the client keeps polling
 A record left at `dispatching` means the tool stopped between its reservation
 and its outcome write, so whether `gh workflow run` started is unknown. It is
 not `dispatched`, it is not retried by the tool, and `/status` answers
-`dispatching`. The operator resolves it from the Actions run list for the
-`julius-paid-<32hex>` group and the spent tag, never by deleting the record.
+`dispatching`. The operator resolves it with
+`reconcile --store <store> --wonderland-run <wlj_> --server-run <wlj_> --repo <owner/name>`,
+which only reads GitHub and appends one outcome, never deleting or rewriting a
+record:
+
+- `dispatched` when the spent tag exists, its `julius-run-spent.v1` message
+  names this run and a `workflow_run_id`, and that id is the one paid run
+  whose run name ends `mode=paid key=<dispatch key>`;
+- `dispatch_failed` (journal error `workflow_run_unspent`; `/status` shows
+  `dispatch_failed` with no cause) when no spent tag exists and that one paid
+  run completed without success, so the workflow ended before it spent the id;
+- otherwise the record stays `dispatching` and the tool prints what GitHub
+  showed (`reconcile_indeterminate`, `spent_tag_unverified`, …).
+
+The outcome keeps the reservation's time and `githubDate`. The workflow's own
+concurrency group is `julius-first-live-mission-${github.run_id}`, one per
+Actions run; `julius-paid-<32hex>` (the record's `concurrencyGroup`) is the
+derived name the workflow checks beside the spent tag, not a concurrency group.
+
+**Upgrading over an old journal.** An earlier claim tool wrote `dispatched` on
+a dry run (`dispatchAttempted: false`). This version refuses that record as a
+dispatch it cannot trust, and a journal holding it reads as `corrupt` as a
+whole: claim, status, reconcile and the bridge's `/status` all fail closed,
+and nothing is written. Before upgrading, run `status` with the old tool: a
+pair it shows as `dispatched` with no Actions run was a dry run. Recovering
+such a journal is a reviewed step, not an operator one: the journal also holds
+ownership and progress, so it is neither edited, deleted nor moved aside by
+hand. Claims written by this version carry `githubDate`; a claim without it
+still reads, but binds no completion.
 
 A process that shuts down and opens that same file replays the pair. The
 `serverRunId`, the state, the model pins, and the caps are the ones in the

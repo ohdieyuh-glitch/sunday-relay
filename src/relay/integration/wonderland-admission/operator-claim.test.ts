@@ -1,10 +1,10 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { AWAITING_OPERATOR_WINDOW_MS, PAID_WORKFLOW_FILE } from './admission-contract';
-import { createFileAdmissionLedger, openAdmissionFile, readAdmissionDocument, noteAwaitingOperatorExpiry, recordAdmissionOwner, AdmissionFileClosedError, isAdmissionFileClosed } from './admission-file';
+import { ADMISSION_LOCK_WAIT_MS, admissionWriteLockPath, createFileAdmissionLedger, openAdmissionFile, readAdmissionDocument, noteAwaitingOperatorExpiry, recordAdmissionOwner, AdmissionFileClosedError, isAdmissionFileClosed } from './admission-file';
 import { createWonderlandAdmissionStore, type AdmissionRequest } from './admission-store';
 import { runOperatorClaimCli } from './operator-claim-cli';
 import {
@@ -23,6 +23,13 @@ import {
   workflowDeclaresRunIdInput,
   workflowDispatchArgs,
   workflowDispatchInputNames,
+  githubDateFromResponse,
+  grantedLanes,
+  LANE_GRANT_SOURCE,
+  mainContentsArgs,
+  missionContractPath,
+  paidRunListArgs,
+  parseLaneGrants,
   type ClaimInput,
   type GhResult,
   type GhSpawner,
@@ -79,14 +86,17 @@ on:
         description: 'key'
 `;
 
+/** GitHub's clock on the spent-tag read, as `gh api --include` prints it, and as the claim stores it. */
+const GITHUB_DATE_HEADER = 'Fri, 23 Oct 2026 17:18:05 GMT';
+const GITHUB_DATE = '2026-10-23T17:18:05Z';
 const ABSENT: GhResult = {
   code: 1,
-  stdout: 'HTTP/2.0 404 Not Found\n{"message":"Not Found"}\n',
+  stdout: `HTTP/2.0 404 Not Found\nDate: ${GITHUB_DATE_HEADER}\n\n{"message":"Not Found"}\n`,
   stderr: '',
 };
 const PRESENT: GhResult = {
   code: 0,
-  stdout: `{"ref":"refs/tags/julius-run-spent-${HEX}","object":{"type":"commit","sha":"${'ab'.repeat(20)}"}}\n`,
+  stdout: `HTTP/2.0 200 OK\nDate: ${GITHUB_DATE_HEADER}\n\n{"ref":"refs/tags/julius-run-spent-${HEX}","object":{"type":"commit","sha":"${'ab'.repeat(20)}"}}\n`,
   stderr: '',
 };
 const WORKFLOW_OK: GhResult = { code: 0, stdout: '', stderr: '' };
@@ -124,26 +134,82 @@ function claimTool(path: string, spawn: GhSpawner, nowIso: () => string = () => 
   return createOperatorClaimTool(openAdmissionFile(path), spawn, { nowIso });
 }
 
-function recorder(behavior: (args: readonly string[]) => GhResult): { spawn: GhSpawner; calls: string[][] } {
+/**
+ * PR #459's lane grant (`DEFAULT_LANES` and `MISSION_LANES`, verbatim) and the
+ * J1 contract's namespace, generated from the git objects, never hand-copied.
+ */
+const PR459_LANES = JSON.parse(readFileSync(join(__dirname, 'fixtures/pr459-lane-grants.json'), 'utf8')) as {
+  readonly sourceCommit: string;
+  readonly checkerBlob: string;
+  readonly checkerSha256: string;
+  readonly laneGrantExcerpt: string;
+  readonly contractBlob: string;
+  readonly contractMarkerNamespace: string;
+};
+
+/** What `main` serves. A field set to null is a file `main` does not have. */
+interface MainFiles {
+  readonly workflow?: string | null;
+  readonly contract?: string | null;
+  readonly checker?: string | null;
+}
+
+const CONTENTS = `repos/${REPO}/contents/`;
+
+/** Serve `gh api .../contents/<path>?ref=main` from `main`; hand every other call to `spawn`. */
+function servingMain(spawn: GhSpawner, main: MainFiles = {}): GhSpawner {
+  const pick = (key: keyof MainFiles, fallback: string): string | null => (key in main ? main[key] ?? null : fallback);
+  return {
+    run(args) {
+      const target = args.find((arg) => arg.startsWith(CONTENTS));
+      if (args[0] !== 'api' || target === undefined) return spawn.run(args);
+      const path = target.slice(CONTENTS.length).replace(/\?ref=main$/u, '');
+      const text = path === `.github/workflows/${PAID_WORKFLOW_FILE}`
+        ? pick('workflow', WORKFLOW_WITH_INPUT)
+        : path === missionContractPath(MISSION)
+          ? pick('contract', JSON.stringify({ markerNamespace: PR459_LANES.contractMarkerNamespace }))
+          : path === LANE_GRANT_SOURCE ? pick('checker', PR459_LANES.laneGrantExcerpt) : null;
+      return text === null ? { code: 1, stdout: '', stderr: 'gh: Not Found (HTTP 404)' } : { code: 0, stdout: text, stderr: '' };
+    },
+  };
+}
+
+function recorder(behavior: (args: readonly string[]) => GhResult, main: MainFiles = {}): { spawn: GhSpawner; calls: string[][] } {
   const calls: string[][] = [];
+  const served = servingMain({ run: (args) => behavior(args) }, main);
   return {
     calls,
     spawn: {
       run(args) {
         const copy = [...args];
         calls.push(copy);
-        return behavior(copy);
+        return served.run(copy);
       },
     },
   };
 }
 
-function scripted(api: GhResult, workflow: GhResult): { spawn: GhSpawner; calls: string[][] } {
+function scripted(api: GhResult, workflow: GhResult, main: MainFiles = {}): { spawn: GhSpawner; calls: string[][] } {
   return recorder((args) => {
     if (args[0] === 'api') return api;
     if (args[0] === 'workflow') return workflow;
     return { code: 99, stdout: '', stderr: '' };
+  }, main);
+}
+
+/** Each gh call by what it is: a read at `main`, the spent-tag read, or the workflow run. */
+function ghKinds(calls: readonly (readonly string[])[]): string[] {
+  return calls.map((args) => {
+    if (args[0] !== 'api') return args[0] ?? '';
+    return args.some((arg) => arg.startsWith(CONTENTS)) ? 'main' : 'tag';
   });
+}
+
+/** A dispatch reads the workflow, the mission contract and the lane grant at main, in that order. */
+const MAIN_READS = ['main', 'main', 'main'] as const;
+
+function dispatchCall(calls: readonly (readonly string[])[]): readonly string[] | undefined {
+  return calls.find((args) => args[0] === 'workflow');
 }
 
 async function withStore(run: (path: string) => Promise<void>): Promise<void> {
@@ -210,7 +276,7 @@ describe('workflow inputs', () => {
     expect(undeclaredDispatchInputs(workflowFromFixture(PR459_INPUTS.workflowDispatchInputs))).toEqual([]);
   });
 
-  it('drift: the in-tree paid workflow either matches the #459 fixture or the claim refuses with no gh spawn', async () => {
+  it('drift: the in-tree paid workflow either matches the #459 fixture or the claim refuses before the spent tag is read', async () => {
     const source = readFileSync(join(__dirname, '../../../../.github/workflows/julius-first-live-mission.yml'), 'utf8');
     const names = workflowDispatchInputNames(source);
     if (names.includes(WORKFLOW_RUN_ID_INPUT)) {
@@ -223,7 +289,7 @@ describe('workflow inputs', () => {
     // #459 has not landed in this tree: the claim tool must refuse to dispatch.
     await withStore(async (path) => {
       await admit(path);
-      const fake = scripted(ABSENT, WORKFLOW_OK);
+      const fake = scripted(ABSENT, WORKFLOW_OK, { workflow: source });
       const claims = claimTool(path, fake.spawn);
       for (const input of [
         claimInput({ workflowSource: source }),
@@ -235,7 +301,8 @@ describe('workflow inputs', () => {
         expect(refused.kind).toBe('workflow_run_id_input_missing');
         expect(refused.record?.state).toBe('admitted');
       }
-      expect(fake.calls).toEqual([]);
+      // The dry run reads nothing; the dispatch reads only the workflow at main.
+      expect(ghKinds(fake.calls)).toEqual(['main']);
       expect(readAdmissionDocument(path).claims).toEqual([]);
     });
   });
@@ -265,18 +332,18 @@ describe('workflow inputs', () => {
         confirmation: OPERATOR_DISPATCH_CONFIRMATION,
       }));
       expect(dryConfirmed.ok && dryConfirmed.command).toBe(formatGhCommand(workflowDispatchArgs({ ...base, confirmLive: true })));
-      const fake = scripted(ABSENT, WORKFLOW_OK);
+      const fake = scripted(ABSENT, WORKFLOW_OK, { workflow });
       const live = await claimTool(path, fake.spawn).claim(claimInput({
         workflowSource: workflow,
         dispatch: true,
         confirmation: OPERATOR_DISPATCH_CONFIRMATION,
       }));
       expect(live.ok && live.dispatchedWorkflow).toBe(true);
-      expect(fake.calls[1]).toEqual(workflowDispatchArgs({ ...base, confirmLive: true }));
+      expect(dispatchCall(fake.calls)).toEqual(workflowDispatchArgs({ ...base, confirmLive: true }));
     });
   });
 
-  it('refuses to claim or dispatch when the workflow it reads lacks run_id, with no gh spawn', async () => {
+  it('refuses to claim or dispatch when the workflow on main lacks run_id, reading nothing past it', async () => {
     const withoutRunId = workflowFromFixture(PR459_INPUTS.workflowDispatchInputs.filter((name) => name !== WORKFLOW_RUN_ID_INPUT));
     const withServerRunId = workflowFromFixture([
       ...PR459_INPUTS.workflowDispatchInputs.filter((name) => name !== WORKFLOW_RUN_ID_INPUT),
@@ -285,7 +352,7 @@ describe('workflow inputs', () => {
     for (const workflowSource of [withoutRunId, withServerRunId, WORKFLOW_WITHOUT_INPUT]) {
       await withStore(async (path) => {
         await admit(path);
-        const fake = scripted(ABSENT, WORKFLOW_OK);
+        const fake = scripted(ABSENT, WORKFLOW_OK, { workflow: workflowSource });
         const refused = await claimTool(path, fake.spawn).claim(claimInput({
           workflowSource,
           dispatch: true,
@@ -295,21 +362,21 @@ describe('workflow inputs', () => {
         if (refused.ok) return;
         expect(refused.kind).toBe('workflow_run_id_input_missing');
         expect(refused.requiredInput).toContain('      run_id:');
-        expect(fake.calls).toEqual([]);
+        expect(ghKinds(fake.calls)).toEqual(['main']);
         expect(readAdmissionDocument(path).claims).toEqual([]);
       });
     }
     await withStore(async (path) => {
       await admit(path);
-      const fake = scripted(ABSENT, WORKFLOW_OK);
       const noKey = workflowFromFixture(PR459_INPUTS.workflowDispatchInputs.filter((name) => name !== 'dispatch_key'));
+      const fake = scripted(ABSENT, WORKFLOW_OK, { workflow: noKey });
       const refused = await claimTool(path, fake.spawn).claim(claimInput({
         workflowSource: noKey,
         dispatch: true,
         confirmation: OPERATOR_DISPATCH_CONFIRMATION,
       }));
       expect(refused.ok === false && refused.kind).toBe('workflow_dispatch_input_missing');
-      expect(fake.calls).toEqual([]);
+      expect(ghKinds(fake.calls)).toEqual(['main']);
     });
   });
 
@@ -423,8 +490,8 @@ describe('operator claim', () => {
       expect(second.claimed).toBe(false);
       expect(second.record.state).toBe('dispatched');
       expect(second.command).toBeNull();
-      expect(fake.calls.map((args) => args[0])).toEqual(['api', 'workflow']);
-      expect(fake.calls[1]).toEqual([
+      expect(ghKinds(fake.calls)).toEqual([...MAIN_READS, 'tag', 'workflow']);
+      expect(dispatchCall(fake.calls)).toEqual([
         'workflow', 'run', PAID_WORKFLOW_FILE,
         '--repo', REPO, '--ref', 'main',
         '-f', `mission=${MISSION}`,
@@ -446,7 +513,7 @@ describe('operator claim', () => {
       const results = [left, right];
       expect(results.filter((result) => result.ok && result.claimed)).toHaveLength(1);
       expect(results.filter((result) => result.ok && result.replayed)).toHaveLength(1);
-      expect(fake.calls.filter((args) => args[0] === 'api')).toHaveLength(1);
+      expect(ghKinds(fake.calls).filter((kind) => kind === 'tag')).toHaveLength(1);
       expect(fake.calls.filter((args) => args[0] === 'workflow')).toHaveLength(1);
       for (const result of results) {
         if (!result.ok) throw new Error('expected both claims to resolve');
@@ -534,7 +601,7 @@ describe('operator claim', () => {
       expect(live.dispatchedWorkflow).toBe(true);
       expect(live.record.state).toBe('dispatched');
       expect(live.record.dispatchAttempted).toBe(true);
-      expect(fake.calls.map((args) => args[0])).toEqual(['api', 'workflow']);
+      expect(ghKinds(fake.calls)).toEqual([...MAIN_READS, 'tag', 'workflow']);
       expect(readAdmissionDocument(path).claims.map((event) => event.state)).toEqual(['dispatching', 'dispatched']);
     });
   });
@@ -543,7 +610,7 @@ describe('operator claim', () => {
     await withStore(async (path) => {
       await admit(path);
       const seen: { state: string | undefined; lock: boolean; status: string | false }[] = [];
-      const spawn: GhSpawner = {
+      const spawn: GhSpawner = servingMain({
         run(args) {
           if (args[0] === 'api') return ABSENT;
           const saved = readAdmissionDocument(path);
@@ -558,7 +625,7 @@ describe('operator claim', () => {
           });
           return WORKFLOW_OK;
         },
-      };
+      });
       const result = await claimTool(path, spawn).claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
       expect(seen).toEqual([{ state: 'dispatching', lock: false, status: 'owner_written' }]);
       expect(result.ok && result.record.state).toBe('dispatched');
@@ -646,7 +713,7 @@ describe('operator claim', () => {
       if (!again.ok) return;
       expect(again.replayed).toBe(true);
       expect(again.record.state).toBe('dispatch_failed');
-      expect(fake.calls.map((args) => args[0])).toEqual(['api', 'workflow']);
+      expect(ghKinds(fake.calls)).toEqual([...MAIN_READS, 'tag', 'workflow']);
       const saved = readAdmissionDocument(path);
       expect(saved.claims.map((event) => event.state)).toEqual(['dispatching', 'dispatch_failed']);
       expect(saved.claims.some((event) => (event.state as string) === 'admitted')).toBe(false);
@@ -680,7 +747,7 @@ describe('operator claim', () => {
       expect(spent.record?.dispatchAttempted).toBe(true);
       const again = await claims.claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
       expect(again.ok && again.replayed && again.record.state).toBe('already_spent');
-      expect(fake.calls.map((args) => args[0])).toEqual(['api', 'workflow']);
+      expect(ghKinds(fake.calls)).toEqual([...MAIN_READS, 'tag', 'workflow']);
       const saved = readAdmissionDocument(path);
       expect(saved.claims.map((event) => event.state)).toEqual(['dispatching', 'already_spent']);
       expect(saved.claims.some((event) => (event.state as string) === 'admitted')).toBe(false);
@@ -704,7 +771,7 @@ describe('operator claim', () => {
       expect(failed.record?.state).not.toBe('admitted');
       const again = await claims.claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
       expect(again.ok && again.replayed && again.record.state).toBe('dispatch_failed');
-      expect(fake.calls.map((args) => args[0])).toEqual(['api', 'workflow']);
+      expect(ghKinds(fake.calls)).toEqual([...MAIN_READS, 'tag', 'workflow']);
       const saved = readAdmissionDocument(path);
       expect(saved.admissions[0]?.admissionState).toBe('ADMISSION_HELD');
       expect(saved.claims.at(-1)?.state).toBe('dispatch_failed');
@@ -728,10 +795,10 @@ describe('operator claim', () => {
       expect(spent.record?.dispatchAttempted).toBe(false);
       expect(spent.record?.halt).toBe('RUN_ID_ALREADY_SPENT');
       expect(spent.record?.concurrencyGroup).toBe(`julius-paid-${HEX}`);
-      expect(fake.calls.map((args) => args[0])).toEqual(['api']);
+      expect(ghKinds(fake.calls)).toEqual([...MAIN_READS, 'tag']);
       const again = await claims.claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
       expect(again.ok && again.replayed && again.record.state).toBe('already_spent');
-      expect(fake.calls.map((args) => args[0])).toEqual(['api']);
+      expect(ghKinds(fake.calls)).toEqual([...MAIN_READS, 'tag']);
     });
   });
 
@@ -746,7 +813,7 @@ describe('operator claim', () => {
       expect(result.record.spentTagState).toBe('absent');
       expect(result.record.state).toBe('dispatched');
       expect(result.record.workflowRunId).toBeNull();
-      expect(fake.calls[0]).toEqual([
+      expect(fake.calls.find((args) => args.includes('--include'))).toEqual([
         'api', '--include', `repos/${REPO}/git/ref/tags/julius-run-spent-${HEX}`,
       ]);
       expect(HEX).toHaveLength(32);
@@ -768,7 +835,7 @@ describe('operator claim', () => {
       if (result.ok) return;
       expect(result.kind).toBe('spent_tag_unreadable');
       expect(result.record?.state).toBe('admitted');
-      expect(fake.calls.map((args) => args[0])).toEqual(['api']);
+      expect(ghKinds(fake.calls)).toEqual([...MAIN_READS, 'tag']);
     });
   });
 
@@ -777,7 +844,7 @@ describe('operator claim', () => {
     expect(workflowDeclaresRunIdInput(WORKFLOW_WITHOUT_INPUT)).toBe(false);
     await withStore(async (path) => {
       await admit(path);
-      const absent = scripted(ABSENT, WORKFLOW_OK);
+      const absent = scripted(ABSENT, WORKFLOW_OK, { workflow: WORKFLOW_WITHOUT_INPUT });
       const claims = claimTool(path, absent.spawn);
       const refused = await claims.claim(claimInput({
         workflowSource: WORKFLOW_WITHOUT_INPUT,
@@ -788,7 +855,7 @@ describe('operator claim', () => {
       if (refused.ok) return;
       expect(refused.kind).toBe('workflow_run_id_input_missing');
       expect(refused.record?.state).toBe('admitted');
-      expect(absent.calls).toEqual([]);
+      expect(ghKinds(absent.calls)).toEqual(['main']);
       const present = scripted(ABSENT, WORKFLOW_OK);
       const allowed = await claimTool(path, present.spawn).claim(claimInput({
         workflowSource: WORKFLOW_WITH_INPUT,
@@ -798,7 +865,7 @@ describe('operator claim', () => {
       expect(allowed.ok && allowed.dispatchedWorkflow).toBe(true);
       if (!allowed.ok) return;
       expect(allowed.record.state).toBe('dispatched');
-      expect(present.calls[1]).toContain(`run_id=${SERVER}`);
+      expect(dispatchCall(present.calls)).toContain(`run_id=${SERVER}`);
     });
   });
 
@@ -806,7 +873,7 @@ describe('operator claim', () => {
     await withStore(async (path) => {
       await admit(path);
       const source = WORKFLOW_WITHOUT_INPUT;
-      const fake = scripted(ABSENT, WORKFLOW_OK);
+      const fake = scripted(ABSENT, WORKFLOW_OK, { workflow: source });
       const claims = claimTool(path, fake.spawn);
       const refused = await claims.claim(claimInput({
         workflowSource: source,
@@ -820,12 +887,13 @@ describe('operator claim', () => {
       expect(refused.requiredInput).not.toContain('server_run_id');
       expect(refused.requiredInput).toContain('^wlj_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$');
       expect(refused.requiredInput).toContain('julius-run-spent-<32hex>');
-      expect(refused.requiredInput).toContain('julius-paid-<32hex>');
+      // julius-paid-<hex> is not the workflow's concurrency group, and the YAML no longer says it is.
+      expect(refused.requiredInput).not.toContain('concurrency group julius-paid');
       expect(refused.requiredInput).toContain('julius-run-spent-<24hex>');
       expect(refused.requiredInput).toContain('RUN_ID_ALREADY_SPENT');
       expect(refused.requiredInput).toContain('SPENT_TAG_UNVERIFIED');
       expect(refused.record?.state).toBe('admitted');
-      expect(fake.calls).toEqual([]);
+      expect(ghKinds(fake.calls)).toEqual(['main']);
       const dry = await claims.claim(claimInput({ workflowSource: source }));
       expect(dry.ok).toBe(false);
       if (dry.ok) return;
@@ -958,7 +1026,7 @@ describe('operator claim', () => {
           confirmation: OPERATOR_DISPATCH_CONFIRMATION,
         }));
         expect(result.ok && result.dispatchedWorkflow).toBe(true);
-        expect(fake.calls.map((args) => args[0])).toEqual(['api', 'workflow']);
+        expect(ghKinds(fake.calls)).toEqual([...MAIN_READS, 'tag', 'workflow']);
         const status = await claimTool(path, fake.spawn).status(RUN, SERVER);
         expect(status.ok && status.record.state).toBe('dispatched');
         const second = await store.admit(request({ runId: OTHER, keyHash: 'b'.repeat(64), dispatchId: 'adm_other' }));
@@ -1129,7 +1197,7 @@ describe('workflow run id', () => {
       expect(saved.claims.at(-1)?.workflowRunId).toBe(WORKFLOW_RUN);
       const status = await claimTool(path, fake.spawn).status(RUN, SERVER);
       expect(status.ok && status.record.workflowRunId).toBe(WORKFLOW_RUN);
-      expect(fake.calls[0]).toEqual(spentTagApiArgs(REPO, SERVER));
+      expect(fake.calls[MAIN_READS.length]).toEqual(spentTagApiArgs(REPO, SERVER));
     });
   });
 
@@ -1186,24 +1254,26 @@ describe('operator claim cli', () => {
     });
   });
 
-  it('dispatch follows fixture YAML: absent refuses, present runs once', async () => {
+  it('dispatch follows the YAML on main, not the checked-out file: absent refuses, present runs once', async () => {
     await withStore(async (path) => {
       await admit(path);
       const calls: string[][] = [];
+      const refusedOut: string[] = [];
       const refused = await runOperatorClaimCli([
         'claim', '--store', path,
         '--wonderland-run', RUN, '--server-run', SERVER,
         '--repo', REPO, '--lane', LANE,
         '--dispatch', '--confirm', OPERATOR_DISPATCH_CONFIRMATION,
       ], {
-        out: () => {},
+        out: (line) => { refusedOut.push(line); },
         err: () => {},
       }, {
-        spawn: { run() { throw new Error('spawned'); } },
+        spawn: servingMain({ run() { throw new Error('spawned past main'); } }, { workflow: WORKFLOW_WITHOUT_INPUT }),
         nowIso: () => WHEN,
-        readWorkflow: () => WORKFLOW_WITHOUT_INPUT,
+        readWorkflow: () => { throw new Error('a dispatch reads main, not the checkout'); },
       });
       expect(refused).toBe(1);
+      expect((JSON.parse(refusedOut[0] ?? '{}') as { kind?: string }).kind).toBe('workflow_run_id_input_missing');
       const code = await runOperatorClaimCli([
         'claim', '--store', path,
         '--wonderland-run', RUN, '--server-run', SERVER,
@@ -1213,19 +1283,16 @@ describe('operator claim cli', () => {
         out: () => {},
         err: () => {},
       }, {
-        spawn: {
-          run(args) {
-            calls.push([...args]);
-            if (args[0] === 'api') return ABSENT;
-            return WORKFLOW_OK;
-          },
-        },
+        spawn: (() => {
+          const served = servingMain({ run: (args) => (args[0] === 'api' ? ABSENT : WORKFLOW_OK) });
+          return { run(args: readonly string[]) { calls.push([...args]); return served.run(args); } };
+        })(),
         nowIso: () => WHEN,
-        readWorkflow: () => WORKFLOW_WITH_INPUT,
+        readWorkflow: () => { throw new Error('a dispatch reads main, not the checkout'); },
       });
       expect(code).toBe(0);
-      expect(calls.map((args) => args[0])).toEqual(['api', 'workflow']);
-      expect(calls[1]).toContain(`run_id=${SERVER}`);
+      expect(ghKinds(calls)).toEqual([...MAIN_READS, 'tag', 'workflow']);
+      expect(dispatchCall(calls)).toContain(`run_id=${SERVER}`);
     });
   });
 
@@ -1407,6 +1474,470 @@ describe('operator claim cli', () => {
     expect(code).toBe(1);
     expect(err).toEqual(['operator_store_not_local']);
     expect(out).toEqual([]);
+  });
+});
+
+describe('the dispatch reads main and the lane grant before anything is written', () => {
+  it('the lane-grant fixture is PR #459\'s, and J1 is granted lab only', () => {
+    expect(PR459_LANES.sourceCommit).toMatch(/^[0-9a-f]{40}$/);
+    expect(PR459_LANES.checkerBlob).toMatch(/^[0-9a-f]{40}$/);
+    expect(PR459_LANES.checkerSha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(PR459_LANES.contractMarkerNamespace).toBe(MISSION);
+    const grants = parseLaneGrants(PR459_LANES.laneGrantExcerpt);
+    expect(grants).not.toBeNull();
+    if (grants === null) return;
+    expect(grants.defaults).toEqual(['lab']);
+    expect(grants.byNamespace.get('julius-continuous-1')).toEqual(['qualification', 'qualification-repair']);
+    expect(grants.byNamespace.get('julius-first-live')).toEqual(['regression']);
+    expect(grants.byNamespace.has(MISSION)).toBe(false);
+    expect(grantedLanes(JSON.stringify({ markerNamespace: MISSION }), grants)).toEqual(['lab']);
+    expect(grantedLanes(JSON.stringify({ markerNamespace: 'julius-continuous-1' }), grants)).toEqual(['qualification', 'qualification-repair']);
+    expect(grantedLanes(JSON.stringify({}), grants)).toEqual(['lab']);
+    expect(grantedLanes('not json', grants)).toBeNull();
+    expect(grantedLanes('[]', grants)).toBeNull();
+  });
+
+  it('the in-tree checker, when it has a grant table, reads the same as #459\'s', () => {
+    const source = readFileSync(join(__dirname, '../../../../', LANE_GRANT_SOURCE), 'utf8');
+    if (!source.includes('const MISSION_LANES = ')) return;
+    expect(parseLaneGrants(source)).toEqual(parseLaneGrants(PR459_LANES.laneGrantExcerpt));
+  });
+
+  it('a grant table this cannot read line by line is no grant', () => {
+    const excerpt = PR459_LANES.laneGrantExcerpt;
+    for (const garbled of [
+      '',
+      excerpt.replace("const DEFAULT_LANES = Object.freeze(['lab']);", ''),
+      excerpt.replace("Object.freeze(['lab'])", "Object.freeze(['lab', 'vip'])"),
+      excerpt.replace("  'julius-first-live': Object.freeze(['regression']),", "  ...EXTRA,"),
+      excerpt.replace("  'julius-live-mission-2': Object.freeze(['regression']),", "  'julius-first-live': Object.freeze(['lab']),"),
+      `${excerpt}${excerpt}`,
+    ]) {
+      expect(parseLaneGrants(garbled), garbled.slice(0, 60)).toBeNull();
+    }
+    expect(parseLaneGrants(excerpt.replaceAll('\n', '\r\n'))).toEqual(parseLaneGrants(excerpt));
+  });
+
+  it('reads the workflow, the contract and the grant at main, in that order, before the spent tag', async () => {
+    await withStore(async (path) => {
+      await admit(path);
+      const fake = scripted(ABSENT, WORKFLOW_OK);
+      const result = await claimTool(path, fake.spawn).claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
+      expect(result.ok && result.dispatchedWorkflow).toBe(true);
+      expect(fake.calls.slice(0, 3)).toEqual([
+        mainContentsArgs(REPO, `.github/workflows/${PAID_WORKFLOW_FILE}`),
+        mainContentsArgs(REPO, missionContractPath(MISSION)),
+        mainContentsArgs(REPO, LANE_GRANT_SOURCE),
+      ]);
+      for (const args of fake.calls.slice(0, 3)) expect(args.at(-1)).toMatch(/\?ref=main$/u);
+      expect(fake.calls[3]).toEqual(spentTagApiArgs(REPO, SERVER));
+    });
+  });
+
+  it('main decides, not the checkout: a checkout without run_id still dispatches, a main without it does not', async () => {
+    await withStore(async (path) => {
+      await admit(path);
+      const fake = scripted(ABSENT, WORKFLOW_OK);
+      const result = await claimTool(path, fake.spawn).claim(claimInput({
+        workflowSource: WORKFLOW_WITHOUT_INPUT,
+        dispatch: true,
+        confirmation: OPERATOR_DISPATCH_CONFIRMATION,
+      }));
+      expect(result.ok && result.dispatchedWorkflow).toBe(true);
+    });
+    await withStore(async (path) => {
+      await admit(path);
+      const fake = scripted(ABSENT, WORKFLOW_OK, { workflow: WORKFLOW_WITHOUT_INPUT });
+      const result = await claimTool(path, fake.spawn).claim(claimInput({
+        workflowSource: WORKFLOW_WITH_INPUT,
+        dispatch: true,
+        confirmation: OPERATOR_DISPATCH_CONFIRMATION,
+      }));
+      expect(result.ok === false && result.kind).toBe('workflow_run_id_input_missing');
+      expect(ghKinds(fake.calls)).toEqual(['main']);
+      expect(readAdmissionDocument(path).claims).toEqual([]);
+    });
+  });
+
+  it('a lane the mission is not granted on main is refused before the spent tag is read, and the id is not burned', async () => {
+    for (const lane of ['qualification', 'qualification-repair', 'regression']) {
+      await withStore(async (path) => {
+        await admit(path);
+        const fake = scripted(ABSENT, WORKFLOW_OK);
+        const claims = claimTool(path, fake.spawn);
+        const refused = await claims.claim(claimInput({ lane, dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
+        expect(refused.ok === false && refused.kind, lane).toBe('lane_not_granted');
+        if (refused.ok) return;
+        expect(refused.message).toContain('it may claim lab');
+        expect(refused.record?.state).toBe('admitted');
+        expect(ghKinds(fake.calls), lane).toEqual(MAIN_READS);
+        expect(readAdmissionDocument(path).claims).toEqual([]);
+        // The operator can still claim the right lane.
+        const allowed = await claims.claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
+        expect(allowed.ok && allowed.dispatchedWorkflow).toBe(true);
+      });
+    }
+  });
+
+  it('a workflow, contract or grant main cannot serve dispatches nothing', async () => {
+    const cases: readonly [MainFiles, string, readonly string[]][] = [
+      [{ workflow: null }, 'main_workflow_unreadable', ['main']],
+      [{ contract: null }, 'lane_grant_unreadable', ['main', 'main']],
+      [{ contract: 'not json' }, 'lane_grant_unreadable', MAIN_READS],
+      [{ checker: null }, 'lane_grant_unreadable', MAIN_READS],
+      [{ checker: 'export {};\n' }, 'lane_grant_unreadable', MAIN_READS],
+    ];
+    for (const [main, kind, kinds] of cases) {
+      await withStore(async (path) => {
+        await admit(path);
+        const fake = scripted(ABSENT, WORKFLOW_OK, main);
+        const refused = await claimTool(path, fake.spawn).claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
+        expect(refused.ok === false && refused.kind, kind).toBe(kind);
+        expect(ghKinds(fake.calls), kind).toEqual(kinds);
+        expect(readAdmissionDocument(path).claims).toEqual([]);
+      });
+    }
+  });
+
+  it('the cli --dispatch never reads the checked-out workflow', async () => {
+    await withStore(async (path) => {
+      await admit(path);
+      let localReads = 0;
+      const code = await runOperatorClaimCli([
+        'claim', '--store', path,
+        '--wonderland-run', RUN, '--server-run', SERVER,
+        '--repo', REPO, '--lane', LANE,
+        '--dispatch', '--confirm', OPERATOR_DISPATCH_CONFIRMATION,
+      ], { out: () => {}, err: () => {} }, {
+        spawn: scripted(ABSENT, WORKFLOW_OK).spawn,
+        nowIso: () => WHEN,
+        readWorkflow: () => { localReads += 1; return WORKFLOW_WITHOUT_INPUT; },
+      });
+      expect(code).toBe(0);
+      expect(localReads).toBe(0);
+    });
+  });
+});
+
+describe('GitHub\'s clock is the dispatch time the bridge orders against', () => {
+  it('reads one IMF-fixdate Date header that names a real instant', () => {
+    expect(githubDateFromResponse(ABSENT)).toBe(GITHUB_DATE);
+    expect(githubDateFromResponse(PRESENT)).toBe(GITHUB_DATE);
+    expect(githubDateFromResponse({ code: 1, stdout: 'HTTP/2.0 404 Not Found\ndate: Fri, 23 Oct 2026 17:18:05 GMT\r\n', stderr: '' })).toBe(GITHUB_DATE);
+    for (const stdout of [
+      'HTTP/2.0 404 Not Found\n',
+      `HTTP/2.0 404 Not Found\nDate: ${GITHUB_DATE_HEADER}\nDate: ${GITHUB_DATE_HEADER}\n`,
+      'HTTP/2.0 404 Not Found\nDate: Thu, 23 Oct 2026 17:18:05 GMT\n',
+      'HTTP/2.0 404 Not Found\nDate: Fri, 31 Oct 2026 25:18:05 GMT\n',
+      'HTTP/2.0 404 Not Found\nDate: 2026-10-23T17:18:05Z\n',
+      'HTTP/2.0 404 Not Found\nDate: Fri, 23 Oct 2026 17:18:05 +0000\n',
+      'HTTP/2.0 404 Not Found\nX-Date: Fri, 23 Oct 2026 17:18:05 GMT\n',
+    ]) {
+      expect(githubDateFromResponse({ code: 1, stdout, stderr: '' }), stdout).toBeNull();
+    }
+  });
+
+  it('stores the spent-tag read\'s Date on the reservation and keeps it on the outcome, never the local clock', async () => {
+    await withStore(async (path) => {
+      await admit(path);
+      const result = await claimTool(path, scripted(ABSENT, WORKFLOW_OK).spawn, () => '2026-10-23T17:30:00.000Z')
+        .claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
+      expect(result.ok && result.dispatchedWorkflow).toBe(true);
+      const claims = readAdmissionDocument(path).claims;
+      expect(claims.map((event) => [event.state, event.githubDate, event.at])).toEqual([
+        ['dispatching', GITHUB_DATE, '2026-10-23T17:30:00.000Z'],
+        ['dispatched', GITHUB_DATE, '2026-10-23T17:30:00.000Z'],
+      ]);
+    });
+  });
+
+  it('an absent tag read without a readable Date claims nothing and dispatches nothing', async () => {
+    await withStore(async (path) => {
+      await admit(path);
+      const fake = scripted({ code: 1, stdout: 'HTTP/2.0 404 Not Found\n{"message":"Not Found"}\n', stderr: '' }, WORKFLOW_OK);
+      const refused = await claimTool(path, fake.spawn).claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
+      expect(refused.ok === false && refused.kind).toBe('github_clock_unreadable');
+      expect(refused.ok === false && refused.record?.state).toBe('admitted');
+      expect(ghKinds(fake.calls)).toEqual([...MAIN_READS, 'tag']);
+      expect(readAdmissionDocument(path).claims).toEqual([]);
+    });
+  });
+});
+
+describe('the write lock is taken by claim and status', () => {
+  it('a held write lock: claim and status wait, then fail lock_held; nothing is written and nothing is spawned', async () => {
+    await withStore(async (path) => {
+      await admit(path);
+      const lock = admissionWriteLockPath(path);
+      const foreign = JSON.stringify({ pid: 999_999, purpose: 'wonderland-admission' });
+      writeFileSync(lock, foreign, { flag: 'wx', mode: 0o600 });
+      const before = readFileSync(path, 'utf8');
+      const journalPath = `${path}.operator.json`;
+      const journalBefore = existsSync(journalPath) ? readFileSync(journalPath, 'utf8') : null;
+      try {
+        const fake = scripted(ABSENT, WORKFLOW_OK);
+        const claims = claimTool(path, fake.spawn);
+        for (const input of [claimInput(), claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION })]) {
+          const started = Date.now();
+          await expect(claims.claim(input)).rejects.toMatchObject({ code: 'lock_held' });
+          expect(Date.now() - started).toBeGreaterThanOrEqual(ADMISSION_LOCK_WAIT_MS - 50);
+        }
+        const started = Date.now();
+        await expect(claims.status(RUN, SERVER)).rejects.toMatchObject({ code: 'lock_held' });
+        expect(Date.now() - started).toBeGreaterThanOrEqual(ADMISSION_LOCK_WAIT_MS - 50);
+        expect(fake.calls).toEqual([]);
+        expect(readFileSync(path, 'utf8')).toBe(before);
+        expect(existsSync(journalPath) ? readFileSync(journalPath, 'utf8') : null).toBe(journalBefore);
+        expect(readFileSync(lock, 'utf8')).toBe(foreign);
+      } finally {
+        unlinkSync(lock);
+      }
+      // Released, the same claim goes through.
+      const after = await claimTool(path, scripted(ABSENT, WORKFLOW_OK).spawn)
+        .claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
+      expect(after.ok && after.dispatchedWorkflow).toBe(true);
+    });
+  }, 30_000);
+});
+
+describe('the reservation re-checks the record after the spent tag is read', () => {
+  it('an expiry noted while the tag was read refuses the reservation and spawns no workflow', async () => {
+    await withStore(async (path) => {
+      await admit(path);
+      const fake = recorder((args) => {
+        if (args[0] === 'api') {
+          noteAwaitingOperatorExpiry(path, SERVER, '2026-10-23T17:18:01.000Z');
+          return ABSENT;
+        }
+        return WORKFLOW_OK;
+      });
+      const refused = await claimTool(path, fake.spawn).claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
+      expect(refused.ok === false && refused.kind).toBe('AWAITING_OPERATOR_EXPIRED');
+      expect(ghKinds(fake.calls)).toEqual([...MAIN_READS, 'tag']);
+      expect(readAdmissionDocument(path).claims).toEqual([]);
+    });
+  });
+
+  it('a claim another tool wrote while the tag was read is replayed, not reserved twice', async () => {
+    await withStore(async (path) => {
+      await admit(path);
+      const journalPath = `${path}.operator.json`;
+      const fake = recorder((args) => {
+        if (args.includes('--include')) {
+          // Another claim tool reserves the pair while this one reads the spent tag.
+          const journal = (existsSync(journalPath)
+            ? JSON.parse(readFileSync(journalPath, 'utf8'))
+            : { schemaVersion: 3, revision: 0, claims: [], progress: [], owners: {} }) as { revision: number; claims: unknown[] };
+          journal.claims.push({
+            wonderlandRunId: RUN, serverRunId: SERVER, state: 'dispatching', spentTag: `julius-run-spent-${HEX}`,
+            spentTagState: 'absent', at: WHEN, dispatchAttempted: false, dispatchError: null, halt: null,
+            workflowRunId: null, githubDate: GITHUB_DATE,
+          });
+          journal.revision += 1;
+          writeFileSync(journalPath, `${JSON.stringify(journal)}
+`);
+          return ABSENT;
+        }
+        return WORKFLOW_OK;
+      });
+      const result = await claimTool(path, fake.spawn).claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
+      expect(result.ok && result.replayed && result.record.state).toBe('dispatching');
+      expect(ghKinds(fake.calls)).toEqual([...MAIN_READS, 'tag']);
+      expect(readAdmissionDocument(path).claims.map((event) => event.state)).toEqual(['dispatching']);
+    });
+  });
+});
+
+describe('reconcile moves a stuck dispatching record from GitHub evidence only', () => {
+  const RUN_ID = '36568129865';
+  const TAG_OBJECT = 'cd'.repeat(20);
+  const PRESENT_ANNOTATED: GhResult = {
+    code: 0,
+    stdout: `HTTP/2.0 200 OK\nDate: ${GITHUB_DATE_HEADER}\n\n{"ref":"refs/tags/julius-run-spent-${HEX}","object":{"type":"tag","sha":"${TAG_OBJECT}"}}\n`,
+    stderr: '',
+  };
+  const tagMessage = (run: string, workflowRunId: string): GhResult => ({
+    code: 0,
+    stdout: `${JSON.stringify({
+      sha: TAG_OBJECT,
+      message: `julius-run-spent.v1\nrun=${run}\nnamespace=julius-inworld-data-1\nreservedUsdMicros=30000000\nworkflow_run_id=${workflowRunId}\nworkflow_run_attempt=1\nhead_sha=${'e'.repeat(40)}\n`,
+    })}\n`,
+    stderr: '',
+  });
+  const runList = (rows: readonly { id: number; status: string; conclusion: string; key?: string; mode?: string }[]): GhResult => ({
+    code: 0,
+    stdout: `${JSON.stringify(rows.map((row) => ({
+      databaseId: row.id,
+      displayTitle: `julius mission=${MISSION} lane=${LANE} mode=${row.mode ?? 'paid'} key=${row.key ?? KEY}`,
+      status: row.status,
+      conclusion: row.conclusion,
+      event: 'workflow_dispatch',
+    })))}\n`,
+    stderr: '',
+  });
+
+  /** Leave the pair `dispatching`: the operator process dies while the workflow child runs. */
+  async function stuck(path: string): Promise<void> {
+    await admit(path);
+    const crashing = recorder((args) => {
+      if (args[0] === 'api') return ABSENT;
+      throw new Error('operator_process_killed');
+    });
+    await expect(claimTool(path, crashing.spawn).claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION })))
+      .rejects.toThrow('operator_process_killed');
+    expect(readAdmissionDocument(path).claims.map((event) => event.state)).toEqual(['dispatching']);
+  }
+
+  function github(tag: GhResult, message: GhResult | null, runs: GhResult): { spawn: GhSpawner; calls: string[][] } {
+    return recorder((args) => {
+      if (args.includes('--include')) return tag;
+      if (args[0] === 'api' && args[1] === `repos/${REPO}/git/tags/${TAG_OBJECT}` && message !== null) return message;
+      if (args[0] === 'run') return runs;
+      return { code: 99, stdout: '', stderr: 'unexpected gh call' };
+    });
+  }
+
+  it('the spent tag naming the one paid run for the key is dispatched, keeping the reservation\'s time and GitHub clock', async () => {
+    await withStore(async (path) => {
+      await stuck(path);
+      const reservation = readAdmissionDocument(path).claims[0];
+      const fake = github(PRESENT_ANNOTATED, tagMessage(SERVER, RUN_ID), runList([{ id: Number(RUN_ID), status: 'in_progress', conclusion: '' }]));
+      const result = await claimTool(path, fake.spawn).reconcile({ wonderlandRunId: RUN, serverRunId: SERVER, repo: REPO });
+      expect(result.ok && result.reconciled).toBe(true);
+      if (!result.ok) return;
+      expect(result.record.state).toBe('dispatched');
+      expect(result.record.workflowRunId).toBe(RUN_ID);
+      expect(fake.calls).toEqual([
+        spentTagApiArgs(REPO, SERVER),
+        ['api', `repos/${REPO}/git/tags/${TAG_OBJECT}`],
+        paidRunListArgs(REPO),
+      ]);
+      const claims = readAdmissionDocument(path).claims;
+      expect(claims.map((event) => event.state)).toEqual(['dispatching', 'dispatched']);
+      expect(claims[1]).toMatchObject({ at: reservation?.at, githubDate: GITHUB_DATE, dispatchAttempted: true, spentTagState: 'present', workflowRunId: RUN_ID });
+      // Reconciled once; a second reconcile reads nothing and writes nothing.
+      const again = github(PRESENT_ANNOTATED, tagMessage(SERVER, RUN_ID), runList([]));
+      const second = await claimTool(path, again.spawn).reconcile({ wonderlandRunId: RUN, serverRunId: SERVER, repo: REPO });
+      expect(second.ok && second.reconciled).toBe(false);
+      expect(again.calls).toEqual([]);
+    });
+  });
+
+  it('no spent tag and the one paid run completed without success is dispatch_failed (workflow_run_unspent)', async () => {
+    await withStore(async (path) => {
+      await stuck(path);
+      const fake = github(ABSENT, null, runList([{ id: Number(RUN_ID), status: 'completed', conclusion: 'failure' }]));
+      const result = await claimTool(path, fake.spawn).reconcile({ wonderlandRunId: RUN, serverRunId: SERVER, repo: REPO });
+      expect(result.ok && result.record.state).toBe('dispatch_failed');
+      expect(result.ok && result.record.dispatchError).toBe('workflow_run_unspent');
+      const status = await claimTool(path, { run() { throw new Error('spawned'); } }).status(RUN, SERVER);
+      expect(status.ok && status.record.state).toBe('dispatch_failed');
+      // Terminal: a claim replays it and dispatches nothing.
+      const replay = scripted(ABSENT, WORKFLOW_OK);
+      const claimed = await claimTool(path, replay.spawn).claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
+      expect(claimed.ok && claimed.replayed && claimed.record.state).toBe('dispatch_failed');
+      expect(replay.calls).toEqual([]);
+    });
+  });
+
+  it('anything short of agreeing evidence leaves dispatching and writes nothing', async () => {
+    const cases: readonly [string, GhResult, GhResult | null, GhResult, string][] = [
+      ['no run yet', ABSENT, null, runList([]), 'reconcile_indeterminate'],
+      ['run still going, no tag', ABSENT, null, runList([{ id: Number(RUN_ID), status: 'in_progress', conclusion: '' }]), 'reconcile_indeterminate'],
+      ['run succeeded, no tag', ABSENT, null, runList([{ id: Number(RUN_ID), status: 'completed', conclusion: 'success' }]), 'reconcile_indeterminate'],
+      ['two runs for the key', PRESENT_ANNOTATED, tagMessage(SERVER, RUN_ID), runList([
+        { id: Number(RUN_ID), status: 'completed', conclusion: 'success' },
+        { id: 4242, status: 'completed', conclusion: 'success' },
+      ]), 'reconcile_indeterminate'],
+      ['tag names another workflow run', PRESENT_ANNOTATED, tagMessage(SERVER, '4242'), runList([{ id: Number(RUN_ID), status: 'completed', conclusion: 'success' }]), 'reconcile_indeterminate'],
+      ['a preflight run with the key', PRESENT_ANNOTATED, tagMessage(SERVER, RUN_ID), runList([{ id: Number(RUN_ID), status: 'completed', conclusion: 'success', mode: 'preflight' }]), 'reconcile_indeterminate'],
+      ['another key\'s run', PRESENT_ANNOTATED, tagMessage(SERVER, RUN_ID), runList([{ id: Number(RUN_ID), status: 'completed', conclusion: 'success', key: 'b'.repeat(64) }]), 'reconcile_indeterminate'],
+      ['tag message for another run', PRESENT_ANNOTATED, tagMessage(OTHER_SERVER, RUN_ID), runList([{ id: Number(RUN_ID), status: 'completed', conclusion: 'success' }]), 'spent_tag_unverified'],
+      ['lightweight tag', PRESENT, null, runList([{ id: Number(RUN_ID), status: 'completed', conclusion: 'success' }]), 'spent_tag_unverified'],
+      ['tag unreadable', { code: 1, stdout: '', stderr: 'temporary failure' }, null, runList([]), 'spent_tag_unreadable'],
+      ['runs unreadable', ABSENT, null, { code: 1, stdout: '', stderr: 'boom' }, 'workflow_runs_unreadable'],
+    ];
+    for (const [name, tag, message, runs, kind] of cases) {
+      await withStore(async (path) => {
+        await stuck(path);
+        const journal = readFileSync(`${path}.operator.json`, 'utf8');
+        const result = await claimTool(path, github(tag, message, runs).spawn).reconcile({ wonderlandRunId: RUN, serverRunId: SERVER, repo: REPO });
+        expect(result.ok === false && result.kind, name).toBe(kind);
+        expect(result.ok === false && result.record?.state, name).toBe('dispatching');
+        expect(readFileSync(`${path}.operator.json`, 'utf8'), name).toBe(journal);
+      });
+    }
+  });
+
+  it('a record that moved while GitHub was read is left as the other writer left it', async () => {
+    await withStore(async (path) => {
+      await stuck(path);
+      const journalPath = `${path}.operator.json`;
+      const listed = runList([{ id: Number(RUN_ID), status: 'completed', conclusion: 'success' }]);
+      const fake = github(PRESENT_ANNOTATED, tagMessage(SERVER, RUN_ID), listed);
+      const moving: GhSpawner = {
+        run(args) {
+          if (args[0] === 'run') {
+            // Another reconcile finishes first, recording a different run id.
+            const journal = JSON.parse(readFileSync(journalPath, 'utf8')) as { revision: number; claims: Record<string, unknown>[] };
+            const reservation = journal.claims[0] ?? {};
+            journal.claims.push({ ...reservation, state: 'dispatched', spentTagState: 'present', dispatchAttempted: true, workflowRunId: '4242' });
+            journal.revision += 1;
+            writeFileSync(journalPath, `${JSON.stringify(journal)}
+`);
+          }
+          return fake.spawn.run(args);
+        },
+      };
+      const result = await claimTool(path, moving).reconcile({ wonderlandRunId: RUN, serverRunId: SERVER, repo: REPO });
+      expect(result.ok === false && result.kind).toBe('record_moved');
+      expect(result.ok === false && result.record?.workflowRunId).toBe('4242');
+      expect(readAdmissionDocument(path).claims.map((event) => [event.state, event.workflowRunId])).toEqual([
+        ['dispatching', null],
+        ['dispatched', '4242'],
+      ]);
+    });
+  });
+
+  it('refuses a pair that was never claimed and reads nothing for a settled one', async () => {
+    await withStore(async (path) => {
+      await admit(path);
+      const fake = github(ABSENT, null, runList([]));
+      const never = await claimTool(path, fake.spawn).reconcile({ wonderlandRunId: RUN, serverRunId: SERVER, repo: REPO });
+      expect(never.ok === false && never.kind).toBe('not_claimed');
+      const bad = await claimTool(path, fake.spawn).reconcile({ wonderlandRunId: RUN, serverRunId: SERVER, repo: 'not a repo' });
+      expect(bad.ok === false && bad.kind).toBe('repo_invalid');
+      expect(fake.calls).toEqual([]);
+    });
+  });
+
+  it('the cli reconcile prints the outcome and what GitHub showed', async () => {
+    await withStore(async (path) => {
+      await stuck(path);
+      const out: string[] = [];
+      const code = await runOperatorClaimCli([
+        'reconcile', '--store', path, '--wonderland-run', RUN, '--server-run', SERVER, '--repo', REPO,
+      ], { out: (line) => { out.push(line); }, err: () => {} }, {
+        spawn: github(PRESENT_ANNOTATED, tagMessage(SERVER, RUN_ID), runList([{ id: Number(RUN_ID), status: 'completed', conclusion: 'success' }])).spawn,
+        nowIso: () => WHEN,
+        readWorkflow: () => { throw new Error('reconcile reads no workflow'); },
+      });
+      expect(code).toBe(0);
+      const body = JSON.parse(out[0] ?? '{}') as { reconciled: boolean; state: string; evidence: { tagWorkflowRunId: string } };
+      expect(body.reconciled).toBe(true);
+      expect(body.state).toBe('dispatched');
+      expect(body.evidence.tagWorkflowRunId).toBe(RUN_ID);
+      for (const extra of [['--lane', LANE], ['--dispatch'], ['--confirm', OPERATOR_DISPATCH_CONFIRMATION]]) {
+        const refused = await runOperatorClaimCli([
+          'reconcile', '--store', path, '--wonderland-run', RUN, '--server-run', SERVER, '--repo', REPO, ...extra,
+        ], { out: () => {}, err: () => {} }, {
+          spawn: { run() { throw new Error('spawned'); } },
+          nowIso: () => WHEN,
+          readWorkflow: () => { throw new Error('reconcile reads no workflow'); },
+        });
+        expect(refused, extra.join(' ')).toBe(2);
+      }
+    });
   });
 });
 

@@ -26,12 +26,29 @@
  * already_spent, and `SPENT_TAG_UNVERIFIED` is dispatch_failed. Neither
  * state is ever written back to admitted, and nothing here retries.
  *
- * A claim runs only when the checked-out workflow declares
- * `workflow_dispatch.inputs.run_id` (PR #459's input) and every other input
- * the argv passes. The value passed as `run_id` is the client's `wlj_` id.
- * The spent lock is `julius-run-spent-` plus 32 hex. A legacy `run:` row
- * keeps the 24-hex lock and is not claimed. This module does not edit the
- * workflow.
+ * A dry run checks the checked-out workflow. A dispatch reads what
+ * `gh workflow run --ref main` will run, at `main` through `gh api`: the
+ * workflow must declare `workflow_dispatch.inputs.run_id` (PR #459's input)
+ * and every other input the argv passes, and the lane must be one the
+ * mission's contract on `main` is granted (`MISSION_LANES` in
+ * `scripts/julius-live-contract-check.mjs`). The workflow writes the spent
+ * tag before its own lane check, so a lane refused there would burn the id;
+ * here it is refused before anything is written or dispatched. The value
+ * passed as `run_id` is the client's `wlj_` id. The spent lock is
+ * `julius-run-spent-` plus 32 hex. A legacy `run:` row keeps the 24-hex lock
+ * and is not claimed. This module does not edit the workflow.
+ *
+ * The spent-tag read right before the reservation also records GitHub's
+ * clock: its `Date:` header, stored on the claim as `githubDate`. The bridge
+ * orders the matched run's `created_at` against that, never this machine's
+ * clock. A read without a readable `Date:` claims nothing.
+ *
+ * `reconcile` is the only exit from a stuck `dispatching` record (a stop
+ * after the reservation and before the outcome write). It writes an outcome
+ * only from GitHub evidence: the paid run whose run name carries
+ * `key=<dispatch key>`, and the spent tag's `workflow_run_id`. It never
+ * deletes or rewrites a record; anything less than agreeing evidence leaves
+ * `dispatching` as it is.
  */
 
 import {
@@ -71,18 +88,20 @@ export const WORKFLOW_RUN_ID_INPUT = 'run_id';
 export const DISPATCH_INPUTS = ['mission', 'lane', 'dispatch_key', 'confirm_live', WORKFLOW_RUN_ID_INPUT] as const;
 
 /**
- * What the refusal prints when the checked-out workflow lacks `run_id`. The
- * input is PR #459's; this tool does not write the workflow. The git tag and
- * the concurrency group use the UUID with the dashes removed: 32 hex,
- * `julius-run-spent-<32hex>` and `julius-paid-<32hex>`. A legacy `run:` row
- * keeps `julius-run-spent-<24hex>` and is not claimed from here. A
- * re-dispatch halts with `RUN_ID_ALREADY_SPENT`. A spent tag the workflow
- * cannot verify halts with `SPENT_TAG_UNVERIFIED`.
+ * What the refusal prints when the workflow lacks `run_id`. The input is PR
+ * #459's; this tool does not write the workflow. The git tag uses the UUID
+ * with the dashes removed: `julius-run-spent-<32hex>`. The workflow's own
+ * concurrency group is `julius-first-live-mission-${github.run_id}`, one per
+ * Actions run; `julius-paid-<32hex>` is only the derived name the workflow
+ * checks beside the tag, not a concurrency group. A legacy `run:` row keeps
+ * `julius-run-spent-<24hex>` and is not claimed from here. A re-dispatch
+ * halts with `RUN_ID_ALREADY_SPENT`. A spent tag the workflow cannot verify
+ * halts with `SPENT_TAG_UNVERIFIED`.
  */
 export const WORKFLOW_RUN_ID_INPUT_YAML = [
   '# workflow_dispatch.inputs of julius-first-live-mission.yml must declare (PR #459):',
   '      run_id:',
-  `        description: 'Canonical Julius run id matching ${WLJ_RUN_ID_PATTERN}. A paid dispatch creates julius-run-spent-<32hex> and concurrency group julius-paid-<32hex>. A legacy run keeps julius-run-spent-<24hex> and is not claimed. A re-dispatch halts with RUN_ID_ALREADY_SPENT. A spent tag that cannot be verified halts with SPENT_TAG_UNVERIFIED.'`,
+  `        description: 'Canonical Julius run id matching ${WLJ_RUN_ID_PATTERN}. A paid dispatch creates julius-run-spent-<32hex>. A legacy run keeps julius-run-spent-<24hex> and is not claimed. A re-dispatch halts with RUN_ID_ALREADY_SPENT. A spent tag that cannot be verified halts with SPENT_TAG_UNVERIFIED.'`,
   '        required: false',
   "        default: ''",
 ].join('\n');
@@ -91,6 +110,14 @@ export const OPERATOR_DISPATCH_CONFIRMATION = 'RUN LIVE MISSION';
 
 export const OPERATOR_LANES = ['qualification', 'qualification-repair', 'lab', 'regression'] as const;
 export type OperatorLane = (typeof OPERATOR_LANES)[number];
+
+/** Where the lane grant lives on `main`, beside the ceilings. */
+export const LANE_GRANT_SOURCE = 'scripts/julius-live-contract-check.mjs';
+
+/** The mission contract the workflow checks, on `main`. */
+export function missionContractPath(mission: string): string {
+  return `.github/julius-missions/${mission}/contract.json`;
+}
 
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/;
 const REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
@@ -128,6 +155,11 @@ export interface OperatorView {
   readonly dispatchAttempted: boolean;
   readonly dispatchError: DispatchError | null;
   readonly halt: WorkflowHalt | null;
+  /**
+   * The derived `julius-paid-<hex>` name the workflow checks beside the
+   * spent tag. Not the workflow's concurrency group, which is
+   * `julius-first-live-mission-${github.run_id}`.
+   */
   readonly concurrencyGroup: string;
   readonly claimedAt: string | null;
   /** GitHub Actions workflow run id, once dispatch has learned it. Null until then. */
@@ -139,6 +171,7 @@ export interface ClaimInput {
   readonly serverRunId: string;
   readonly repo: string;
   readonly lane: string;
+  /** The checked-out workflow. Read by a dry run only: a dispatch reads `main`. */
   readonly workflowSource: string;
   readonly dispatch: boolean;
   readonly confirmation: string | null;
@@ -176,6 +209,35 @@ export type ClaimResult =
 export type StatusResult =
   | { readonly ok: true; readonly record: OperatorView; readonly phase: OperatorStatusPhase | null }
   | { readonly ok: false; readonly kind: string; readonly message: string };
+
+export interface ReconcileInput {
+  readonly wonderlandRunId: string;
+  readonly serverRunId: string;
+  readonly repo: string;
+}
+
+/** What GitHub showed. Printed so the operator sees why the record moved or stayed. */
+export interface ReconcileEvidence {
+  readonly spentTag: 'present' | 'absent';
+  readonly tagWorkflowRunId: string | null;
+  readonly matchedRuns: readonly { readonly workflowRunId: string; readonly status: string; readonly conclusion: string | null }[];
+}
+
+export type ReconcileResult =
+  | {
+    readonly ok: true;
+    /** False when the record was not `dispatching`: nothing was read or written. */
+    readonly reconciled: boolean;
+    readonly record: OperatorView;
+    readonly evidence: ReconcileEvidence | null;
+  }
+  | {
+    readonly ok: false;
+    readonly kind: string;
+    readonly message: string;
+    readonly record: OperatorView | null;
+    readonly evidence: ReconcileEvidence | null;
+  };
 
 /** Hex suffix of a parsed admission id. 32 for `wlj_`, 24 for a legacy `run:` id. */
 export function serverRunHex(serverRunId: string): string {
@@ -341,6 +403,165 @@ export function learnWorkflowRunId(result: GhResult, repo: string): string | nul
   return [...ids][0] ?? null;
 }
 
+/** `gh api` for one file at `main`, raw. The dispatch runs `--ref main`, so this is what it runs. */
+export function mainContentsArgs(repo: string, path: string): readonly string[] {
+  return ['api', '-H', 'Accept: application/vnd.github.raw+json', `repos/${repo}/contents/${path}?ref=main`];
+}
+
+export interface LaneGrants {
+  readonly defaults: readonly OperatorLane[];
+  readonly byNamespace: ReadonlyMap<string, readonly OperatorLane[]>;
+}
+
+/**
+ * `DEFAULT_LANES` and `MISSION_LANES` as `julius-live-contract-check.mjs`
+ * writes them, read as text and never run. A table this cannot read line by
+ * line is null, and a null grant dispatches nothing.
+ */
+export function parseLaneGrants(checkerSource: string): LaneGrants | null {
+  const source = checkerSource.replaceAll('\r\n', '\n');
+  const defaults = [...source.matchAll(/^const DEFAULT_LANES = Object\.freeze\(\[([^\]\n]*)\]\);$/gmu)];
+  const tables = [...source.matchAll(/^const MISSION_LANES = Object\.freeze\(\{\n([\s\S]*?)\n\}\);$/gmu)];
+  if (defaults.length !== 1 || tables.length !== 1) return null;
+  const defaultLanes = laneList(defaults[0]?.[1] ?? '');
+  if (defaultLanes === null) return null;
+  const byNamespace = new Map<string, readonly OperatorLane[]>();
+  for (const raw of (tables[0]?.[1] ?? '').split('\n')) {
+    const line = raw.trim();
+    if (line === '' || line.startsWith('//')) continue;
+    const entry = /^'([a-z0-9-]+)': Object\.freeze\(\[([^\]]*)\]\),?(?:\s*\/\/.*)?$/u.exec(line);
+    if (entry === null) return null;
+    const namespace = entry[1] ?? '';
+    const granted = laneList(entry[2] ?? '');
+    if (granted === null || byNamespace.has(namespace)) return null;
+    byNamespace.set(namespace, granted);
+  }
+  return { defaults: defaultLanes, byNamespace };
+}
+
+function laneList(text: string): OperatorLane[] | null {
+  const lanes: OperatorLane[] = [];
+  for (const item of text.split(',').map((part) => part.trim()).filter((part) => part !== '')) {
+    const quoted = /^'([a-z-]+)'$/u.exec(item);
+    const lane = quoted?.[1] ?? '';
+    if (!OPERATOR_LANES.includes(lane as OperatorLane)) return null;
+    lanes.push(lane as OperatorLane);
+  }
+  return lanes.length === 0 ? null : lanes;
+}
+
+/**
+ * The lanes the contract may claim, by its own `markerNamespace`, as the
+ * checker's `lanesFor` decides: a namespace absent from the table gets the
+ * defaults. A contract that is not a JSON object is null.
+ */
+export function grantedLanes(contractSource: string, grants: LaneGrants): readonly OperatorLane[] | null {
+  let contract: unknown;
+  try {
+    contract = JSON.parse(contractSource);
+  } catch {
+    return null;
+  }
+  if (contract === null || typeof contract !== 'object' || Array.isArray(contract)) return null;
+  const namespace = (contract as Record<string, unknown>).markerNamespace;
+  if (typeof namespace === 'string' && grants.byNamespace.has(namespace)) return grants.byNamespace.get(namespace) ?? null;
+  return grants.defaults;
+}
+
+const HTTP_DATE_LINE = /^date:[ \t]*([A-Z][a-z]{2}, \d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}:\d{2} GMT)[ \t]*\r?$/gimu;
+
+/**
+ * GitHub's clock from a `gh api --include` response: exactly one `Date:`
+ * header in IMF-fixdate form that names a real instant, as ISO UTC at
+ * seconds. Anything else is null.
+ */
+export function githubDateFromResponse(result: GhResult): string | null {
+  const found = [...`${result.stdout}\n${result.stderr}`.matchAll(HTTP_DATE_LINE)];
+  if (found.length !== 1) return null;
+  const header = found[0]?.[1] ?? '';
+  const ms = Date.parse(header);
+  if (!Number.isFinite(ms) || new Date(ms).toUTCString() !== header) return null;
+  return new Date(ms).toISOString().replace(/\.\d{3}Z$/u, 'Z');
+}
+
+/** The annotated tag object a spent ref points at, or null for anything else. */
+export function spentTagObjectSha(result: GhResult): string | null {
+  const body = jsonBody(result.stdout);
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) return null;
+  const object = (body as Record<string, unknown>).object;
+  if (object === null || typeof object !== 'object' || Array.isArray(object)) return null;
+  const { type, sha } = object as Record<string, unknown>;
+  return type === 'tag' && typeof sha === 'string' && /^[0-9a-f]{40}$/u.test(sha) ? sha : null;
+}
+
+/**
+ * `workflow_run_id` from a `julius-run-spent.v1` tag message for this run.
+ * A message for another run, another schema, or a repeated key is null.
+ */
+export function spentTagWorkflowRunId(result: GhResult, serverRunId: string): string | null {
+  if (result.code !== 0) return null;
+  const body = jsonBody(result.stdout);
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) return null;
+  const message = (body as Record<string, unknown>).message;
+  if (typeof message !== 'string') return null;
+  const lines = message.split('\n').filter((line) => line !== '');
+  if (lines[0] !== 'julius-run-spent.v1') return null;
+  const fields = new Map<string, string>();
+  for (const line of lines.slice(1)) {
+    const eq = line.indexOf('=');
+    if (eq <= 0) return null;
+    const key = line.slice(0, eq);
+    if (fields.has(key)) return null;
+    fields.set(key, line.slice(eq + 1));
+  }
+  if (fields.get('run') !== serverRunId) return null;
+  const id = fields.get('workflow_run_id') ?? '';
+  return isStoredWorkflowRunId(id) ? id : null;
+}
+
+/** Paid runs of the workflow, newest first, as `gh run list` reports them. */
+export function paidRunListArgs(repo: string): readonly string[] {
+  return [
+    'run', 'list', '--repo', repo, '--workflow', PAID_WORKFLOW_FILE,
+    '--event', 'workflow_dispatch', '--limit', '200',
+    '--json', 'databaseId,displayTitle,status,conclusion,event',
+  ];
+}
+
+/**
+ * The runs whose run name is this claim's paid dispatch: the workflow's
+ * `run-name` ends `mode=paid key=<dispatch key>`. Null when the list is not
+ * readable JSON.
+ */
+export function runsForDispatchKey(result: GhResult, dispatchKey: string): ReconcileEvidence['matchedRuns'] | null {
+  if (result.code !== 0) return null;
+  const body = jsonBody(result.stdout);
+  if (!Array.isArray(body)) return null;
+  const suffix = ` mode=paid key=${dispatchKey}`;
+  const matched: { workflowRunId: string; status: string; conclusion: string | null }[] = [];
+  for (const row of body) {
+    if (row === null || typeof row !== 'object' || Array.isArray(row)) return null;
+    const { databaseId, displayTitle, status, conclusion, event } = row as Record<string, unknown>;
+    if (typeof displayTitle !== 'string' || !displayTitle.endsWith(suffix) || event !== 'workflow_dispatch') continue;
+    const id = typeof databaseId === 'number' && Number.isSafeInteger(databaseId) ? String(databaseId) : '';
+    if (!isStoredWorkflowRunId(id) || typeof status !== 'string') return null;
+    matched.push({ workflowRunId: id, status, conclusion: typeof conclusion === 'string' && conclusion !== '' ? conclusion : null });
+  }
+  return matched;
+}
+
+function jsonBody(stdout: string): unknown {
+  // `--include` puts the status line and headers first; the body starts at the first `{` or `[` line.
+  const lines = stdout.split(/\r?\n/u);
+  const start = lines.findIndex((line) => line.startsWith('{') || line.startsWith('['));
+  if (start === -1) return null;
+  try {
+    return JSON.parse(lines.slice(start).join('\n'));
+  } catch {
+    return null;
+  }
+}
+
 export function interpretSpentTagResponse(result: GhResult): 'present' | 'absent' | 'unreadable' {
   if (result.code === 0 && /"ref"\s*:/.test(result.stdout)) return 'present';
   const blob = `${result.stdout}\n${result.stderr}`;
@@ -353,6 +574,7 @@ export function interpretSpentTagResponse(result: GhResult): 'present' | 'absent
 export interface OperatorClaimTool {
   claim(input: ClaimInput): Promise<ClaimResult>;
   status(wonderlandRunId: string, serverRunId: string): Promise<StatusResult>;
+  reconcile(input: ReconcileInput): Promise<ReconcileResult>;
 }
 
 export function createOperatorClaimTool(
@@ -373,6 +595,12 @@ export function createOperatorClaimTool(
     status(wonderlandRunId, serverRunId) {
       return file.exclusive((io) => Promise.resolve(statusInside(io, file.path, wonderlandRunId, serverRunId, clock)));
     },
+    reconcile(input) {
+      const next = (): Promise<ReconcileResult> => reconcilePhased(file, input, spawn);
+      const run = claims.then(next, next);
+      claims = run.then(() => undefined, () => undefined);
+      return run;
+    },
   };
 }
 
@@ -387,11 +615,14 @@ export function openOperatorClaimTool(
 
 /**
  * Each write lock is held for one read-check-write only, never across a `gh`
- * child: (1) check, (2) read the spent tag without the lock, (3) re-check and
- * write `dispatching` or `already_spent`, (4) spawn the workflow without the
- * lock, (5) write the outcome. A stop between (3) and (5) leaves
- * `dispatching`: whether the workflow started is unknown, and it is never
- * reported as `dispatched` or retried.
+ * child: (1) check, (2) read the workflow, the mission contract and the lane
+ * grant at `main` and refuse an undeclared input or an ungranted lane, (3)
+ * read the spent tag and GitHub's clock without the lock, (4) re-check and
+ * write `dispatching` or `already_spent`, (5) spawn the workflow without the
+ * lock, (6) write the outcome. A stop between (4) and (6) leaves
+ * `dispatching`: whether the workflow started is unknown, it is never
+ * reported as `dispatched` or retried, and only `reconcile` moves it, from
+ * GitHub evidence.
  */
 async function claimPhased(
   file: AdmissionFile,
@@ -401,7 +632,10 @@ async function claimPhased(
 ): Promise<ClaimResult> {
   const checked = await file.exclusive((io) => Promise.resolve(checkClaim(io, file.path, input, clock)));
   if (checked.kind === 'done') return checked.result;
-  const tag = interpretSpentTagResponse(spawn.run(spentTagApiArgs(input.repo, checked.admission.serverRunId)));
+  const onMain = mainRefusal(spawn, input, checked.admission);
+  if (onMain !== null) return onMain;
+  const tagRead = spawn.run(spentTagApiArgs(input.repo, checked.admission.serverRunId));
+  const tag = interpretSpentTagResponse(tagRead);
   if (tag === 'unreadable') {
     return fail(
       'spent_tag_unreadable',
@@ -409,10 +643,76 @@ async function claimPhased(
       toView(checked.admission, null),
     );
   }
-  const reserved = await file.exclusive((io) => Promise.resolve(reserveClaim(io, file.path, input, clock, tag)));
+  const githubDate = githubDateFromResponse(tagRead);
+  if (tag === 'absent' && githubDate === null) {
+    return fail(
+      'github_clock_unreadable',
+      'GitHub\'s Date header could not be read from the spent-tag response. The record was not claimed and nothing was dispatched.',
+      toView(checked.admission, null),
+    );
+  }
+  const reserved = await file.exclusive((io) => Promise.resolve(reserveClaim(io, file.path, input, clock, tag, githubDate)));
   if (reserved.kind === 'done') return reserved.result;
   const ran = spawn.run(reserved.liveArgs);
   return file.exclusive((io) => Promise.resolve(recordDispatchOutcome(io, input, reserved, ran)));
+}
+
+/**
+ * The dispatch runs `--ref main`, so what is checked is `main`: the workflow
+ * declares every input the argv passes, and the mission's contract there is
+ * granted the lane. Null when both hold.
+ */
+function mainRefusal(spawn: GhSpawner, input: ClaimInput, admission: StoredAdmission): ClaimResult | null {
+  const record = toView(admission, null);
+  const read = (path: string): string | null => {
+    const result = spawn.run(mainContentsArgs(input.repo, path));
+    return result.code === 0 && result.stdout.trim() !== '' ? result.stdout : null;
+  };
+  const workflow = read(`.github/workflows/${PAID_WORKFLOW_FILE}`);
+  if (workflow === null) {
+    return fail('main_workflow_unreadable', 'The paid workflow could not be read at main. Nothing was claimed or dispatched.', record);
+  }
+  const inputs = workflowInputsRefusal(workflow, admission);
+  if (inputs !== null) return inputs;
+  const contract = read(missionContractPath(admission.missionId ?? ''));
+  const checker = contract === null ? null : read(LANE_GRANT_SOURCE);
+  const grants = checker === null ? null : parseLaneGrants(checker);
+  const granted = contract === null || grants === null ? null : grantedLanes(contract, grants);
+  if (granted === null) {
+    return fail(
+      'lane_grant_unreadable',
+      'The mission contract or the lane grant could not be read at main. Nothing was claimed or dispatched.',
+      record,
+    );
+  }
+  if (!granted.includes(input.lane as OperatorLane)) {
+    return fail(
+      'lane_not_granted',
+      `The lane ${input.lane} is not granted to ${admission.missionId ?? 'this mission'} on main; it may claim ${granted.join(', ')}. Nothing was claimed or dispatched.`,
+      record,
+    );
+  }
+  return null;
+}
+
+function workflowInputsRefusal(workflowSource: string, admission: StoredAdmission): ClaimResult | null {
+  if (!workflowDeclaresRunIdInput(workflowSource)) {
+    return fail(
+      'workflow_run_id_input_missing',
+      'The paid workflow does not declare workflow_dispatch input run_id. Nothing was claimed or dispatched.',
+      toView(admission, null),
+      WORKFLOW_RUN_ID_INPUT_YAML,
+    );
+  }
+  const undeclared = undeclaredDispatchInputs(workflowSource);
+  if (undeclared.length > 0) {
+    return fail(
+      'workflow_dispatch_input_missing',
+      `The paid workflow does not declare workflow_dispatch input ${undeclared.join(', ')}. Nothing was claimed or dispatched.`,
+      toView(admission, null),
+    );
+  }
+  return null;
 }
 
 type Checked =
@@ -423,6 +723,7 @@ interface Reservation {
   readonly kind: 'reserved';
   readonly admission: StoredAdmission;
   readonly at: string;
+  readonly githubDate: string | null;
   readonly liveArgs: readonly string[];
   readonly command: string;
 }
@@ -488,22 +789,9 @@ function checkClaim(
   if (!PAID_SLOT_DISPATCH_KEY.test(admission.keyHash)) {
     return done(fail('dispatch_key_invalid', 'The admitted dispatch key cannot be passed to the paid workflow.', toView(admission, null)));
   }
-  if (!workflowDeclaresRunIdInput(input.workflowSource)) {
-    return done(fail(
-      'workflow_run_id_input_missing',
-      'The paid workflow does not declare workflow_dispatch input run_id. Nothing was claimed or dispatched.',
-      toView(admission, null),
-      WORKFLOW_RUN_ID_INPUT_YAML,
-    ));
-  }
-  const undeclared = undeclaredDispatchInputs(input.workflowSource);
-  if (undeclared.length > 0) {
-    return done(fail(
-      'workflow_dispatch_input_missing',
-      `The paid workflow does not declare workflow_dispatch input ${undeclared.join(', ')}. Nothing was claimed or dispatched.`,
-      toView(admission, null),
-    ));
-  }
+  // A dry run checks the checked-out workflow. A dispatch checks main, before the spent tag is read.
+  const local = input.dispatch ? null : workflowInputsRefusal(input.workflowSource, admission);
+  if (local !== null) return done(local);
   const confirmLive = input.confirmation === OPERATOR_DISPATCH_CONFIRMATION;
   const dispatchArgs = guardedDispatchArgs({
     repo: input.repo,
@@ -545,6 +833,7 @@ function reserveClaim(
   input: ClaimInput,
   clock: OperatorClaimClock,
   tag: 'present' | 'absent',
+  githubDate: string | null,
 ): Reserved {
   // The record may have moved while the spent tag was read: check again.
   const checked = checkClaim(io, storePath, input, clock);
@@ -561,6 +850,7 @@ function reserveClaim(
       dispatchAttempted: false,
       dispatchError: null,
       halt: 'RUN_ID_ALREADY_SPENT',
+      githubDate,
     });
     io.write(appendClaim(document, event));
     if (!claimWasRecorded(storePath, event)) return { kind: 'done', result: expiredRefusal(admission) };
@@ -579,6 +869,7 @@ function reserveClaim(
     dispatchAttempted: false,
     dispatchError: null,
     halt: null,
+    githubDate,
   });
   io.write(appendClaim(document, reservation));
   if (!claimWasRecorded(storePath, reservation)) return { kind: 'done', result: expiredRefusal(admission) };
@@ -593,7 +884,7 @@ function reserveClaim(
     storePath,
   });
   if (liveArgs === null) return { kind: 'done', result: expiredRefusal(admission) };
-  return { kind: 'reserved', admission, at: nowIso, liveArgs, command };
+  return { kind: 'reserved', admission, at: nowIso, githubDate, liveArgs, command };
 }
 
 /**
@@ -607,7 +898,7 @@ function recordDispatchOutcome(
   reserved: Reservation,
   ran: GhResult,
 ): ClaimResult {
-  const { admission, at, command } = reserved;
+  const { admission, at, githubDate, command } = reserved;
   const document = io.read();
   const halt = interpretWorkflowHalt(ran);
   const workflowRunId = learnWorkflowRunId(ran, input.repo);
@@ -619,6 +910,7 @@ function recordDispatchOutcome(
       dispatchError: null,
       halt,
       workflowRunId,
+      githubDate,
     });
     io.write(appendClaim(document, spent));
     return fail(
@@ -636,6 +928,7 @@ function recordDispatchOutcome(
       dispatchError: unverified ? 'SPENT_TAG_UNVERIFIED' : 'gh_workflow_run_failed',
       halt: unverified ? 'SPENT_TAG_UNVERIFIED' : null,
       workflowRunId,
+      githubDate,
     });
     io.write(appendClaim(document, failed));
     return fail(
@@ -653,6 +946,7 @@ function recordDispatchOutcome(
     dispatchError: null,
     halt: null,
     workflowRunId,
+    githubDate,
   });
   io.write(appendClaim(document, dispatched));
   return {
@@ -664,6 +958,130 @@ function recordDispatchOutcome(
     dispatchedWorkflow: true,
     requiredInput: null,
   };
+}
+
+type ReconcileChecked =
+  | { readonly kind: 'done'; readonly result: ReconcileResult }
+  | { readonly kind: 'stuck'; readonly admission: StoredAdmission; readonly reservation: ClaimEvent };
+
+/**
+ * `dispatching` -> `dispatched` or `dispatch_failed`, from GitHub alone:
+ * - `dispatched` when the spent tag exists, its message names this run and a
+ *   `workflow_run_id`, and that id is the one paid run named `key=<dispatch key>`;
+ * - `dispatch_failed` (`workflow_run_unspent`) when no spent tag exists and
+ *   the one paid run named for the key completed without success: the workflow
+ *   ended before it spent the id.
+ * Anything else (no run, two runs, a run still going, a tag naming another
+ * run) leaves `dispatching` and says what GitHub showed. The outcome keeps the
+ * reservation's timestamp and GitHub clock. Nothing is deleted or rewritten.
+ */
+async function reconcilePhased(file: AdmissionFile, input: ReconcileInput, spawn: GhSpawner): Promise<ReconcileResult> {
+  const checked = await file.exclusive((io) => Promise.resolve(checkReconcile(io, input)));
+  if (checked.kind === 'done') return checked.result;
+  const { admission, reservation } = checked;
+  const record = toView(admission, reservation);
+  const refused = (kind: string, message: string, evidence: ReconcileEvidence | null): ReconcileResult =>
+    ({ ok: false, kind, message, record, evidence });
+  const tagRead = spawn.run(spentTagApiArgs(input.repo, admission.serverRunId));
+  const tag = interpretSpentTagResponse(tagRead);
+  if (tag === 'unreadable') return refused('spent_tag_unreadable', 'The spent tag could not be read. The record stays dispatching.', null);
+  let tagWorkflowRunId: string | null = null;
+  if (tag === 'present') {
+    const objectSha = spentTagObjectSha(tagRead);
+    tagWorkflowRunId = objectSha === null
+      ? null
+      : spentTagWorkflowRunId(spawn.run(['api', `repos/${input.repo}/git/tags/${objectSha}`]), admission.serverRunId);
+    if (tagWorkflowRunId === null) {
+      return refused(
+        'spent_tag_unverified',
+        'The spent tag exists but its message does not name this run and a workflow run. The record stays dispatching.',
+        { spentTag: 'present', tagWorkflowRunId: null, matchedRuns: [] },
+      );
+    }
+  }
+  const matchedRuns = runsForDispatchKey(spawn.run(paidRunListArgs(input.repo)), admission.keyHash);
+  if (matchedRuns === null) {
+    return refused('workflow_runs_unreadable', 'The paid workflow runs could not be listed. The record stays dispatching.', null);
+  }
+  const evidence: ReconcileEvidence = { spentTag: tag, tagWorkflowRunId, matchedRuns };
+  const only = matchedRuns.length === 1 ? matchedRuns[0] ?? null : null;
+  let outcome: ClaimEvent | null = null;
+  if (tag === 'present' && only !== null && only.workflowRunId === tagWorkflowRunId) {
+    outcome = baseEvent(admission, reservation.at, {
+      state: 'dispatched',
+      spentTagState: 'present',
+      dispatchAttempted: true,
+      dispatchError: null,
+      halt: null,
+      workflowRunId: only.workflowRunId,
+      githubDate: reservation.githubDate,
+    });
+  } else if (tag === 'absent' && only !== null && only.status === 'completed' && only.conclusion !== 'success') {
+    outcome = baseEvent(admission, reservation.at, {
+      state: 'dispatch_failed',
+      spentTagState: 'absent',
+      dispatchAttempted: true,
+      dispatchError: 'workflow_run_unspent',
+      halt: null,
+      workflowRunId: only.workflowRunId,
+      githubDate: reservation.githubDate,
+    });
+  }
+  if (outcome === null) {
+    return refused(
+      'reconcile_indeterminate',
+      'GitHub does not show one paid run for this dispatch key that agrees with the spent tag. The record stays dispatching.',
+      evidence,
+    );
+  }
+  const written = outcome;
+  return file.exclusive((io) => {
+    const document = io.read();
+    const latest = latestClaim(document, admission.runId, admission.serverRunId);
+    if (latest === null || claimKey(latest) !== claimKey(reservation)) {
+      return Promise.resolve<ReconcileResult>({
+        ok: false,
+        kind: 'record_moved',
+        message: 'The record changed while GitHub was read. Nothing was written.',
+        record: latest === null ? record : toView(admission, latest),
+        evidence,
+      });
+    }
+    io.write(appendClaim(document, written));
+    return Promise.resolve<ReconcileResult>({ ok: true, reconciled: true, record: toView(admission, written), evidence });
+  });
+}
+
+function checkReconcile(io: AdmissionFileIo, input: ReconcileInput): ReconcileChecked {
+  const done = (result: ReconcileResult): ReconcileChecked => ({ kind: 'done', result });
+  const shape = pairShape(input.wonderlandRunId, input.serverRunId);
+  if (shape !== null) return done({ ok: false, kind: shape.kind, message: shape.message, record: null, evidence: null });
+  if (!isRepo(input.repo)) return done({ ok: false, kind: 'repo_invalid', message: 'The GitHub repo must be owner/name.', record: null, evidence: null });
+  const located = locate(io.read(), input.wonderlandRunId, input.serverRunId);
+  if (located.kind !== 'match' || located.admission === null) {
+    return done({ ok: false, kind: 'admission_not_found', message: 'No admitted record matches that pair.', record: null, evidence: null });
+  }
+  const admission = located.admission;
+  if (isLegacyAdmission(admission)) {
+    return done({
+      ok: false,
+      kind: 'legacy_readonly',
+      message: 'A legacy run: admission cannot be claimed, dispatched, or spend-locked.',
+      record: toView(admission, located.claim),
+      evidence: null,
+    });
+  }
+  if (located.claim === null) {
+    return done({ ok: false, kind: 'not_claimed', message: 'The record was never claimed. Nothing to reconcile.', record: toView(admission, null), evidence: null });
+  }
+  if (located.claim.state !== 'dispatching') {
+    return done({ ok: true, reconciled: false, record: toView(admission, located.claim), evidence: null });
+  }
+  return { kind: 'stuck', admission, reservation: located.claim };
+}
+
+function claimKey(event: ClaimEvent): string {
+  return JSON.stringify([event.state, event.at, event.dispatchAttempted, event.githubDate, event.workflowRunId]);
 }
 
 function statusInside(
@@ -897,10 +1315,13 @@ function legalTransition(prior: ClaimEvent | null, event: ClaimEvent): boolean {
   }
   if (prior.state !== 'dispatching') return false;
   if (!event.dispatchAttempted) return false;
+  // The outcome keeps the reservation's GitHub clock: it is the dispatch's, not the outcome write's.
+  if (event.githubDate !== prior.githubDate) return false;
   if (event.state === 'already_spent') return true;
   if (event.state === 'dispatch_failed') {
     if (event.halt === 'SPENT_TAG_UNVERIFIED') return event.dispatchError === 'SPENT_TAG_UNVERIFIED';
-    return event.halt === null && event.dispatchError === 'gh_workflow_run_failed';
+    return event.halt === null
+      && (event.dispatchError === 'gh_workflow_run_failed' || event.dispatchError === 'workflow_run_unspent');
   }
   return event.state === 'dispatched';
 }
@@ -912,6 +1333,7 @@ function baseEvent(admission: StoredAdmission, at: string, fields: {
   readonly dispatchError: ClaimEvent['dispatchError'];
   readonly halt: ClaimEvent['halt'];
   readonly workflowRunId?: string | null;
+  readonly githubDate: string | null;
 }): ClaimEvent {
   return {
     wonderlandRunId: admission.runId,
@@ -924,6 +1346,7 @@ function baseEvent(admission: StoredAdmission, at: string, fields: {
     dispatchError: fields.dispatchError,
     halt: fields.halt,
     workflowRunId: fields.workflowRunId ?? null,
+    githubDate: fields.githubDate,
   };
 }
 
