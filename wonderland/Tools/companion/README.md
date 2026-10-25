@@ -210,3 +210,13 @@ That line is printed by all four builds (g++ 14.2.0 -O2, g++ ASan+UBSan, clang++
 - **Not covered:** the status SSE stream (§4.3) client, the agent invite (§3.1) client, and `GET` of stored conversation turns (§2.2). BRIDGE has no mission-independent agent list.
 - **HUD:** the adapter exposes `GetAgentIds` / `GetAgentView(agentId)` (authorized capabilities only) and `GetSessionView`; there is still no widget.
 - **Nothing committed, pushed or PR'd.**
+
+## Before chat is served: pre-chat checklist
+
+Chat isn't served on any bridge yet (MAIN JULIUS, #466 `b2740229`), and `bChatRouteServed` stays false. Before anyone sets it to true:
+
+1. **The stream's game-thread hop must not capture a raw `this`.** In `UWonderlandCompanionClient::StartChatRequest`, the HTTP-thread body callback queues `AsyncTask(ENamedThreads::GameThread, [this, …])`. Replace that with a `TWeakObjectPtr<UWonderlandCompanionClient>` captured and checked on the game thread, so a chunk arriving after `Deinitialize` or GC can never touch a dead object. Recorded by REVIEW on #467 (`023af6cc`).
+2. **The session goes to the paired bridge only.** `MayCarrySession` must keep gating every request, chat included (#467 `9ee52065`). The KAT rows under `key` must stay green.
+3. **Open questions O1–O4** in `OPEN_QUESTIONS_FOR_BRIDGE.md` need answers in BRIDGE code first: the real paths, the bodies, the stream grammar, the chat capability word, and the meta identity.
+4. **Truthful labelling** (#436): an API-backed side companion is labelled as an API integration. It is never presented as the founder's ChatGPT account or as Grok participation.
+5. **Spend:** any provider call made through chat needs founder scope and spend authorization first.
