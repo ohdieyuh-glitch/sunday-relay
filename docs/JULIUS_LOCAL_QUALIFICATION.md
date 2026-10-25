@@ -12,6 +12,8 @@ runner is set up yet:
   and bills the Anthropic key;
 - personal Claude OAuth or session credentials must never move to GitHub infrastructure.
 
+Organization attribution is workflow-only. The hosted readiness step makes one spend-free models GET, keeps the non-secret `anthropic-organization-id` header, and compares it with `JULIUS_EXPECTED_ANTHROPIC_ORG_ID`. The local launcher does not run that check.
+
 **Nothing in this document authorises the live mission.** `run` is gated on the founder's
 explicit, separate authorization and on the literal `--confirm "RUN LIVE MISSION"`.
 

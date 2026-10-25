@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -89,7 +89,7 @@ suite('the C.A.R.D. gate at dispatch and the claim hold over a real PostgreSQL',
     runs = new JuliusPostgresRepository(pool);
     lifecycle = new JuliusLifecyclePostgresRepository(pool);
     const ports = { bootstrap, missingConfig: [], reviewerProvider: 'xai', cardRevision: CARD };
-    create = (body) => handleJuliusMissionRoute({ method: 'POST', path: '/julius/missions', operator: true, body }, ports);
+    create = (body) => handleJuliusMissionRoute({ method: 'POST', path: '/julius/missions', operator: true, body, runId: `wlj_${randomUUID()}` }, ports);
   });
   afterAll(async () => pool?.end());
 

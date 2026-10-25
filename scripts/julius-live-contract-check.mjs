@@ -163,6 +163,9 @@ const MISSION_LIMITS = Object.freeze({
   // The fourth unscored diagnostic (two latent defects found by reading two independent pure domain modules: a hand-written SHA-256's UTF-8 encoder and an evidence age
   // calculation); same ceilings, same permanent maximum-capability directive.
   'julius-diag-digest-evidence-1': Object.freeze({ spendUsd: 100, repairCycles: 3 }),
+  // The in-world data mission. Thirty dollars and three repair cycles, named here so the contract cannot grant itself the ceiling.
+  // No lane grant and no research grant: a namespace absent from those tables stays on the lab default and may not research.
+  'julius-inworld-data-1': Object.freeze({ spendUsd: 30, repairCycles: 3 }),
 });
 
 /** The ceilings that apply to THIS contract, by its own declared namespace. */

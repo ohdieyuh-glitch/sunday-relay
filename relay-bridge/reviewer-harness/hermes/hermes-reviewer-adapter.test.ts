@@ -358,6 +358,10 @@ describe('usage is reported or Unknown, never zero', () => {
     expect(outcome.usage.totalTokens).toBe(1540);
     expect(outcome.usage.model).toBe('grok-4.5');
     expect(outcome.usage.costMicros).toBe('4200');
+    // The fake usage file names no provider request id, and stdout is not a source for one.
+    expect(outcome.usage.providerRequestId).toBeNull();
+    expect(outcome.usage.providerRequestAvailability).toBe('UNAVAILABLE');
+    expect(outcome.usage.providerRequestUnavailableReason).toBe('hermes_usage_file_has_no_provider_request_id');
   }, 30_000);
 
   it('a missing or malformed usage report is Unknown, not zero', () => {
@@ -365,10 +369,70 @@ describe('usage is reported or Unknown, never zero', () => {
     const absent = parseUsageFile(join(dir, 'nope.json'));
     expect(absent.totalTokens).toBeNull();
     expect(absent.source).toBe('unavailable');
+    expect(absent.providerRequestId).toBeNull();
+    expect(absent.providerRequestAvailability).toBe('UNAVAILABLE');
+    expect(absent.providerRequestUnavailableReason).toBe('hermes_usage_file_absent');
     const bad = join(dir, 'bad.json');
     writeFileSync(bad, 'not json');
     expect(parseUsageFile(bad).source).toBe('unavailable');
     expect(parseUsageFile(bad).inputTokens).toBeNull();
+    expect(parseUsageFile(bad).providerRequestUnavailableReason).toBe('hermes_usage_file_unreadable');
+    const arrayFile = join(dir, 'array.json');
+    writeFileSync(arrayFile, '[]');
+    expect(parseUsageFile(arrayFile).providerRequestUnavailableReason).toBe('hermes_usage_file_unreadable');
+  });
+
+  it('captures a safe provider request id and refuses session id, stdout, and credential-shaped values', () => {
+    const dir = workdir();
+    const write = (name: string, body: unknown) => {
+      const path = join(dir, name);
+      writeFileSync(path, JSON.stringify(body));
+      return path;
+    };
+    const captured = parseUsageFile(write('captured.json', {
+      input_tokens: 3, output_tokens: 1, model: 'grok-build-0.1',
+      session_id: 'sess_not_a_provider_request',
+      request_id: 'req_01ABCDEFGHIJKLMN',
+    }));
+    expect(captured.providerRequestAvailability).toBe('CAPTURED');
+    expect(captured.providerRequestId).toBe('req_01ABCDEFGHIJKLMN');
+    expect(captured.providerRequestUnavailableReason).toBeNull();
+    expect(captured.source).toBe('harness_reported');
+    expect(JSON.stringify(captured)).not.toContain('sess_not_a_provider_request');
+
+    for (const key of ['provider_request_id', 'xai_request_id', 'provider_response_id', 'response_id'] as const) {
+      const usage = parseUsageFile(write(`${key}.json`, { model: 'grok-build-0.1', [key]: `id_${key}` }));
+      expect(usage.providerRequestId, key).toBe(`id_${key}`);
+      expect(usage.providerRequestAvailability, key).toBe('CAPTURED');
+    }
+
+    const sessionOnly = parseUsageFile(write('session.json', {
+      model: 'grok-build-0.1', input_tokens: 1, session_id: 'sess_only',
+    }));
+    expect(sessionOnly.providerRequestId).toBeNull();
+    expect(sessionOnly.providerRequestAvailability).toBe('UNAVAILABLE');
+    expect(sessionOnly.providerRequestUnavailableReason).toBe('hermes_usage_file_has_no_provider_request_id');
+    expect(JSON.stringify(sessionOnly)).not.toContain('sess_only');
+
+    // The first present key wins. A credential-shaped value is not replaced by a later safe key.
+    const secret = 'xai-FAKETESTNOTREAL';
+    const refused = parseUsageFile(write('secret.json', {
+      model: 'grok-build-0.1',
+      provider_request_id: secret,
+      request_id: 'req_later_safe',
+    }));
+    expect(refused.providerRequestId).toBeNull();
+    expect(refused.providerRequestAvailability).toBe('UNAVAILABLE');
+    expect(refused.providerRequestUnavailableReason).toBe('provider_request_id_credential_shaped');
+    expect(JSON.stringify(refused)).not.toContain(secret);
+    expect(JSON.stringify(refused)).not.toContain('req_later_safe');
+
+    const unusable = parseUsageFile(write('unusable.json', {
+      model: 'grok-build-0.1', request_id: 'not an id',
+    }));
+    expect(unusable.providerRequestId).toBeNull();
+    expect(unusable.providerRequestUnavailableReason).toBe('provider_request_id_unusable');
+    expect(JSON.stringify(unusable)).not.toContain('not an id');
   });
 });
 

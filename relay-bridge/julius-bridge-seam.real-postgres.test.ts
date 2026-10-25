@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -38,6 +38,19 @@ const suite = enabled ? describe : describe.todo;
 
 const nonce = () => randomBytes(4).toString('hex');
 
+/**
+ * TEST ONLY. The same body always names the same `wlj_` id, and a rerun key names a different one, so the
+ * production route's replay and race cases still meet one admitted run. Production never derives an id.
+ */
+function admittedRunId(body: string, rerunKey?: string): string {
+  const material = rerunKey === undefined ? body : `${body}\0rerun:${rerunKey}`;
+  const chars = createHash('sha256').update(material).digest('hex').slice(0, 32).split('');
+  chars[12] = '4';
+  chars[16] = 'a';
+  const hex = chars.join('');
+  return `wlj_${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 function contractFor(id: string, testCommand = '') {
   return {
     missionId: `mission:seam-${id}`, markerNamespace: `seam-${id}`, projectId: `prj-seam-${id}`, tenantId: `tenant-seam-${id}`,
@@ -71,9 +84,9 @@ suite('the Wonderland seam over a real PostgreSQL', () => {
     const bootstrap = composeJuliusMissionBootstrap(pool);
     statePorts = { api: composeJuliusStateApi(pool), missingConfig: [] };
     const ports = { bootstrap, missingConfig: [], reviewerProvider: 'xai', cardRevision: 'card:seam:1' };
-    create = (body) => handleJuliusMissionRoute({ method: 'POST', path: '/julius/missions', operator: true, body }, ports);
+    create = (body) => handleJuliusMissionRoute({ method: 'POST', path: '/julius/missions', operator: true, body, runId: admittedRunId(body) }, ports);
     createRerun = (body, rerunKey) => handleJuliusMissionRoute(
-      { method: 'POST', path: '/julius/missions', operator: true, body, rerun: 'explicit', ...(rerunKey === undefined ? {} : { rerunKey }) }, ports);
+      { method: 'POST', path: '/julius/missions', operator: true, body, rerun: 'explicit', runId: admittedRunId(body, rerunKey ?? ''), ...(rerunKey === undefined ? {} : { rerunKey }) }, ports);
   });
   afterAll(async () => pool?.end());
 

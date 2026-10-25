@@ -8,7 +8,8 @@ import { deriveJuliusSpentTag } from '../scripts/julius-admission-run-id.mjs';
 import { createMemoryAdmissionStore, isClientRunId, isServerRunId, type AdmittedRecord } from './julius-dispatch-admission';
 import type { JuliusCompanionBinding } from './julius-companion-slot';
 import { createMemoryCompanionEvidenceStore, type CompanionEvidenceStore } from './julius-companion-evidence';
-import { createSharedSpendLedger, type JuliusSpendLedgerPort } from './julius-dispatch-spend';
+import { type JuliusSpendLedgerPort } from './julius-dispatch-spend';
+import { createDurableStandInSpendLedger } from './julius-dispatch-wiring-testkit';
 import { authorizeJuliusLiveSpend } from '../src/relay/mission/julius/julius-spend-ceiling';
 import type { KeyStore } from './julius-key-store';
 
@@ -1263,7 +1264,7 @@ describe('R3 the KeyStore is REQUIRED in live mode (the controller itself refuse
 describe('the durable cap is authorizeJuliusLiveSpend, in both directions', () => {
   const inworld: FrozenMission = { ...FROZEN, markerNamespace: 'julius-inworld-data-1', spendUsd: 30, repairCycles: 3 };
   it('a settlement already on the shared ledger is seen by the controller and the admission stays unclaimed', async () => {
-    const spendLedger = createSharedSpendLedger();
+    const spendLedger = createDurableStandInSpendLedger();
     await spendLedger.record('run:cccccccccccccccccccccccc', {
       taskId: 'run:cccccccccccccccccccccccc:coder', role: 'CODING_AGENT', basis: 'PROVIDER_REPORTED',
       usdMicros: 30_000_001, estimatedUsdMicros: null, billingPath: 'API_BILLED',
@@ -1275,7 +1276,7 @@ describe('the durable cap is authorizeJuliusLiveSpend, in both directions', () =
     expect(h.claims.status(RUN)).toBe('admitted');
   });
   it('a cost the controller records is the same fact authorizeJuliusLiveSpend folds', async () => {
-    const spendLedger = createSharedSpendLedger();
+    const spendLedger = createDurableStandInSpendLedger();
     const h = harness({
       frozen: inworld, spendLedger,
       behave: {
@@ -1348,7 +1349,7 @@ describe('companion slot beside the chain', () => {
       objectiveSummary: 'Plan the fixture.',
       companion_task: { subtask: 'Add the companion note.', acceptanceCriteria: ['The note is present.'] },
     });
-    const spendLedger = createSharedSpendLedger();
+    const spendLedger = createDurableStandInSpendLedger();
     const h = harness({
       frozen: { ...FROZEN, markerNamespace: 'julius-inworld-data-1', spendUsd: 30, repairCycles: 3 },
       spendLedger,
@@ -1420,6 +1421,7 @@ describe('companion slot beside the chain', () => {
     const read = await spendLedger.readPrior({ missionId: 'julius-inworld-data-1', projectId: PROJECT, excludeRunId: 'run:not-this-one' });
     expect(read).toEqual({
       readable: true,
+      durableRecord: 'PRESENT',
       priorRuns: [{
         runId: RUN,
         knownUsdMicros: 6_000_000,
@@ -1535,7 +1537,7 @@ describe('canonical wlj_ spend key; legacy run: is read-only', () => {
   });
 
   it('keys spend and evidence on the wlj_ id and the 32-hex spent tag', async () => {
-    const spendLedger = createSharedSpendLedger();
+    const spendLedger = createDurableStandInSpendLedger();
     const h = harness({ spendLedger });
     expect(await h.controller.dispatch(input())).toMatchObject({ ok: true, runId: RUN });
     await h.controller.whenIdle();
@@ -1556,7 +1558,7 @@ describe('canonical wlj_ spend key; legacy run: is read-only', () => {
   });
 
   it('a legacy id cannot dispatch, resume or claim spend, and an unparseable id fails closed', async () => {
-    const spendLedger = createSharedSpendLedger();
+    const spendLedger = createDurableStandInSpendLedger();
     const h = harness({ spendLedger });
     expect(await h.controller.dispatch(input({ runId: LEGACY }))).toMatchObject({ ok: false, status: 409, code: 'julius_dispatch_legacy_read_only' });
     expect(h.claims.status(LEGACY)).toBe('admitted');
@@ -1596,7 +1598,7 @@ describe('canonical wlj_ spend key; legacy run: is read-only', () => {
   });
 
   it('a legacy spend row still counts toward the $60 cap, and presenting it does not claim again', async () => {
-    const spendLedger = createSharedSpendLedger();
+    const spendLedger = createDurableStandInSpendLedger();
     await spendLedger.record(LEGACY, {
       taskId: `${LEGACY}:coder`, role: 'CODING_AGENT', basis: 'PROVIDER_REPORTED', usdMicros: 30_000_001, estimatedUsdMicros: null, billingPath: 'API_BILLED',
     });

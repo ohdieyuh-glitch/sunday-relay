@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { createMemoryAdmissionStore } from './julius-dispatch-admission';
 import { providerRequestId } from './julius-dispatch';
-import { createSharedSpendLedger } from './julius-dispatch-spend';
+import { createSharedSpendLedger, createSpentTagSpendLedger, preSpendDecision, spendRefusalCode } from './julius-dispatch-spend';
+import { createDurableStandInSpendLedger } from './julius-dispatch-wiring-testkit';
 import { authorizeJuliusLiveSpend, summarizeJuliusPriorRunSpend, type JuliusSettlementFact } from '../src/relay/mission/julius/julius-spend-ceiling';
 
 /**
@@ -71,7 +72,7 @@ describe('claim store', () => {
 
 describe('one spend ledger, both directions', () => {
   it('a settlement the J1 port records is the spend authorizeJuliusLiveSpend refuses on', async () => {
-    const ledger = createSharedSpendLedger();
+    const ledger = createDurableStandInSpendLedger();
     const runId = 'run:aaaaaaaaaaaaaaaaaaaaaaaa';
     await ledger.record(runId, fact(runId, 30_000_001));
     const read = await ledger.readPrior({ missionId: 'julius-inworld-data-1', projectId: 'proj-1' });
@@ -82,17 +83,66 @@ describe('one spend ledger, both directions', () => {
     if (!again.authorized) expect(again.reasonCode).toBe('qualifying_pair_spend_exceeded');
   });
   it('a fact summarized by the runtime module, placed on the same port, is what a later read returns', async () => {
-    const ledger = createSharedSpendLedger();
+    const ledger = createDurableStandInSpendLedger();
     const prior = fact('run:bbbbbbbbbbbbbbbbbbbbbbbb', 10_000_000);
     await ledger.record(prior.taskId.slice(0, 28), prior);
     const summarized = summarizeJuliusPriorRunSpend('run:bbbbbbbbbbbbbbbbbbbbbbbb', [prior]);
     expect(summarized.spendVerified).toBe(true);
     expect(summarized.knownUsdMicros).toBe(10_000_000);
     const read = await ledger.readPrior({ missionId: 'julius-inworld-data-1', projectId: 'proj-1' });
-    expect(read).toEqual({ readable: true, priorRuns: [summarized] });
+    expect(read).toEqual({ readable: true, priorRuns: [summarized], durableRecord: 'PRESENT' });
     const admitted = authorizeJuliusLiveSpend({
       namespace: 'julius-inworld-data-1', spendUsd: 30, repairCycles: 3, ledger: read,
     });
     expect(admitted).toMatchObject({ authorized: true, spendCeilingUsdMicros: 30_000_000 });
+  });
+});
+
+describe('J1 dispatch reads the durable spent-tag record', () => {
+  const J1 = 'julius-inworld-data-1';
+  const listing = (status: number, body: unknown): typeof fetch => (async () => new Response(JSON.stringify(body), { status })) as typeof fetch;
+  const decide = async (ledger: ReturnType<typeof createSpentTagSpendLedger> | ReturnType<typeof createSharedSpendLedger>, spendUsd = 30, repairCycles = 3) =>
+    preSpendDecision({ markerNamespace: J1, spendUsd, repairCycles, ledger: await ledger.readPrior({ missionId: J1, projectId: 'proj-1' }) });
+
+  it('authorizes $30 and 3 repairs when the tag listing is empty', async () => {
+    const ledger = createSpentTagSpendLedger({ repository: 'ohdieyuh-glitch/sunday-relay', token: 'ghs_test_not_a_real_token', fetchImpl: listing(200, []) });
+    expect(await decide(ledger)).toEqual({ applicable: true, authorized: true, spendCeilingUsdMicros: 30_000_000, maxRepairRounds: 3 });
+  });
+
+  it('refuses $30.01 and a fourth repair cycle on that same empty record', async () => {
+    const ledger = createSpentTagSpendLedger({ repository: 'ohdieyuh-glitch/sunday-relay', token: 'ghs_test_not_a_real_token', fetchImpl: listing(200, []) });
+    expect(await decide(ledger, 30.01)).toMatchObject({ authorized: false, reasonCode: 'namespace_spend_ceiling_exceeded' });
+    expect(await decide(ledger, 30, 4)).toMatchObject({ authorized: false, reasonCode: 'namespace_repair_ceiling_exceeded' });
+  });
+
+  it('refuses when the tag listing cannot be read, and that is a 503, not zero', async () => {
+    const ledger = createSpentTagSpendLedger({ repository: 'ohdieyuh-glitch/sunday-relay', token: 'ghs_test_not_a_real_token', fetchImpl: listing(500, {}) });
+    const decision = await decide(ledger);
+    expect(decision).toMatchObject({ authorized: false, reasonCode: 'spend_ledger_unreadable' });
+    expect(spendRefusalCode('spend_ledger_unreadable')).toEqual({ status: 503, code: 'julius_dispatch_spend_ledger_unreadable' });
+  });
+
+  it('refuses with no token, and does not call the listing', async () => {
+    let called = false;
+    const ledger = createSpentTagSpendLedger({ repository: 'ohdieyuh-glitch/sunday-relay', token: '', fetchImpl: (async () => { called = true; return new Response('[]'); }) as typeof fetch });
+    expect(await decide(ledger)).toMatchObject({ authorized: false, reasonCode: 'spend_ledger_unreadable' });
+    expect(called).toBe(false);
+  });
+
+  it('an in-process ledger is not the durable record, and its refusal has its own 503 code', async () => {
+    expect(await decide(createSharedSpendLedger())).toMatchObject({ authorized: false, reasonCode: 'qualifying_pair_spend_absent' });
+    expect(spendRefusalCode('qualifying_pair_spend_absent')).toEqual({ status: 503, code: 'julius_dispatch_spend_record_absent' });
+  });
+
+  it('does not write: the reservation tag belongs to the paid workflow, and a settlement resolves without a request', async () => {
+    let calls = 0;
+    const ledger = createSpentTagSpendLedger({ repository: 'ohdieyuh-glitch/sunday-relay', token: 'ghs_test_not_a_real_token', fetchImpl: (async () => { calls += 1; return new Response('[]'); }) as typeof fetch });
+    await expect(ledger.record('wlj_01234567-89ab-4cde-8fab-0123456789ab', {} as JuliusSettlementFact)).resolves.toBeUndefined();
+    expect(calls).toBe(0);
+  });
+
+  it('the production in-process ledger is never the durable record', async () => {
+    expect((await createSharedSpendLedger().readPrior({ missionId: J1, projectId: 'proj-1' }))).toMatchObject({ durableRecord: 'ABSENT' });
+    expect((await createDurableStandInSpendLedger().readPrior({ missionId: J1, projectId: 'proj-1' }))).toMatchObject({ durableRecord: 'PRESENT' });
   });
 });

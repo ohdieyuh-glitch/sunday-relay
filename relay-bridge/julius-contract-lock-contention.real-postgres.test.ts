@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { Pool, type PoolClient } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -184,7 +184,7 @@ suite('a contended task-contract lock, against a real PostgreSQL', () => {
     pool = new Pool({ connectionString: databaseUrl!, max: 10 });
     await new TransactionalWonderlandDatabase(pool).migrate();
     const ports = { bootstrap: composeJuliusMissionBootstrap(pool), missingConfig: [], reviewerProvider: 'xai', cardRevision: CARD };
-    create = (body) => handleJuliusMissionRoute({ method: 'POST', path: '/julius/missions', operator: true, body }, ports);
+    create = (body) => handleJuliusMissionRoute({ method: 'POST', path: '/julius/missions', operator: true, body, runId: `wlj_${randomUUID()}` }, ports);
   });
   afterAll(async () => pool?.end());
 

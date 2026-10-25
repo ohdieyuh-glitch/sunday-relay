@@ -102,6 +102,11 @@ const SECRET_SHAPES = [
   // A `claude setup-token` subscription token (CLAUDE_CODE_OAUTH_TOKEN), named for itself.
   /\bsk-ant-oat\d*-[A-Za-z0-9_-]{8,}/u,
   /\bCLAUDE_CODE_OAUTH_TOKEN\s*[:=]\s*\S{8,}/u,
+  // The paid coder's Anthropic API key, named for itself. The generic api-key
+  // shape does not see the underscore in ANTHROPIC_API_KEY.
+  /\bANTHROPIC_API_KEY\s*[:=]\s*\S{8,}/u,
+  /\bx-api-key\s*[:=]\s*\S{8,}/iu,
+  /\banthropic-organization-id\s*[:=]\s*\S+/iu,
   /\bgh[pousr]_[A-Za-z0-9]{16,}/u,
   /\bgithub_pat_[A-Za-z0-9_]{16,}/u,
   /\bAKIA[0-9A-Z]{12,}/u,
