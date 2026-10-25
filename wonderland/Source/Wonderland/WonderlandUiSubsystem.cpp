@@ -6572,8 +6572,7 @@ void UWonderlandUiSubsystem::MountHudFurniture()
 						.Text_Lambda([WeakThis]() { FString Text; bool bLive = false; if (WeakThis.IsValid()) { WeakThis->JuliusLiveCard(Text, bLive); } return FText::FromString(Text); })
 					]
 				]
-			]
-		];
+			];
 	if (!TerritoryBannerBrush.IsValid())
 	{
 		// DARK ENOUGH TO READ AGAINST IVORY STONE. Photographed at the Icarus checkpoint at 0.86 alpha, the
