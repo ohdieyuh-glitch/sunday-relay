@@ -6,6 +6,7 @@ import { bundleDigest } from '../scripts/julius-paid-run-archive.mjs';
 import { deriveJuliusSpentTag } from '../scripts/julius-admission-run-id.mjs';
 import { juliusMissionTraceId } from '../scripts/julius-mission-trace.mjs';
 import {
+  checkerVerdictFrom,
   createJuliusMissionEvidenceReader,
   type JuliusMissionGitHub,
   type JuliusMissionWorkflowRun,
@@ -219,6 +220,8 @@ describe('JuliusMissionEvidenceReader', () => {
       phases: null,
       traceId: TRACE,
       traceparent: null,
+      checkerVerdict: 'NOT_RUN',
+      checker: null,
     });
     const json = JSON.stringify(reading);
     expect(json).not.toContain('ffffffffffffffffffffffffffffffff');
@@ -517,5 +520,50 @@ describe('JuliusMissionEvidenceReader', () => {
       { path: 'live-mission.evidence.txt', text: RESULT },
       { path: 'runs.tsv', text: runs },
     ]))).read(WLJ)).toBeNull();
+  });
+});
+
+describe('the hidden checker verdict is read from the grade job only', () => {
+  const judged = 'b'.repeat(64);
+  const checkerSha = 'c'.repeat(64);
+  const verdictFile = (verdict: string, runId = WLJ, extra = ''): string => [
+    'schema=julius-inworld-verdict.v1', `verdict=${verdict}`, 'reason=none', `run_id=${runId}`, 'task_id=task:build-1', 'task_type=build',
+    `judged_trimmed_sha256=${judged}`, `raw_sha256=${'d'.repeat(64)}`, `game_digest=${judged.slice(0, 12)}`, `checker_sha256=${checkerSha}`,
+    'combined_pin=none', 'grader_sha256=none', 'failed_sections=none', extra, '',
+  ].join('\n');
+
+  it('PASS and FAIL are kept verbatim with what was judged', () => {
+    expect(checkerVerdictFrom(verdictFile('PASS'), WLJ)).toEqual({
+      checkerVerdict: 'PASS',
+      checker: { reason: 'none', taskId: 'task:build-1', judgedTrimmedSha256: judged, gameDigest: judged.slice(0, 12), checkerSha256: checkerSha },
+    });
+    expect(checkerVerdictFrom(verdictFile('FAIL'), WLJ).checkerVerdict).toBe('FAIL');
+  });
+
+  it('absent, another run, another schema, a duplicate key, or an unknown token is NOT_RUN, never PASS', () => {
+    expect(checkerVerdictFrom(null, WLJ)).toEqual({ checkerVerdict: 'NOT_RUN', checker: null });
+    expect(checkerVerdictFrom(verdictFile('PASS', 'wlj_0b7a1c2e-4f3d-4a6b-8c2d-3e4f5a6b7c8d'), WLJ).checkerVerdict).toBe('NOT_RUN');
+    expect(checkerVerdictFrom(verdictFile('PASS').replace('julius-inworld-verdict.v1', 'v0'), WLJ).checkerVerdict).toBe('NOT_RUN');
+    expect(checkerVerdictFrom(verdictFile('PASS', WLJ, 'verdict=PASS'), WLJ).checkerVerdict).toBe('NOT_RUN');
+    expect(checkerVerdictFrom(verdictFile('pass'), WLJ).checkerVerdict).toBe('NOT_RUN');
+    expect(checkerVerdictFrom(verdictFile('NOT_RUN'), WLJ).checkerVerdict).toBe('NOT_RUN');
+  });
+
+  it('a PASS that does not name the judged bytes is not a verdict', () => {
+    expect(checkerVerdictFrom(verdictFile('PASS').replace(`judged_trimmed_sha256=${judged}`, 'judged_trimmed_sha256=none'), WLJ).checkerVerdict).toBe('NOT_RUN');
+    expect(checkerVerdictFrom(verdictFile('PASS').replace(`game_digest=${judged.slice(0, 12)}`, 'game_digest=000000000000'), WLJ).checkerVerdict).toBe('NOT_RUN');
+  });
+
+  it('a completed run carries the grade job\'s verdict, and a verdict inside julius-live-evidence is not read', async () => {
+    const runs = `run_id\tmission_id\tstate\tcard_revision\n${WLJ}\tmission:julius-continuous-1\tCOMPLETED\t7\n(1 row)\n`;
+    const files = [{ path: 'live-mission.evidence.txt', text: RESULT }, { path: 'runs.tsv', text: runs }];
+    const graded = withProof(files);
+    const withVerdict = { ...graded, artifacts: [...graded.artifacts, { name: 'julius-inworld-verdict', files: [{ path: 'checker-verdict.txt', text: verdictFile('FAIL') }] }] };
+    const failed = await createJuliusMissionEvidenceReader(github(tagMessage(WLJ), withVerdict)).read(WLJ) as { checkerVerdict: string } | null;
+    expect(failed?.checkerVerdict).toBe('FAIL');
+
+    const smuggled = withProof([...files, { path: 'checker-verdict.txt', text: verdictFile('PASS') }]);
+    const notRun = await createJuliusMissionEvidenceReader(github(tagMessage(WLJ), smuggled)).read(WLJ) as { checkerVerdict: string } | null;
+    expect(notRun?.checkerVerdict).toBe('NOT_RUN');
   });
 });

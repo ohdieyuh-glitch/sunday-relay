@@ -27,6 +27,8 @@ import { projectJuliusSlotViews, type JuliusTimelineEntry } from '../src/relay/m
 
 export const JULIUS_SPEND_TAG_SCHEMA = 'julius-run-spent.v1' as const;
 const EVIDENCE_ARTIFACT = 'julius-live-evidence';
+/** The grade job's own artifact. A verdict anywhere else is not read. */
+const VERDICT_ARTIFACT = 'julius-inworld-verdict';
 
 export const JULIUS_MISSION_PHASE_ROLES = ['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER'] as const;
 export type JuliusMissionPhaseRole = (typeof JULIUS_MISSION_PHASE_ROLES)[number];
@@ -144,6 +146,22 @@ export interface JuliusMissionCompletionEvidence {
   readonly phases: readonly JuliusMissionPhaseEvidence[] | null;
   readonly traceId: string | null;
   readonly traceparent: null;
+  /**
+   * The pinned hidden checker's verdict on this run, from the grade job. Absent,
+   * unreadable, for another run, or any other token is NOT_RUN: never PASS.
+   */
+  readonly checkerVerdict: JuliusCheckerVerdict;
+  readonly checker: JuliusCheckerEvidence | null;
+}
+
+export type JuliusCheckerVerdict = 'PASS' | 'FAIL' | 'NOT_RUN';
+
+export interface JuliusCheckerEvidence {
+  readonly reason: string | null;
+  readonly taskId: string | null;
+  readonly judgedTrimmedSha256: string | null;
+  readonly gameDigest: string | null;
+  readonly checkerSha256: string | null;
 }
 
 /**
@@ -630,8 +648,44 @@ export function createJuliusMissionEvidenceReader(github: JuliusMissionGitHub): 
         phases: phasesFrom(fileText(evidence, 'slot-events.tsv'), derived.runId),
         traceId: juliusMissionTraceId(derived.runId),
         traceparent: null,
+        ...checkerVerdictFrom(fileText(observed.artifacts.find((artifact) => artifact.name === VERDICT_ARTIFACT), 'checker-verdict.txt'), derived.runId),
       };
       return completion;
     },
   };
+}
+
+const VERDICT_SHA = /^[0-9a-f]{64}$/u;
+const VERDICT_DIGEST = /^[0-9a-f]{12}$/u;
+const VERDICT_TOKEN = /^[a-z_]{1,64}$/u;
+const VERDICT_TASK = /^[A-Za-z0-9:_-]{1,128}$/u;
+
+/** checker-verdict.txt (scripts/julius-inworld-grade.mjs): closed `key=value` lines. */
+export function checkerVerdictFrom(text: string | null, runId: string): { readonly checkerVerdict: JuliusCheckerVerdict; readonly checker: JuliusCheckerEvidence | null } {
+  const notRun = { checkerVerdict: 'NOT_RUN' as const, checker: null };
+  if (text === null) return notRun;
+  const fields = new Map<string, string>();
+  for (const line of text.split('\n')) {
+    const at = line.indexOf('=');
+    if (at <= 0) continue;
+    const key = line.slice(0, at);
+    if (fields.has(key)) return notRun;
+    fields.set(key, line.slice(at + 1).replace(/\r$/u, ''));
+  }
+  if (fields.get('schema') !== 'julius-inworld-verdict.v1' || fields.get('run_id') !== runId) return notRun;
+  const verdict = fields.get('verdict');
+  const known = (value: string | undefined, shape: RegExp): string | null => (value !== undefined && shape.test(value) ? value : null);
+  const checker: JuliusCheckerEvidence = {
+    reason: known(fields.get('reason'), VERDICT_TOKEN),
+    taskId: known(fields.get('task_id'), VERDICT_TASK),
+    judgedTrimmedSha256: known(fields.get('judged_trimmed_sha256'), VERDICT_SHA),
+    gameDigest: known(fields.get('game_digest'), VERDICT_DIGEST),
+    checkerSha256: known(fields.get('checker_sha256'), VERDICT_SHA),
+  };
+  if (verdict === 'PASS' || verdict === 'FAIL') {
+    // A PASS or FAIL names what was judged. Without those hashes it is not a verdict.
+    if (checker.judgedTrimmedSha256 === null || checker.checkerSha256 === null || checker.gameDigest !== checker.judgedTrimmedSha256.slice(0, 12)) return notRun;
+    return { checkerVerdict: verdict, checker };
+  }
+  return { checkerVerdict: 'NOT_RUN', checker };
 }
