@@ -611,6 +611,15 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
      adapter built, never from the mission's declaration; `effortEchoed` is the provider's own report, where its response carries one. --- */
   ...(safeReasonCode(v.effortSent)===null?{}:{effortSent:safeReasonCode(v.effortSent) as string}),
   ...(safeReasonCode(v.effortEchoed)===null?{}:{effortEchoed:safeReasonCode(v.effortEchoed) as string}),
+  /**
+   * CORRELATION, NOT A RECEIPT AND NOT SPEND. Always null from this allowlist.
+   * An adapter that puts `traceId`, `spanId`, or `traceparent` on its
+   * diagnostics is ignored. Julius writes the derived values afterwards, from
+   * the admitted run id, and those win.
+   */
+  traceId:null,
+  spanId:null,
+  traceparent:null,
  });
 };
 /**

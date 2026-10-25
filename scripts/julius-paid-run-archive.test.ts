@@ -61,6 +61,9 @@ describe('the bundle is read truthfully', () => {
     expect(document.run.workflow_run_id).toBe(34774471909);
     expect(document.run.workflow_run_attempt).toBe(1);
     expect(document.run.julius_run_id).toBe('run:e6814f7ce2167785052595c6');
+    expect(document.run.trace_id, 'a legacy run id derives no trace id').toBeNull();
+    expect(document.run.span_id, 'the archive run is not a span').toBeNull();
+    expect(document.run.trace_phases).toEqual([]);
     expect(document.run.artifact_digest).toMatch(/^[0-9a-f]{64}$/u);
     expect(document.run.state_mode).toBe('FRESH');
     // The same bytes give the same digest; one changed byte gives another.
@@ -128,6 +131,42 @@ describe('nothing is persisted that should not be', () => {
     const dir = bundle({ 'tasks.tsv': TASKS });
     expect(() => archive.buildDocument({ meta: { ...META, state_mode: 'WHATEVER' }, bundleDir: dir })).toThrow('archive_state_mode_invalid');
     expect(archive.STATE_MODES).toEqual(['FRESH', 'CONTINUATION', 'LEARNING', 'REGRESSION']);
+  });
+
+  it('derives the known trace id from the admitted run id and ignores a forged trace in the bundle', () => {
+    const wlj = 'wlj_01234567-89ab-4cde-8fab-0123456789ab';
+    const runs = `run_id\tmission_id\tstate\n${wlj}\tmission:julius-continuous-1\tCOMPLETED\n(1 row)\n`;
+    const diagnostics = [
+      'role\tstage\tdispatch_attempt\ttrace_id\tspan_id',
+      'CODING_AGENT\tbuild\t1\tffffffffffffffffffffffffffffffff\taaaaaaaaaaaaaaaa',
+      'PROMPT_ARCHITECT\tplan\t1\tffffffffffffffffffffffffffffffff\tbbbbbbbbbbbbbbbb',
+      '(2 rows)',
+    ].join('\n');
+    const forged = 'schema=julius-mission-trace.v1\ntraceId=00000000000000000000000000000000\n';
+    const document = archive.buildDocument({
+      meta: META,
+      bundleDir: bundle({
+        'tasks.tsv': TASKS,
+        'runs.tsv': runs,
+        'worker-diagnostics.tsv': diagnostics,
+        'mission-trace.txt': forged,
+      }),
+    });
+    expect(document.run.trace_id).toBe('192b1fbb866790da0ba590b4a8f45144');
+    expect(document.run.span_id).toBeNull();
+    expect(document.run.trace_phases).toEqual([
+      {
+        role: 'CODING_AGENT', stage: 'build', attempt: 1, spanId: '3e314a67b8845836',
+        traceparent: '00-192b1fbb866790da0ba590b4a8f45144-3e314a67b8845836-01',
+      },
+      {
+        role: 'PROMPT_ARCHITECT', stage: 'plan', attempt: 1, spanId: '83fcf8b101fb2299',
+        traceparent: '00-192b1fbb866790da0ba590b4a8f45144-83fcf8b101fb2299-01',
+      },
+    ]);
+    const stored = document.files.find((file: { path: string }) => file.path === 'mission-trace.txt');
+    expect(stored.content).toBe(forged);
+    expect(stored.content).not.toContain(document.run.trace_id);
   });
 
   it('the schema keys every table on the workflow run attempt and refuses a different artifact for the same key', () => {

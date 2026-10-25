@@ -398,3 +398,88 @@ describe('the handoff is fenced by the lease, and an abort during it still stops
     expect(fenced).toEqual(['operation:worker.dispatched']);
   });
 });
+
+describe('mission trace ids on coder and reviewer receipts', () => {
+  const WLJ = 'wlj_01234567-89ab-4cde-8fab-0123456789ab';
+  const ROUTE_WLJ = 'wlj_0b7a1c2e-4f3d-4a6b-8c2d-3e4f5a6b7c8d';
+  const BINDING = {
+    contractId: 'contract', taskId: 'task', contractRevision: 2,
+    bindingDigest: 'sha256:e35b6d88bf79ec266f5a884a9e832521e97db50d2c4b4e3cc65844f281ba6942',
+  };
+
+  it('writes the derived coder trace and ignores an adapter-supplied trace id', async () => {
+    const rows: Record<string, unknown>[] = [];
+    const h = harness({
+      adapterId: 'adapter',
+      async dispatch() {
+        return {
+          workerId: 'worker', providerId: 'provider', status: 'SUCCEEDED' as const,
+          safeSummary: 'done', evidence: [{ type: 'TEST' as const, status: 'PASSED' as const, safeSummary: 'tests pass' }],
+          usage: { usdMicros: 8 },
+          diagnostics: {
+            transport: 'hosted', stage: 'build',
+            traceId: 'ffffffffffffffffffffffffffffffff',
+            spanId: 'aaaaaaaaaaaaaaaa',
+            traceparent: '00-ffffffffffffffffffffffffffffffff-aaaaaaaaaaaaaaaa-01',
+          },
+        };
+      },
+    }, { async recordEvent(input) { rows.push({ type: input.type, ...input.payload }); } });
+    const traced = {
+      ...request,
+      attempt: 1,
+      claim: { ...claim, runId: WLJ },
+      contract: { stage: 'build' as const, binding: BINDING },
+    };
+    expect(await h.coordinator.execute(traced as never)).toMatchObject({ status: 'COMPLETED' });
+    const completed = rows.find((row) => row.type === 'worker.completed');
+    expect(completed?.diag_traceId).toBe('192b1fbb866790da0ba590b4a8f45144');
+    expect(completed?.diag_spanId).toBe('3e314a67b8845836');
+    expect(completed?.diag_traceparent).toBe('00-192b1fbb866790da0ba590b4a8f45144-3e314a67b8845836-01');
+    const dispatched = rows.find((row) => row.type === 'worker.dispatched');
+    expect(dispatched).not.toHaveProperty('diag_traceId');
+    expect(dispatched).not.toHaveProperty('traceId');
+    expect(JSON.stringify(dispatched)).not.toContain('192b1fbb866790da0ba590b4a8f45144');
+  });
+
+  it('writes the derived reviewer span for a repair plan and leaves a legacy run id null', async () => {
+    const rows: Record<string, unknown>[] = [];
+    const registry = new JuliusWorkerRegistry();
+    registry.register({ workerId: 'reviewer', role: 'INDEPENDENT_REVIEWER', adapterId: 'adapter', providerId: 'provider', capabilities: ['review'], taskTypes: ['repair:plan'], concurrencyLimit: 1, timeoutMs: 100, maxRetries: 2, status: 'AVAILABLE' });
+    const adapter: JuliusProviderAdapter = {
+      adapterId: 'adapter',
+      async dispatch() {
+        return {
+          workerId: 'reviewer', providerId: 'provider', status: 'SUCCEEDED',
+          safeSummary: 'reviewed', evidence: [{ type: 'TEST', status: 'PASSED', safeSummary: 'reviewed' }],
+          usage: { usdMicros: 1 },
+          diagnostics: { transport: 'hosted', stage: 'repair:plan', traceId: '11111111111111111111111111111111' },
+        };
+      },
+    };
+    const ports: JuliusExecutionPorts = {
+      async reserve() { return { reservationId: 'reservation', state: 'RESERVED', denialReason: null }; },
+      async commit() {},
+      async release() {},
+      async persistEvidence() {},
+      async acceptResult() { return { duplicate: false }; },
+      async recordEvent(input) { rows.push({ type: input.type, ...input.payload }); },
+    };
+    const coordinator = new JuliusExecutionCoordinator(new JuliusProviderRouter(registry, new Map([['adapter', adapter]]), new JuliusProviderHealthRegistry()), ports);
+    const reviewerClaim = { ...claim, runId: ROUTE_WLJ, capability: 'review', task: { ...claim.task, role: 'INDEPENDENT_REVIEWER' as const, taskType: 'repair:plan' } };
+    const reviewerRequest = { ...request, claim: reviewerClaim, role: 'INDEPENDENT_REVIEWER' as const, taskType: 'repair:plan', capability: 'review', attempt: 1, policy: { ...policy, capabilities: ['review'] } };
+    expect(await coordinator.execute(reviewerRequest)).toMatchObject({ status: 'COMPLETED' });
+    const completed = rows.find((row) => row.type === 'worker.completed');
+    expect(completed?.diag_traceId).toBe('0ef34f0df7cf2cf89b844dcfa5fe084f');
+    expect(completed?.diag_spanId).toBe('4d4c5030f6bc2dbc');
+    expect(completed?.diag_traceparent).toBe('00-0ef34f0df7cf2cf89b844dcfa5fe084f-4d4c5030f6bc2dbc-01');
+
+    rows.length = 0;
+    const legacyClaim = { ...reviewerClaim, runId: 'run:0123456789abcdef01234567' };
+    expect(await coordinator.execute({ ...reviewerRequest, claim: legacyClaim })).toMatchObject({ status: 'COMPLETED' });
+    const legacy = rows.find((row) => row.type === 'worker.completed');
+    expect(legacy?.diag_traceId).toBeNull();
+    expect(legacy?.diag_spanId).toBeNull();
+    expect(legacy?.diag_traceparent).toBeNull();
+  });
+});
