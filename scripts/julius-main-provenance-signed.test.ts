@@ -726,7 +726,7 @@ describe('v3.5b S-3: the queried repository is REQUIRED (library, GitHub mode an
     const full = {
       mainSha: MAIN, mainShaAfter: MAIN, mainTreeSha: TREE, mainParents: [PARENT], mainCommitMessage: message(),
       reviewerKeyPem: REVIEWER_PEM, reviewerKeyAtSha: PARENT, tipReviewerKeyPem: REVIEWER_PEM,
-      changedPaths: ['src/a.ts'], changedPathsComplete: true, headCommit: { sha: HEAD, treeSha: TREE, authenticatedAuthor: workerAuthor },
+      changedPaths: ['src/a.ts'], changedPathsComplete: true, headCommit: clearedHead(),
     };
     const run = (repoArg: string, evidence: Record<string, unknown>) => {
       const directory = mkdtempSync(join(tmpdir(), 'julius-provenance-s3-'));
