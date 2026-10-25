@@ -1327,7 +1327,8 @@ namespace WonderlandJuliusMissionFlow
 		{
 			return S == "queued" || S == "in_progress" || S == "completed" || S == "waiting" || S == "pending" || S == "requested";
 		}
-		bool LiveRole(const std::string& S) { return S == "architect" || S == "coder" || S == "reviewer"; }
+		/** The bridge's LIVE_PROGRESS_GRAMMAR (338da8b3): `other` is a real runtime value, shown as "other", never a guess. */
+		bool LiveRole(const std::string& S) { return S == "architect" || S == "coder" || S == "reviewer" || S == "other"; }
 		bool LiveTaskType(const std::string& S)
 		{
 			return S == "plan" || S == "build" || S == "review" || S == "research" || S == "repair_plan" || S == "repair_build"
@@ -1336,7 +1337,7 @@ namespace WonderlandJuliusMissionFlow
 		bool LiveTaskState(const std::string& S)
 		{
 			return S == "blocked" || S == "runnable" || S == "active" || S == "succeeded" || S == "failed" || S == "cancelled"
-				|| S == "skipped";
+				|| S == "skipped" || S == "other";
 		}
 		bool LiveReason(const std::string& S)
 		{
@@ -1442,7 +1443,10 @@ namespace WonderlandJuliusMissionFlow
 				bool bSampled = false;
 				if (!LiveBool(Field(Node, "sampled"), bSampled) || !bSampled) { return Out; } // FLOW_LIVE_PHASES_ARE_SAMPLES
 				if (!LiveInt(Field(Node, "ordinal"), 0, 1000000, Event.Ordinal)) { return Out; }
-				if (!LiveInt(Field(Node, "repairCycle"), 0, 3, Event.RepairCycle)) { return Out; } // FLOW_LIVE_REPAIR_CYCLE_BOUND
+				// `c x` on the wire is null here: the cycle was not reported. Kept as -1 and never shown as a number.
+				const FJson* Cycle = Field(Node, "repairCycle");
+				if (Cycle != nullptr && Cycle->Kind == EJsonKind::Null) { Event.RepairCycle = -1; }
+				else if (!LiveInt(Cycle, 0, 3, Event.RepairCycle)) { return Out; } // FLOW_LIVE_REPAIR_CYCLE_BOUND
 			}
 			else { return Out; }
 			Read.Events.push_back(std::move(Event));
@@ -1546,6 +1550,7 @@ namespace WonderlandJuliusMissionFlow
 			}
 			std::string Now = (Out.bLive ? "now: " : "last sampled: ") + It->Role + " / " + It->TaskType + " -- " + It->State;
 			if (It->RepairCycle > 0) { Now += " (repair cycle " + std::to_string(It->RepairCycle) + " of 3)"; }
+			else if (It->RepairCycle < 0 && It->TaskType.rfind("repair_", 0) == 0) { Now += " (repair cycle not reported)"; }
 			Out.Lines.push_back(std::move(Now));
 			Out.Lines.push_back("phase history is sampled every ~10 s; short tasks may not appear");
 			break;

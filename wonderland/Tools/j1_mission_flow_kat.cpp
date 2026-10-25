@@ -608,6 +608,25 @@ const ABSENT_PHASE = {
 			Expect(!ParseLiveEvents(LiveWlj, 200, LiveBody(LiveTop, Many)).bParsed, "a 501-event page is refused");
 			++LiveCases;
 		}
+		// REVIEW (c573b54e) MEDIUM-1: the bridge grammar's `other` role/state and `c x` (null cycle) are accepted, so one
+		// such sample never freezes the view (a refused page is never applied and the cursor never advances).
+		{
+			const std::string Other = Swap(Swap(LivePhase, "\"coder\"", "\"other\""), "\"state\":\"active\"", "\"state\":\"other\"");
+			const FLiveRead OtherRead = ParseLiveEvents(LiveWlj, 200, LiveBody(LiveTop, Other));
+			Expect(OtherRead.bParsed && OtherRead.Events[0].Role == "other" && OtherRead.Events[0].State == "other", "role and state other");
+			FLiveFeed OtherFeed;
+			OtherFeed.Apply(OtherRead);
+			Expect(PanelHas(LivePanelFor(OtherFeed, 0), "now: other / repair_build -- other"), "other is shown as other");
+			const std::string NoCycle = Swap(LivePhase, "\"repairCycle\":1", "\"repairCycle\":null");
+			const FLiveRead CxRead = ParseLiveEvents(LiveWlj, 200, LiveBody(LiveTop, NoCycle));
+			Expect(CxRead.bParsed && CxRead.Events[0].RepairCycle == -1, "c x (null cycle) parses");
+			FLiveFeed CxFeed;
+			CxFeed.Apply(CxRead);
+			const FLivePanel CxPanel = LivePanelFor(CxFeed, 0);
+			Expect(PanelHas(CxPanel, "(repair cycle not reported)") && !PanelHas(CxPanel, "of 3"), "null cycle is never a number");
+			Expect(!ParseLiveEvents(LiveWlj, 200, LiveBody(LiveTop, Swap(LivePhase, "\"repairCycle\":1", "\"repairCycle\":\"x\""))).bParsed, "raw x is not the wire form");
+			++LiveCases;
+		}
 		// The real folded step name from the workflow.
 		Expect(ParseLiveEvents(LiveWlj, 200, Swap(Good, "LIVE: run the first real Julius mission", "Preflight complete - stopping here (no confirm_live given)")).bParsed, "real folded step name");
 		++LiveCases;
