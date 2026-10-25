@@ -3125,18 +3125,19 @@ describe('the trust gate runs before anything the candidate controls', () => {
 
   describe('the gate script, driven with stand-ins for gh, git and node', () => {
     const MAIN = 'b'.repeat(40);
-    const run = (gateName: string, over: { ref?: string; head?: string; mains?: readonly string[]; trust?: number; provenance?: string; monotonicity?: string }) => {
+    const run = (gateName: string, over: { ref?: string; head?: string; mains?: readonly string[]; trust?: number; provenance?: string; monotonicity?: string; provenanceExit?: number; monotonicityExit?: number }) => {
       const bin = mkdtempSync(join(tmpdir(), 'julius-trust-gate-'));
       const mains = over.mains ?? [MAIN, MAIN];
       writeFileSync(join(bin, 'mains'), `${mains.join('\n')}\n`);
-      writeFileSync(join(bin, 'gh'), '#!/usr/bin/env bash\nn=$(cat "$BIN/count" 2>/dev/null || echo 0); n=$((n+1)); echo "$n" > "$BIN/count"; sed -n "${n}p" "$BIN/mains"\n');
+      // A `FAIL` line in mains makes that gh read fail.
+      writeFileSync(join(bin, 'gh'), '#!/usr/bin/env bash\nn=$(cat "$BIN/count" 2>/dev/null || echo 0); n=$((n+1)); echo "$n" > "$BIN/count"; line=$(sed -n "${n}p" "$BIN/mains"); [ "$line" = FAIL ] && exit 1; echo "$line"\n');
       writeFileSync(join(bin, 'git'), `#!/usr/bin/env bash\necho '${over.head ?? MAIN}'\n`);
       writeFileSync(join(bin, 'node'), [
         '#!/usr/bin/env bash',
         'case "$1" in',
         `  scripts/julius-main-provenance-trust.mjs) echo 'the checkpoint attestation is not founder-approved: stand-in' >&2; exit ${over.trust ?? 0};;`,
-        `  scripts/julius-main-provenance.mjs) echo '${over.provenance ?? `repo=r branch=main source=github provenance=provenant main=${MAIN} tree=t pr=459`}';;`,
-        `  scripts/julius-main-monotonicity.mjs) echo '${over.monotonicity ?? `repo=r branch=main source=github monotonicity=monotonic main=${MAIN} accepted=69`}';;`,
+        `  scripts/julius-main-provenance.mjs) echo '${over.provenance ?? `repo=r branch=main source=github provenance=provenant main=${MAIN} tree=t pr=459`}'; exit ${over.provenanceExit ?? 0};;`,
+        `  scripts/julius-main-monotonicity.mjs) echo '${over.monotonicity ?? `repo=r branch=main source=github monotonicity=monotonic main=${MAIN} accepted=69`}'; exit ${over.monotonicityExit ?? 0};;`,
         'esac',
         '',
       ].join('\n'));
@@ -3170,6 +3171,12 @@ describe('the trust gate runs before anything the candidate controls', () => {
           ['provenant for another commit', { provenance: `repo=r branch=main source=github provenance=provenant main=${'e'.repeat(40)} tree=t` }, `reason=reviewed-main provenance is not provenant for ${MAIN}`],
           ['rolled back', { monotonicity: `repo=r branch=main source=github monotonicity=rollback main=${MAIN} accepted=69` }, `reason=main is not monotonic at ${MAIN}`],
           ['main moved during the gate', { mains: [MAIN, 'f'.repeat(40)] }, `reason=main moved to ${'f'.repeat(40)} while the gate ran`],
+          ['provenance exits non-zero', { provenanceExit: 1 }, 'reason=reviewed-main provenance refused'],
+          ['monotonicity exits non-zero', { monotonicityExit: 1 }, 'reason=main monotonicity refused'],
+          ['main unreadable', { mains: ['FAIL'] }, 'reason=main could not be read'],
+          ['main unreadable the second time', { mains: [MAIN, 'FAIL'] }, 'reason=main could not be read again'],
+          ['monotonic for another commit', { monotonicity: `repo=r branch=main source=github monotonicity=monotonic main=${'e'.repeat(40)} accepted=69` }, `reason=main is not monotonic at ${MAIN}`],
+          ['provenant for a sha prefix', { provenance: `repo=r branch=main source=github provenance=provenant main=${MAIN.slice(0, 12)} tree=t` }, `reason=reviewed-main provenance is not provenant for ${MAIN}`],
         ] as const) {
           const refused = run(gateName, over);
           expect(refused.status, label).not.toBe(0);

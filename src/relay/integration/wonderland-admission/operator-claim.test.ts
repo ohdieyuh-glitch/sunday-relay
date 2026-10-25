@@ -1501,7 +1501,8 @@ describe('the dispatch reads main and the lane grant before anything is written'
 
   it('the in-tree checker, when it has a grant table, reads the same as #459\'s', () => {
     const source = readFileSync(join(__dirname, '../../../../', LANE_GRANT_SOURCE), 'utf8');
-    if (!source.includes('const MISSION_LANES = ')) return;
+    // The grant table is on main since #459; a checker without it is a test failure, not a skip.
+    expect(source).toContain('const MISSION_LANES = ');
     expect(parseLaneGrants(source)).toEqual(parseLaneGrants(PR459_LANES.laneGrantExcerpt));
   });
 
