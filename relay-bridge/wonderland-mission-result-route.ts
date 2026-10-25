@@ -23,6 +23,7 @@ import { juliusMissionTraceId } from '../scripts/julius-mission-trace.mjs';
 import { parseJuliusAdmissionRunId } from '../src/relay/integration/wonderland-admission/admission-run-id';
 import {
   acceptJuliusMissionEvidence,
+  bindJuliusEvidenceToDispatch,
   type JuliusMissionCompletionEvidence,
   type JuliusMissionEvidenceReader,
   type JuliusMissionPhaseEvidence,
@@ -46,6 +47,7 @@ const STATUS_CEILING = new Set([
   'ledger_unwritten',
   'interrupted',
   'failed',
+  'dispatching',
   'dispatched',
   'dispatch_failed',
   'already_spent',
@@ -141,8 +143,14 @@ export function handleWonderlandMissionReadRoute(
     // NO COMPLETION BEFORE DISPATCH. A run the operator never dispatched cannot have run, so
     // evidence (a completion, phases, a verdict) is read only once the admission row records
     // `dispatched`. Every other state keeps the status ceiling and a NOT_RUN verdict.
+    // EVIDENCE IS BOUND TO THE DISPATCH RECORD. The spend tag must name the
+    // workflow run the claim recorded (when it recorded one), and that run
+    // must have been created no earlier than the recorded dispatch.
     const evidence = admission.state === 'dispatched'
-      ? await readEvidence(evidenceReader, parsed.runId)
+      ? bindJuliusEvidenceToDispatch(await readEvidence(evidenceReader, parsed.runId), {
+        dispatchedAt: textOrNull(admission.dispatchedAt),
+        workflowRunId: textOrNull(admission.workflowRunId),
+      })
       : { completion: null, phases: null };
     const state = evidence.completion === null ? ceilingState(admission.state) : 'completed';
     // Null from the reader is the ceiling. A null phase list stays null.

@@ -80,6 +80,7 @@ function readerOutput(): Record<string, unknown> {
       workflowRunId: '4242',
       workflowRunAttempt: '1',
       headSha: SHA,
+      workflowRunCreatedAt: '2026-10-23T17:19:00Z',
     },
     spendAccounting: null,
     coderCost: {
@@ -212,6 +213,7 @@ describe('acceptJuliusMissionEvidence accepts the #446 object', () => {
         workflowRunId: '4242',
         workflowRunAttempt: '1',
         headSha: SHA,
+        workflowRunCreatedAt: '2026-10-23T17:19:00Z',
       },
       spendAccounting: null,
       coderCost: null,

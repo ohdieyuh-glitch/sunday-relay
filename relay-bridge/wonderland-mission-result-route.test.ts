@@ -7,6 +7,8 @@ import { juliusMissionTraceId } from '../scripts/julius-mission-trace.mjs';
 import { handleJuliusMissionRoute } from './julius-mission-routes';
 import {
   JULIUS_PINNED_CHECKER_SHA256,
+  acceptJuliusMissionEvidence,
+  bindJuliusEvidenceToDispatch,
   createJuliusMissionEvidenceTestDouble,
   type JuliusMissionEvidenceReader,
 } from './julius-mission-evidence';
@@ -145,6 +147,7 @@ function completionValue(over: Record<string, unknown> = {}): Record<string, unk
       workflowRunId: '4242',
       workflowRunAttempt: '1',
       headSha: SHA,
+      workflowRunCreatedAt: '2026-10-23T17:19:00Z',
     },
     spendAccounting: null,
     coderCost: {
@@ -688,6 +691,89 @@ describe('no completion and no verdict before the operator dispatched the run', 
       recordDispatch(storePath);
       const result = await handleWonderlandMissionReadRoute(readRequest('result', RUN), ports, createJuliusMissionEvidenceTestDouble({ [RUN]: graded('PASS') }));
       expect(result?.body).toMatchObject({ state: 'completed', checkerVerdict: 'PASS', completion: { checkerVerdict: 'PASS' } });
+      ports.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('evidence is bound to the operator dispatch record', () => {
+  const judged = 'b'.repeat(64);
+  const passing = (spendTag: Record<string, unknown> = {}) => {
+    const base = completionValue();
+    return {
+      ...base,
+      spendTag: { ...(base.spendTag as Record<string, unknown>), ...spendTag },
+      checkerVerdict: 'PASS',
+      checker: { reason: 'none', taskId: 'task:build-1', judgedTrimmedSha256: judged, gameDigest: judged.slice(0, 12), checkerSha256: JULIUS_PINNED_CHECKER_SHA256 },
+    };
+  };
+  const dispatchWith = (storePath: string, claim: Record<string, unknown>): void => {
+    recordDispatch(storePath);
+    const journalPath = `${storePath}.operator.json`;
+    const journal = JSON.parse(readFileSync(journalPath, 'utf8')) as { claims: Array<Record<string, unknown>> };
+    journal.claims[0] = { ...journal.claims[0], ...claim };
+    writeFileSync(journalPath, `${JSON.stringify(journal)}\n`);
+  };
+  const read = async (storePath: string, ports: ReturnType<typeof service>, value: unknown) => {
+    void storePath;
+    return handleWonderlandMissionReadRoute(readRequest('result', RUN), ports, createJuliusMissionEvidenceTestDouble({ [RUN]: value }));
+  };
+
+  it('the spend tag must name the workflow run the claim recorded', async () => {
+    const { dir, storePath, ports } = await admitted();
+    try {
+      dispatchWith(storePath, { workflowRunId: '4242' });
+      const same = await read(storePath, ports, passing({ workflowRunId: '4242' }));
+      expect(same?.body).toMatchObject({ state: 'completed', checkerVerdict: 'PASS' });
+      const other = await read(storePath, ports, passing({ workflowRunId: '9999' }));
+      expect(other?.body).toMatchObject({ state: 'dispatched', checkerVerdict: 'NOT_RUN', completion: null, phases: null });
+      ports.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('a run created before the recorded dispatch, or with no creation time, is not completion', async () => {
+    const { dir, storePath, ports } = await admitted();
+    try {
+      dispatchWith(storePath, { at: '2026-10-23T17:18:30.400Z' });
+      const before = await read(storePath, ports, passing({ workflowRunCreatedAt: '2026-10-23T17:18:29Z' }));
+      expect(before?.body).toMatchObject({ state: 'dispatched', checkerVerdict: 'NOT_RUN', completion: null });
+      // GitHub's created_at has whole seconds: the same second is after the dispatch.
+      const sameSecond = await read(storePath, ports, passing({ workflowRunCreatedAt: '2026-10-23T17:18:30Z' }));
+      expect(sameSecond?.body).toMatchObject({ state: 'completed', checkerVerdict: 'PASS' });
+      const after = await read(storePath, ports, passing({ workflowRunCreatedAt: '2026-10-23T17:25:00Z' }));
+      expect(after?.body).toMatchObject({ state: 'completed', checkerVerdict: 'PASS' });
+      for (const missing of [undefined, null, '', 'yesterday', '2026-10-23 17:25:00', 1_766_000_000]) {
+        const value = passing({ workflowRunCreatedAt: missing });
+        const reading = await read(storePath, ports, value);
+        expect(reading?.body, String(missing)).toMatchObject({ state: 'dispatched', checkerVerdict: 'NOT_RUN', completion: null });
+      }
+      ports.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('bindJuliusEvidenceToDispatch: no recorded dispatch time is no completion; a null workflow run id on the record does not bind', () => {
+    const accepted = acceptJuliusMissionEvidence(RUN, passing());
+    expect(accepted.completion).not.toBeNull();
+    expect(bindJuliusEvidenceToDispatch(accepted, { dispatchedAt: null, workflowRunId: null })).toEqual({ completion: null, phases: null });
+    expect(bindJuliusEvidenceToDispatch(accepted, { dispatchedAt: 'not-a-time', workflowRunId: null })).toEqual({ completion: null, phases: null });
+    expect(bindJuliusEvidenceToDispatch(accepted, { dispatchedAt: WHEN, workflowRunId: null })).toBe(accepted);
+    expect(bindJuliusEvidenceToDispatch(accepted, { dispatchedAt: WHEN, workflowRunId: '4242' })).toBe(accepted);
+    expect(bindJuliusEvidenceToDispatch(accepted, { dispatchedAt: WHEN, workflowRunId: '4243' })).toEqual({ completion: null, phases: null });
+    expect(bindJuliusEvidenceToDispatch(accepted, { dispatchedAt: '2026-10-23T17:19:01.000Z', workflowRunId: null })).toEqual({ completion: null, phases: null });
+  });
+
+  it('a dispatching reservation is reported as dispatching, not unknown, and reads no evidence', async () => {
+    const { dir, storePath, ports } = await admitted();
+    try {
+      dispatchWith(storePath, { state: 'dispatching', dispatchAttempted: false, workflowRunId: null });
+      const result = await read(storePath, ports, passing());
+      expect(result?.body).toMatchObject({ state: 'dispatching', dispatchedAt: null, checkerVerdict: 'NOT_RUN', completion: null });
       ports.close();
     } finally {
       rmSync(dir, { recursive: true, force: true });

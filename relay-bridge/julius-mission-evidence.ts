@@ -54,6 +54,13 @@ export interface JuliusMissionSpendTagEvidence {
   readonly workflowRunId: string;
   readonly workflowRunAttempt: string;
   readonly headSha: string;
+  /**
+   * When the matched Actions run was created (GitHub's `created_at`, ISO,
+   * UTC). The reader reads it off the run it matched to `workflowRunId`.
+   * Required: without it the bridge cannot show that the operator's
+   * dispatch came first, so the read is not completion.
+   */
+  readonly workflowRunCreatedAt: string;
 }
 
 /** Cap reading of one verified tag. Present only when YUJI's reader supplies it. */
@@ -192,6 +199,7 @@ const SECRET = /sk-[A-Za-z0-9_-]{8,}|gh[pousr]_[A-Za-z0-9]{16,}|xai-[A-Za-z0-9_-
 const SHA40 = /^[0-9a-f]{40}$/;
 const SHA256 = /^[0-9a-f]{64}$/;
 const DIGITS = /^\d{1,20}$/;
+const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/;
 const REASON = /^[a-z0-9_:-]{1,80}$/;
 const WORK_ARTIFACT = /julius-work-artifact\.v1/;
 
@@ -227,7 +235,9 @@ function spendTag(wljRunId: string, value: unknown): JuliusMissionSpendTagEviden
   const workflowRunId = typeof body.workflowRunId === 'string' && DIGITS.test(body.workflowRunId) ? body.workflowRunId : null;
   const workflowRunAttempt = typeof body.workflowRunAttempt === 'string' && DIGITS.test(body.workflowRunAttempt) ? body.workflowRunAttempt : null;
   const headSha = typeof body.headSha === 'string' && SHA40.test(body.headSha) ? body.headSha : null;
-  if (namespace === null || reservedUsdMicros === null || workflowRunId === null || workflowRunAttempt === null || headSha === null) {
+  const workflowRunCreatedAt = isoUtc(body.workflowRunCreatedAt);
+  if (namespace === null || reservedUsdMicros === null || workflowRunId === null || workflowRunAttempt === null || headSha === null
+    || workflowRunCreatedAt === null) {
     return null;
   }
   return {
@@ -238,7 +248,47 @@ function spendTag(wljRunId: string, value: unknown): JuliusMissionSpendTagEviden
     workflowRunId,
     workflowRunAttempt,
     headSha,
+    workflowRunCreatedAt,
   };
+}
+
+function isoUtc(value: unknown): string | null {
+  return typeof value === 'string' && ISO_UTC.test(value) && Number.isFinite(Date.parse(value)) ? value : null;
+}
+
+/** What the operator claim recorded for this run, as the status route reports it. */
+export interface JuliusMissionDispatchRecord {
+  /** The first recorded dispatch, or null when none is recorded. */
+  readonly dispatchedAt: string | null;
+  /** The Actions run id `gh workflow run` printed for the dispatched child, or null. */
+  readonly workflowRunId: string | null;
+}
+
+/**
+ * Bind accepted evidence to the operator's own dispatch record. A completion
+ * survives only when:
+ * - a dispatch is recorded (`dispatchedAt` is an ISO time);
+ * - when the record knows a workflow run id, the spend tag names that same
+ *   run (a run the operator did not dispatch is not this mission's run);
+ * - the dispatch came first: the matched run was created no earlier than
+ *   the recorded dispatch, compared at whole seconds because GitHub's
+ *   `created_at` has no sub-second part.
+ * Anything else is no completion, so the verdict is NOT_RUN.
+ */
+export function bindJuliusEvidenceToDispatch(
+  reading: JuliusMissionEvidenceReading,
+  dispatch: JuliusMissionDispatchRecord,
+): JuliusMissionEvidenceReading {
+  const completion = reading.completion;
+  if (completion === null) return reading;
+  const dispatchedAt = isoUtc(dispatch.dispatchedAt);
+  if (dispatchedAt === null) return absent;
+  const tag = completion.spendTag;
+  if (dispatch.workflowRunId !== null && dispatch.workflowRunId !== tag.workflowRunId) return absent;
+  const dispatchSecond = Math.floor(Date.parse(dispatchedAt) / 1000);
+  const createdSecond = Math.floor(Date.parse(tag.workflowRunCreatedAt) / 1000);
+  if (!(dispatchSecond <= createdSecond)) return absent;
+  return reading;
 }
 
 function spendAccounting(value: unknown): JuliusMissionSpendAccounting | null {

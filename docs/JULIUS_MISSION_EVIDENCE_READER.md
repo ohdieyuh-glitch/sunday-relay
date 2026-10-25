@@ -13,7 +13,11 @@ Until that reader is wired, `GET /relay-api/wonderland/julius/missions/{wljRunId
 `read(wljRunId)` returns the object `acceptJuliusMissionEvidence` accepts, or null. Completion requires both:
 
 - `juliusFinalState: "COMPLETED"` — the runtime word `JULIUS_MISSION_STATES` uses, and the archive column `julius_final_state`. This route does not compute it.
-- `spendTag` — the `julius-run-spent.v1` message fields. The `run` must be the path's `wlj_` id.
+- `spendTag` — the `julius-run-spent.v1` message fields. The `run` must be the path's `wlj_` id. `spendTag.workflowRunCreatedAt` (ISO UTC) is the `created_at` of the Actions run the reader matched to `workflowRunId`. It is required: without it the read is not completion.
+
+## Bound to the operator dispatch record
+
+The routes read evidence only for a row whose status is `dispatched`, and then bind it to the operator claim record (`bindJuliusEvidenceToDispatch`). Completion survives only when a dispatch time is recorded, the spend tag's `workflowRunId` equals the workflow run id the claim recorded (when it recorded one; `gh workflow run` does not always print it), and the matched run was created no earlier than the recorded dispatch, compared at whole seconds. Otherwise the route stays on the status ceiling with `checkerVerdict: "NOT_RUN"`. `#446` at `041d2599` does not supply `workflowRunCreatedAt`, so its reads are not completion until it does.
 
 A missing section is null on the completion object. Null is unknown. A missing cost is not zero. `providerMessageId` is not a field: a message id does not make a receipt `CAPTURED`.
 
@@ -69,6 +73,7 @@ The table below is the field inventory those names were read from. `#446` does n
 | `spendTag.workflowRunId` | `workflow_run_id=` | same line. GitHub Actions run id. Not an application trace id. |
 | `spendTag.workflowRunAttempt` | `workflow_run_attempt=` | same line |
 | `spendTag.headSha` | `head_sha=` | same line |
+| `spendTag.workflowRunCreatedAt` | the matched run's `created_at` | the reader's own read of the Actions run. Not in `041d2599`. Required by this bridge. |
 | `spendAccounting.knownUsdMicros` | `priorRuns[].knownUsdMicros` | `#434` `d9b9e04e` `src/relay/mission/julius/julius-spent-tag-contract.test.ts` (verified tag: equals the reserved micros) |
 | `spendAccounting.unknownCostComponents` | `unknownCostComponents` | same test. `0` on a verified tag, `1` on the legacy `server_run_id` body. |
 | `spendAccounting.unverifiableApiSpend` | `unverifiableApiSpend` | same test |

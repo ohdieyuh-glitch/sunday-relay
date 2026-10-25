@@ -164,6 +164,7 @@ function readerCompletion(): Record<string, unknown> {
       workflowRunId: '4242',
       workflowRunAttempt: '1',
       headSha: 'ab'.repeat(20),
+      workflowRunCreatedAt: '2026-10-23T17:19:00Z',
     },
     spendAccounting: null,
     coderCost: {
