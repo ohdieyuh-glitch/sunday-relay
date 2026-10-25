@@ -9,6 +9,7 @@ import {
   isWonderlandStatusRoute,
   wonderlandAdmissionPathname,
 } from './wonderland-admission-route';
+import { isWonderlandMissionReadRoute, wonderlandMissionRead } from './wonderland-mission-result-route';
 
 export interface WonderlandRouteRequest {
   readonly method: string; readonly path: string; readonly url: string;
@@ -20,19 +21,22 @@ const asRecord = (value: unknown): Record<string, unknown> => value !== null && 
 const text = (body: Record<string, unknown>, key: string): string => { const value = body[key]; if (typeof value !== 'string' || value.trim() === '') throw new Error(`invalid_${key}`); return value; };
 
 /**
- * Every `/wonderland/` path except the Julius admission and status pathnames.
- * A query on either pathname stays on that route, because the handler reads
- * `projectId` from it. A trailing slash, a child segment, or a different case
- * stays here. This catch-all refuses a native session before it reads the
- * path, so admission and status cannot be served from inside it.
+ * Every `/wonderland/` path except the Julius admission, status, result, and
+ * progress pathnames. A query on an exact pathname stays on that route,
+ * because the handler reads `projectId` from it. A trailing slash, a child
+ * segment, or a different case stays here. This catch-all refuses a native
+ * session before it reads the path, so those Julius reads cannot be served
+ * from inside it.
  */
 export function isWonderlandRoute(path: string): boolean {
   const pathname = wonderlandAdmissionPathname(path);
   if (pathname === WONDERLAND_ADMISSION_PATH || pathname === WONDERLAND_STATUS_PATH) return false;
+  if (isWonderlandMissionReadRoute(pathname)) return false;
   if (pathname === '/wonderland' || pathname.startsWith('/wonderland/')) return true;
   const folded = pathname.toLowerCase();
   return folded === WONDERLAND_ADMISSION_PATH || folded.startsWith(`${WONDERLAND_ADMISSION_PATH}/`)
-    || folded === WONDERLAND_STATUS_PATH || folded.startsWith(`${WONDERLAND_STATUS_PATH}/`);
+    || folded === WONDERLAND_STATUS_PATH || folded.startsWith(`${WONDERLAND_STATUS_PATH}/`)
+    || /^\/wonderland\/julius\/missions\/[^/]+\/(result|progress)(\/.*)?$/.test(folded);
 }
 
 /**
@@ -48,16 +52,36 @@ export function classifyWonderlandDispatchPath(bridgePath: string, rawPath: stri
   readonly catchAllPath: string | null;
   readonly exactAdmission: boolean;
   readonly exactStatus: boolean;
+  readonly exactMissionResult: boolean;
+  readonly exactMissionProgress: boolean;
 } {
-  if (isWonderlandAdmissionRoute(rawPath)) return { catchAllPath: null, exactAdmission: true, exactStatus: false };
-  if (isWonderlandStatusRoute(rawPath)) return { catchAllPath: null, exactAdmission: false, exactStatus: true };
+  const classified = (
+    over: {
+      readonly catchAllPath?: string | null;
+      readonly exactAdmission?: boolean;
+      readonly exactStatus?: boolean;
+      readonly exactMissionResult?: boolean;
+      readonly exactMissionProgress?: boolean;
+    } = {},
+  ) => ({
+    catchAllPath: over.catchAllPath ?? null,
+    exactAdmission: over.exactAdmission ?? false,
+    exactStatus: over.exactStatus ?? false,
+    exactMissionResult: over.exactMissionResult ?? false,
+    exactMissionProgress: over.exactMissionProgress ?? false,
+  });
+  if (isWonderlandAdmissionRoute(rawPath)) return classified({ exactAdmission: true });
+  if (isWonderlandStatusRoute(rawPath)) return classified({ exactStatus: true });
+  const missionRead = wonderlandMissionRead(rawPath);
+  if (missionRead?.kind === 'result') return classified({ exactMissionResult: true });
+  if (missionRead?.kind === 'progress') return classified({ exactMissionProgress: true });
   const candidate = bridgePath === WONDERLAND_ADMISSION_PATH || bridgePath === WONDERLAND_STATUS_PATH
     || (!isWonderlandRoute(bridgePath) && isWonderlandRoute(rawPath))
     ? rawPath
     : bridgePath;
   return isWonderlandRoute(candidate)
-    ? { catchAllPath: candidate, exactAdmission: false, exactStatus: false }
-    : { catchAllPath: null, exactAdmission: false, exactStatus: false };
+    ? classified({ catchAllPath: candidate })
+    : classified();
 }
 
 export async function handleWonderlandRoute(input: WonderlandRouteRequest, deps: {

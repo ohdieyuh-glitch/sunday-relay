@@ -78,6 +78,7 @@ import type { MissionOwnershipScope } from './mission';
 import { WonderlandBackend } from '../src/relay/mission/wonderland/wonderland-backend';
 import { classifyWonderlandDispatchPath, handleWonderlandRoute } from './wonderland-routes';
 import { createWonderlandAdmissionBridge, createWonderlandAdmissionService, createWonderlandStatusBridge, isWonderlandAdmissionRoute, isWonderlandStatusRoute, type WonderlandAdmissionRoutePorts } from './wonderland-admission-route';
+import { createWonderlandMissionReadBridge, isWonderlandMissionReadRoute } from './wonderland-mission-result-route';
 import { handleProjectBrainRoute, isProjectBrainRoute, type ProjectBrainRoutePorts } from './project-brain-routes';
 import { composeProjectBrainPorts, nativeSessionVerifier } from './project-brain/compose';
 import { handleNativePairingRoute, isNativePairingRoute } from './wonderland-native-pairing-routes';
@@ -461,6 +462,9 @@ const juliusMissionPorts = (wonderlandAdmission: WonderlandAdmissionRoutePorts):
     ...juliusMissionCache,
     wonderlandAdmissionBridge: createWonderlandAdmissionBridge(wonderlandAdmission),
     wonderlandStatusBridge: createWonderlandStatusBridge(wonderlandAdmission),
+    // YUJI owns JuliusMissionEvidenceReader. It is not wired here, so result
+    // and progress stay on the status ceiling and never report completed.
+    wonderlandMissionReadBridge: createWonderlandMissionReadBridge(wonderlandAdmission),
   };
 };
 
@@ -1058,7 +1062,9 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
         const missionPath = path.replace('/relay-api', '');
         if (isJuliusMissionRoute(missionPath)
           || (wonderlandDispatch.exactAdmission && isWonderlandAdmissionRoute(missionPath))
-          || (wonderlandDispatch.exactStatus && isWonderlandStatusRoute(missionPath))) {
+          || (wonderlandDispatch.exactStatus && isWonderlandStatusRoute(missionPath))
+          || ((wonderlandDispatch.exactMissionResult || wonderlandDispatch.exactMissionProgress)
+            && isWonderlandMissionReadRoute(missionPath))) {
           const missionAuthz = typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
           const missionResult = await handleJuliusMissionRoute({
             method,

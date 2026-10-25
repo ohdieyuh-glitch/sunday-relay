@@ -502,6 +502,33 @@ journal note above. A legacy document stays schema version 2.
   then renamed over the store. A reader sees the previous document or the
   complete next one.
 
+## Mission result and progress
+
+`GET /relay-api/wonderland/julius/missions/<wljRunId>/result?projectId=<id>`
+and `.../progress?projectId=<id>`. Both carry the same guards as status:
+loopback peer and Host, no forwarding header, a native session, the founder
+player and the paired project. **`projectId` is required**: without it the
+answer is `403 julius_dispatch_wrong_project`. A legacy, malformed or unknown
+id is the uniform 404.
+
+Both bodies carry `wljRunId`, `serverRunId`, `legacyRunId`, the derived
+`traceId`, `state`, `updatedAt`, `phases` and `projectBrainRevision`. `state`
+is the status ceiling until the evidence reader returns a completion, and then
+`completed`. `/result` adds `dispatchedAt`, `cause` while not completed,
+`completion`, and a top-level **`checkerVerdict`**:
+
+| `checkerVerdict` | Meaning |
+|---|---|
+| `PASS` | the paid workflow's grade job ran the pinned hidden checker on the coder's final message and it passed. The only verified completion. |
+| `FAIL` | the checker ran and the artifact failed. A failed evaluation. |
+| `NOT_RUN` | no verdict: the run is not completed, it was not graded, or the verdict was absent, unreadable or for another run. Unverified. |
+
+A client shows **Completed only on `PASS`**. A `completed` state with
+`NOT_RUN` is a finished but unverified run. Any value other than the three
+tokens is `NOT_RUN`. `completion.checker` carries the judged trimmed sha256,
+its 12-hex game digest, the checker's own sha256, the graded task and the
+reason, or null.
+
 ## Progress source
 
 The held-phase expiry is written when the operator claim or a status read
