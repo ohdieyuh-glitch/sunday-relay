@@ -10,6 +10,7 @@
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
 #include "Misc/DateTime.h"
+#include "WonderlandBeta.h"
 #include "WonderlandHandoffDirector.h"
 #include "WonderlandHandoffWire.h"
 #include "WonderlandQaFormat.h"
@@ -126,11 +127,24 @@ namespace WonderlandQaEventCommands
 		return Facts;
 	}
 
+	/**
+	 * DEVELOPER SESSIONS ONLY (editor or -wldev), like wl.Qa.FollowRemote and the J1 paid doors (REVIEW #456 H1): Development
+	 * packages reach players and -ExecCmds reaches every command there. Measured before this gate: a player-session launch with
+	 * "wl.Qa.Enabled 1,wl.Qa.Mission.Handoff equip" equipped the swords and the handoff was saved (restored HELD next launch).
+	 */
+	bool QaDeveloperDoor(const char* Name)
+	{
+		if (WonderlandBeta::IsDeveloperSession()) { return true; }
+		UE_LOG(LogTemp, Display, TEXT("%s: developer sessions only (-wldev)"), UTF8_TO_TCHAR(Name));
+		return false;
+	}
+
 	FAutoConsoleCommandWithWorldAndArgs GQaEnabledCommand(
 		TEXT("wl.Qa.Enabled"),
 		TEXT("QA event line. No argument prints on or off. 1 turns it on for this process. 0 turns it off. Not in shipping builds."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld*)
 		{
+			if (!QaDeveloperDoor("wl.Qa.Enabled")) { return; }
 			if (Args.Num() == 0)
 			{
 				QaPlain(WonderlandQa::IsEnabled() ? "QA instrumentation on" : "QA instrumentation off");
@@ -152,12 +166,20 @@ namespace WonderlandQaEventCommands
 		TEXT("QA: take up the swords, or 'end' to give them back, through the existing handoff. Does not start a mission. Not in shipping builds."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
+			if (!QaDeveloperDoor("wl.Qa.Mission.Handoff")) { return; }
 			if (!WonderlandQa::IsEnabled())
 			{
 				QaPlain(WonderlandQa::DisabledRefusal());
 				return;
 			}
+			// Exactly one of the two words: a typo ("return", "off") must not silently equip.
+			const bool bEquip = Args.Num() == 0 || Args[0].Equals(TEXT("equip"), ESearchCase::IgnoreCase);
 			const bool bEnd = Args.Num() > 0 && Args[0].Equals(TEXT("end"), ESearchCase::IgnoreCase);
+			if (!bEquip && !bEnd)
+			{
+				QaPlain("usage: wl.Qa.Mission.Handoff [equip|end]");
+				return;
+			}
 			FString Said;
 			if (bEnd)
 			{
@@ -175,6 +197,7 @@ namespace WonderlandQaEventCommands
 		TEXT("QA: record a local drop and the snapshot already on this client. Seconds default 2, clamped 0 to 30. Not in shipping builds."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
+			if (!QaDeveloperDoor("wl.Qa.Net.Drop")) { return; }
 			if (!WonderlandQa::IsEnabled())
 			{
 				QaPlain(WonderlandQa::DisabledRefusal());
