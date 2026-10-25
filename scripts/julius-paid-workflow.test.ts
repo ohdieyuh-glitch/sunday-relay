@@ -792,3 +792,54 @@ describe('the WITHOUT-arm log parser admits one id through the shared module', (
     expect(parsed.stdout).toBe(`${WLJ}\n`);
   });
 });
+
+describe('the roles preflight runs the entrypoint as the admitted run (P0, run 40230911550)', () => {
+  const ROLES = "'Preflight: all three roles resolve to the expected models, nothing dispatched'";
+  const LIVE = "'LIVE: run the first real Julius mission'";
+
+  it('passes the same run id to the roles preflight as to the live step, or the entrypoint refuses admission_run_id_required', () => {
+    const paid = job('first-live-mission');
+    for (const name of [ROLES, LIVE]) {
+      const block = step(paid, name);
+      expect(block, name).toContain('JULIUS_RUN_ID: ${{ needs.spend-tag.outputs.run_id }}');
+      expect(block, name).toContain('JULIUS_SERVER_RUN_ID: ${{ needs.spend-tag.outputs.run_id }}');
+    }
+  });
+
+  it('the entrypoint admission check refuses without the ids and admits with the two equal values the step passes', async () => {
+    const { admitLiveJuliusRunId } = await import('../relay-bridge/julius-live-mission');
+    expect(admitLiveJuliusRunId({})).toEqual({ ok: false, reason: 'admission_run_id_required' });
+    const id = 'wlj_21d2b8fe-a9d5-47af-94b3-62c23f24ffdf';
+    expect(admitLiveJuliusRunId({ JULIUS_RUN_ID: id, JULIUS_SERVER_RUN_ID: id })).toEqual({ ok: true, runId: id });
+  });
+});
+
+describe('the live-progress publisher is best-effort, paid-only, and the job writes only statuses', () => {
+  const paid = job('first-live-mission');
+  const START = "'Live progress: start the phase publisher (best-effort)'";
+  const STOP = "'Live progress: stop the phase publisher'";
+  const LIVE = "'LIVE: run the first real Julius mission'";
+
+  it('declares the full read set plus statuses: write, and never checks: write', () => {
+    const block = /\n    permissions:\n((?: {6}\S[^\n]*\n)+)/u.exec(paid)?.[1] ?? '';
+    const scopes = Object.fromEntries(block.trim().split('\n').map((line) => line.trim().split(/:\s*/u)));
+    expect(scopes).toEqual({ contents: 'read', actions: 'read', 'pull-requests': 'read', issues: 'read', statuses: 'write' });
+    // As a YAML key, not prose: the comment above the block names `checks: write` to say it is never granted.
+    expect(workflow).not.toMatch(/^\s+checks:\s*write\s*$/mu);
+  });
+
+  it('starts before LIVE and stops after it, both paid-only and continue-on-error; the token goes to the publisher alone', () => {
+    const start = step(paid, START);
+    const stop = step(paid, STOP);
+    expect(paid.indexOf(`- name: ${START}`)).toBeLessThan(paid.indexOf(`- name: ${LIVE}`));
+    expect(paid.indexOf(`- name: ${LIVE}`)).toBeLessThan(paid.indexOf(`- name: ${STOP}`));
+    expect(start).toContain("if: inputs.confirm_live == 'RUN LIVE MISSION'");
+    expect(stop).toContain("if: always() && inputs.confirm_live == 'RUN LIVE MISSION'");
+    for (const block of [start, stop]) expect(block).toContain('continue-on-error: true');
+    expect(start).toContain('GH_TOKEN: ${{ github.token }}');
+    expect(start).not.toMatch(/secrets\./u);
+    expect(start).toContain('nohup node .github/julius-live-progress.mjs');
+    expect(stop).not.toContain('GH_TOKEN');
+    expect(step(paid, LIVE)).not.toContain('GH_TOKEN');
+  });
+});

@@ -231,6 +231,7 @@ describe('wonderland mission result and progress', () => {
         exactStatus: false,
         exactMissionResult: kind === 'result',
         exactMissionProgress: kind === 'progress',
+        exactMissionEvents: false,
         exactCompanion: false,
       });
       for (const raw of [

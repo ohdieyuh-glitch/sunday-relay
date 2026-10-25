@@ -79,6 +79,8 @@ import { WonderlandBackend } from '../src/relay/mission/wonderland/wonderland-ba
 import { classifyWonderlandDispatchPath, handleWonderlandRoute } from './wonderland-routes';
 import { createWonderlandAdmissionBridge, createWonderlandAdmissionService, createWonderlandStatusBridge, isWonderlandAdmissionRoute, isWonderlandStatusRoute, type WonderlandAdmissionRoutePorts } from './wonderland-admission-route';
 import { createWonderlandMissionReadBridge, isWonderlandMissionReadRoute } from './wonderland-mission-result-route';
+import { createWonderlandMissionEventsBridge, isWonderlandMissionEventsRoute } from './wonderland-mission-events-route';
+import { wonderlandLiveReadsFrom } from './wonderland-live-wiring';
 import { createCompanionResultStore, createWonderlandCompanionBridge, isWonderlandCompanionAgentRoute, isWonderlandCompanionRoute } from './wonderland-companion-route';
 import { createCompanionAdapterRegistry, type CompanionAdapterRegistry } from './wonderland-companion-registry';
 import { handleProjectBrainRoute, isProjectBrainRoute, type ProjectBrainRoutePorts } from './project-brain-routes';
@@ -460,6 +462,28 @@ const juliusStatePorts = (): ReturnType<typeof createJuliusStatePorts> => {
  * same variable the live composition reads.
  */
 let juliusMissionCache: JuliusMissionRoutePorts | null = null;
+/**
+ * THE LIVE VIEW'S STATE OUTLIVES A REQUEST. The GitHub reads, the evidence
+ * reader's cache and the events route's per-run cache (its epoch and seq) are
+ * built once per admission port set, so a poll is served from the cache and
+ * a reconnect's cursor stays valid. Nothing here can dispatch.
+ */
+let wonderlandLiveCache: {
+  readonly ports: WonderlandAdmissionRoutePorts;
+  readonly reads: ReturnType<typeof wonderlandLiveReadsFrom>;
+  readonly events: ReturnType<typeof createWonderlandMissionEventsBridge>;
+} | null = null;
+const wonderlandLive = (wonderlandAdmission: WonderlandAdmissionRoutePorts) => {
+  if (wonderlandLiveCache === null || wonderlandLiveCache.ports !== wonderlandAdmission) {
+    const reads = wonderlandLiveReadsFrom(process.env);
+    wonderlandLiveCache = {
+      ports: wonderlandAdmission,
+      reads,
+      events: createWonderlandMissionEventsBridge(wonderlandAdmission, reads?.runReader),
+    };
+  }
+  return wonderlandLiveCache;
+};
 const juliusMissionPorts = (
   wonderlandAdmission: WonderlandAdmissionRoutePorts,
   companionResults: ReturnType<typeof createCompanionResultStore>,
@@ -479,9 +503,12 @@ const juliusMissionPorts = (
     ...juliusMissionCache,
     wonderlandAdmissionBridge: createWonderlandAdmissionBridge(wonderlandAdmission),
     wonderlandStatusBridge: createWonderlandStatusBridge(wonderlandAdmission),
-    // YUJI owns JuliusMissionEvidenceReader. It is not wired here, so result
-    // and progress stay on the status ceiling and never report completed.
-    wonderlandMissionReadBridge: createWonderlandMissionReadBridge(wonderlandAdmission),
+    // YUJI's JuliusMissionEvidenceReader reads GitHub through the founder's own
+    // `gh` when JULIUS_WONDERLAND_GITHUB_REPO is set; unset, result and
+    // progress stay on the status ceiling and never report completed.
+    wonderlandMissionReadBridge: createWonderlandMissionReadBridge(wonderlandAdmission, wonderlandLive(wonderlandAdmission).reads?.evidenceReader),
+    // The live view of a dispatched run: GitHub reads only, no dispatch path.
+    wonderlandMissionEventsBridge: wonderlandLive(wonderlandAdmission).events,
     wonderlandCompanionBridge: createWonderlandCompanionBridge({ ...wonderlandAdmission, companionResults, companionAgents }),
   };
 };
@@ -1087,6 +1114,7 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
           || (wonderlandDispatch.exactStatus && isWonderlandStatusRoute(missionPath))
           || ((wonderlandDispatch.exactMissionResult || wonderlandDispatch.exactMissionProgress)
             && isWonderlandMissionReadRoute(missionPath))
+          || (wonderlandDispatch.exactMissionEvents && isWonderlandMissionEventsRoute(missionPath))
           || (wonderlandDispatch.exactCompanion && (isWonderlandCompanionRoute(missionPath) || isWonderlandCompanionAgentRoute(missionPath)))) {
           const missionAuthz = typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
           const missionResult = await handleJuliusMissionRoute({
