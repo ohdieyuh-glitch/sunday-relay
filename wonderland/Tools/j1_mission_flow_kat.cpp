@@ -672,6 +672,45 @@ const ABSENT_PHASE = {
 		Expect(HasLine(DonePanel, "missionCost.unknownComponents: 2"), "unknown components as reported");
 		Expect(HasLine(DonePanel, "missionCost.complete: false"), "incomplete total stays false");
 		Expect(!ContainsText(DonePanel, ReaderTrace), "reader trace is not substituted");
+		Expect(!ContainsText(DonePanel, "checkerVerdict"), "absent verdict is not invented");
+		++Bridge;
+
+		// PR-B CHECKER VERDICT (founder-approved): "Completed" only on PASS; FAIL is a failed evaluation; NOT_RUN,
+		// absent and unreadable all stay "not independently verified".
+		const auto WithVerdict = [&](const char* Extra)
+		{
+			return Load(ResultJson(BridgeRun, "completed", TraceJson.c_str(), nullptr, HappyCompletion.c_str(), Extra), HappyProgress);
+		};
+		const FResultRead Passed = WithVerdict(",\"checkerVerdict\":\"PASS\"");
+		const FResultPanel PassedPanel = ResultPanelFor(Passed);
+		Expect(Passed.bCheckerReported && Passed.Checker == ECheckerVerdict::Pass, "pass parsed");
+		Expect(Same(PassedPanel.Line, CopyStateCompletedChecked) && PassedPanel.bVerified && PassedPanel.bFinished && PassedPanel.bShowsArtifact, "pass shows completed");
+		Expect(HasLine(PassedPanel, "checkerVerdict: PASS"), "pass named");
+		++Bridge;
+		const FResultRead Failed = WithVerdict(",\"checkerVerdict\":\"FAIL\"");
+		const FResultPanel FailedPanel = ResultPanelFor(Failed);
+		Expect(Failed.Checker == ECheckerVerdict::Fail, "fail parsed");
+		Expect(Same(FailedPanel.Line, CopyCheckerFailed) && !FailedPanel.bVerified && !FailedPanel.bShowsArtifact, "fail is a failed evaluation");
+		Expect(!ContainsText(FailedPanel, "state: completed") && HasLine(FailedPanel, "checkerVerdict: FAIL"), "fail is never completed");
+		Expect(!ContainsText(FailedPanel, "archive.artifactName"), "fail offers no artifact");
+		++Bridge;
+		const FResultRead NotRun = WithVerdict(",\"checkerVerdict\":\"NOT_RUN\"");
+		Expect(Same(ResultPanelFor(NotRun).Line, CopyStateCompleted) && HasLine(ResultPanelFor(NotRun), "checkerVerdict: NOT_RUN"), "not run stays unverified");
+		++Bridge;
+		const char* Unreadable[] = { ",\"checkerVerdict\":\"pass\"", ",\"checkerVerdict\":true", ",\"checkerVerdict\":null",
+			",\"checkerVerdict\":\"PASSED\"", ",\"checkerVerdict\":{\"verdict\":\"PASS\"}", ",\"checkerVerdict\":\" PASS\"" };
+		for (const char* Extra : Unreadable)
+		{
+			const FResultRead Odd = WithVerdict(Extra);
+			const FResultPanel OddPanel = ResultPanelFor(Odd);
+			Expect(Odd.Checker == ECheckerVerdict::NotRun && !Odd.bCheckerReported, "unreadable verdict is not run");
+			Expect(Same(OddPanel.Line, CopyStateCompleted) && !ContainsText(OddPanel, "checkerVerdict"), "unreadable verdict stays unverified and unnamed");
+			++Bridge;
+		}
+		const FResultRead PassNoEvidence = Load(ResultJson(BridgeRun, "dispatched", TraceJson.c_str(), nullptr, nullptr, ",\"checkerVerdict\":\"PASS\""),
+			ProgressJson(BridgeRun, "dispatched", TraceJson.c_str(), nullptr));
+		Expect(!PassNoEvidence.bVerified && !Same(ResultPanelFor(PassNoEvidence).Line, CopyStateCompletedChecked), "pass without completion evidence is not completed");
+		++Bridge;
 		Expect(!ContainsText(DonePanel, "traceparent:"), "null traceparent is not computed");
 		Expect(!ContainsText(DonePanel, "msg_does_not_count"), "message id absent");
 		Expect(!ContainsText(DonePanel, "sk-"), "secret absent");

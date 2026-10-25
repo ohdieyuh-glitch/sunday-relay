@@ -354,6 +354,21 @@ MUTATIONS = [
         "(void)bOffered; // FLOW_RESUME_ONLY_AN_OFFER",
     ),
     (
+        "checker_open_set",
+        'Out.Checker = Verdict.Text == "PASS" ? ECheckerVerdict::Pass',
+        'Out.Checker = Verdict.Text != "FAIL" ? ECheckerVerdict::Pass',
+    ),
+    (
+        "checker_fail_shown_verified",
+        "Out.bVerified = false; // FLOW_CHECKER_FAIL_NOT_VERIFIED",
+        "Out.bVerified = Read.bVerified; // FLOW_CHECKER_FAIL_NOT_VERIFIED",
+    ),
+    (
+        "completed_without_pass",
+        "Out.Line = Read.Checker == ECheckerVerdict::Pass ? CopyStateCompletedChecked : CopyStateCompleted; // FLOW_COMPLETED_ONLY_ON_PASS",
+        "Out.Line = CopyStateCompletedChecked; // FLOW_COMPLETED_ONLY_ON_PASS",
+    ),
+    (
         "start_again_from_any_step",
         "if (Step != EFlowStep::Watching) { return false; } // FLOW_START_AGAIN_ONLY_FROM_WATCHING",
         "// FLOW_START_AGAIN_ONLY_FROM_WATCHING",

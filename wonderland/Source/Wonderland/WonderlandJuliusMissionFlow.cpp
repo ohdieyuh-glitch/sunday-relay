@@ -773,6 +773,20 @@ namespace WonderlandJuliusMissionFlow
 		{
 			Out.Lines.push_back(std::string("traceId: ") + Read.TraceId.Text); // FLOW_TRACE_ID_AS_REPORTED
 		}
+		if (Read.bCheckerReported)
+		{
+			Out.Lines.push_back(Read.Checker == ECheckerVerdict::Pass ? "checkerVerdict: PASS"
+				: Read.Checker == ECheckerVerdict::Fail ? "checkerVerdict: FAIL" : "checkerVerdict: NOT_RUN");
+		}
+		if (Read.Checker == ECheckerVerdict::Fail)
+		{
+			// A failed evaluation is shown as failed, never as completed, and offers no artifact (PR-B).
+			Out.bVerified = false; // FLOW_CHECKER_FAIL_NOT_VERIFIED
+			Out.bFinished = Read.bVerified;
+			Out.Line = CopyCheckerFailed;
+			AppendPhasesAndRevision(Out.Lines, Read);
+			return Out;
+		}
 		else if (Read.TraceId.bNull)
 		{
 			Out.Lines.push_back("traceId: Unknown");
@@ -808,7 +822,7 @@ namespace WonderlandJuliusMissionFlow
 			Out.Line = CopyNoResultYet;
 			return Out;
 		}
-		Out.Line = CopyStateCompleted;
+		Out.Line = Read.Checker == ECheckerVerdict::Pass ? CopyStateCompletedChecked : CopyStateCompleted; // FLOW_COMPLETED_ONLY_ON_PASS
 		if (Read.CompletionTraceId.bKnown)
 		{
 			Out.Lines.push_back(std::string("completion.traceId: ") + Read.CompletionTraceId.Text);
@@ -876,6 +890,13 @@ namespace WonderlandJuliusMissionFlow
 		Out.bParsed = true;
 		Out.bReported = true;
 		Out.TraceId = ReadString(&Root, "traceId");
+		const FReportedString Verdict = ReadString(&Root, "checkerVerdict");
+		if (Verdict.bKnown && (Verdict.Text == "PASS" || Verdict.Text == "FAIL" || Verdict.Text == "NOT_RUN"))
+		{
+			Out.bCheckerReported = true;
+			Out.Checker = Verdict.Text == "PASS" ? ECheckerVerdict::Pass
+				: Verdict.Text == "FAIL" ? ECheckerVerdict::Fail : ECheckerVerdict::NotRun; // FLOW_CHECKER_CLOSED_SET
+		}
 		const FReportedString State = ReadString(&Root, "state");
 		if (State.bKnown) { Out.State = State.Text; }
 		Out.Cause = ReadString(&Root, "cause");
