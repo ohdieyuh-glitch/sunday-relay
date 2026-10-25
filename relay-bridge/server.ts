@@ -1079,6 +1079,8 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
             url: (req.url ?? '/').replace('/relay-api', ''),
             nowIso: new Date().toISOString(),
             nowMs: Date.now(),
+            // Not trimmed: a padded id is malformed, and the value is never logged.
+            runId: typeof req.headers['x-relay-julius-run-id'] === 'string' ? req.headers['x-relay-julius-run-id'] : undefined,
           }, juliusMissionPorts(wonderlandAdmission));
           if (missionResult !== null) {
             send(res, missionResult.status, missionResult.body, cors);

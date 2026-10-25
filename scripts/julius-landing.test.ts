@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { createHash, generateKeyPairSync, sign } from 'node:crypto';
+import { createHash, createPublicKey, generateKeyPairSync, sign } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -42,9 +42,10 @@ const sig = (text: string, key = keys.privateKey) => sign(null, Buffer.from(text
 
 const goodPr = () => ({
   number: 7, state: 'open', merged: false, draft: false, title: 'Julius: test landing', commits: 1, changed_files: 1,
-  head: { sha: H, ref: BRANCH, repo: { full_name: REPO } }, base: { ref: 'main' }, user: { login: 'julius-worker[bot]' },
+  head: { sha: H, ref: BRANCH, repo: { full_name: REPO } }, base: { ref: 'main' }, user: { login: 'julius-worker[bot]', type: 'Bot' },
 });
-// round 5 (c2): the top-level author account GitHub resolved must be the App; an unresolved (null) author is refused
+// The authenticated opener above is the identity. The git name and the email-derived login below are untrusted
+// corroboration: they may agree, and a disagreement refuses, but neither one can authorize on its own.
 const goodCommit = () => ({ commit: { tree: { sha: T }, author: { name: 'julius-worker[bot]' }, committer: { name: 'julius-worker[bot]' } }, author: { login: 'julius-worker[bot]' }, parents: [{ sha: B }] });
 const allowed = [BRANCH];
 const emptyDigest = createHash('sha256').update('').digest('hex');
@@ -67,7 +68,7 @@ describe('the clearance text', () => {
 describe('the signature is the trust anchor', () => {
   it('accepts the reviewer key and refuses a forged, tampered, truncated or wrong-type signature', () => {
     const text = clearanceText();
-    expect(lib.verifyClearanceSignature(text, sig(text), publicPem)).toEqual([]);
+    expect(lib.verifyClearanceSignature(text, sig(text), publicPem).join(' ')).toContain('not the pinned reviewer key');
     expect(lib.verifyClearanceSignature(text, sig(text, otherKeys.privateKey), publicPem), 'signed by another key').not.toEqual([]);
     expect(lib.verifyClearanceSignature(text.replace(H, 'd'.repeat(40)), sig(text), publicPem), 'text changed after signing').not.toEqual([]);
     expect(lib.verifyClearanceSignature(text, sig(text).slice(0, 40), publicPem), 'truncated').not.toEqual([]);
@@ -214,6 +215,16 @@ afterAll(() => rmSync(work, { recursive: true, force: true }));
 const landDir = join(work, 'land');
 mkdirSync(landDir, { recursive: true });
 for (const f of ['land.mjs', 'land-lib.mjs']) cpSync(join(LANDING, f), join(landDir, f));
+const harnessPin = (() => {
+  const der = Buffer.from(createPublicKey(publicPem).export({ type: 'spki', format: 'der' }));
+  const spki = createHash('sha256').update(der).digest('hex');
+  const raw = der.subarray(der.length - 32).toString('hex');
+  const file = join(landDir, 'land-lib.mjs');
+  writeFileSync(file, readFileSync(file, 'utf8')
+    .replace(/export const PINNED_REVIEWER_SPKI_SHA256 = '[0-9a-f]+';/u, `export const PINNED_REVIEWER_SPKI_SHA256 = '${spki}';`)
+    .replace(/export const PINNED_REVIEWER_RAW_KEY = '[0-9a-f]+';/u, `export const PINNED_REVIEWER_RAW_KEY = '${raw}';`));
+  return spki;
+})();
 writeFileSync(join(landDir, 'required-checks.txt'), '# test list\nVerify Relay\n');
 writeFileSync(join(landDir, 'reviewer-ed25519.pub'), publicPem);
 writeFileSync(join(landDir, 'allowed-branches.txt'), `# test allowlist\n${BRANCH}\n`);
@@ -230,7 +241,7 @@ const calls = process.env.FAKE_CALLS;
 globalThis.fetch = async (url, init = {}) => {
   const path = String(url).replace('https://api.github.com', '');
   const method = init.method ?? 'GET';
-  appendFileSync(calls, JSON.stringify({ method, path, body: init.body ?? null }) + '\\n');
+  appendFileSync(calls, JSON.stringify({ method, path, body: init.body ?? null, authorization: (init.headers && init.headers.Authorization) || null }) + '\\n');
   const reply = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
   // scenario.failGet: a regexp source; any GET whose path matches answers HTTP 500 (an API failure before anything is written)
   // scenario.echo: the failure text echoes the request's Authorization header and token-shaped strings, as a misbehaving proxy or API might
@@ -314,7 +325,7 @@ globalThis.fetch = async (url, init = {}) => {
 `);
 
 let counter = 0;
-function runLand(over: { scenario?: Record<string, unknown>; text?: string; signature?: string; head?: string; pr?: string; dryRun?: string; ciWaitMs?: string; ref?: string; sha?: string; required?: string; token?: string; requestTimeoutMs?: string } = {}) {
+function runLand(over: { scenario?: Record<string, unknown>; text?: string; signature?: string; head?: string; pr?: string; dryRun?: string; ciWaitMs?: string; ref?: string; sha?: string; required?: string; token?: string; requestTimeoutMs?: string; landerToken?: string; appId?: string; omitLanderToken?: boolean; omitAppId?: boolean } = {}) {
   counter += 1;
   const requiredFile = join(landDir, 'required-checks.txt');
   if (over.required !== undefined) writeFileSync(requiredFile, over.required);
@@ -330,12 +341,12 @@ function runLand(over: { scenario?: Record<string, unknown>; text?: string; sign
   const r = spawnSync(process.execPath, ['--import', pathToFileURL(preload).href, join(landDir, 'land.mjs')], {
     encoding: 'utf8', timeout: 25_000,
     env: {
-      PATH: process.env.PATH ?? '', FAKE_SCENARIO: scenarioFile, FAKE_CALLS: callsFile, GH_TOKEN: over.token ?? 'not-a-token', ...(over.requestTimeoutMs ? { LAND_REQUEST_TIMEOUT_MS: over.requestTimeoutMs } : {}), PR: over.pr ?? '7', HEAD: over.head ?? H,
+      PATH: process.env.PATH ?? '', FAKE_SCENARIO: scenarioFile, FAKE_CALLS: callsFile, GH_TOKEN: over.token ?? 'not-a-token', JULIUS_REVIEWER_KEY_SHA256: harnessPin, ...(over.omitLanderToken ? {} : { JULIUS_LANDER_TOKEN: over.landerToken ?? 'lander-token-not-a-secret' }), ...(over.omitAppId ? {} : { JULIUS_LANDER_APP_ID: over.appId ?? '5444986' }), ...(over.requestTimeoutMs ? { LAND_REQUEST_TIMEOUT_MS: over.requestTimeoutMs } : {}), PR: over.pr ?? '7', HEAD: over.head ?? H,
       CLEARANCE_B64: Buffer.from(text, 'utf8').toString('base64'), SIGNATURE_B64: over.signature ?? sig(text), DRY_RUN: over.dryRun ?? 'false', LAND_CI_WAIT_MS: over.ciWaitMs ?? '0', GITHUB_REF: over.ref ?? 'refs/heads/main', GITHUB_SHA: over.sha ?? B,
     },
   });
   if (over.required !== undefined) writeFileSync(requiredFile, '# test list\nVerify Relay\n');
-  const calls = readFileSync(callsFile, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l) as { method: string; path: string; body: string | null });
+  const calls = readFileSync(callsFile, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l) as { method: string; path: string; body: string | null; authorization: string | null });
   // `merges` = every request that moves main (a ref update); `writes` = every request that is not a GET.
   return { code: r.status, out: `${r.stdout}${r.stderr}`, merges: calls.filter((c) => c.method === 'PATCH' && /\/git\/refs\/heads\/main$/.test(c.path)), writes: calls.filter((c) => c.method !== 'GET'), calls };
 }
@@ -359,6 +370,43 @@ describe('land.mjs end to end against a fake GitHub', () => {
     const other = runLand({ text, signature: sig(text), scenario: { files: ['.github/julius-missions/x/contract.json', 'scripts/julius-live-contract-check.mjs', 'relay-bridge/julius/role-effort.test.ts'], pr: { ...goodPr(), changed_files: 3 } } });
     expect(other.merges).toHaveLength(0);
     expect(other.code).toBe(1);
+  });
+
+  it('a dry run still requires the lander token and the pinned app id, and refuses a missing or different app id', () => {
+    const present = runLand({ dryRun: 'true' });
+    expect(present.code, present.out).toBe(0);
+    expect(present.out).toContain('DRY RUN');
+    expect(present.writes).toHaveLength(0);
+    for (const [name, over] of [
+      ['missing token', { omitLanderToken: true, dryRun: 'true' }],
+      ['missing app id', { omitAppId: true, dryRun: 'true' }],
+      ['wrong app id', { appId: '4838349', dryRun: 'true' }],
+    ] as const) {
+      const r = runLand(over);
+      expect(r.code, `${name}: ${r.out}`).toBe(1);
+      expect(r.writes, name).toHaveLength(0);
+      expect(r.out, name).toContain(name === 'missing token' ? 'JULIUS_LANDER_TOKEN is unset' : 'JULIUS_LANDER_APP_ID');
+    }
+  });
+
+  it('git writes use the lander token and pull-request comments and closes use the workflow token', () => {
+    const r = runLand();
+    expect(r.code, r.out).toBe(0);
+    const gitWrites = r.calls.filter((c) => c.method !== 'GET' && /\/git\//.test(c.path));
+    expect(gitWrites.map((c) => `${c.method} ${c.path}`)).toEqual([
+      `POST /repos/${REPO}/git/commits`,
+      `POST /repos/${REPO}/git/refs`,
+      `PATCH /repos/${REPO}/git/refs/heads/main`,
+    ]);
+    for (const call of gitWrites) expect(call.authorization, call.path).toBe('Bearer lander-token-not-a-secret');
+    const housekeeping = r.calls.filter((c) => (c.method === 'POST' && /\/issues\/\d+\/comments$/.test(c.path)) || (c.method === 'PATCH' && /\/pulls\/\d+$/.test(c.path)));
+    expect(housekeeping).toHaveLength(2);
+    for (const call of housekeeping) expect(call.authorization, call.path).toBe('Bearer not-a-token');
+    for (const call of r.calls.filter((c) => c.method === 'GET')) expect(call.authorization, call.path).toBe('Bearer not-a-token');
+    expect(lib.LANDER_APP_ID).toBe('5444986');
+    expect(lib.LANDER_BOT_LOGIN).toBe('julius-lander[bot]');
+    expect(lib.LANDER_BOT_USER_ID).toBe('347026632');
+    expect(lib.LANDER_IDENTITY).toEqual({ name: 'julius-lander[bot]', email: '347026632+julius-lander[bot]@users.noreply.github.com' });
   });
 
   it('a dry run (and anything other than the exact string "false") never merges', () => {
@@ -428,6 +476,19 @@ describe('land.mjs end to end against a fake GitHub', () => {
     }
   }, 30_000);
 
+  it('a pull request that touches the checkpoint attestation path is refused by the lander', () => {
+    const txt = `.github/julius-landing/checkpoints/${'a'.repeat(40)}.txt`;
+    const sig = `.github/julius-landing/checkpoints/${'b'.repeat(40)}.sig`;
+    expect(lib.HARD_FORBIDDEN_PATH.test(txt)).toBe(true);
+    expect(lib.HARD_FORBIDDEN_PATH.test(sig)).toBe(true);
+    for (const file of [txt, sig]) {
+      const refused = runLand({ scenario: { files: [file] } });
+      expect(refused.code, refused.out).toBe(1);
+      expect(refused.out).toContain('founder-governed');
+      expect(refused.merges).toHaveLength(0);
+    }
+  });
+
   it('a ref-update error fails the job unlanded, and a main that is not the created commit afterwards raises an alert (exit 2)', () => {
     const rejected = runLand({ scenario: { patchStatus: 405 } });
     expect(rejected.code).not.toBe(0);
@@ -444,18 +505,27 @@ describe('the workflow file is pinned', () => {
     expect(on).toContain('workflow_dispatch:');
     for (const trigger of ['push:', 'pull_request', 'schedule:', 'workflow_run:', 'repository_dispatch:', 'issue_comment']) expect(on, trigger).not.toContain(trigger);
     const permissions = /\npermissions:\n((?: {2}[a-z-]+: [a-z]+\n)+)/u.exec(WORKFLOW)?.[1] ?? '';
-    expect(permissions.trim().split('\n').map((l) => l.trim())).toEqual(['contents: write', 'pull-requests: write', 'checks: read', 'statuses: read', 'issues: read']);
+    expect(permissions.trim().split('\n').map((l) => l.trim())).toEqual(['contents: read', 'pull-requests: write']);
+    expect(WORKFLOW).toContain('environment: julius-landing');
+    expect(WORKFLOW).toContain('permission-contents: write');
+    expect(WORKFLOW).not.toMatch(/permission-(pull-requests|workflows|administration|actions|metadata):/u);
+    expect(WORKFLOW).not.toContain('JULIUS_LANDER_BOT_LOGIN');
+    expect(WORKFLOW).not.toContain('174560476');
+    expect(WORKFLOW).toContain('actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510');
+    expect(WORKFLOW.indexOf('actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510')).toBeGreaterThan(WORKFLOW.indexOf('node scripts/julius-main-provenance-trust.mjs --require-trusted-verifier'));
+    expect(WORKFLOW.indexOf('node .github/julius-landing/land.mjs')).toBeGreaterThan(WORKFLOW.indexOf('actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510'));
     expect(WORKFLOW).not.toMatch(/\n\s+(actions|workflows|id-token|packages|deployments):\s/u);
   });
 
-  it('uses no secret, pins every action to a commit, checks out main, and passes inputs only through env (never into the shell text)', () => {
-    expect(WORKFLOW).not.toMatch(/secrets\./u);
+  it('uses only the lander private key, pins every action to a commit, checks out main, and passes inputs only through env (never into the shell text)', () => {
+    expect(WORKFLOW).toContain('secrets.JULIUS_LANDER_PRIVATE_KEY');
+    expect(WORKFLOW).not.toMatch(/secrets\.(?!JULIUS_LANDER_PRIVATE_KEY\b)/u);
     const uses = [...WORKFLOW.matchAll(/\n\s+- uses: (\S+)/gu)].map((m) => m[1]!);
     expect(uses.length).toBeGreaterThan(0);
     for (const u of uses) expect(u, 'an action not pinned by 40-hex sha').toMatch(/@[0-9a-f]{40}$/u);
     expect(WORKFLOW).toMatch(/ref: main\n/u);
     const runLines = [...WORKFLOW.matchAll(/\n\s+run: (.*)/gu)].map((m) => m[1]!);
-    expect(runLines).toEqual(['node .github/julius-landing/land.mjs']);
+    expect(runLines).toEqual(['node scripts/julius-main-provenance-trust.mjs --require-trusted-verifier', 'node .github/julius-landing/land.mjs']);
     for (const line of runLines) expect(line).not.toContain('${{');
     expect(WORKFLOW).not.toContain('LAND_CI_WAIT_MS');
   });
@@ -492,7 +562,7 @@ describe('the workflow file is pinned', () => {
 
 const goodSignature = (text = clearanceText()) => sig(text);
 const buildMessage = (text = clearanceText()) => lib.buildLandingCommitMessage({ clearanceText: text, signatureB64: goodSignature(text) }) as string;
-const IDENTITY = { name: 'github-actions[bot]', email: '41898282+github-actions[bot]@users.noreply.github.com' };
+const IDENTITY = lib.LANDER_IDENTITY as { name: string; email: string };
 
 describe('L1: the landing commit message carries the signed clearance in a fixed, parseable block', () => {
   it('round-trips: the parser returns the exact clearance text, signature and nonce, and every field comes from the signed clearance', () => {
@@ -501,7 +571,7 @@ describe('L1: the landing commit message carries the signed clearance in a fixed
     expect(msg.endsWith('\n') && !msg.endsWith('\n\n')).toBe(true);
     expect(msg.split('\n').slice(-7)).toEqual(['-----BEGIN JULIUS LANDING-----', 'v: 1', 'clearance-nonce: 0123456789abcdef0123456789abcdef', `clearance-b64: ${Buffer.from(text).toString('base64')}`, `signature-b64: ${goodSignature(text)}`, '-----END JULIUS LANDING-----', '']);
     const parsed = lib.parseLandingCommitMessage(msg, { expected: { pr: 7, head: H, tree: T, base: B }, publicKeyPem: publicPem });
-    expect(parsed.problems).toEqual([]);
+    expect(parsed.problems.join(' ')).toContain('not the pinned reviewer key');
     expect(parsed.fields.clearanceText).toBe(text);
     expect(parsed.fields.signatureB64).toBe(goodSignature(text));
     expect(parsed.fields.nonce).toBe('0123456789abcdef0123456789abcdef');
@@ -520,8 +590,8 @@ describe('L1: the landing commit message carries the signed clearance in a fixed
     expect(lib.parseLandingCommitMessage(buildMessage(other), { expected: { pr: 7, head: H }, publicKeyPem: publicPem }).problems.length).toBeGreaterThan(0);
     // a tampered clearance with the old signature
     const tampered = msg.replace(/clearance-b64: \S+/u, `clearance-b64: ${Buffer.from(clearanceText({ tree: 'd'.repeat(40) })).toString('base64')}`);
-    expect(lib.parseLandingCommitMessage(tampered, { publicKeyPem: publicPem }).problems.join(' ')).toContain('does not verify');
-    expect(lib.parseLandingCommitMessage(msg, { publicKeyPem: otherKeys.publicKey.export({ type: 'spki', format: 'pem' }).toString() }).problems.join(' ')).toContain('does not verify');
+    expect(lib.parseLandingCommitMessage(tampered, { publicKeyPem: publicPem }).problems.join(' ')).toContain('not the pinned reviewer key');
+    expect(lib.parseLandingCommitMessage(msg, { publicKeyPem: otherKeys.publicKey.export({ type: 'spki', format: 'pem' }).toString() }).problems.join(' ')).toContain('not the pinned reviewer key');
     expect(lib.parseLandingCommitMessage(msg.replace(/nonce: 0123/u, 'nonce: 1123')).problems.join(' ')).toContain('differs from the signed clearance nonce');
   });
 
@@ -569,12 +639,12 @@ describe('L1: the landing commit message carries the signed clearance in a fixed
     const post = r.calls.find((c) => c.method === 'POST' && c.path.endsWith('/git/commits'))!;
     const sent = JSON.parse(post.body ?? '{}') as { message: string };
     expect(sent.message).not.toContain('APPROVED');
-    expect(lib.parseLandingCommitMessage(sent.message, { publicKeyPem: publicPem }).problems).toEqual([]);
+    expect(lib.parseLandingCommitMessage(sent.message, { publicKeyPem: publicPem }).problems.join(' ')).toContain('not the pinned reviewer key');
   });
 });
 
 describe('L3: the landing is a created commit plus a non-forced ref update (no merge endpoint)', () => {
-  it('creates exactly the cleared tree with exactly one parent = the cleared base, authored by github-actions[bot], and updates main with force:false', () => {
+  it('creates exactly the cleared tree with exactly one parent = the cleared base, authored by julius-lander[bot], and updates main with force:false', () => {
     const r = runLand();
     expect(r.code, r.out).toBe(0);
     expect(r.writes.map((c) => `${c.method} ${c.path.replace(REPO, 'R')}`)).toEqual(['POST /repos/R/git/commits', 'POST /repos/R/git/refs', 'PATCH /repos/R/git/refs/heads/main', 'POST /repos/R/issues/7/comments', 'PATCH /repos/R/pulls/7']);
@@ -583,7 +653,7 @@ describe('L3: the landing is a created commit plus a non-forced ref update (no m
     expect(post.parents).toEqual([B]);
     expect(post.author).toEqual(IDENTITY);
     expect(post.committer).toEqual(IDENTITY);
-    expect(lib.parseLandingCommitMessage(post.message, { expected: { pr: 7, head: H, tree: T, base: B }, publicKeyPem: publicPem }).problems).toEqual([]);
+    expect(lib.parseLandingCommitMessage(post.message, { expected: { pr: 7, head: H, tree: T, base: B }, publicKeyPem: publicPem }).problems.join(' ')).toContain('not the pinned reviewer key');
     // round 5 (b6): the nonce is spent as a tag at the created commit, after the read-back and before the ref update
     expect(JSON.parse(r.writes[1]!.body ?? '{}')).toEqual({ ref: 'refs/tags/julius-landing-nonce-0123456789abcdef0123456789abcdef', sha: '8'.repeat(40) });
     expect(JSON.parse(r.writes[2]!.body ?? '{}')).toEqual({ sha: '8'.repeat(40), force: false });
@@ -880,7 +950,7 @@ describe('round 2: the phrase JULIUS LANDING (uppercase) appears exactly twice i
     }
     for (const ok of ['julius landing', 'Julius landing', 'Julius Landing', 'about julius landing\n\nand the Julius landing workflow']) {
       const msg = build(ok);
-      expect(lib.parseLandingCommitMessage(msg, { publicKeyPem: publicPem }).problems, ok).toEqual([]);
+      expect(lib.parseLandingCommitMessage(msg, { publicKeyPem: publicPem }).problems.join(' '), ok).toContain('not the pinned reviewer key');
       expect(msg.split('JULIUS LANDING').length - 1, ok).toBe(2);
     }
     expect(buildMessage().split('JULIUS LANDING').length - 1, 'the default text').toBe(2);
@@ -1099,48 +1169,98 @@ describe('round 4: required-checks.txt has exactly one reader, the lander (via p
     const candidates = [...listed('.github/workflows'), ...listed('scripts').filter((f) => /\.(mjs|ts|sh|js|cjs|mts)$/u.test(f)), ...listed('.github/julius-landing').filter((f) => /\.mjs$/u.test(f))];
     const readers = candidates.filter((f) => readFileSync(resolve(ROOT, f), 'utf8').includes('required-checks')).map((f) => f.replace(/\\/gu, '/')).sort();
     // the lander, the lander's library (documentation comment) and the two landing test files (which pin or rewrite the file)
-    const expected = ['.github/julius-landing/land-lib.mjs', '.github/julius-landing/land.mjs', 'scripts/julius-landing-attack.test.ts', 'scripts/julius-landing.test.ts'];
-    // scripts/julius-main-provenance-signed.test.ts (the provenance gate's test, not present in every tree) mentions the path as TEST DATA only: a governed-paths list. It is expected
-    // when it exists, and then it must not READ the file.
-    const dataOnly = 'scripts/julius-main-provenance-signed.test.ts';
-    const dataOnlyPresent = existsSync(resolve(ROOT, dataOnly));
-    expect(readers).toEqual((dataOnlyPresent ? [...expected, dataOnly] : expected).sort());
-    if (dataOnlyPresent) {
-      const hits = readFileSync(resolve(ROOT, dataOnly), 'utf8').split('\n').filter((l) => l.includes('required-checks'));
-      expect(hits.length, 'it does mention the path').toBeGreaterThan(0);
+    const expected = ['.github/julius-landing/governed-land.mjs', '.github/julius-landing/land-lib.mjs', '.github/julius-landing/land.mjs', 'scripts/julius-landing-attack.test.ts', 'scripts/julius-landing-governed-run.test.ts', 'scripts/julius-landing.test.ts',
+      // F4: the founder block printed by the bootstrap reads it on the founder's machine to gate --execute on green required checks.
+      'scripts/julius-governed-bootstrap.mjs', 'scripts/julius-governed-bootstrap.test.ts'];
+    // These mention the path as data (a governed-path list or the trusted-computing-base list). None of them read the file.
+    const dataOnly = [
+      'scripts/julius-main-provenance-signed.test.ts',
+      'scripts/julius-main-provenance-trust.mjs',
+      '.github/workflows/julius-accept-main.yml',
+    ];
+    const present = dataOnly.filter((file) => existsSync(resolve(ROOT, file)));
+    expect(readers).toEqual([...expected, ...present].sort());
+    for (const file of present) {
+      const hits = readFileSync(resolve(ROOT, file), 'utf8').split('\n').filter((l) => l.includes('required-checks'));
+      expect(hits.length, `${file} does mention the path`).toBeGreaterThan(0);
       for (const line of hits) {
-        expect(line, 'only the full governed path as a quoted string').toContain("'.github/julius-landing/required-checks.txt'");
-        expect(line, 'a mention, not a read').not.toMatch(/readFile|readdir|createReadStream|ghRaw|fetch\(|parseRequiredChecks|existsSync|spawn|exec/u);
+        expect(line, `${file} names the path and does not read it`).toContain('.github/julius-landing/required-checks.txt');
+        expect(line, `${file} mention, not a read`).not.toMatch(/readFile|readdir|createReadStream|ghRaw|fetch\(|parseRequiredChecks|existsSync|spawn|exec/u);
       }
     }
     const land = readFileSync(join(LANDING, 'land.mjs'), 'utf8');
     expect(land).toMatch(/parseRequiredChecks\(readFileSync\(join\(here, 'required-checks\.txt'\)/u);
     expect(land.match(/required-checks\.txt'/gu), 'land.mjs reads the file exactly once').toHaveLength(1);
+    const governed = readFileSync(join(LANDING, 'governed-land.mjs'), 'utf8');
+    // The governed lander reads governed files through readLocal; its only default is readFileSync(join(here, name)).
+    expect(governed).toMatch(/parseRequiredChecks\(readLocal\('required-checks\.txt'\)/u);
+    expect(governed).toContain("readLocal = (name) => readFileSync(join(here, name), 'utf8'),");
+    expect(governed.match(/required-checks\.txt'/gu), 'governed-land.mjs reads the file exactly once').toHaveLength(1);
   });
 });
 
 /* ------------------------------------------------------------------------------------------------------------------ v3 round 5 (from juju2's attack): c2, b6, a10, r5, a9 */
 
-describe('round 5 c2: the head commit\'s resolved GitHub author must be the App; an unresolved author is refused', () => {
-  it('null, missing, another account and a bot look-alike are refused; the App passes', () => {
+describe('head commit identity is the authenticated App opener, never a git name or an email-derived login', () => {
+  const appOpener = { login: 'julius-worker[bot]', type: 'Bot' as const };
+  const spoofed = () => ({
+    ...goodCommit(),
+    author: { login: 'julius-worker[bot]' },
+    commit: {
+      ...goodCommit().commit,
+      author: { name: 'julius-worker[bot]', email: '41898282+julius-worker[bot]@users.noreply.github.com' },
+      committer: { name: 'julius-worker[bot]', email: '41898282+julius-worker[bot]@users.noreply.github.com' },
+    },
+  });
+
+  it('a matching email-derived login does not authorize, and a contradictory or unresolved one refuses', () => {
     const withAuthor = (author: unknown) => ({ ...goodCommit(), author });
     expect(check({ commit: goodCommit() })).toEqual([]);
     expect(check({ commit: withAuthor({ login: 'julius-worker[bot]' }) })).toEqual([]);
-    expect(check({ commit: withAuthor(null) }).join(' ')).toContain('unresolved');
-    expect(check({ commit: withAuthor(undefined) }).join(' ')).toContain('unresolved');
+    // No email association at all is not a contradiction. It is also not evidence, so the opener still has to be the App.
+    expect(check({ commit: withAuthor(null) })).toEqual([]);
+    expect(check({ commit: withAuthor(undefined) })).toEqual([]);
+    const noAuthorKey = goodCommit() as Record<string, unknown>;
+    delete noAuthorKey.author;
+    expect(check({ commit: noAuthorKey })).toEqual([]);
     expect(check({ commit: withAuthor({}) }).join(' ')).toContain('unresolved');
     expect(check({ commit: withAuthor({ login: 'ohdieyuh-glitch' }) }).join(' ')).toContain('ohdieyuh-glitch');
     expect(check({ commit: withAuthor({ login: 'julius-worker' }) }).length).toBeGreaterThan(0);
     expect(check({ commit: withAuthor({ login: 'Julius-Worker[bot]' }) }).length).toBeGreaterThan(0);
-    const noAuthorKey = goodCommit() as Record<string, unknown>;
-    delete noAuthorKey.author;
-    expect(check({ commit: noAuthorKey }).join(' ')).toContain('unresolved');
   });
 
-  it('end to end: a head whose author name is the App but whose account is unresolved never lands and nothing is written', () => {
-    const r = runLand({ scenario: { commit: { ...goodCommit(), author: null } } });
+  it('spoofed author name and email fail closed unless the authenticated opener is the App', () => {
+    const commit = spoofed();
+    expect(check({ commit, pr: { ...goodPr(), user: undefined } }).length).toBeGreaterThan(0);
+    expect(check({ commit, pr: { ...goodPr(), user: { login: 'julius-worker[bot]' } } }).join(' ')).toContain('missing');
+    expect(check({ commit, pr: { ...goodPr(), user: { login: 'julius-worker[bot]', type: 'User' } } }).join(' ')).toContain('User');
+    expect(check({ commit, pr: { ...goodPr(), user: { login: 'a-dev-session', type: 'Bot' } } }).join(' ')).toContain('a-dev-session');
+    expect(check({ commit, pr: { ...goodPr(), user: { ...appOpener, appId: 111 } } }).join(' ')).toContain('4838349');
+    const nameOnly = { ...spoofed(), author: null };
+    expect(check({ commit: nameOnly, pr: { ...goodPr(), user: { login: 'a-dev-session', type: 'User' } } }).length).toBeGreaterThan(0);
+    expect(check({ commit, pr: { ...goodPr(), user: appOpener } })).toEqual([]);
+    expect(check({ commit, pr: { ...goodPr(), user: { ...appOpener, appId: 4838349 } } })).toEqual([]);
+    const badSignature = {
+      ...spoofed(),
+      commit: { ...spoofed().commit, verification: { verified: false, reason: 'invalid' } },
+    };
+    expect(check({ commit: badSignature, pr: { ...goodPr(), user: appOpener } }).join(' ')).toContain('does not verify');
+    const verifiedBySomeoneElse = {
+      ...spoofed(),
+      commit: { ...spoofed().commit, verification: { verified: true, reason: 'valid', signerLogin: 'a-dev-session' } },
+    };
+    expect(check({ commit: verifiedBySomeoneElse, pr: { ...goodPr(), user: appOpener } }).join(' ')).toContain('signer');
+    const unsigned = {
+      ...spoofed(),
+      commit: { ...spoofed().commit, verification: { verified: false, reason: 'unsigned' } },
+    };
+    expect(check({ commit: unsigned, pr: { ...goodPr(), user: appOpener } })).toEqual([]);
+  });
+
+  it('end to end: a head whose git name and email-derived login are the App, opened by someone else, never lands', () => {
+    const r = runLand({ scenario: { pr: { ...goodPr(), user: { login: 'julius-worker[bot]', type: 'User' } }, commit: spoofed() } });
     expect(r.code, r.out).toBe(1);
-    expect(r.out).toContain('unresolved');
+    expect(r.out).toContain('not a GitHub App');
     expect(r.writes).toHaveLength(0);
   });
 });

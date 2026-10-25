@@ -173,11 +173,14 @@ export const juliusFailureIsContentRefusal = (failureClass: string | null | unde
 /**
  * THE FAILURES THAT END THE RUN, NOT ONLY THEIR TASK.
  *
- * Founder rule (2026-09-30): the coder is the requested model or nothing. No
- * automatic downgrade, and a STOP rather than a substitute. The Claude Code
- * provider ends a session FAILED under one of these classes when the session
- * was answered by another model, or by one it cannot attest
- * (`claude-code-coding-provider.ts`). Ending the TASK was not a stop:
+ * Founder rule (2026-09-30): a peer is the requested model or nothing. No
+ * automatic downgrade, and a STOP rather than a substitute. The Coding Agent
+ * ends a session FAILED under `coder_served_model_*` when the session was
+ * answered by another model, or by one it cannot attest
+ * (`claude-code-coding-provider.ts`). The Prompt Architect and the Independent
+ * Reviewer do the same, on a successful answer, under
+ * `architect_served_model_*` and `reviewer_served_model_*`. A provider failure
+ * keeps its own class. Ending the TASK was not a stop:
  *  - the run's own reason was the generic `TASK_FAILED`;
  *  - a sibling that never depended on the failed task was still claimable,
  *    and would have been sent to the same path.
@@ -199,8 +202,68 @@ export const juliusFailureIsContentRefusal = (failureClass: string | null | unde
 export const JULIUS_RUN_HALTING_FAILURE_CLASSES: readonly string[] = Object.freeze([
   'coder_served_model_mismatch',
   'coder_served_model_unattested',
+  'architect_served_model_mismatch',
+  'architect_served_model_unattested',
+  'reviewer_served_model_mismatch',
+  'reviewer_served_model_unattested',
   'context_integrity_unresolved_clash',
 ]);
+
+/** Date suffixes that still name the requested id. `YYYYMMDD` is the hosted dated build. */
+export type JuliusServedModelDateForm = 'YYYYMMDD' | 'YYYY-MM-DD';
+
+const COMPACT_DATE = /^\d{8}$/u;
+const DASHED_DATE = /^(\d{4})-(\d{2})-(\d{2})$/u;
+
+/** A real calendar day. No `Date` — the mission domain does not read a clock. */
+function calendarDay(year: number, month: number, day: number): boolean {
+  if (!Number.isInteger(year) || month < 1 || month > 12 || day < 1) return false;
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const length = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1] ?? 0;
+  return day <= length;
+}
+
+/**
+ * The suffix after `<requested>-` is a date of one accepted form, and nothing
+ * else. `YYYYMMDD` is the hosted dated-build grammar (eight digits, same as
+ * `hostedServedModelVerdict`). The dashed form is a real calendar day. A
+ * different base, a year-month, or an extra token does not match.
+ */
+export function juliusServedModelDateSuffix(suffix: string, forms: readonly JuliusServedModelDateForm[]): boolean {
+  if (forms.includes('YYYYMMDD') && COMPACT_DATE.test(suffix)) return true;
+  const dashed = DASHED_DATE.exec(suffix);
+  if (forms.includes('YYYY-MM-DD') && dashed !== null) {
+    return calendarDay(Number(dashed[1]), Number(dashed[2]), Number(dashed[3]));
+  }
+  return false;
+}
+
+/**
+ * WHETHER AN ATTESTED SERVED MODEL IS THE ONE REQUESTED.
+ *
+ * Default forms are the Coding Agent's hosted verdict: the served name, or an
+ * extra attested name, must be the requested id exactly, or `<requested>-YYYYMMDD`.
+ * The Prompt Architect also accepts OpenAI's dashed snapshot `<requested>-YYYY-MM-DD`
+ * (model pages date snapshots that way; `gpt-5.6-sol` is the id at
+ * https://developers.openai.com/api/docs/models/gpt-5.6-sol). Both forms are
+ * the same base id only. No served name is unattested — never a match, and
+ * never filled in from the request. A missing request with a served name is
+ * a mismatch, not an attestation of the request.
+ */
+export const juliusServedModelVerdict = (
+  requested: string | null,
+  served: string | null,
+  attestedNames: readonly (string | null)[] = [],
+  dateForms: readonly JuliusServedModelDateForm[] = ['YYYYMMDD'],
+): 'MATCH' | 'MISMATCH' | 'UNATTESTED' => {
+  if (served === null || served === '') return 'UNATTESTED';
+  const requestedId = requested ?? '';
+  const names = [served, ...attestedNames].filter((name): name is string => name !== null && name !== '');
+  const dated = (name: string): boolean =>
+    requestedId !== '' && name.startsWith(`${requestedId}-`)
+    && juliusServedModelDateSuffix(name.slice(requestedId.length + 1), dateForms);
+  return requestedId !== '' && names.some((name) => name === requestedId || dated(name)) ? 'MATCH' : 'MISMATCH';
+};
 
 /** The class, when it is one that ends the run; otherwise null. */
 export const juliusRunHaltingFailureClass = (failureClass: unknown): string | null =>

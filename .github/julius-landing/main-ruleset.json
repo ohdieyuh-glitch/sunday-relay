@@ -1,0 +1,30 @@
+{
+  "id": 25792058,
+  "name": "main-lander-only",
+  "target": "branch",
+  "source_type": "Repository",
+  "source": "ohdieyuh-glitch/sunday-relay",
+  "enforcement": "active",
+  "bypass_actors": [
+    {
+      "actor_id": 5457712,
+      "actor_type": "Integration",
+      "bypass_mode": "always"
+    }
+  ],
+  "conditions": {
+    "ref_name": {
+      "exclude": [],
+      "include": [
+        "~DEFAULT_BRANCH",
+        "refs/heads/julius-governed-audit/**/*"
+      ]
+    }
+  },
+  "rules": [
+    { "type": "deletion" },
+    { "type": "non_fast_forward" },
+    { "type": "creation" },
+    { "type": "update" }
+  ]
+}

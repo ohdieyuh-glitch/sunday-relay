@@ -89,6 +89,7 @@ describe('the key names the attempt', () => {
     const paid = dispatchArgs({ mission: 'm', lane: 'lab', key: 'm@0845c593a8eb#lab#a1', paid: true });
     expect(paid).toContain('confirm_live=RUN LIVE MISSION');
     expect(paid).toContain('dispatch_key=m@0845c593a8eb#lab#a1');
+    expect(paid.join('\n')).not.toMatch(/trace_id|traceId|span_id|spanId/u);
     expect(dispatchArgs({ mission: 'm', lane: 'lab', key: 'k'.repeat(8), paid: false })).not.toContain('confirm_live=RUN LIVE MISSION');
   });
 });

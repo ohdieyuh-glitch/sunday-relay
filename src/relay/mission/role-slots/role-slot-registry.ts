@@ -404,6 +404,20 @@ export function occupantsForRole(role: RoleSlot): readonly RoleOccupant[] {
  * deliberate and copied from `selectHermesMode`, where guessing in production
  * was the original bug.
  */
+/**
+ * WHAT THE HOSTED LIVE WORKFLOW ASKS EACH ROLE TO RUN.
+ *
+ * These are requested pins. They are not qualified served models:
+ * `qualifiedServedModels` names only what a paid run attested, and a missing
+ * attestation stays an empty list. The workflow env is held to these strings
+ * by the role-slot tests.
+ */
+export const JULIUS_LIVE_REQUESTED_MODELS = Object.freeze({
+  prompt_architect: 'gpt-5.6-sol',
+  coding_agent: 'claude-opus-5-5',
+  reviewer: 'grok-build-0.1',
+});
+
 export const DEVELOPMENT_DEFAULT_OCCUPANTS: Readonly<Record<RoleSlot, string>> = Object.freeze({
   // THE UNMETERED ONE. Before role slots existed, an unconfigured machine had
   // no architect at all (`selectArchitectPath` answered `blocked`), so there is

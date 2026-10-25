@@ -1,5 +1,6 @@
 import type { Pool } from 'pg';
 
+import { parseJuliusAdmissionRunId } from '../scripts/julius-admission-run-id.mjs';
 import type { JuliusBootstrapOutcome, JuliusBootstrapPort, JuliusBootstrapRequest } from '../src/relay/integration/julius/julius-port';
 import { JuliusContractPostgresRepository } from '../src/relay/persistence/julius-contract-postgres';
 import { JuliusPostgresRepository } from '../src/relay/persistence/julius-postgres';
@@ -102,6 +103,13 @@ export interface JuliusMissionRouteRequest {
   readonly url?: string | undefined;
   readonly nowIso?: string | undefined;
   readonly nowMs?: number | undefined;
+  /**
+   * `x-relay-julius-run-id` — the admission id the caller already holds.
+   * A canonical `wlj_` id is the only one this route will create a run for.
+   * A missing, malformed, or legacy `run:` id is refused before the port
+   * writes anything. This route never mints one.
+   */
+  readonly runId?: string | undefined;
 }
 
 /**
@@ -114,7 +122,7 @@ export interface JuliusMissionRouteRequest {
  * mission whose independence cannot later be checked.
  */
 export interface JuliusMissionRoutePorts {
-  readonly bootstrap: ((executionId: string, tenantId: string) => JuliusBootstrapPort) | null;
+  readonly bootstrap: ((executionId: string, tenantId: string, admittedRunId: string) => JuliusBootstrapPort) | null;
   readonly missingConfig: readonly string[];
   readonly reviewerProvider: string | null;
   readonly cardRevision: string;
@@ -163,6 +171,9 @@ const REFUSAL_STATUS: Readonly<Record<string, number>> = {
   // An explicit rerun arrived without a key of its own: the caller's to fix, and
   // the message says what to send.
   rerun_key_required: 400,
+  admission_run_id_required: 400,
+  admission_run_id_malformed: 400,
+  admission_run_id_legacy_read_only: 400,
   // The same identity was already used for a different mission: the run's.
   mission_already_running: 409,
   // The mission is already running something else. 409, and the message names
@@ -208,6 +219,11 @@ export async function handleJuliusMissionRoute(
 
   const rerunIntent = request.rerun?.trim().toLowerCase() === 'explicit';
   const rerunKey = request.rerunKey?.trim();
+  const admitted = parseJuliusAdmissionRunId(request.runId ?? '');
+  if (!admitted.ok || admitted.form !== 'wlj') {
+    return err(400, admitted.ok ? 'admission_run_id_legacy_read_only' : admitted.reason,
+      'The live run was not admitted on a canonical wlj id. No run was created.');
+  }
   const bootstrapRequest = {
     ...compileBootstrapRequest(contract, missionWorkerRequests(ports.reviewerProvider), ports.cardRevision),
     ...(rerunIntent ? { rerunIntent: 'EXPLICIT' as const } : {}),
@@ -215,8 +231,9 @@ export async function handleJuliusMissionRoute(
   };
   // The same execution identity the job derives, so a mission created here and
   // then driven by the job is ONE execution rather than two that share a name.
-  const outcome: JuliusBootstrapOutcome = await ports.bootstrap(`execution:julius-live:${contract.missionId}`, contract.tenantId)
-    .submit(bootstrapRequest);
+  const outcome: JuliusBootstrapOutcome = await ports.bootstrap(
+    `execution:julius-live:${contract.missionId}`, contract.tenantId, admitted.runId,
+  ).submit(bootstrapRequest);
   if (!outcome.accepted) {
     return err(REFUSAL_STATUS[outcome.reasonCode] ?? 409, outcome.reasonCode, outcome.safeMessage);
   }
@@ -255,13 +272,13 @@ export async function handleJuliusMissionRoute(
  * the mission job hands to the same port. Nothing here is a second way to create
  * a run.
  */
-export function composeJuliusMissionBootstrap(pool: Pool): (executionId: string, tenantId: string) => JuliusBootstrapPort {
+export function composeJuliusMissionBootstrap(pool: Pool): (executionId: string, tenantId: string, admittedRunId: string) => JuliusBootstrapPort {
   const runs = new JuliusPostgresRepository(pool);
   const contracts = new JuliusContractPostgresRepository(pool);
   const seeds = createPostgresMissionSeedStore(pool);
   // What earlier missions of this project verified, for this one to inherit.
   const knowledge = createPostgresMissionKnowledgeStore(pool);
-  return (executionId, tenantId) => createLiveJuliusBootstrapPort({
+  return (executionId, tenantId, admittedRunId) => createLiveJuliusBootstrapPort({
     runs: {
       loadRun: runs.loadRun.bind(runs),
       createRun: runs.createRun.bind(runs),
@@ -269,6 +286,6 @@ export function composeJuliusMissionBootstrap(pool: Pool): (executionId: string,
       transition: runs.transition.bind(runs),
       putTaskContract: contracts.putTaskContract.bind(contracts),
     },
-    seeds, knowledge, tenantId, executionId,
+    seeds, knowledge, tenantId, executionId, admittedRunId,
   });
 }

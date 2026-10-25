@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { createHash, generateKeyPairSync, sign } from 'node:crypto';
+import { createHash, createPublicKey, generateKeyPairSync, sign } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -46,9 +46,9 @@ const sig = (text: string) => sign(null, Buffer.from(text, 'utf8'), keys.private
 const goodPr = () => ({
   // HARNESS ADAPTATION (258e6e01): the lander compares the rows read with the PR's changed_files, so the fake PR reports it (1 = the default single file).
   number: 7, state: 'open', merged: false, draft: false, title: 'Julius: test landing', commits: 1, changed_files: 1,
-  head: { sha: H, ref: BRANCH, repo: { full_name: REPO } }, base: { ref: 'main' }, user: { login: APP },
+  head: { sha: H, ref: BRANCH, repo: { full_name: REPO } }, base: { ref: 'main' }, user: { login: APP, type: 'Bot' },
 });
-// round 5 (c2): a head commit carries the top-level author account GitHub resolved; an unresolved (null) author is now refused
+// Git name and email-derived login may agree with the App. They are not what authorizes the commit.
 const goodCommit = () => ({ commit: { tree: { sha: T }, author: { name: APP }, committer: { name: APP } }, author: { login: APP }, parents: [{ sha: B }] });
 const check = (over: Record<string, unknown> = {}) => lib.checkPullRequest({
   fields: lib.parseClearance(clearanceText()).fields, now: NOW, pr: goodPr(), commit: goodCommit(), files: ['.github/julius-missions/x/contract.json'], fileRows: 1, mainSha: B, allowedBranches: [BRANCH], digest: emptyDigest, ...over,
@@ -63,6 +63,17 @@ mkdirSync(landDir, { recursive: true });
 // HARNESS ADAPTATION (258e6e01): the committed required-checks.txt names six checks; the scenarios model a head whose CI is "Verify Relay", so the harness writes its own
 // one-name list (as the landing test does) instead of copying the production file. The production file's content is pinned by scripts/julius-landing.test.ts.
 for (const f of ['land.mjs', 'land-lib.mjs', 'reviewer-tools.mjs']) if (existsSync(join(LANDING, f))) cpSync(join(LANDING, f), join(landDir, f));
+const harnessPin = (() => {
+  const der = Buffer.from(createPublicKey(publicPem).export({ type: 'spki', format: 'der' }));
+  const spki = createHash('sha256').update(der).digest('hex');
+  const raw = der.subarray(der.length - 32).toString('hex');
+  const file = join(landDir, 'land-lib.mjs');
+  if (!existsSync(file)) return spki;
+  writeFileSync(file, readFileSync(file, 'utf8')
+    .replace(/export const PINNED_REVIEWER_SPKI_SHA256 = '[0-9a-f]+';/u, `export const PINNED_REVIEWER_SPKI_SHA256 = '${spki}';`)
+    .replace(/export const PINNED_REVIEWER_RAW_KEY = '[0-9a-f]+';/u, `export const PINNED_REVIEWER_RAW_KEY = '${raw}';`));
+  return spki;
+})();
 writeFileSync(join(landDir, 'reviewer-ed25519.pub'), publicPem);
 writeFileSync(join(landDir, 'allowed-branches.txt'), `# attack allowlist\n${BRANCH}\n`);
 // a required-checks file is part of the hardened design; the committed implementation has none, so the default is created ONLY when the implementation reads one
@@ -86,7 +97,7 @@ globalThis.fetch = async (url, init = {}) => {
   const path = String(url).replace('https://api.github.com', '');
   const bare = path.split('?')[0];
   const method = init.method ?? 'GET';
-  appendFileSync(calls, JSON.stringify({ method, path, body: init.body ?? null }) + '\\n');
+  appendFileSync(calls, JSON.stringify({ method, path, body: init.body ?? null, authorization: (init.headers && init.headers.Authorization) || null }) + '\\n');
   const reply = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
   if (method === 'PUT' && /\\/pulls\\/\\d+\\/merge$/.test(bare)) return reply(200, { sha: scenario.mergedSha, merged: true });
   if (method === 'POST' && /\\/git\\/commits$/.test(bare)) { globalThis.__created = JSON.parse(init.body); return reply(201, { sha: scenario.createdSha ?? '8'.repeat(40) }); }
@@ -132,7 +143,7 @@ function runLand(scenario: Record<string, unknown> = {}) {
   const r = spawnSync(process.execPath, ['--import', pathToFileURL(preload).href, join(landDir, 'land.mjs')], {
     encoding: 'utf8', timeout: 25_000,
     env: {
-      PATH: process.env.PATH ?? '', FAKE_SCENARIO: scenarioFile, FAKE_CALLS: callsFile, FAKE_COUNTERS: countersFile, GH_TOKEN: 'not-a-token', PR: '7', HEAD: H,
+      PATH: process.env.PATH ?? '', FAKE_SCENARIO: scenarioFile, FAKE_CALLS: callsFile, FAKE_COUNTERS: countersFile, GH_TOKEN: 'not-a-token', JULIUS_LANDER_TOKEN: 'lander-token-not-a-secret', JULIUS_LANDER_APP_ID: '5444986', JULIUS_REVIEWER_KEY_SHA256: harnessPin, PR: '7', HEAD: H,
       CLEARANCE_B64: Buffer.from(text, 'utf8').toString('base64'), SIGNATURE_B64: sig(text), DRY_RUN: 'false', LAND_CI_WAIT_MS: '0',
       // HARNESS ADAPTATION (258e6e01): the lander's runtime guard reads GITHUB_REF/GITHUB_SHA. A legitimate run is dispatched from main at its tip at dispatch time.
       GITHUB_REF: 'refs/heads/main', GITHUB_SHA: String((scenario.mainSequence as string[] | undefined)?.[0] ?? scenario.main ?? B),
@@ -185,7 +196,26 @@ describe('ATTACK: ways past the gate', () => {
 
   it('ATK-7 the App identity is a commit AUTHOR NAME (free text): a commit whose GitHub-resolved author is someone else passes', () => {
     const spoofed = { ...goodCommit(), author: { login: 'a-dev-session' }, committer: { login: 'a-dev-session' } };
-    expect(check({ commit: spoofed }).length, 'the resolved GitHub login of the commit author/committer must be the App').toBeGreaterThan(0);
+    expect(check({ commit: spoofed }).length, 'an email-derived login other than the authenticated opener must refuse').toBeGreaterThan(0);
+  });
+
+  it('ATK-7b a spoofed git name and email-derived login of the App, with no authenticated App opener, must refuse', () => {
+    const spoofedCommit = {
+      ...goodCommit(),
+      author: { login: APP },
+      commit: {
+        ...goodCommit().commit,
+        author: { name: APP, email: '41898282+julius-worker[bot]@users.noreply.github.com' },
+        committer: { name: APP, email: '41898282+julius-worker[bot]@users.noreply.github.com' },
+      },
+    };
+    for (const user of [undefined, null, {}, { login: APP }, { login: APP, type: 'User' }, { login: 'a-dev-session', type: 'User' }, { login: 'a-dev-session', type: 'Bot' }]) {
+      const problems = check({ commit: spoofedCommit, pr: { ...goodPr(), user } });
+      expect(problems.length, `opener ${JSON.stringify(user)} must refuse`).toBeGreaterThan(0);
+    }
+    expect(check({ commit: spoofedCommit, pr: { ...goodPr(), user: { login: APP, type: 'Bot', appId: 1 } } }).join(' ')).toContain(String(4838349));
+    const agreed = check({ commit: spoofedCommit, pr: { ...goodPr(), user: { login: APP, type: 'Bot' } } });
+    expect(agreed, agreed.join(' ')).toEqual([]);
   });
 
   it('ATK-8 the PR TITLE (editable by anyone with write access) becomes the squash commit title verbatim; it can carry another clearance\'s nonce and any text', () => {

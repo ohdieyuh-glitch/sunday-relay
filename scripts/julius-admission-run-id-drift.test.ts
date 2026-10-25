@@ -1,26 +1,30 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-
 import { describe, expect, it } from 'vitest';
 
 /**
- * Byte-for-byte copy of PR #434 head 090eabbb64008f6526e90183f0a2849f7a021ee4.
- * These are SHA-256 hashes of the file bytes. A drift fails this test.
+ * Gatekeeper: the shared run-id module is owned by #434 at 090eabbb.
+ * These copies stay byte-identical until that pull request lands and this
+ * branch takes them through an ordinary merge. A drift fails this test.
  */
-const PR_434_HEAD = '090eabbb64008f6526e90183f0a2849f7a021ee4';
-const EXPECTED_SHA256 = {
-  'julius-admission-run-id.mjs': '4000164514507f6fe64aa7e9397af850207237921048daa6b7a4713d2f098cfb',
-  'julius-admission-run-id.d.mts': '8bb33449acfc0c19e6a764b652f106fc51fcafe9ac1d385657ecf67043ea5a9c',
-  'julius-admission-run-id.test.ts': 'df1c4a7b9bbd4379f32fde6545714db2caa90f09e9ca80eae8e7237b01c1a202',
-} as const;
+const OWNED_BY_434_AT_090EABBB: Readonly<Record<string, string>> = {
+  'scripts/julius-admission-run-id.mjs': 'c560b73a2957dad284177f5fa2558b067c80f0fe',
+  'scripts/julius-admission-run-id.d.mts': '0720a987c51483dce897a3133ade37e3dfd94c33',
+  'scripts/julius-admission-run-id.test.ts': '68bb6e03bcb5afd9f2418b1832c612456352870a',
+  'src/relay/mission/julius/julius-spent-tag-record.ts': 'f6ee4e9ddeb2f6f24d2afaa4a2ef32f74ef950a2',
+  'src/relay/mission/julius/julius-spent-tag-contract.test.ts': 'e9f1c71200b26453dfe2884428bbcad9015f53bd',
+};
 
-describe(`julius admission run id copy of ${PR_434_HEAD}`, () => {
-  it('matches the stored SHA-256 of each copied file', () => {
-    for (const [name, expected] of Object.entries(EXPECTED_SHA256)) {
-      const bytes = readFileSync(resolve(import.meta.dirname, name));
-      const hash = createHash('sha256').update(bytes).digest('hex');
-      expect(hash, name).toBe(expected);
-    }
-  });
+function gitBlobSha1(bytes: Buffer): string {
+  return createHash('sha1').update(`blob ${String(bytes.length)}\0`).update(bytes).digest('hex');
+}
+
+describe('shared run-id module matches #434 at 090eabbb', () => {
+  const root = resolve(import.meta.dirname, '..');
+  for (const [rel, sha] of Object.entries(OWNED_BY_434_AT_090EABBB)) {
+    it(`${rel} is byte-identical`, () => {
+      expect(gitBlobSha1(readFileSync(resolve(root, rel)))).toBe(sha);
+    });
+  }
 });

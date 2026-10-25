@@ -221,6 +221,10 @@ export async function runOpenAiReview(input: {
         model: actualModel, apiCalls: 1,
         costMicros: null, currency: null,
         source: actualModel === null ? 'unavailable' : 'harness_reported',
+        // Chat Completions on this path does not supply an xAI request id.
+        providerRequestId: null,
+        providerRequestAvailability: 'UNAVAILABLE',
+        providerRequestUnavailableReason: 'provider_request_id_not_reported',
       },
     };
   } catch {

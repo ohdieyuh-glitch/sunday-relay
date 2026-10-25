@@ -113,7 +113,7 @@ describe('the local launch mirrors the workflow job, and names every difference'
     }
   });
 
-  it('adds exactly two variables of its own; the workflow runs its coder in the same subscription mode and sets none of the rig-only switches', () => {
+  it('adds exactly two variables of its own; the launcher stays on the subscription while the hosted workflow bills the Anthropic API key', () => {
     const begin = launcher.indexOf('# BEGIN JOB ENV');
     const end = launcher.indexOf('# END JOB ENV');
     const outside = (launcher.slice(0, begin) + launcher.slice(end)).split('\n')
@@ -126,12 +126,12 @@ describe('the local launch mirrors the workflow job, and names every difference'
     const port = outside[1]![2]!;
     expect(port).toMatch(/^[0-9]+$/u);
     expect(port, '127.0.0.1:5432 inside WSL2 is the live store\'s forward').not.toBe('5432');
-    // THE CODER'S AUTH IS NO LONGER A LOCAL-ONLY SWITCH (founder, 2026-09-29): the paid workflow runs
-    // the Coding Agent on the founder's Claude subscription as well, so it sets the SAME mode the
-    // launcher exports, on exactly the two steps that start the coder, and never an API mode.
+    // The hosted workflow bills the API key. The launcher keeps the subscription
+    // and still refuses any ANTHROPIC_* route. The two steps that start the
+    // coder set ANTHROPIC_API, and they do not copy the launcher's mode.
     const modes = [...workflow.matchAll(/^\s+JULIUS_CLAUDE_AUTH: (.+)$/gmu)].map((match) => match[1]!.trim());
-    expect(modes, 'the roles preflight and the LIVE step, and no other').toHaveLength(2);
-    for (const mode of modes) expect(mode, 'the workflow agrees with the launcher').toBe(auth);
+    expect(modes, 'the roles preflight and the LIVE step, and no other').toEqual(['ANTHROPIC_API', 'ANTHROPIC_API']);
+    expect(modes).not.toContain(auth);
     // CI UNCHANGED for the rest: every other switch added for the local rig defaults to the old
     // behaviour, and the workflow sets none of them.
     for (const name of ['JULIUS_LIVE_PG_PORT', 'HERMES_PHASE', 'HERMES_PYTHON', 'HERMES_VENV_DIR', 'HERMES_SRC_DIR']) {

@@ -43,3 +43,8 @@ julius-learning-pair-2-without-1 .github/julius-missions/julius-learning-pair-2-
 julius-learning-pair-2-with-1 .github/julius-missions/julius-learning-pair-2-with-1 cf7b41fffd62e2aa417ba66cd9d04a16d9c0a0f7
 julius-learning-pair-2-without-2 .github/julius-missions/julius-learning-pair-2-without-2 5bc6f3e62e3f269f34c922acc32a4acc35eff5b6
 julius-learning-pair-2-with-2 .github/julius-missions/julius-learning-pair-2-with-2 0d81a0c6a176cec14a495810f7bceacc760befcd
+# J1, the in-world data mission (PR-B, 2026-10-25): the paid workflow's mission directory (contract.json and the
+# workspace seed), and the pinned originals beside the hidden checker that the grade job stages from git objects.
+# J1_PINNED_CONTRACT_SHA256 and J1_PINNED_CHECKER_SHA256 pin the same bytes by content.
+julius-inworld-data-1 .github/julius-missions/julius-inworld-data-1 089ce62c8b59f4fa2e6ac9a3dc6f6fb6d797d4a8
+julius-inworld-data-1 relay-bridge/julius-inworld-mission/julius-inworld-data-1 db456579a6e93b79a5ae5ff0e3a9c0cbe5bdff7b

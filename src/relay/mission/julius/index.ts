@@ -1,6 +1,7 @@
 export * from './julius-runtime';
 export * from './julius-policy';
 export * from './julius-cost-accounting';
+export * from './julius-spend-ceiling';
 export * from './julius-contract-disposition';
 export * from './julius-memory-trust';
 export * from './julius-context-integrity';
@@ -62,3 +63,4 @@ export * from './julius-peer-channel';
 export * from './julius-peer-runtime';
 export * from './julius-review-verdict';
 export * from './julius-disagreement';
+export { JULIUS_FILE_CREATION_CONTRACTS, JULIUS_FILE_CREATION_GRANTS, juliusFileCreationGrant, juliusFileCreationGrantFor, type JuliusFileCreationGrant } from './julius-file-authority';

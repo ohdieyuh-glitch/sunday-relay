@@ -12,6 +12,13 @@ export declare const NON_ATTESTING_IDENTITIES: readonly string[];
 export declare const REVIEW_AUTHORITY_LOGINS: readonly string[];
 /** Who may have authored a landed candidate: the same set that may never attest. */
 export declare const WORKER_AUTHOR_LOGINS: readonly string[];
+/** GitHub App id of the coding worker. Not a bot user id and not an email. */
+export declare const WORKER_APP_ID: 4838349;
+/**
+ * Authenticated sources that may establish the cleared head's author.
+ * Git author name, email, and the email-derived `commit.author.login` are not in this list.
+ */
+export declare const AUTHENTICATED_COMMIT_SOURCES: readonly ['pull-opener', 'app-installation', 'verified-signature'];
 export declare const PROVENANCE_VERDICTS: readonly ['provenant', 'unprovenanced', 'indeterminate'];
 
 export interface MainProvenanceResult {
@@ -41,6 +48,8 @@ export interface AssociatedPullRequest {
   readonly mergeCommitSha?: unknown;
   readonly authorLogin?: unknown;
   readonly headSha?: unknown;
+  /** The pull request head branch. A governed audit branch is refused. */
+  readonly headRef?: unknown;
   /** The branch the review was rendered against. */
   readonly baseRef?: unknown;
 }
@@ -75,8 +84,20 @@ export declare function evaluateMainProvenance(input: {
   readonly changedPaths?: unknown;
   /** Strictly true when changedPaths is complete. */
   readonly changedPathsComplete?: unknown;
-  /** `{ sha, authorLogin, treeSha }` of the commit the signed clearance names as head. */
+  /**
+   * The commit the signed clearance names as head.
+   * `authenticatedAuthor` (`{ login, source, accountType, appId?, signatureVerified? }`) is the only author identity.
+   * `emailDerivedLogin`, `gitAuthorName`, `gitAuthorEmail` and a legacy `authorLogin` are untrusted and cannot authorize.
+   */
   readonly headCommit?: unknown;
+  /** H1: the founder-approval key file read at the parent, and its anchor (else JULIUS_FOUNDER_APPROVAL_KEY_SHA256). */
+  readonly founderKeyPem?: unknown;
+  readonly externalFounderKeySha256?: unknown;
+  /**
+   * External fingerprint of the pinned reviewer key (`JULIUS_REVIEWER_KEY_SHA256`).
+   * Present-and-wrong fails closed. Omitted reads the process environment.
+   */
+  readonly externalReviewerKeySha256?: unknown;
 }): MainProvenanceResult;
 
 export declare const LANDING_BEGIN: string;
@@ -87,6 +108,8 @@ export type LandingBlock =
   | { readonly state: 'invalid'; readonly reason: string }
   | { readonly state: 'ok'; readonly nonce: string; readonly clearanceB64: string; readonly signatureB64: string };
 
+export declare function pagedCommitFiles(fetchPage: (page: number, perPage: number) => { files?: unknown } | undefined, options?: { perPage?: number }): Array<{ filename?: string; previous_filename?: string }>;
+export declare function readFirstParentChain(gh: (path: string) => unknown, repo: string, tipSha: string, floorSha?: string): Array<Record<string, unknown>> | null;
 export declare function extractLandingBlock(message: unknown): LandingBlock;
 export declare function parseSignedClearance(text: string, queriedRepo?: string): { readonly problems: string[]; readonly fields: Record<string, string> };
 export declare function evaluateSignedLanding(input: Record<string, unknown>, tip: { readonly mainSha: string; readonly mainTreeSha: unknown; readonly parentSha: string }):

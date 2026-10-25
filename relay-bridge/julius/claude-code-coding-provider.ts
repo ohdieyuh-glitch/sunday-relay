@@ -39,6 +39,8 @@ import {
   readJuliusParticipationBlock,
   type JuliusParticipationReading,
 } from '../../src/relay/mission/julius/julius-worker-participation';
+import type { JuliusFileCreationGrant } from '../../src/relay/mission/julius/julius-file-authority';
+import { writeJuliusFinalMessage } from './julius-final-message';
 
 export const CLAUDE_CODE_PROVIDER_KIND = 'claude-code-hosted' as const;
 
@@ -98,6 +100,50 @@ export function hostedCoderCost(
     costBasis: attested ? 'PROVIDER_REPORTED' : 'UNKNOWN',
     executionCostUsdMicros: null,
     billingPath: 'API_BILLED',
+  };
+}
+
+/**
+ * THE ANTHROPIC API REQUEST ID FOR THIS DISPATCH, NEVER THE RUNTIME SESSION ID.
+ *
+ * Console reconciliation needs `request_id`. `CAPTURED` is that id, and only
+ * that id. `message.id` is kept beside it and never promotes a leg to
+ * `CAPTURED`, never fills `responseId`, and never replaces a request id that
+ * was present but refused. `sessionId` is not consulted.
+ */
+function anthropicProviderIds(observed: HostedObservation | null): {
+  readonly responseId: string | null;
+  readonly providerRequestId: string | null;
+  readonly providerMessageId: string | null;
+  readonly providerRequestAvailability: 'CAPTURED' | 'UNAVAILABLE';
+  readonly providerRequestUnavailableReason: string | null;
+} {
+  if (observed === null) {
+    return {
+      responseId: null,
+      providerRequestId: null,
+      providerMessageId: null,
+      providerRequestAvailability: 'UNAVAILABLE',
+      providerRequestUnavailableReason: 'provider_request_id_not_reported',
+    };
+  }
+  const requestId = observed.anthropicRequestId ?? null;
+  const messageId = observed.anthropicMessageId ?? null;
+  if (requestId !== null) {
+    return {
+      responseId: requestId,
+      providerRequestId: requestId,
+      providerMessageId: messageId,
+      providerRequestAvailability: 'CAPTURED',
+      providerRequestUnavailableReason: null,
+    };
+  }
+  return {
+    responseId: null,
+    providerRequestId: null,
+    providerMessageId: messageId,
+    providerRequestAvailability: 'UNAVAILABLE',
+    providerRequestUnavailableReason: observed.anthropicRequestRejection ?? 'provider_request_id_not_reported',
   };
 }
 
@@ -201,7 +247,7 @@ export const hostedCoderDiagnostics = (input: {
     resultModelThird: usageEntry(2)?.model ?? null,
     resultModelThirdInputTokens: usageEntry(2)?.inputTokens ?? null,
     resultModelThirdOutputTokens: usageEntry(2)?.outputTokens ?? null,
-    responseId: observed?.sessionId ?? null,
+    ...anthropicProviderIds(observed),
     numTurns: observed?.numTurns ?? null,
     // The effort option the runner handed the SDK (absent when it passed none); the runtime echoes nothing of it, so there is no `effortEchoed` for the coder.
     ...(observed?.effortSent === undefined ? {} : { effortSent: observed.effortSent }),
@@ -357,6 +403,20 @@ export function createClaudeCodeCodingAgentProvider(input: {
   readonly authMode?: ClaudeAuthMode;
   /** The mission's declared coder effort; absent changes nothing. Forwarded to the runner. */
   readonly effort?: HostedEffort;
+  /**
+   * The mission's file-creation grant, looked up by the composition root from the
+   * VERIFIED contract's `markerNamespace`. Fixed for the provider's life and
+   * forwarded to every run; nothing in a request can select or widen it. Absent:
+   * no creation, exactly as before.
+   */
+  readonly fileCreation?: JuliusFileCreationGrant | null;
+  /**
+   * Where a completed dispatch's final message is kept for the hidden checker
+   * (`julius-final-message.ts`). The composition root reads it from the paid
+   * workflow's `JULIUS_FINAL_MESSAGE_DIR`; absent, nothing is written and the
+   * diagnostics are exactly what they were.
+   */
+  readonly finalMessageDir?: string | null;
   /** Test seam for the SDK's tool helpers; production omits it. */
   readonly sdkHelpersLoader?: () => Promise<HostedSdkHelpers>;
 }): JuliusCodingAgentProvider {
@@ -433,6 +493,7 @@ export function createClaudeCodeCodingAgentProvider(input: {
         requestedModel: input.requestedModel,
         ...(input.authMode === undefined ? {} : { authMode: input.authMode }),
         ...(input.effort === undefined ? {} : { effort: input.effort }),
+        ...(input.fileCreation == null ? {} : { fileCreation: input.fileCreation }),
         ...(session?.selfTest === undefined || sdkHelpers === undefined ? {} : { selfTestTool: session.selfTest, sdkHelpers }),
         limits,
         now: nowIso,
@@ -515,10 +576,24 @@ export function createClaudeCodeCodingAgentProvider(input: {
           }),
         };
       }
-      const diagnostics = hostedCoderDiagnostics({
+      const baseDiagnostics = hostedCoderDiagnostics({
         taskType: request.identity.taskType, requestedModel: input.requestedModel,
         observed: outcome.observation, limits, ...(input.authMode === undefined ? {} : { authMode: input.authMode }), outcome: 'succeeded',
       });
+      // THE GRADED ARTIFACT, kept outside the workspace and named on this dispatch's durable
+      // diagnostics, so the hidden checker grades exactly the text this dispatch returned.
+      const kept = writeJuliusFinalMessage({
+        directory: input.finalMessageDir,
+        workspacePath: request.workspacePath,
+        taskId: request.identity.taskId,
+        contextId: request.identity.contextId,
+        runId: request.identity.runId,
+        finalText: outcome.observation.finalText,
+      });
+      // Asked to keep it and could not: that is recorded, so the grade reads NOT_RUN for a reason.
+      const diagnostics = kept.written
+        ? { ...baseDiagnostics, finalMessageSha256: kept.manifest.trimmedSha256, finalMessageContextId: kept.manifest.contextId }
+        : input.finalMessageDir ? { ...baseDiagnostics, finalMessageWrite: kept.reason } : baseDiagnostics;
       const usage = outcome.observation.usage;
       // THE SAME ANSWER THE DIAGNOSTICS GAVE, from the same function. This ending
       // priced itself by hand once, and a subscription success became API spend.

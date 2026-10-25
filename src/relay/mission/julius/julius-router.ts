@@ -59,6 +59,10 @@ export const safeFailureClass=(value:unknown):string|null=>typeof value==='strin
  * explain a paid failure — so the alphabet is widened here and nowhere else.
  */
 export const safeReasonCode=(value:unknown):string|null=>typeof value==='string'&&/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(value)?value:null;
+/** A lowercase sha256 hex digest, or null. */
+export const safeSha256Hex=(value:unknown):string|null=>typeof value==='string'&&/^[0-9a-f]{64}$/.test(value)?value:null;
+/** A Julius dispatch context id (`ids.next('context')`), or null. */
+export const safeContextId=(value:unknown):string|null=>typeof value==='string'&&/^[A-Za-z0-9:_-]{1,128}$/.test(value)?value:null;
 /**
  * WHY A HOSTED CODING AGENT FAILED, AS A CLOSED SET THE DOMAIN OWNS.
  *
@@ -211,6 +215,15 @@ export type JuliusSafeDiagnostics=Readonly<Record<string,string|number|boolean|n
 export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
  if(value===null||typeof value!=='object'||Array.isArray(value))return null;
  const v=value as Record<string,unknown>;
+ const providerRequestId=safeResponseId(v.providerRequestId);
+ const providerMessageId=safeResponseId(v.providerMessageId);
+ const statedRequestAvailability=safeEnum(v.providerRequestAvailability,['CAPTURED','UNAVAILABLE'] as const);
+ // A message id is not a request id. CAPTURED requires the request id itself.
+ const captured=providerRequestId!==null;
+ const providerRequestAvailability=statedRequestAvailability==='CAPTURED'&&!captured?'UNAVAILABLE':statedRequestAvailability;
+ const statedRequestReason=safeToken(v.providerRequestUnavailableReason);
+ const credentialShapedRequest=typeof v.providerRequestId==='string'&&CREDENTIAL_SHAPED.test(v.providerRequestId);
+ const providerRequestUnavailableReason=captured?null:statedRequestReason??(credentialShapedRequest?'provider_request_id_credential_shaped':statedRequestAvailability==='CAPTURED'?'provider_request_id_unusable':null);
  return Object.freeze({
   stage:safeEnum(v.stage,['plan','build','repair:plan','repair:build'] as const),
   transport:safeEnum(v.transport,['local','remote','openai','hosted'] as const),
@@ -311,6 +324,22 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   /* --- Prompt Architect (plan stage). Null for the reviewer, and vice versa. */
   requestedModel:safeModel(v.requestedModel),
   responseId:safeResponseId(v.responseId),
+  /**
+   * THE PROVIDER REQUEST ID. The coder also keeps the message id beside it.
+   *
+   * `providerRequestId` is the Anthropic API `request_id`, the same kind of id
+   * the reviewer reads from Hermes' usage file. `responseId` is that request
+   * id when one was safe to keep, never a runtime session id and never
+   * `message.id`. `providerMessageId` is the Messages API `message.id`. It is
+   * an extra field. It does not make the leg `CAPTURED`, and it is not a
+   * substitute for a request id that was present but refused. `CAPTURED`
+   * survives only when the request id survives {@link safeResponseId}. The
+   * status word is never written into `responseId`.
+   */
+  providerRequestId:providerRequestId,
+  providerMessageId:providerMessageId,
+  providerRequestAvailability:providerRequestAvailability,
+  providerRequestUnavailableReason:providerRequestUnavailableReason,
   validationPassed:safeNullableBool(v.validationPassed),
   /** A member of the closed `ArchitectPlanReasonCode` union, never validator prose. */
   validationReasonCode:safeToken(v.validationReasonCode),
@@ -586,6 +615,21 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
      adapter built, never from the mission's declaration; `effortEchoed` is the provider's own report, where its response carries one. --- */
   ...(safeReasonCode(v.effortSent)===null?{}:{effortSent:safeReasonCode(v.effortSent) as string}),
   ...(safeReasonCode(v.effortEchoed)===null?{}:{effortEchoed:safeReasonCode(v.effortEchoed) as string}),
+  /* --- THE GRADED ARTIFACT'S RECORD (PR-B). The sha256 of the trimmed final message the Coding Agent's dispatch returned, and that
+     dispatch's context id, present only when the paid workflow asked for the message to be kept and it was; `finalMessageWrite` is the
+     closed reason it was not. The hidden checker grades only a kept message whose sha256 equals this record. --- */
+  ...(safeSha256Hex(v.finalMessageSha256)===null?{}:{finalMessageSha256:safeSha256Hex(v.finalMessageSha256) as string}),
+  ...(safeContextId(v.finalMessageContextId)===null?{}:{finalMessageContextId:safeContextId(v.finalMessageContextId) as string}),
+  ...(safeReasonCode(v.finalMessageWrite)===null?{}:{finalMessageWrite:safeReasonCode(v.finalMessageWrite) as string}),
+  /**
+   * CORRELATION, NOT A RECEIPT AND NOT SPEND. Always null from this allowlist.
+   * An adapter that puts `traceId`, `spanId`, or `traceparent` on its
+   * diagnostics is ignored. Julius writes the derived values afterwards, from
+   * the admitted run id, and those win.
+   */
+  traceId:null,
+  spanId:null,
+  traceparent:null,
  });
 };
 /**

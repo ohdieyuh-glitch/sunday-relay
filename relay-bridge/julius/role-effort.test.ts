@@ -108,6 +108,8 @@ describe('the contract: absent is today, declared is bound, bad is refused', () 
       'julius-diag-output-safety-2': { architect: 'high', coder: 'high' },
       'julius-diag-audit-fixes-1': { architect: 'high', coder: 'high' },
       'julius-diag-digest-evidence-1': { architect: 'high', coder: 'high' },
+      // J1, the in-world data mission: its pinned contract (J1_PINNED_CONTRACT_SHA256) declares high/high.
+      'julius-inworld-data-1': { architect: 'high', coder: 'high' },
     };
     const names = readdirSync(MISSIONS).sort();
     let seen = 0;
@@ -250,7 +252,7 @@ const BASE: Record<string, string> = Object.freeze({
   OPENAI_API_KEY: 'FAKETESTNOTREAL-openai',
   OPENAI_PROMPT_ARCHITECT_MODEL: 'gpt-5.6-sol',
   RELAY_PROMPT_ARCHITECT_MODE: 'live',
-  RELAY_HOSTED_CODING_MODEL: 'claude-fable-5',
+  RELAY_HOSTED_CODING_MODEL: 'claude-opus-5-5',
   RELAY_HERMES_PROVIDER: 'xai',
   RELAY_HERMES_MODEL: 'grok-build-0.1',
   RELAY_HERMES_EXECUTABLE: '/usr/bin/true',

@@ -4,6 +4,8 @@ import { createHash, createPublicKey, verify } from 'node:crypto';
 
 export const REPO = 'ohdieyuh-glitch/sunday-relay';
 export const APP_LOGIN = 'julius-worker[bot]';
+/** GitHub App id of julius-worker. The bot user id is a different number and is not this. */
+export const WORKER_APP_ID = 4838349;
 export const MAX_CLEARANCE_AGE_MS = 24 * 60 * 60 * 1000;
 const SHA = /^[0-9a-f]{40}$/u;
 
@@ -18,7 +20,8 @@ const SHA = /^[0-9a-f]{40}$/u;
 // .github/julius-learning-registrations/, and scripts/julius-landing (the landing system's own tests, scripts/julius-landing*.test.ts: a PR must not be able to weaken the tests that
 // pin the lander). The mission directories (.github/julius-missions/**), relay-bridge/**, src/** and JULIUS_HARNESS_MANIFEST.md stay allowed.
 // Case-insensitive: a checkout on a case-insensitive filesystem (Windows, macOS) folds `.GITHUB/Julius-Landing/...` onto the governed file.
-export const HARD_FORBIDDEN_PATH = /^(\.github\/workflows\/|\.github\/julius-landing\/|\.github\/julius-mission-pins\.txt$|\.github\/julius-approvers\.json$|\.github\/CODEOWNERS$|CODEOWNERS$|docs\/CODEOWNERS$|CLAUDE\.md$|package\.json$|package-lock\.json$|scripts\/julius-approval-gates\.mjs$|scripts\/julius-live-evidence\.mjs$|scripts\/julius-main-provenance|scripts\/julius-review-currency|scripts\/julius-main-monotonicity|scripts\/julius-paid-slot|scripts\/julius-subscription-check|scripts\/julius-live-preflight-gates|scripts\/julius-accept|scripts\/relay-repository-boundary|scripts\/export-julius-harness|scripts\/relay-parity-gate|scripts\/wonderland-beta-gate|scripts\/julius-live-preflight-identity|scripts\/julius-derive-scoped-credentials|scripts\/julius-ci-callers|scripts\/ci-test-accounting|scripts\/julius-paid-dispatch|scripts\/julius-paid-run-archive|\.github\/julius-mission-pins\.sh$|\.github\/julius-executor-entrypoint\.sh$|scripts\/julius-docker-executor\.sh$|scripts\/julius-executor-ready\.mjs$|scripts\/julius-reviewer-isolation|scripts\/julius-reviewer-deadline\.mjs$|scripts\/julius-live-preflight\.ts$|scripts\/julius-usage-limit\.mjs$|\.github\/julius-learning-store\.sh$|\.github\/julius-phase\.sh$|\.github\/wait-for-executor\.sh$|\.github\/julius-live-|\.github\/actions\/|\.github\/julius-mission-slice\/|\.github\/julius-learning-registrations\/|scripts\/julius-landing|\.github\/julius-live-evidence-dump\.sh$|.*\bmigrations?\/)/iu;
+// `.github/julius-landing/checkpoints/` is inside the second alternative. A pull request cannot add or replace a checkpoint attestation.
+export const HARD_FORBIDDEN_PATH = /^(\.github\/workflows\/|\.github\/julius-landing\/|\.github\/julius-mission-pins\.txt$|\.github\/julius-approvers\.json$|\.github\/CODEOWNERS$|CODEOWNERS$|docs\/CODEOWNERS$|CLAUDE\.md$|package\.json$|package-lock\.json$|scripts\/julius-approval-gates\.mjs$|scripts\/julius-live-evidence\.mjs$|scripts\/julius-main-provenance|scripts\/julius-review-currency|scripts\/julius-main-monotonicity|scripts\/julius-paid-slot|scripts\/julius-subscription-check|scripts\/julius-live-preflight-gates|scripts\/julius-accept|scripts\/relay-repository-boundary|scripts\/export-julius-harness|scripts\/relay-parity-gate|scripts\/wonderland-beta-gate|scripts\/julius-live-preflight-identity|scripts\/julius-derive-scoped-credentials|scripts\/julius-ci-callers|scripts\/ci-test-accounting|scripts\/julius-paid-dispatch|scripts\/julius-paid-run-archive|\.github\/julius-mission-pins\.sh$|\.github\/julius-executor-entrypoint\.sh$|scripts\/julius-docker-executor\.sh$|scripts\/julius-executor-ready\.mjs$|scripts\/julius-reviewer-isolation|scripts\/julius-reviewer-deadline\.mjs$|scripts\/julius-live-preflight\.ts$|scripts\/julius-usage-limit\.mjs$|\.github\/julius-learning-store\.sh$|\.github\/julius-phase\.sh$|\.github\/wait-for-executor\.sh$|\.github\/julius-live-|\.github\/actions\/|\.github\/julius-mission-slice\/|\.github\/julius-learning-registrations\/|scripts\/julius-landing|scripts\/julius-governed-bootstrap|\.github\/julius-live-evidence-dump\.sh$|.*\bmigrations?\/)/iu;
 // SIGNED-EXCEPTION: the spend ceilings and the effort tripwire live here. A PR may change them only if the reviewer's signed clearance lists the EXACT file in `governed-exceptions`.
 export const EXCEPTION_ELIGIBLE = ['relay-bridge/julius/role-effort.test.ts', 'scripts/julius-live-contract-check.mjs'];
 // Matched case-insensitively for the same reason as above; a case variant is never in the signed list (that list holds exact names only), so it is always refused.
@@ -28,6 +31,71 @@ export const FORBIDDEN_PATH = { test: (f) => HARD_FORBIDDEN_PATH.test(f) || isEx
 
 /** The canonical clearance text the reviewer signs. One `key: value` per line, fixed key order, LF line ends. */
 export const CLEARANCE_KEYS = ['pr', 'head', 'tree', 'base', 'kind', 'bot-comments-sha256', 'governed-exceptions', 'nonce', 'by', 'issued', 'expires'];
+/**
+ * Optional lines after `expires`, in this order, each omitted or present once.
+ * A clearance without them is the historical form. `protected-paths` is covered
+ * by the same signature: it is how a governed landing names founder-governed
+ * paths. The historical lander does not honor it.
+ */
+export const CLEARANCE_OPTIONAL_KEYS = Object.freeze(['protected-paths', 'landing-method', 'binds-draft', 'depends', 'comments-digest']);
+/**
+ * The signed rule for `bot-comments-sha256` on a governed landing. A clearance
+ * delivered as a pull-request comment cannot hash its own comment, so the
+ * governed lander leaves out every issue comment that consists only of a
+ * delivery of this exact clearance text. That rule is signed: a clearance
+ * without `comments-digest: excludes-delivery` is refused by the governed lander.
+ */
+export const COMMENTS_DIGEST_RULE = 'excludes-delivery';
+
+export function splitClearanceList(value) {
+  if (value === undefined || value === '-') return [];
+  return String(value).split(',');
+}
+
+/** Hard-forbidden paths not named in the signed `protected-paths`, plus exception-eligible paths not named in `governed-exceptions`. */
+export function unauthorizedGovernedPaths(paths, fields) {
+  const exceptions = splitClearanceList(fields?.['governed-exceptions']);
+  const listed = splitClearanceList(fields?.['protected-paths']);
+  return (Array.isArray(paths) ? paths : []).filter((path) => {
+    if (typeof path !== 'string' || path === '') return true;
+    if (HARD_FORBIDDEN_PATH.test(path)) return !listed.includes(path);
+    if (isExceptionEligible(path) && !exceptions.includes(path)) return true;
+    return false;
+  });
+}
+
+/** Signed protected paths that this diff does not actually change. */
+export function unusedProtectedPaths(paths, fields) {
+  const listed = splitClearanceList(fields?.['protected-paths']);
+  const changed = Array.isArray(paths) ? paths : [];
+  return listed.filter((path) => !changed.includes(path));
+}
+
+function optionalClearanceProblems(fields) {
+  const problems = [];
+  if (fields['protected-paths'] !== undefined) {
+    const value = fields['protected-paths'];
+    const list = value === '-' ? [] : value.split(',');
+    const safe = (path) => path !== '' && !path.includes('..') && !path.startsWith('/') && !/[*?[\]{}\s]/u.test(path) && /^[A-Za-z0-9._@/-]+$/u.test(path);
+    if (value !== '-' && (list.some((path) => !safe(path)) || new Set(list).size !== list.length || [...list].sort().join(',') !== value)) {
+      problems.push('protected-paths must be "-" or a sorted comma-separated path list');
+    }
+  }
+  if (fields['landing-method'] !== undefined && !['squash', 'fast-forward'].includes(fields['landing-method'])) {
+    problems.push('landing-method must be squash or fast-forward');
+  }
+  if (fields['binds-draft'] !== undefined && fields['binds-draft'] !== 'yes') problems.push('binds-draft must be yes');
+  if (fields['comments-digest'] !== undefined && fields['comments-digest'] !== COMMENTS_DIGEST_RULE) problems.push(`comments-digest must be ${COMMENTS_DIGEST_RULE}`);
+  if (fields.depends !== undefined) {
+    const value = fields.depends;
+    const parts = value === '-' ? [] : value.split(',');
+    const ids = parts.map((part) => (/^[1-9][0-9]{0,6}$/u.test(part) ? Number(part) : Number.NaN));
+    if (value !== '-' && (ids.some((id) => !Number.isInteger(id)) || new Set(parts).size !== parts.length || [...ids].sort((a, b) => a - b).join(',') !== value)) {
+      problems.push('depends must be "-" or a numerically sorted comma-separated list of pull request numbers');
+    }
+  }
+  return problems;
+}
 
 export function parseClearance(text) {
   const problems = [];
@@ -41,7 +109,24 @@ export function parseClearance(text) {
     if (!line.startsWith(prefix)) problems.push(`line ${3 + i} must start with "${prefix}"`);
     else fields[key] = line.slice(prefix.length);
   });
-  if (lines.length !== 2 + CLEARANCE_KEYS.length + 1 || lines[lines.length - 1] !== '') problems.push('exactly one trailing newline and no extra lines');
+  let cursor = 0;
+  let index = 2 + CLEARANCE_KEYS.length;
+  while (index < lines.length - 1) {
+    const line = lines[index];
+    let matched = -1;
+    for (let keyIndex = cursor; keyIndex < CLEARANCE_OPTIONAL_KEYS.length; keyIndex += 1) {
+      if (line.startsWith(`${CLEARANCE_OPTIONAL_KEYS[keyIndex]}: `)) {
+        matched = keyIndex;
+        break;
+      }
+    }
+    if (matched < 0) break;
+    const key = CLEARANCE_OPTIONAL_KEYS[matched];
+    fields[key] = line.slice(key.length + 2);
+    cursor = matched + 1;
+    index += 1;
+  }
+  if (lines.length === 0 || lines[lines.length - 1] !== '' || index !== lines.length - 1) problems.push('exactly one trailing newline and no extra lines');
   for (const key of ['head', 'tree', 'base']) if (fields[key] !== undefined && !SHA.test(fields[key])) problems.push(`${key} must be a full 40-hex sha`);
   if (fields.pr !== undefined && !/^[1-9][0-9]{0,6}$/u.test(fields.pr)) problems.push('pr must be a positive integer');
   if (fields.kind !== undefined && !['CLEARED', 'CLEARED-TREE'].includes(fields.kind)) problems.push('kind must be CLEARED or CLEARED-TREE');
@@ -50,6 +135,7 @@ export function parseClearance(text) {
     const list = v === '-' ? [] : v.split(',');
     if (v !== '-' && (list.some((f) => !EXCEPTION_ELIGIBLE.includes(f)) || new Set(list).size !== list.length || [...list].sort().join(',') !== v)) problems.push('governed-exceptions must be "-" or a sorted, comma-separated list of exception-eligible files');
   }
+  problems.push(...optionalClearanceProblems(fields));
   if (fields.nonce !== undefined && !/^[0-9a-f]{32}$/u.test(fields.nonce)) problems.push('nonce must be 32 hex characters');
   if (fields.by !== undefined && fields.by !== 'INDEPENDENT_REVIEW') problems.push('by must be INDEPENDENT_REVIEW');
   if (fields['bot-comments-sha256'] !== undefined && !/^[0-9a-f]{64}$/u.test(fields['bot-comments-sha256'])) problems.push('bot-comments-sha256 must be 64 hex');
@@ -59,14 +145,64 @@ export function parseClearance(text) {
   return { problems, fields };
 }
 
-/** Ed25519 signature check of the exact clearance bytes against the public key committed on main. */
+/**
+ * The reviewer trust root, duplicated from scripts/julius-main-provenance-trust.mjs so this file does not import it.
+ * A test fails if the two copies drift. Full SPKI SHA-256 and the raw 32-byte key. A short prefix is not a match.
+ * The same fingerprint must also be presented as JULIUS_REVIEWER_KEY_SHA256. A missing or different value fails closed.
+ */
+export const PINNED_REVIEWER_SPKI_SHA256 = '12c9b1853c4c33322241273f386b0fd08fdefd08134c911dd4024c5bb5cdff13';
+export const PINNED_REVIEWER_RAW_KEY = 'e033a345ed082b8126c8c6d9ad43cb54a4c854fe8c5423c2fc7ed475ee5461b5';
+export const EXTERNAL_ANCHOR_VARIABLE = 'JULIUS_REVIEWER_KEY_SHA256';
+
+/** Full-length equality of the SPKI SHA-256 and the raw 32-byte key. An 8-hex prefix is not a match. */
+export function exactPinnedFingerprint(spkiSha256, rawHex) {
+  return typeof spkiSha256 === 'string' && typeof rawHex === 'string'
+    && spkiSha256.length === 64 && rawHex.length === 64
+    && spkiSha256 === PINNED_REVIEWER_SPKI_SHA256
+    && rawHex === PINNED_REVIEWER_RAW_KEY;
+}
+
+export function reviewerKeyMaterialProblems(publicKeyPem) {
+  try {
+    const key = createPublicKey(publicKeyPem);
+    if (key.asymmetricKeyType !== 'ed25519') return ['the committed reviewer key is not an ed25519 key'];
+    const der = Buffer.from(key.export({ type: 'spki', format: 'der' }));
+    if (der.length < 32) return ['the reviewer key fingerprint could not be read'];
+    const spkiSha256 = createHash('sha256').update(der).digest('hex');
+    const rawHex = der.subarray(der.length - 32).toString('hex');
+    if (!exactPinnedFingerprint(spkiSha256, rawHex)) {
+      return [`the reviewer key is not the pinned reviewer key ${PINNED_REVIEWER_SPKI_SHA256}`];
+    }
+    return [];
+  } catch {
+    return ['the reviewer key fingerprint could not be read'];
+  }
+}
+
+export function externalAnchorProblems(raw = process.env[EXTERNAL_ANCHOR_VARIABLE]) {
+  // Surrounding whitespace, including a trailing CR/LF, is not part of the anchor. The rest must be 64 lowercase hex.
+  const external = raw === undefined || raw === null ? '' : String(raw).trim();
+  if (external === '') return [`${EXTERNAL_ANCHOR_VARIABLE} is unset`];
+  if (!/^[0-9a-f]{64}$/u.test(external)) return [`reviewer_anchor_not_sha256: anchor is not a sha256 hex (${EXTERNAL_ANCHOR_VARIABLE})`];
+  if (external === PINNED_REVIEWER_SPKI_SHA256) return [];
+  return [`${EXTERNAL_ANCHOR_VARIABLE} does not match the pinned reviewer key ${PINNED_REVIEWER_SPKI_SHA256}`];
+}
+
+/** Ed25519 signature check of the exact clearance bytes against the public key committed on main. An unpinned key is refused for that reason. */
 export function verifyClearanceSignature(text, signatureB64, publicKeyPem) {
   try {
     const key = createPublicKey(publicKeyPem);
     if (key.asymmetricKeyType !== 'ed25519') return ['the committed reviewer key is not an ed25519 key'];
     const signature = Buffer.from(String(signatureB64).trim(), 'base64');
     if (signature.length !== 64) return ['the signature is not 64 bytes'];
-    return verify(null, Buffer.from(text, 'utf8'), key, signature) ? [] : ['the signature does not verify against the committed reviewer key'];
+    const ok = verify(null, Buffer.from(text, 'utf8'), key, signature) === true;
+    const material = reviewerKeyMaterialProblems(publicKeyPem);
+    if (!ok) {
+      if (material.some((problem) => problem.includes('not the pinned reviewer key'))) return material;
+      return ['the signature does not verify against the committed reviewer key'];
+    }
+    if (material.length > 0) return material;
+    return externalAnchorProblems(process.env[EXTERNAL_ANCHOR_VARIABLE]);
   } catch (error) {
     return [`signature check failed: ${error instanceof Error ? error.message : String(error)}`];
   }
@@ -100,16 +236,46 @@ export function checkPullRequest({ fields, now, pr, commit, files, fileRows, mai
   if (pr.head?.sha !== fields.head) problems.push(`the PR head is ${pr.head?.sha}, the clearance names ${fields.head}`);
   if (pr.head?.repo?.full_name !== REPO) problems.push('the PR head is not in this repository');
   if (pr.base?.ref !== 'main') problems.push('the PR does not target main');
+  const auditBranch = (ref) => {
+    if (typeof ref !== 'string' || ref === '') return false;
+    const name = ref.startsWith('refs/heads/') ? ref.slice('refs/heads/'.length) : ref;
+    return name === 'julius-governed-audit' || name.startsWith('julius-governed-audit/');
+  };
+  if (auditBranch(pr.head?.ref) || auditBranch(pr.base?.ref)) {
+    problems.push(`${pr.head?.ref && auditBranch(pr.head.ref) ? pr.head.ref : pr.base?.ref} is a governed audit branch and cannot be a pull request head or base`);
+  }
   if (mainSha !== fields.base) problems.push(`main is ${mainSha}, the clearance names base ${fields.base}`);
-  if (pr.user?.login !== APP_LOGIN) problems.push(`the PR author is ${pr.user?.login}, not ${APP_LOGIN}`);
+  // AUTHENTICATED OPENER. `pr.user` is the GitHub account that created the pull request, which GitHub sets from the
+  // credential it authenticated. Git author name, git author email, and `commit.author.login` (the account GitHub
+  // associated by matching that email) are not identity: anyone can set the name and the email, and the login follows
+  // the email. They cannot satisfy this check. When they are present they must not contradict the authenticated
+  // opener; a contradiction or a missing opener refuses. The top-level `committer` login is not an identity source
+  // either (commits created through the API often carry another committer login) and is not consulted.
+  const openerLogin = typeof pr.user?.login === 'string' ? pr.user.login : null;
+  if (openerLogin !== APP_LOGIN) problems.push(`the authenticated PR opener is ${openerLogin ?? 'missing'}, not ${APP_LOGIN}`);
+  if (pr.user?.type !== 'Bot') problems.push(`the authenticated PR opener account type is ${typeof pr.user?.type === 'string' && pr.user.type !== '' ? pr.user.type : 'missing'}, not a GitHub App`);
+  const appId = pr.appId ?? pr.user?.appId;
+  if (appId !== undefined && appId !== WORKER_APP_ID) problems.push(`the PR App installation is ${String(appId)}, not ${WORKER_APP_ID}`);
   if (pr.commits !== 1) problems.push(`the PR has ${pr.commits} commits, exactly one is required`);
   if (commit?.commit?.tree?.sha !== fields.tree) problems.push(`the head tree is ${commit?.commit?.tree?.sha}, the clearance names ${fields.tree}`);
   if (commit?.parents?.length !== 1 || commit.parents[0]?.sha !== fields.base) problems.push('the head is not one commit directly on the cleared base');
-  if (commit?.commit?.author?.name !== APP_LOGIN || commit?.commit?.committer?.name !== APP_LOGIN) problems.push('the head commit is not authored and committed by the App');
-  // The git author NAME above is free text. The top-level `author` is the account GitHub resolved from the author email, and it MUST be the App: an UNRESOLVED author (null) is
-  // refused too, because the main-provenance gate judges exactly this login and would call the landed tip unprovenanced. The top-level `committer` is not checked: commits created
-  // through the API often carry another committer login.
-  if (commit?.author?.login !== APP_LOGIN) problems.push(`the head commit's GitHub author is ${commit?.author?.login ?? 'unresolved'}, not ${APP_LOGIN}`);
+  const gitAuthorName = commit?.commit?.author?.name;
+  const gitCommitterName = commit?.commit?.committer?.name;
+  if (typeof gitAuthorName === 'string' && gitAuthorName !== '' && gitAuthorName !== APP_LOGIN) problems.push('the git author name does not match the App; a free-text name is not identity and a mismatch fails closed');
+  if (typeof gitCommitterName === 'string' && gitCommitterName !== '' && gitCommitterName !== APP_LOGIN) problems.push('the git committer name does not match the App; a free-text name is not identity and a mismatch fails closed');
+  if (commit?.author != null) {
+    const derived = commit.author.login;
+    if (typeof derived !== 'string' || derived !== APP_LOGIN) problems.push(`the email-derived commit author is ${typeof derived === 'string' ? derived : 'unresolved'} and does not match ${APP_LOGIN}; email-derived login is not identity and a mismatch fails closed`);
+    else if (openerLogin !== null && derived !== openerLogin) problems.push(`the email-derived commit author ${derived} does not match the authenticated PR opener ${openerLogin}`);
+  }
+  const verification = commit?.commit?.verification;
+  if (verification != null && typeof verification === 'object') {
+    if (verification.reason !== undefined && verification.reason !== 'unsigned' && verification.verified !== true) problems.push(`the head commit signature does not verify (${typeof verification.reason === 'string' && verification.reason !== '' ? verification.reason : 'unreadable'})`);
+    if (verification.verified === true) {
+      const signer = typeof verification.signerLogin === 'string' ? verification.signerLogin : verification.signer?.login;
+      if (typeof signer !== 'string' || signer === '' || signer !== APP_LOGIN) problems.push(`the verified signature signer is ${typeof signer === 'string' && signer !== '' ? signer : 'missing'}, not ${APP_LOGIN}`);
+    }
+  }
   if (!allowedBranches.includes(pr.head?.ref)) problems.push(`branch ${pr.head?.ref} is not in the founder's standing landing allowlist`);
   // `files` holds EVERY name GitHub reports for a changed file: `filename` and, for a rename or copy, `previous_filename` too (a workflow renamed out of .github/workflows is still a
   // workflow change). `fileRows` is how many file rows were actually read; it must equal the PR's own changed_files count, or the list was truncated and nothing is trusted.
@@ -139,7 +305,7 @@ export function parseRequiredChecks(lines) {
 
 /** `required` entries are names or `{ name, appId }`. With an appId the single run of that name must also carry `app.id` equal to it (the check-run API always sends `app`; absent = refused),
  * so a look-alike check posted by another app under the same name cannot stand in for the real one. 'neutral' is NOT green: only 'success' is. */
-export function checkCi({ checkRuns, statuses, self, required = [] }) {
+export function checkCi({ checkRuns, statuses, self, required = [], requiredStatusesOnly = false }) {
   const problems = [];
   const runs = checkRuns.filter((r) => r.name !== self);
   const wanted = required.map((r) => (typeof r === 'string' ? { name: r, appId: undefined } : r));
@@ -159,7 +325,12 @@ export function checkCi({ checkRuns, statuses, self, required = [] }) {
     if (r.status !== 'completed') problems.push(`check "${r.name}" is ${r.status}`);
     else if (r.conclusion !== 'success') problems.push(`check "${r.name}" concluded ${r.conclusion}`);
   }
-  for (const s of statuses) if (s.state !== 'success') problems.push(`status "${s.context}" is ${s.state}`);
+  // The governed lander gates on required-checks.txt only: a commit status whose context is not a required name (a Vercel
+  // deployment, say) does not decide a landing. The historical lander keeps refusing any status that is not success.
+  for (const s of statuses) {
+    if (requiredStatusesOnly && !requiredNames.includes(s.context)) continue;
+    if (s.state !== 'success') problems.push(`status "${s.context}" is ${s.state}`);
+  }
   return problems;
 }
 
@@ -174,11 +345,16 @@ export function checkLanded({ landed, base, tree }) {
   return problems;
 }
 
-export const LANDER_IDENTITY = { name: 'github-actions[bot]', email: '41898282+github-actions[bot]@users.noreply.github.com' };
+/** The lander App, pinned in this governed file. Not a repository variable. Installation id is not consulted, so it is not pinned. */
+export const LANDER_APP_ID = '5444986';
+export const LANDER_BOT_LOGIN = 'julius-lander[bot]';
+export const LANDER_BOT_USER_ID = '347026632';
+export const LANDER_IDENTITY = { name: LANDER_BOT_LOGIN, email: `${LANDER_BOT_USER_ID}+julius-lander[bot]@users.noreply.github.com` };
 
 /** The commit the lander CREATED, read back from GitHub (REST `commits/{sha}`), against exactly what it asked for: the cleared tree, ONE parent = the cleared base, the exact message
- * and the github-actions[bot] identity. Any difference means the ref update must not follow. */
-export function checkCreatedCommit({ created, sha, base, tree, message }) {
+ * and the julius-lander[bot] identity. Any difference means the ref update must not follow. */
+/** `committerIdentity` defaults to `identity`. The governed lander passes GitHub's signer: GitHub commits the App's API commits as web-flow. */
+export function checkCreatedCommit({ created, sha, base, tree, message, identity = LANDER_IDENTITY, committerIdentity = identity }) {
   const problems = [];
   if (!SHA.test(String(sha))) problems.push('the created commit has no valid sha');
   if (created?.sha !== undefined && created.sha !== sha) problems.push(`the read-back commit is ${created.sha}, expected ${sha}`);
@@ -188,8 +364,11 @@ export function checkCreatedCommit({ created, sha, base, tree, message }) {
   // sent message minus its ONE final newline; nothing else (no other trailing whitespace, no other byte). The signed block, the nonce and the signature are still compared byte for byte.
   const stored = created?.commit?.message;
   if (typeof message !== 'string' || (stored !== message && !(message.endsWith('\n') && stored === message.slice(0, -1)))) problems.push('the created commit message differs from the one that was sent');
-  for (const who of ['author', 'committer']) {
-    if (created?.commit?.[who]?.name !== LANDER_IDENTITY.name || created?.commit?.[who]?.email !== LANDER_IDENTITY.email) problems.push(`the created commit ${who} is not ${LANDER_IDENTITY.name}`);
+  // Read-back of the commit THIS job just created, not an authorization of an untrusted author. The name and email
+  // are the bytes the lander sent and GitHub stored on that sha. They are not accepted as identity evidence for a
+  // commit somebody else authored.
+  for (const [who, expected] of [['author', identity], ['committer', committerIdentity]]) {
+    if (created?.commit?.[who]?.name !== expected.name || created?.commit?.[who]?.email !== expected.email) problems.push(`the created commit ${who} is not ${expected.name}`);
   }
   return problems;
 }
@@ -220,7 +399,7 @@ const signatureIsCanonical = (b64) => canonicalB64(b64) && Buffer.from(b64, 'bas
 /** Build the landing commit message. `freeText` defaults to the title built from the clearance (PR number and head only); a caller-supplied text is allowed but THROWS when any line
  * mentions the uppercase phrase JULIUS LANDING at all (a PR title, say, must never be able to forge or truncate the block) or carries a CR. THROWS when the clearance does not parse or the signature is not canonical
  * base64 of 64 bytes (the signature is verified against the key by the caller, not here). */
-export function buildLandingCommitMessage({ clearanceText, signatureB64, freeText }) {
+export function buildLandingCommitMessage({ clearanceText, signatureB64, freeText, founderSignatureB64 }) {
   const parsed = parseClearance(clearanceText);
   if (parsed.problems.length) throw new Error(`cannot build a landing message from a malformed clearance: ${parsed.problems.join('; ')}`);
   const signature = String(signatureB64).trim();
@@ -231,7 +410,11 @@ export function buildLandingCommitMessage({ clearanceText, signatureB64, freeTex
   if (body === '') throw new Error('the free text of the landing message must not be empty');
   if (body.includes('\r')) throw new Error('the free text of the landing message must not contain CR');
   if (markerMentions(body) > 0) throw new Error(`the free text of the landing message must not contain "${MARKER_PHRASE}" (uppercase) anywhere`);
-  return [body, '', LANDING_BEGIN, 'v: 1', `clearance-nonce: ${f.nonce}`, `clearance-b64: ${Buffer.from(clearanceText, 'utf8').toString('base64')}`, `signature-b64: ${signature}`, LANDING_END, ''].join('\n');
+  const founder = founderSignatureB64 === undefined ? null : String(founderSignatureB64).trim();
+  if (founder !== null && !signatureIsCanonical(founder)) throw new Error('the founder-approval signature must be canonical base64 of 64 bytes');
+  // The founder-approval line is optional and last. A governed landing of a founder-governed path carries it (H1).
+  const founderLine = founder === null ? [] : [`founder-signature-b64: ${founder}`];
+  return [body, '', LANDING_BEGIN, 'v: 1', `clearance-nonce: ${f.nonce}`, `clearance-b64: ${Buffer.from(clearanceText, 'utf8').toString('base64')}`, `signature-b64: ${signature}`, ...founderLine, LANDING_END, ''].join('\n');
 }
 
 /** Parse a landing commit message strictly. Returns { problems, fields }; fields = { freeText, nonce, clearanceText, signatureB64, clearance } where `clearance` is the parsed signed
@@ -255,7 +438,7 @@ export function parseLandingCommitMessage(message, { expected, publicKeyPem } = 
   if (lines[e] !== LANDING_END) problems.push('the END marker must be exactly its line');
   if (e !== lines.length - 1) problems.push('nothing may follow the END marker');
   if (b === 0) problems.push('free text must come before the block');
-  if (e - b !== 5) problems.push('the block must hold exactly four key lines');
+  if (e - b !== 5 && e - b !== 6) problems.push('the block must hold four key lines, or five with founder-signature-b64 last');
   if (problems.length) return { problems, fields };
   const block = lines.slice(b + 1, e);
   const raw = {};
@@ -267,6 +450,12 @@ export function parseLandingCommitMessage(message, { expected, publicKeyPem } = 
   if (raw['clearance-nonce'] !== undefined && !/^[0-9a-f]{32}$/u.test(raw['clearance-nonce'])) problems.push('clearance-nonce must be 32 hex characters');
   if (raw['clearance-b64'] !== undefined && (raw['clearance-b64'] === '' || !canonicalB64(raw['clearance-b64']))) problems.push('clearance-b64 must be canonical base64 on one line');
   if (raw['signature-b64'] !== undefined && !signatureIsCanonical(raw['signature-b64'])) problems.push('signature-b64 must be canonical base64 of 64 bytes');
+  if (block.length === 5) {
+    const prefix = 'founder-signature-b64: ';
+    if (!block[4].startsWith(prefix)) problems.push(`block line 5 must start with "${prefix}"`);
+    else if (!signatureIsCanonical(block[4].slice(prefix.length))) problems.push('founder-signature-b64 must be canonical base64 of 64 bytes');
+    else raw['founder-signature-b64'] = block[4].slice(prefix.length);
+  }
   if (problems.length) return { problems, fields };
   const clearanceText = Buffer.from(raw['clearance-b64'], 'base64').toString('utf8');
   const parsed = parseClearance(clearanceText);
@@ -278,7 +467,7 @@ export function parseLandingCommitMessage(message, { expected, publicKeyPem } = 
     fields.clearance = c;
   }
   if (publicKeyPem !== undefined) problems.push(...verifyClearanceSignature(clearanceText, raw['signature-b64'], publicKeyPem));
-  Object.assign(fields, { freeText: lines.slice(0, b).join('\n'), nonce: raw['clearance-nonce'], clearanceText, signatureB64: raw['signature-b64'] });
+  Object.assign(fields, { freeText: lines.slice(0, b).join('\n'), nonce: raw['clearance-nonce'], clearanceText, signatureB64: raw['signature-b64'], founderSignatureB64: raw['founder-signature-b64'] });
   return { problems, fields };
 }
 
