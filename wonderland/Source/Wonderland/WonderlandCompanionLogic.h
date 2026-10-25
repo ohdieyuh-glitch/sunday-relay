@@ -340,6 +340,12 @@ namespace WonderlandCompanionLogic
 	/** ^http://(127.0.0.1|[::1]):<1-65535>$ exactly: loopback literal, no name lookup, no path, no userinfo. Q9. */
 	bool IsLoopbackRelayOrigin(std::string_view Origin);
 	/**
+	 * REVIEW #467 (defense in depth): may a request to Url carry the paired native session? Only when RelayOrigin is a
+	 * strict loopback relay origin and Url is exactly that origin followed by a path ('/'): never a look-alike host or port,
+	 * never another scheme, never a provider URL a future adapter might hand the client.
+	 */
+	bool MayCarrySession(std::string_view Url, std::string_view RelayOrigin);
+	/**
 	 * Q9: the companion's relay origin is the SAME configured endpoint the J1 dispatch path (#433) uses; there is no
 	 * discovery and pairing returns no port. Returns J1BaseUrl (one trailing '/' dropped) when it is a strict
 	 * loopback origin per IsLoopbackRelayOrigin, else empty: #433 also accepts "localhost", which the companion

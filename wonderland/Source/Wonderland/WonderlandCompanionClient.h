@@ -45,6 +45,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
 	void Start(const FString& J1RelayBaseUrl, const FString& ProjectId);
 
+	/**
+	 * O6 (BRIDGE juliusLoopbackGuard on every companion route): the SAME paired native session the J1 subsystem adopted,
+	 * handed over by UWonderlandJuliusMissionSubsystem only -- memory only, never logged, never returned. Every request then
+	 * carries "authorization: Relay-Session <token>"; with no session nothing is sent (a request would only be refused).
+	 */
+	void AdoptSession(const FString& Token);
+	void DropSession();
+	bool HasSession() const { return !SessionToken.IsEmpty(); }
+
 	/** v0.2: GET the mission companion route and upsert its agents[] slots (per slot, fail closed per slot). */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
 	void RefreshMissionAgents(const FString& WljRunId, const FString& ProjectId);
@@ -72,9 +81,25 @@ public:
 	const WonderlandCompanionLogic::FAgentView* GetAgentView(const FString& AgentId) const;
 	const WonderlandCompanionLogic::FTurnHistory* GetHistory(const FString& AgentId) const;
 	/** Session-wide: origin, project, connect in flight, the last connect notice, unreadable slots, the SIMULATED banner. */
-	const WonderlandCompanionLogic::FCompanionSessionView& GetSessionView() const { return Session->SessionView(); }
+	const WonderlandCompanionLogic::FCompanionSessionView& GetSessionView() const
+	{
+		static const WonderlandCompanionLogic::FCompanionSessionView Offline;
+		return Session ? Session->SessionView() : Offline;
+	}
 
 	/** #447: the companion route's traceId for WljRunId as BRIDGE reported it; empty when absent, null, malformed or another run. */
+	/** The mission companion read for WljRunId as BRIDGE answered it (state, untrusted result, provenance), or null. */
+	const WonderlandCompanionLogic::FCompanionMissionView* GetMissionView(const FString& WljRunId) const
+	{
+		return bHaveMissionView && WljRunId.Equals(MissionTraceWljRunId, ESearchCase::CaseSensitive) ? &MissionView : nullptr;
+	}
+
+	/** HTTP status of the last mission companion read for WljRunId (404 = BRIDGE holds no companion row for a known run), or 0. */
+	int32 GetMissionViewHttpStatus(const FString& WljRunId) const
+	{
+		return bHaveMissionView && WljRunId.Equals(MissionTraceWljRunId, ESearchCase::CaseSensitive) ? MissionViewHttpStatus : 0;
+	}
+
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
 	FString GetMissionTraceId(const FString& WljRunId) const { return WljRunId.Equals(MissionTraceWljRunId, ESearchCase::CaseSensitive) ? MissionTraceId : FString(); }
 
@@ -94,7 +119,12 @@ private:
 	WonderlandCompanionLogic::FIdempotencyKeyMinter KeyMinter;
 	/** One chat stream per agent, keyed by agentId. */
 	TMap<FString, TSharedPtr<IHttpRequest, ESPMode::ThreadSafe>> ChatRequests;
+	/** O6: the paired native session (memory only). */
+	FString SessionToken;
 	/** Last companion read's run and its parsed traceId (ParseCompanionMission). */
 	FString MissionTraceWljRunId;
+	WonderlandCompanionLogic::FCompanionMissionView MissionView;
+	bool bHaveMissionView = false;
+	int32 MissionViewHttpStatus = 0;
 	FString MissionTraceId;
 };
