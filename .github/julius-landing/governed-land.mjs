@@ -24,7 +24,9 @@ import {
   verifyClearanceSignature,
 } from './land-lib.mjs';
 import {
+  CHECKPOINT_ATTESTATION_DIR,
   TRUSTED_COMPUTING_BASE,
+  attestationShapeProblem,
   checkpointAttestationProblems,
   checkpointPairingRequired,
   governedAuditBranchProblem,
@@ -530,6 +532,9 @@ export function evaluateGovernedLanding(input) {
     if (!descends) problems.push('the pull request head does not descend from the signed base');
   }
   if (checkpointPairingRequired(files)) {
+    // The checkpoint directory at the head is what main will carry: the same shape every gate requires afterwards.
+    const shape = attestationShapeProblem({ names: input?.checkpointNames, text: input?.attestationText });
+    if (shape) problems.push(`the checkpoint directory at the head would be refused: ${shape}`);
     const attestationProblems = checkpointAttestationProblems({
       text: input?.attestationText,
       signatureB64: input?.attestationSignatureB64,
@@ -889,10 +894,20 @@ async function landQueue({ env, fetchImpl, readLocal, now, stdout, stderr, state
         let attestationText = '';
         let attestationSignatureB64 = '';
         const treeHashes = {};
+        let checkpointNames = null;
         if (treeDiffComplete && checkpointPairingRequired(changedPaths)) {
-          const txtPath = changedPaths.find((path) => /^\.github\/julius-landing\/checkpoints\/[0-9a-f]{40}\.txt$/iu.test(path));
-          const sigPath = changedPaths.find((path) => /^\.github\/julius-landing\/checkpoints\/[0-9a-f]{40}\.sig$/iu.test(path));
-          if (typeof txtPath === 'string' && typeof sigPath === 'string') {
+          // Read the directory at the head, not the diff: a diff that deletes the old
+          // attestation also names it, and the head is what main will carry.
+          const listing = await readRaw(`/repos/${REPO}/contents/${CHECKPOINT_ATTESTATION_DIR}?ref=${head}`);
+          if (listing.status === 404) checkpointNames = [];
+          else if (listing.status === 200 && Array.isArray(listing.body) && listing.body.every((row) => row?.type === 'file' && typeof row?.name === 'string')) {
+            checkpointNames = listing.body.map((row) => row.name).sort();
+          }
+          const texts = (checkpointNames ?? []).filter((name) => /^[0-9a-f]{40}\.txt$/u.test(name));
+          const txtPath = texts.length === 1 ? `${CHECKPOINT_ATTESTATION_DIR}/${texts[0]}` : null;
+          const sigName = texts.length === 1 ? texts[0].replace(/\.txt$/u, '.sig') : null;
+          const sigPath = sigName !== null && (checkpointNames ?? []).includes(sigName) ? `${CHECKPOINT_ATTESTATION_DIR}/${sigName}` : null;
+          if (txtPath !== null && sigPath !== null) {
             attestationText = (await blobBytes(txtPath, head)).toString('utf8');
             attestationSignatureB64 = (await blobBytes(sigPath, head)).toString('utf8').trim();
             for (const path of TRUSTED_COMPUTING_BASE) {
@@ -928,6 +943,7 @@ async function landQueue({ env, fetchImpl, readLocal, now, stdout, stderr, state
           attestationText,
           attestationSignatureB64,
           treeHashes,
+          checkpointNames,
         });
         decision.changedPaths = changedPaths;
         }

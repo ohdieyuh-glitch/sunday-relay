@@ -10,7 +10,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { PINNED_REVIEWER_RAW_KEY, PINNED_REVIEWER_SPKI_SHA256, TRUSTED_COMPUTING_BASE } from './julius-main-provenance-trust.mjs';
+import { PINNED_REVIEWER_RAW_KEY, PINNED_REVIEWER_SPKI_SHA256, TRUSTED_CHECKPOINT_SHA, TRUSTED_COMPUTING_BASE } from './julius-main-provenance-trust.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const REPO = 'ohdieyuh-glitch/sunday-relay';
@@ -24,7 +24,9 @@ const APP = '5457712';
 const BOT = '347502603';
 const NOW = Date.parse('2026-10-23T18:30:00Z');
 const ISSUED = '2026-10-23T18:00:00Z';
-const EXPIRES = '2026-10-24T17:00:00Z';
+/** Six months: the bootstrap installs the long-window attestation directly (B4). */
+const EXPIRES = '2027-04-23T18:00:00Z';
+const STALE = '10aedd11643a1d717311b5824d54e863aa94d763';
 
 const pair = generateKeyPairSync('ed25519');
 const other = generateKeyPairSync('ed25519');
@@ -77,6 +79,8 @@ const treeHashes = Object.fromEntries(tcb.map((row) => [row.path, row.sha256]));
 
 type Boot = {
   BOOTSTRAP_MAX_WINDOW_MS: number;
+  ATTESTATION_MAX_WINDOW_MS: number;
+  BOOTSTRAP_MIN_REMAINING_MS: number;
   INSTALLER_COMMIT_MESSAGE: string;
   evaluateGovernedBootstrap: (input: Record<string, unknown>) => { ok: boolean; problems: string[] };
   runBootstrap: (options: {
@@ -116,6 +120,9 @@ function good(over: Record<string, unknown> = {}) {
     mainSha: MAIN,
     targetSha: TARGET,
     targetTree: TREE,
+    liveTargetTree: TREE,
+    existingCheckpointNames: [],
+    attestedRange: [{ sha: TARGET, tree: TREE }],
     compare: { behind_by: 0, status: 'ahead', ahead_by: 1 },
     publicKeyPem: publicPem,
     externalAnchor: spki,
@@ -136,30 +143,64 @@ function good(over: Record<string, unknown> = {}) {
 const problems = (over: Record<string, unknown> = {}) => boot.evaluateGovernedBootstrap(good(over)).problems.join('\n');
 
 describe('the bootstrap decision fails closed', () => {
-  it('accepts a descendant target bound by a short signed attestation', () => {
+  it('accepts a descendant target bound by a six-month signed attestation', () => {
     const decision = boot.evaluateGovernedBootstrap(good());
     expect(decision.ok, decision.problems.join('\n')).toBe(true);
-    expect(boot.BOOTSTRAP_MAX_WINDOW_MS).toBe(24 * 60 * 60 * 1000);
+    expect(boot.ATTESTATION_MAX_WINDOW_MS).toBe(184 * 24 * 60 * 60 * 1000);
+    expect(boot.BOOTSTRAP_MAX_WINDOW_MS).toBe(boot.ATTESTATION_MAX_WINDOW_MS);
+    expect(boot.BOOTSTRAP_MIN_REMAINING_MS).toBe(7 * 24 * 60 * 60 * 1000);
   });
 
-  it('refuses a bad expected sha, a moved main, a bad target, and a target that is already main', () => {
+  it('refuses a bad expected sha, a moved main, a bad target, and a target tree that is not the live tree', () => {
     expect(problems({ expectedMainSha: 'abc' })).toMatch(/expected main sha is not a full 40-hex sha/u);
     expect(problems({ mainSha: OTHER })).toMatch(new RegExp(`main is ${OTHER}, not the expected ${MAIN}`));
     expect(problems({ mainSha: undefined })).toMatch(/main could not be read/u);
     expect(problems({ targetSha: 'zz' })).toMatch(/target sha is not a full 40-hex sha/u);
     expect(problems({ targetTree: 'zz' })).toMatch(/target tree is not a full 40-hex sha/u);
-    const same = attest({ checkpoint: MAIN });
-    expect(problems({
-      targetSha: MAIN,
-      attestationText: same.text,
-      attestationSignatureB64: same.signature,
-    })).toMatch(/the target is main; there is nothing to land/u);
+    expect(problems({ targetTree: undefined })).toMatch(/target tree is not a full 40-hex sha/u);
+    expect(problems({ liveTargetTree: OTHER })).toMatch(new RegExp(`the target tree is ${OTHER}, not ${TREE}`));
   });
 
-  it('refuses a target that is behind, diverged, or identical', () => {
+  it('refuses a target that is behind, diverged, or identical but not main', () => {
     expect(problems({ compare: { behind_by: 1, status: 'behind', ahead_by: 0 } })).toMatch(/does not descend from main/u);
     expect(problems({ compare: { behind_by: 1, status: 'diverged', ahead_by: 1 } })).toMatch(/does not descend from main/u);
     expect(problems({ compare: { behind_by: 0, status: 'identical', ahead_by: 0 } })).toMatch(/does not descend from main/u);
+  });
+
+  it('B4: a target equal to main is the recovery path and re-attests main', () => {
+    const same = attest({ checkpoint: MAIN });
+    const decision = boot.evaluateGovernedBootstrap(good({
+      targetSha: MAIN,
+      compare: null,
+      attestedRange: [{ sha: MAIN, tree: TREE }],
+      existingCheckpointNames: [`${STALE}.sig`, `${STALE}.txt`],
+      attestationText: same.text,
+      attestationSignatureB64: same.signature,
+    }));
+    expect(decision.ok, decision.problems.join('\n')).toBe(true);
+    expect((decision as { recovery?: boolean }).recovery).toBe(true);
+  });
+
+  it('B4: refuses a window past six months and one that expires within seven days of install', () => {
+    const long = attest({ issued: '2026-10-23T18:00:00Z', expires: '2027-04-26T18:00:00Z' });
+    expect(problems({ attestationText: long.text, attestationSignatureB64: long.signature })).toMatch(/longer than the six-month ceiling/u);
+    const soon = attest({ issued: '2026-10-23T18:00:00Z', expires: '2026-10-29T18:00:00Z' });
+    expect(problems({ attestationText: soon.text, attestationSignatureB64: soon.signature })).toMatch(/expires within seven days/u);
+  });
+
+  it('B2: the installed directory is exactly one attestation, whatever the target carried', () => {
+    const plan = (boot as unknown as { installerDiffPlan: (target: string, names: string[]) => { added: string[]; removed: string[] } })
+      .installerDiffPlan(TARGET, [`${STALE}.txt`]);
+    expect(plan.removed).toEqual([`.github/julius-landing/checkpoints/${STALE}.txt`]);
+    expect(plan.added).toEqual([`.github/julius-landing/checkpoints/${TARGET}.sig`, `.github/julius-landing/checkpoints/${TARGET}.txt`]);
+    expect(problems({ existingCheckpointNames: [`${STALE}.txt`] })).toBe('');
+    expect(problems({ existingCheckpointNames: ['README.md'] })).toMatch(/holds files that are not attestations/u);
+    expect(problems({ existingCheckpointNames: null })).toMatch(/checkpoint directory at the target could not be read/u);
+  });
+
+  it('refuses an attestation whose commit list is not the first-parent chain from the prior', () => {
+    expect(problems({ attestedRange: [{ sha: OTHER, tree: TREE }, { sha: TARGET, tree: TREE }] })).toMatch(/does not list the first-parent chain/u);
+    expect(problems({ attestedRange: null })).toMatch(/first-parent chain from 2528ac5c[0-9a-f]+ to the target could not be read/u);
   });
 
   it('refuses an unset pin, the wrong key, and a missing or bogus attestation', () => {
@@ -172,7 +213,7 @@ describe('the bootstrap decision fails closed', () => {
     })).toMatch(/was not verified/u);
   });
 
-  it('refuses a checkpoint or tree that is not the target, a nonce that does not bind, and a window longer than 24 hours', () => {
+  it('refuses a checkpoint or tree that is not the target and a nonce that does not bind', () => {
     const otherCommit = attest({ checkpoint: OTHER });
     expect(problems({
       attestationText: otherCommit.text,
@@ -187,12 +228,7 @@ describe('the bootstrap decision fails closed', () => {
     expect(problems({
       attestationText: rebound.text,
       attestationSignatureB64: rebound.signature,
-    })).toMatch(/the attestation nonce does not bind the target/u);
-    const long = attest({ issued: '2026-10-22T18:00:00Z', expires: '2026-10-24T18:00:00Z' });
-    expect(problems({
-      attestationText: long.text,
-      attestationSignatureB64: long.signature,
-    })).toMatch(/the attestation expiry is not a short window/u);
+    })).toMatch(/installed checkpoint directory would be refused: nonce does not bind/u);
   });
 
   it('refuses an extra active ruleset, a snapshot that omits creation, a null id, and an unset bot', () => {
@@ -219,7 +255,9 @@ describe('runBootstrap talks to GitHub only with a token and never prints it', (
     expect(source).not.toContain('--re-enable');
     expect(source).not.toContain('skip-attestation');
     expect(source).toContain('There is no re-enable flag');
-    expect(source).toContain('delete this file');
+    // B4: the script is the recovery path for an expired attestation and stays in the tree.
+    expect(source).toContain('Keep this file');
+    expect(source).not.toContain('delete this file');
     expect(TRUSTED_COMPUTING_BASE).toContain('scripts/julius-governed-bootstrap.mjs');
     expect(TRUSTED_COMPUTING_BASE).not.toContain('.github/workflows/julius-governed-evidence.yml');
     expect(trust.TRUSTED_COMPUTING_BASE).not.toContain('.github/workflows/julius-governed-evidence.yml');
@@ -238,7 +276,8 @@ describe('runBootstrap talks to GitHub only with a token and never prints it', (
     '--signature', signaturePath,
   ];
 
-  function client(mode: 'ok' | 'identity' | 'moved' | 'tree' = 'ok') {
+  type Mode = 'ok' | 'identity' | 'moved' | 'tree' | 'readback-tree' | 'readback-parents' | 'readback-message' | 'readback-extra' | 'stale';
+  function client(mode: Mode = 'ok') {
     const calls: { path: string; method: string; body?: string; token: string }[] = [];
     const request = async (path: string, init: { method: string; body?: string; token: string }) => {
       calls.push({ path, method: init.method, body: init.body, token: init.token });
@@ -248,9 +287,31 @@ describe('runBootstrap talks to GitHub only with a token and never prints it', (
         if (seen >= 3) return { status: 200, body: { object: { sha: INSTALLER } } };
         return { status: 200, body: { object: { sha: MAIN } } };
       }
+      if (path === `/repos/${REPO}/compare/${TARGET}...${INSTALLER}`) {
+        const files = [
+          { status: 'added', filename: `.github/julius-landing/checkpoints/${TARGET}.txt` },
+          { status: 'added', filename: `.github/julius-landing/checkpoints/${TARGET}.sig` },
+          ...(mode === 'stale' ? [{ status: 'removed', filename: `.github/julius-landing/checkpoints/${STALE}.txt` }] : []),
+          ...(mode === 'readback-extra' ? [{ status: 'removed', filename: 'src/main.tsx' }] : []),
+        ];
+        return { status: 200, body: { behind_by: 0, status: 'ahead', ahead_by: 1, files } };
+      }
       if (path.includes('/compare/')) return { status: 200, body: { behind_by: 0, status: 'ahead', ahead_by: 1 } };
       if (path === `/repos/${REPO}/commits/${TARGET}`) {
-        return { status: 200, body: { commit: { tree: { sha: mode === 'tree' ? OTHER : TREE } } } };
+        return { status: 200, body: { commit: { tree: { sha: mode === 'tree' ? OTHER : TREE } }, parents: [{ sha: TRUSTED_CHECKPOINT_SHA }] } };
+      }
+      if (path === `/repos/${REPO}/contents/.github/julius-landing/checkpoints?ref=${TARGET}`) {
+        return mode === 'stale' ? { status: 200, body: [{ type: 'file', name: `${STALE}.txt` }] } : { status: 404, body: null };
+      }
+      if (path === `/repos/${REPO}/git/commits/${INSTALLER}`) {
+        return {
+          status: 200,
+          body: {
+            tree: { sha: mode === 'readback-tree' ? OTHER : 'c'.repeat(40) },
+            parents: mode === 'readback-parents' ? [{ sha: MAIN }] : [{ sha: TARGET }],
+            message: mode === 'readback-message' ? 'something else' : boot.INSTALLER_COMMIT_MESSAGE.replace(/\n$/u, ''),
+          },
+        };
       }
       if (path.includes('/contents/')) {
         const encoded = path.slice(path.indexOf('/contents/') + '/contents/'.length, path.indexOf('?ref='));
@@ -340,5 +401,57 @@ describe('runBootstrap talks to GitHub only with a token and never prints it', (
     expect(mismatch.ok).toBe(false);
     expect(mismatch.problems.join('\n')).toMatch(new RegExp(`the target tree is ${OTHER}, not ${TREE}`));
     expect(tree.calls.every((call) => call.method === 'GET')).toBe(true);
+  });
+
+  it('B1: refuses before any request when --target-tree is omitted, so base_tree is never undefined', async () => {
+    const { calls, request } = client();
+    const withoutTree = argv.filter((value, index) => value !== '--target-tree' && argv[index - 1] !== '--target-tree');
+    const result = await boot.runBootstrap({ argv: [...withoutTree, '--execute'], env, request, now: NOW });
+    expect(result.ok).toBe(false);
+    expect(result.problems.join('\n')).toMatch(/--target-tree is required/u);
+    expect(calls).toEqual([]);
+  });
+
+  it('B1: does not move main unless the installer tree, single parent, message and diff are exactly what was created', async () => {
+    for (const [mode, why] of [
+      ['readback-tree', new RegExp(`installer tree is ${OTHER}`)],
+      ['readback-parents', /installer parents are/u],
+      ['readback-message', /installer message is not the installer message/u],
+      ['readback-extra', /diff is .*removed:src\/main\.tsx/u],
+    ] as const) {
+      const { calls, request } = client(mode);
+      const result = await boot.runBootstrap({ argv: [...argv, '--execute'], env, request, now: NOW });
+      expect(result.ok, mode).toBe(false);
+      expect(result.problems.join('\n'), mode).toMatch(why);
+      expect(calls.some((call) => call.method === 'PATCH'), mode).toBe(false);
+    }
+  });
+
+  it('B2: execute removes a stale attestation in the same installer and checks that removal on read-back', async () => {
+    const { calls, request } = client('stale');
+    const result = await boot.runBootstrap({ argv: [...argv, '--execute'], env, request, now: NOW });
+    expect(result.ok, result.problems.join('\n')).toBe(true);
+    const tree = JSON.parse(calls.find((call) => call.method === 'POST' && call.path.endsWith('/git/trees'))?.body ?? '{}') as {
+      base_tree: string;
+      tree: { path: string; sha: string | null }[];
+    };
+    expect(tree.base_tree).toBe(TREE);
+    expect(tree.tree).toContainEqual({ path: `.github/julius-landing/checkpoints/${STALE}.txt`, mode: '100644', type: 'blob', sha: null });
+    expect(tree.tree.filter((row) => row.sha !== null).map((row) => row.path).sort()).toEqual([
+      `.github/julius-landing/checkpoints/${TARGET}.sig`,
+      `.github/julius-landing/checkpoints/${TARGET}.txt`,
+    ]);
+    const unexpected = client('ok');
+    const withoutRemoval = await boot.runBootstrap({
+      argv: [...argv, '--execute'],
+      env,
+      request: async (path, init) => (path === `/repos/${REPO}/contents/.github/julius-landing/checkpoints?ref=${TARGET}`
+        ? { status: 200, body: [{ type: 'file', name: `${STALE}.txt` }] }
+        : unexpected.request(path, init)),
+      now: NOW,
+    });
+    expect(withoutRemoval.ok).toBe(false);
+    expect(withoutRemoval.problems.join('\n')).toMatch(/not exactly .*removed:/u);
+    expect(unexpected.calls.some((call) => call.method === 'PATCH')).toBe(false);
   });
 });

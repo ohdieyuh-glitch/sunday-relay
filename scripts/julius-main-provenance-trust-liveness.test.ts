@@ -1002,4 +1002,52 @@ describe('signed checkpoint liveness', () => {
     expect(result.reason).not.toContain('chain verified');
     rmSync(repo, { recursive: true, force: true });
   });
+
+  it('B4: an expired attestation locks every gate, and the bootstrap installer shape re-attests main', async () => {
+    const repo = copyFixture();
+    const later = Date.parse('2027-05-01T00:00:00Z');
+    const locked = await gate(repo, { [mod.EXTERNAL_ANCHOR_VARIABLE]: spki }, later);
+    expect(locked.ok).toBe(false);
+    expect(locked.reason).toMatch(/has expired/u);
+    // The recovery run: target is main itself. The installer removes the
+    // expired attestation and adds a fresh one in one commit whose parent is main.
+    const { installerDiffPlan } = await import(pathToFileURL(join(ROOT, 'scripts/julius-governed-bootstrap.mjs')).href) as {
+      installerDiffPlan: (target: string, names: string[]) => { added: string[]; removed: string[] };
+    };
+    const main = git(repo, ['rev-parse', 'HEAD']).trim();
+    const mainTree = git(repo, ['rev-parse', 'HEAD^{tree}']).trim();
+    const dir = join(repo, mod.CHECKPOINT_ATTESTATION_DIR);
+    const plan = installerDiffPlan(main, readdirSync(dir));
+    const tcb = mod.TRUSTED_COMPUTING_BASE.map((path) => ({ path, sha256: createHash('sha256').update(readFileSync(join(repo, path))).digest('hex') }));
+    const text = mod.canonicalCheckpointAttestation({
+      checkpoint: main,
+      commits: [{ sha: main, tree: mainTree, basis: 'recovery re-attestation' }],
+      tcb,
+      issued: '2027-04-30T00:00:00Z',
+      expires: '2027-10-30T00:00:00Z',
+    });
+    for (const path of plan.removed) git(repo, ['rm', '-q', path]);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, `${main}.txt`), text);
+    writeFileSync(join(dir, `${main}.sig`), `${signText(text)}\n`);
+    git(repo, ['add', '-A']);
+    git(repo, ['commit', '-m', 'Add the signed checkpoint attestation.']);
+    const changed = git(repo, ['diff', '--no-renames', '--name-only', 'HEAD~1', 'HEAD']).trim().split('\n').sort();
+    expect(changed).toEqual([...plan.added, ...plan.removed].sort());
+    const recovered = await gate(repo, { [mod.EXTERNAL_ANCHOR_VARIABLE]: spki }, later);
+    expect(recovered.ok, recovered.reason).toBe(true);
+    // Leaving the expired file next to the new one is the B2 lockout.
+    const both = copyFixture();
+    const bothMain = git(both, ['rev-parse', 'HEAD']).trim();
+    const bothText = text.replaceAll(main, bothMain);
+    writeFileSync(join(both, mod.CHECKPOINT_ATTESTATION_DIR, `${bothMain}.txt`), bothText);
+    writeFileSync(join(both, mod.CHECKPOINT_ATTESTATION_DIR, `${bothMain}.sig`), `${signText(bothText)}\n`);
+    git(both, ['add', '-A']);
+    git(both, ['commit', '-m', 'Add the signed checkpoint attestation.']);
+    const stale = await gate(both, { [mod.EXTERNAL_ANCHOR_VARIABLE]: spki }, later);
+    expect(stale.ok).toBe(false);
+    expect(stale.reason).toMatch(/more than one checkpoint attestation is on main/u);
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(both, { recursive: true, force: true });
+  });
 });

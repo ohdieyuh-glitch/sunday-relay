@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { generateKeyPairSync, sign } from 'node:crypto';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -401,51 +401,21 @@ describe('the checkpoint workflow and the working tree', () => {
       JULIUS_CHECKPOINT_ATTESTATION_SIGNATURE: Buffer.alloc(64, 9).toString('base64'),
     });
     expect(result.ok).toBe(false);
-    expect(result.reason).toContain('unsigned');
     expect(result.reason).toContain(INSTALLER_RECOVERY);
     expect(readFileSync(join(ROOT, '.github/julius-landing/README.md'), 'utf8')).toContain(INSTALLER_RECOVERY);
+  });
+
+  it('B2: the target tree carries no stale checkpoint attestation, so the bootstrap leaves exactly one', () => {
+    // 10aedd11's unsigned attestation was on #453's head. The bootstrap only adds
+    // <target>.txt and its signatures, so a stale file would leave two
+    // attestations on main and every gate would refuse.
     const checkpoint = '10aedd11643a1d717311b5824d54e863aa94d763';
-    const livePath = join(ROOT, `.github/julius-landing/checkpoints/${checkpoint}.txt`);
-    const live = parseCheckpointAttestation(readFileSync(livePath, 'utf8'));
-    expect(live.problems.join('\n')).toMatch(/key-spki-sha256 is not the pinned reviewer key 12c9b1853c4c33322241273f386b0fd08fdefd08134c911dd4024c5bb5cdff13/u);
-    expect(live.fields.checkpoint).toBe(checkpoint);
-    const attested = live.fields.tcb.map((row) => row.path);
-    const added = [
-      '.github/julius-landing/governed-land.mjs',
-      '.github/julius-landing/governed-queue.txt',
-      '.github/julius-landing/main-ruleset.json',
-      '.github/workflows/julius-governed-land.yml',
-      'scripts/julius-governed-bootstrap.mjs',
-    ];
-    expect(TRUSTED_COMPUTING_BASE.length).toBe(attested.length + added.length);
-    for (const path of attested) expect(TRUSTED_COMPUTING_BASE).toContain(path);
-    for (const path of added) expect(TRUSTED_COMPUTING_BASE).toContain(path);
-    expect(attested).not.toEqual([...TRUSTED_COMPUTING_BASE]);
-    // The founder bootstrap regenerates this attestation. This repair does not
-    // edit it. Trusted files this repair changes no longer match; every other
-    // trusted file still does. The verifier still refuses a hash mismatch.
-    expect(createHash('sha256').update(readFileSync(livePath)).digest('hex')).toBe('a4fde0b67e790890fa58b2998d8ed88b436f67c2ff2bde49c98fd59f70cb8d25');
-    const founderRegenerates = new Set([
-      'scripts/julius-main-provenance-trust.mjs',
-      'scripts/julius-main-provenance-trust.d.mts',
-      'scripts/julius-main-provenance.mjs',
-      'scripts/julius-main-provenance.d.mts',
-      '.github/julius-landing/land-lib.mjs',
-      '.github/julius-landing/reviewer-ed25519.pub',
-      '.github/workflows/julius-land.yml',
-      '.github/workflows/julius-accept-main.yml',
-    ]);
-    for (const row of live.fields.tcb) {
-      const actual = createHash('sha256').update(readFileSync(join(ROOT, row.path!))).digest('hex');
-      if (founderRegenerates.has(row.path!)) expect(actual, row.path).not.toBe(row.sha256);
-      else expect(actual, row.path).toBe(row.sha256);
-    }
-    expect(attestationNonceProblems(live.fields)).toBeNull();
-    expect(existsSync(livePath.replace(/\.txt$/u, '.sig'))).toBe(false);
-    // The installer object's single parent is the checkpoint. Both commits
-    // stay ancestors of HEAD. The tip is not pinned, so a later commit or a
-    // merge with two parents still passes. A squash or rewrite that drops
-    // either commit is not an ancestor and fails.
+    const dir = join(ROOT, '.github/julius-landing/checkpoints');
+    const names = existsSync(dir) ? readdirSync(dir) : [];
+    expect(names.filter((name) => /^[0-9a-f]{40}\./u.test(name))).toEqual([]);
+    const stale = git(['show', `${PREVIOUS_PIN_HEAD}:.github/julius-landing/checkpoints/${checkpoint}.txt`]);
+    expect(createHash('sha256').update(stale).digest('hex')).toBe('a4fde0b67e790890fa58b2998d8ed88b436f67c2ff2bde49c98fd59f70cb8d25');
+    expect(parseCheckpointAttestation(stale).fields.checkpoint).toBe(checkpoint);
     const installer = 'b994daebe511e3bbddcd18edb1a7caf221810387';
     ensureCommit(checkpoint, 1);
     ensureCommit(installer, 1);

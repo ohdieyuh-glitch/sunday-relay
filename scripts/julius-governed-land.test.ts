@@ -132,6 +132,7 @@ function attestationMaterial(signature: (text: string) => string = signWith) {
     attestationText: text,
     attestationSignatureB64: signature(text),
     treeHashes: Object.fromEntries(tcb.map((row) => [row.path, row.sha256])),
+    checkpointNames: [`${checkpoint}.sig`, `${checkpoint}.txt`],
   };
 }
 
@@ -675,6 +676,25 @@ describe('squash and fast-forward pass only when every binding holds', () => {
     }, [`protected-paths: ${files.join(',')}`, 'landing-method: fast-forward']));
     expect(mismatched.ok).toBe(false);
     expect(mismatched.problems.join('\n')).toMatch(/the checkpoint attestation was not verified/u);
+  });
+
+  it('B2: refuses a checkpoint landing whose head would leave a second or stray attestation on main', () => {
+    const attestation = `.github/julius-landing/checkpoints/${'e'.repeat(40)}`;
+    const files = [`${attestation}.sig`, `${attestation}.txt`, WORKFLOW];
+    const landWith = (checkpointNames: string[] | null) => fixture.evaluateGovernedLanding(landingInput({
+      fastForward: true,
+      files,
+      pr: openPr({ changed_files: files.length }),
+      ...attestationMaterial(),
+      checkpointNames,
+    }, [`protected-paths: ${files.join(',')}`, 'landing-method: fast-forward']));
+    const stale = '10aedd11643a1d717311b5824d54e863aa94d763';
+    const two = landWith([`${'e'.repeat(40)}.sig`, `${'e'.repeat(40)}.txt`, `${stale}.txt`]);
+    expect(two.ok).toBe(false);
+    expect(two.problems.join('\n')).toMatch(/would be refused: more than one checkpoint attestation is on main/u);
+    const stray = landWith([`${'e'.repeat(40)}.sig`, `${'e'.repeat(40)}.txt`, 'notes.md']);
+    expect(stray.problems.join('\n')).toMatch(/would be refused: the checkpoint directory holds files that are not this attestation/u);
+    expect(landWith(null).ok).toBe(false);
   });
 
   it('a draft passes only when the clearance binds it', () => {

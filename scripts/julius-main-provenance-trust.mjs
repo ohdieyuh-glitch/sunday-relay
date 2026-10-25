@@ -156,6 +156,8 @@ export const HISTORICAL_TCB = Object.freeze([
 ]);
 
 const ATTESTATION_FILE = /^\.github\/julius-landing\/checkpoints\/[0-9a-f]{40}\.(txt|sig)$/iu;
+/** The files one attestation occupies in the checkpoint directory. Nothing else may sit there. */
+export const CHECKPOINT_DIRECTORY_SUFFIXES = Object.freeze(['.txt', '.sig']);
 
 /**
  * Exact companion files of the founder installer, besides the trusted
@@ -678,6 +680,37 @@ function checkpointFileName(name) {
   return /^[0-9a-f]{40}\.txt$/u.test(name);
 }
 
+/**
+ * The shape every gate requires of the checkpoint directory, before any key or
+ * clock is consulted: exactly one `<checkpoint>.txt`, its `.sig`, no other
+ * file, a parseable text named for its own checkpoint, a nonce that binds the
+ * listed lines, and the trusted checkpoint as `prior`. The bootstrap applies
+ * this to the directory it is about to install and the governed lander to the
+ * head it is about to land, so neither can produce a main the verifier refuses
+ * for its shape. Returns the first problem, or null.
+ */
+export function attestationShapeProblem({ names, text } = {}) {
+  const list = Array.isArray(names) ? names.map(String) : [];
+  const texts = list.filter(checkpointFileName).sort();
+  if (texts.length === 0) return INSTALLER_RECOVERY;
+  if (texts.length > 1) return `more than one checkpoint attestation is on main (${texts.join(', ')}). ${INSTALLER_RECOVERY}`;
+  const stem = texts[0].replace(/\.txt$/u, '');
+  const allowed = new Set(CHECKPOINT_DIRECTORY_SUFFIXES.map((suffix) => `${stem}${suffix}`));
+  const stray = list.filter((name) => !allowed.has(name)).sort();
+  if (stray.length > 0) return `the checkpoint directory holds files that are not this attestation (${stray.join(', ')}). ${INSTALLER_RECOVERY}`;
+  if (!list.includes(`${stem}.sig`)) return `the checkpoint attestation is unsigned. ${INSTALLER_RECOVERY}`;
+  if (typeof text !== 'string' || text === '') return `the checkpoint attestation is unsigned. ${INSTALLER_RECOVERY}`;
+  const parsed = parseCheckpointAttestation(text);
+  if (parsed.problems.length > 0) return parsed.problems[0];
+  if (`${parsed.fields.checkpoint}.txt` !== texts[0]) {
+    return `the attestation file ${texts[0]} is not named for checkpoint ${parsed.fields.checkpoint}. ${INSTALLER_RECOVERY}`;
+  }
+  const nonceProblem = attestationNonceProblems(parsed.fields);
+  if (nonceProblem) return nonceProblem;
+  if (parsed.fields.prior !== TRUSTED_CHECKPOINT_SHA) return `the attestation prior is not the trusted checkpoint ${TRUSTED_CHECKPOINT_SHA}`;
+  return null;
+}
+
 /** The single attestation on disk, or null when the directory is absent or not exactly one file. */
 export function readCheckpointAttestation(root = process.cwd()) {
   const dir = join(root, CHECKPOINT_ATTESTATION_DIR);
@@ -1047,21 +1080,12 @@ export async function requireTrustedVerifier(env = process.env, options = {}) {
   try { names = readdirSync(dir); } catch { return { ok: false, reason: INSTALLER_RECOVERY }; }
   const texts = names.filter(checkpointFileName).sort();
   if (texts.length === 0) return { ok: false, reason: INSTALLER_RECOVERY };
-  if (texts.length > 1) return { ok: false, reason: `more than one checkpoint attestation is on main (${texts.join(', ')}). ${INSTALLER_RECOVERY}` };
-  const found = readCheckpointAttestation(root);
-  if (!found?.signatureB64) return { ok: false, reason: `the checkpoint attestation is unsigned. ${INSTALLER_RECOVERY}` };
+  const found = texts.length === 1 ? readCheckpointAttestation(root) : null;
+  const shape = attestationShapeProblem({ names, text: found?.signatureB64 ? found.text : '' });
+  if (shape) return { ok: false, reason: shape };
   const parsed = parseCheckpointAttestation(found.text);
-  if (parsed.problems.length > 0) return { ok: false, reason: parsed.problems[0] };
-  if (`${parsed.fields.checkpoint}.txt` !== found.fileName) {
-    return { ok: false, reason: `the attestation file ${found.fileName} is not named for checkpoint ${parsed.fields.checkpoint}. ${INSTALLER_RECOVERY}` };
-  }
-  const nonceProblem = attestationNonceProblems(parsed.fields);
-  if (nonceProblem) return { ok: false, reason: nonceProblem };
   const windowProblem = judgeAttestationWindow(parsed.fields, now);
   if (windowProblem) return { ok: false, reason: windowProblem };
-  if (parsed.fields.prior !== TRUSTED_CHECKPOINT_SHA) {
-    return { ok: false, reason: `the attestation prior is not the trusted checkpoint ${TRUSTED_CHECKPOINT_SHA}` };
-  }
   let pem;
   try { pem = readFileSync(join(root, '.github/julius-landing/reviewer-ed25519.pub'), 'utf8'); } catch {
     return { ok: false, reason: 'the reviewer key could not be read' };
