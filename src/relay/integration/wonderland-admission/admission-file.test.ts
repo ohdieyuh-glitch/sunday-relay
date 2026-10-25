@@ -130,6 +130,9 @@ describe('resolveAdmissionStorePath', () => {
     expect(resolveAdmissionStorePath('c:/no-such-dir-julius/admission.json', 'darwin').ok).toBe(false);
     expect(resolveAdmissionStorePath('file:///C:/admission.json', 'win32').ok).toBe(false);
     expect(resolveAdmissionStorePath('mailto:admission.json', 'win32').ok).toBe(false);
+    for (const share of ['\\\\server\\share\\admission.json', '\\\\?\\C:\\admission.json', '\\\\?\\UNC\\server\\share\\admission.json', '\\\\.\\C:\\admission.json', '\\/server/share/admission.json']) {
+      expect(resolveAdmissionStorePath(share, 'win32').ok, share).toBe(false);
+    }
     const dir = directory();
     try {
       const file = join(dir, 'admission.json');

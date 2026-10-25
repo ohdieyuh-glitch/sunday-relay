@@ -82,6 +82,8 @@ export function resolveAdmissionStorePath(raw: string | undefined, platform: Nod
   if (trimmed === '' || trimmed.includes('\0') || trimmed.includes('://')) return { ok: false };
   if (!windowsDrivePath && /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed)) return { ok: false };
   if (!isAbsolute(trimmed) || trimmed.startsWith('//')) return { ok: false };
+  // A network share or a device namespace is not a local file: `\\server\share`, `\\?\`, `\\.\`.
+  if (platform === 'win32' && (trimmed.startsWith('\\\\') || trimmed.startsWith('\\/') || trimmed.startsWith('/\\'))) return { ok: false };
   const filePath = resolve(trimmed);
   const dir = dirname(filePath);
   try {
