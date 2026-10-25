@@ -52,6 +52,10 @@
 		{
 			"Name": "MetaHumanSDK",
 			"Enabled": false
+		},
+		{
+			"Name": "PlatformCrypto",
+			"Enabled": true
 		}
 	]
 }
