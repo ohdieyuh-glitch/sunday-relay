@@ -42,6 +42,29 @@ const ID = /^[A-Za-z0-9:_-]{1,128}$/u;
 
 const sha256 = (text: string): string => createHash('sha256').update(text, 'utf8').digest('hex');
 
+/**
+ * Every credential SHAPE the paid workflow's evidence scan refuses (its "LAYER ONE" grep in
+ * julius-first-live-mission.yml), redacted here first. Otherwise one key-shaped string in a final
+ * message would make the scan delete the whole evidence bundle. A test holds the two lists together.
+ */
+const EVIDENCE_SHAPES: readonly RegExp[] = [
+  /(^|[^A-Za-z0-9_-])sk-(?:ant-|proj-)?[A-Za-z0-9_-]{16,}/gu,
+  /xai-[A-Za-z0-9_-]{16,}/gu,
+  /gh[pousr]_[A-Za-z0-9]{16,}/gu,
+  /-*BEGIN [A-Z ]*PRIVATE KEY-*[\s\S]*?(?:-*END [A-Z ]*PRIVATE KEY-*|$)/gu,
+  /Authorization:\s*(?:[A-Za-z]+\s+)?[A-Za-z0-9._-]{16,}/gu,
+  /CLAUDE_CODE_OAUTH_TOKEN\s*[:=]\s*[A-Za-z0-9._-]{8,}/gu,
+];
+
+/** `redactPayload`, then every shape the evidence scan refuses. */
+export function redactForEvidence(text: string): string {
+  let out = redactPayload(text);
+  for (const shape of EVIDENCE_SHAPES) {
+    out = out.replace(shape, (_match: string, lead?: string) => (shape.source.startsWith('(^|') && typeof lead === 'string' ? `${lead}[redacted]` : '[redacted]'));
+  }
+  return out;
+}
+
 /** The file stem for a task and dispatch context: ids with `:` spelled `_`, joined by `.`. */
 export function juliusFinalMessageStem(taskId: string, contextId: string): string {
   return `${taskId.replace(/:/gu, '_')}.${contextId.replace(/:/gu, '_')}`;
@@ -131,7 +154,7 @@ export function writeJuliusFinalMessage(input: {
     trimmedSha256: sha256(trimmed),
     trimmedUtf8Bytes: Buffer.byteLength(trimmed, 'utf8'),
   };
-  const redacted = redactPayload(trimmed);
+  const redacted = redactForEvidence(trimmed);
   const stem = juliusFinalMessageStem(input.taskId, input.contextId);
   try {
     fs.writeExclusive(join(directory, `${stem}.raw.txt`), trimmed, 0o600);

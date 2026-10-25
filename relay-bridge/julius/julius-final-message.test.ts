@@ -129,3 +129,24 @@ function walk(dir: string): string[] {
   }
   return out;
 }
+
+describe('the published copy can never trip the evidence credential scan', () => {
+  it('redacts every shape the workflow\'s LAYER ONE grep refuses', async () => {
+    const { redactForEvidence } = await import('./julius-final-message');
+    const workflow = readFileSync(join('.github', 'workflows', 'julius-first-live-mission.yml'), 'utf8');
+    const line = workflow.split('\n').find((l) => l.includes('shape_hits=$(grep -rlE ')) ?? '';
+    const ere = /grep -rlE '(.*)' julius-live-evidence\)/u.exec(line)?.[1];
+    expect(ere, 'the evidence scan shape grep must stay parseable').toBeDefined();
+    const scan = new RegExp((ere as string).replaceAll('[[:space:]]', '\\s'), 'u');
+    const samples = [
+      `sk-${'a'.repeat(20)}`, `x sk-ant-${'b'.repeat(20)}`, `sk-proj-${'c'.repeat(20)}`, `xai-${'A'.repeat(16)}`,
+      `ghp_${'d'.repeat(20)}`, `gho_${'e'.repeat(20)}`, '-----BEGIN RSA PRIVATE KEY-----\nMIIabc\n-----END RSA PRIVATE KEY-----',
+      `Authorization: Bearer ${'f'.repeat(20)}`, `CLAUDE_CODE_OAUTH_TOKEN=${'g'.repeat(12)}`,
+    ];
+    for (const sample of samples) {
+      const doc = `{"note":"${sample.replaceAll('\n', '\\n')}","sales":[]}`;
+      expect(scan.test(sample), `the scan must refuse the raw sample: ${sample.slice(0, 12)}`).toBe(true);
+      expect(scan.test(redactForEvidence(doc)), `redacted copy still trips the scan: ${sample.slice(0, 12)}`).toBe(false);
+    }
+  });
+});
