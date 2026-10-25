@@ -11,6 +11,7 @@ import {
   type JuliusMissionGitHub,
   type JuliusMissionWorkflowRun,
 } from './julius-mission-evidence-reader';
+import { J1_PINNED_CHECKER_FILE_SHA256 } from './julius-inworld-checker';
 
 const WLJ = 'wlj_01234567-89ab-4cde-8fab-0123456789ab';
 const LEGACY = 'run:0123456789abcdef01234567';
@@ -525,45 +526,69 @@ describe('JuliusMissionEvidenceReader', () => {
 
 describe('the hidden checker verdict is read from the grade job only', () => {
   const judged = 'b'.repeat(64);
-  const checkerSha = 'c'.repeat(64);
-  const verdictFile = (verdict: string, runId = WLJ, extra = ''): string => [
-    'schema=julius-inworld-verdict.v1', `verdict=${verdict}`, 'reason=none', `run_id=${runId}`, 'task_id=task:build-1', 'task_type=build',
-    `judged_trimmed_sha256=${judged}`, `raw_sha256=${'d'.repeat(64)}`, `game_digest=${judged.slice(0, 12)}`, `checker_sha256=${checkerSha}`,
-    'combined_pin=none', 'grader_sha256=none', 'failed_sections=none', extra, '',
+  const TASK = 'task:build-1';
+  const CONTEXT = 'context:9';
+  const verdictFile = (verdict: string, opts: { runId?: string; checkerSha?: string; extra?: string } = {}): string => [
+    'schema=julius-inworld-verdict.v1', `verdict=${verdict}`, 'reason=none', `run_id=${opts.runId ?? WLJ}`, `context_id=${CONTEXT}`, `task_id=${TASK}`, 'task_type=build',
+    `judged_trimmed_sha256=${judged}`, `game_digest=${judged.slice(0, 12)}`, `checker_sha256=${opts.checkerSha ?? J1_PINNED_CHECKER_FILE_SHA256}`,
+    'combined_pin=none', 'grader_sha256=none', 'failed_sections=none', opts.extra ?? '', '',
   ].join('\n');
+  const published = (taskId: string, contextId: string): string | null => (taskId === TASK && contextId === CONTEXT ? judged : null);
+  const redactedRecord = (sha = judged): string => JSON.stringify({ schema: 'julius-final-message.v2', taskId: TASK, contextId: CONTEXT, runId: WLJ, trimmedSha256: sha, trimmedUtf8Bytes: 2, text: '{}' });
 
   it('PASS and FAIL are kept verbatim with what was judged', () => {
-    expect(checkerVerdictFrom(verdictFile('PASS'), WLJ)).toEqual({
+    expect(checkerVerdictFrom(verdictFile('PASS'), WLJ, published)).toEqual({
       checkerVerdict: 'PASS',
-      checker: { reason: 'none', taskId: 'task:build-1', judgedTrimmedSha256: judged, gameDigest: judged.slice(0, 12), checkerSha256: checkerSha },
+      checker: { reason: 'none', taskId: TASK, judgedTrimmedSha256: judged, gameDigest: judged.slice(0, 12), checkerSha256: J1_PINNED_CHECKER_FILE_SHA256 },
     });
-    expect(checkerVerdictFrom(verdictFile('FAIL'), WLJ).checkerVerdict).toBe('FAIL');
+    expect(checkerVerdictFrom(verdictFile('FAIL'), WLJ, published).checkerVerdict).toBe('FAIL');
   });
 
   it('absent, another run, another schema, a duplicate key, or an unknown token is NOT_RUN, never PASS', () => {
-    expect(checkerVerdictFrom(null, WLJ)).toEqual({ checkerVerdict: 'NOT_RUN', checker: null });
-    expect(checkerVerdictFrom(verdictFile('PASS', 'wlj_0b7a1c2e-4f3d-4a6b-8c2d-3e4f5a6b7c8d'), WLJ).checkerVerdict).toBe('NOT_RUN');
-    expect(checkerVerdictFrom(verdictFile('PASS').replace('julius-inworld-verdict.v1', 'v0'), WLJ).checkerVerdict).toBe('NOT_RUN');
-    expect(checkerVerdictFrom(verdictFile('PASS', WLJ, 'verdict=PASS'), WLJ).checkerVerdict).toBe('NOT_RUN');
-    expect(checkerVerdictFrom(verdictFile('pass'), WLJ).checkerVerdict).toBe('NOT_RUN');
-    expect(checkerVerdictFrom(verdictFile('NOT_RUN'), WLJ).checkerVerdict).toBe('NOT_RUN');
+    expect(checkerVerdictFrom(null, WLJ, published)).toEqual({ checkerVerdict: 'NOT_RUN', checker: null });
+    expect(checkerVerdictFrom(verdictFile('PASS', { runId: 'wlj_0b7a1c2e-4f3d-4a6b-8c2d-3e4f5a6b7c8d' }), WLJ, published).checkerVerdict).toBe('NOT_RUN');
+    expect(checkerVerdictFrom(verdictFile('PASS').replace('julius-inworld-verdict.v1', 'v0'), WLJ, published).checkerVerdict).toBe('NOT_RUN');
+    expect(checkerVerdictFrom(verdictFile('PASS', { extra: 'verdict=PASS' }), WLJ, published).checkerVerdict).toBe('NOT_RUN');
+    expect(checkerVerdictFrom(verdictFile('pass'), WLJ, published).checkerVerdict).toBe('NOT_RUN');
+    expect(checkerVerdictFrom(verdictFile('NOT_RUN'), WLJ, published).checkerVerdict).toBe('NOT_RUN');
   });
 
   it('a PASS that does not name the judged bytes is not a verdict', () => {
-    expect(checkerVerdictFrom(verdictFile('PASS').replace(`judged_trimmed_sha256=${judged}`, 'judged_trimmed_sha256=none'), WLJ).checkerVerdict).toBe('NOT_RUN');
-    expect(checkerVerdictFrom(verdictFile('PASS').replace(`game_digest=${judged.slice(0, 12)}`, 'game_digest=000000000000'), WLJ).checkerVerdict).toBe('NOT_RUN');
+    expect(checkerVerdictFrom(verdictFile('PASS').replace(`judged_trimmed_sha256=${judged}`, 'judged_trimmed_sha256=none'), WLJ, published).checkerVerdict).toBe('NOT_RUN');
+    expect(checkerVerdictFrom(verdictFile('PASS').replace(`game_digest=${judged.slice(0, 12)}`, 'game_digest=000000000000'), WLJ, published).checkerVerdict).toBe('NOT_RUN');
+  });
+
+  it('a PASS from an unpinned checker, or on bytes the run did not publish, is NOT_RUN', () => {
+    expect(checkerVerdictFrom(verdictFile('PASS', { checkerSha: 'c'.repeat(64) }), WLJ, published).checkerVerdict).toBe('NOT_RUN');
+    expect(checkerVerdictFrom(verdictFile('PASS'), WLJ, () => 'e'.repeat(64)).checkerVerdict).toBe('NOT_RUN');
+    expect(checkerVerdictFrom(verdictFile('PASS'), WLJ).checkerVerdict).toBe('NOT_RUN');
   });
 
   it('a completed run carries the grade job\'s verdict, and a verdict inside julius-live-evidence is not read', async () => {
     const runs = `run_id\tmission_id\tstate\tcard_revision\n${WLJ}\tmission:julius-continuous-1\tCOMPLETED\t7\n(1 row)\n`;
-    const files = [{ path: 'live-mission.evidence.txt', text: RESULT }, { path: 'runs.tsv', text: runs }];
+    const files = [
+      { path: 'live-mission.evidence.txt', text: RESULT }, { path: 'runs.tsv', text: runs },
+      { path: 'final-message/task_build-1.context_9.redacted.json', text: redactedRecord() },
+    ];
     const graded = withProof(files);
     const withVerdict = { ...graded, artifacts: [...graded.artifacts, { name: 'julius-inworld-verdict', files: [{ path: 'checker-verdict.txt', text: verdictFile('FAIL') }] }] };
     const failed = await createJuliusMissionEvidenceReader(github(tagMessage(WLJ), withVerdict)).read(WLJ) as { checkerVerdict: string } | null;
     expect(failed?.checkerVerdict).toBe('FAIL');
 
+    const tampered = withProof([...files.slice(0, 2), { path: 'final-message/task_build-1.context_9.redacted.json', text: redactedRecord('e'.repeat(64)) }]);
+    const tamperedWithVerdict = { ...tampered, artifacts: [...tampered.artifacts, { name: 'julius-inworld-verdict', files: [{ path: 'checker-verdict.txt', text: verdictFile('PASS') }] }] };
+    const mismatch = await createJuliusMissionEvidenceReader(github(tagMessage(WLJ), tamperedWithVerdict)).read(WLJ) as { checkerVerdict: string } | null;
+    expect(mismatch?.checkerVerdict).toBe('NOT_RUN');
+
     const smuggled = withProof([...files, { path: 'checker-verdict.txt', text: verdictFile('PASS') }]);
     const notRun = await createJuliusMissionEvidenceReader(github(tagMessage(WLJ), smuggled)).read(WLJ) as { checkerVerdict: string } | null;
     expect(notRun?.checkerVerdict).toBe('NOT_RUN');
+  });
+});
+
+describe('the reader\'s inlined checker pin', () => {
+  it('equals the runtime pin, so a re-pinned checker cannot be read past', async () => {
+    const source = (await import('node:fs')).readFileSync('relay-bridge/julius-mission-evidence-reader.ts', 'utf8');
+    expect(source).toContain(`const J1_PINNED_CHECKER_FILE_SHA256 = '${J1_PINNED_CHECKER_FILE_SHA256}';`);
   });
 });

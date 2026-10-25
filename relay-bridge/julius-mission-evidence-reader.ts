@@ -29,6 +29,8 @@ export const JULIUS_SPEND_TAG_SCHEMA = 'julius-run-spent.v1' as const;
 const EVIDENCE_ARTIFACT = 'julius-live-evidence';
 /** The grade job's own artifact. A verdict anywhere else is not read. */
 const VERDICT_ARTIFACT = 'julius-inworld-verdict';
+/** J1_PINNED_CHECKER_FILE_SHA256 (relay-bridge/julius-inworld-checker.ts), inlined so this reader does not reach the J1 dispatch modules. A test holds the two equal. */
+const J1_PINNED_CHECKER_FILE_SHA256 = '1a98f1a4d739ebe2da254715d81f56cd5fa08d534a1fbf10ef6214e8b262207e';
 
 export const JULIUS_MISSION_PHASE_ROLES = ['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER'] as const;
 export type JuliusMissionPhaseRole = (typeof JULIUS_MISSION_PHASE_ROLES)[number];
@@ -648,7 +650,11 @@ export function createJuliusMissionEvidenceReader(github: JuliusMissionGitHub): 
         phases: phasesFrom(fileText(evidence, 'slot-events.tsv'), derived.runId),
         traceId: juliusMissionTraceId(derived.runId),
         traceparent: null,
-        ...checkerVerdictFrom(fileText(observed.artifacts.find((artifact) => artifact.name === VERDICT_ARTIFACT), 'checker-verdict.txt'), derived.runId),
+        ...checkerVerdictFrom(
+          fileText(observed.artifacts.find((artifact) => artifact.name === VERDICT_ARTIFACT), 'checker-verdict.txt'),
+          derived.runId,
+          (taskId, contextId) => publishedFinalMessageSha256(fileText(evidence, `${taskId.replace(/:/gu, '_')}.${contextId.replace(/:/gu, '_')}.redacted.json`), taskId, contextId, derived.runId),
+        ),
       };
       return completion;
     },
@@ -661,7 +667,12 @@ const VERDICT_TOKEN = /^[a-z_]{1,64}$/u;
 const VERDICT_TASK = /^[A-Za-z0-9:_-]{1,128}$/u;
 
 /** checker-verdict.txt (scripts/julius-inworld-grade.mjs): closed `key=value` lines. */
-export function checkerVerdictFrom(text: string | null, runId: string): { readonly checkerVerdict: JuliusCheckerVerdict; readonly checker: JuliusCheckerEvidence | null } {
+export function checkerVerdictFrom(
+  text: string | null,
+  runId: string,
+  /** The trimmed sha256 the run's own published final-message record holds for a task and context, or null. */
+  publishedSha256: (taskId: string, contextId: string) => string | null = () => null,
+): { readonly checkerVerdict: JuliusCheckerVerdict; readonly checker: JuliusCheckerEvidence | null } {
   const notRun = { checkerVerdict: 'NOT_RUN' as const, checker: null };
   if (text === null) return notRun;
   const fields = new Map<string, string>();
@@ -685,7 +696,23 @@ export function checkerVerdictFrom(text: string | null, runId: string): { readon
   if (verdict === 'PASS' || verdict === 'FAIL') {
     // A PASS or FAIL names what was judged. Without those hashes it is not a verdict.
     if (checker.judgedTrimmedSha256 === null || checker.checkerSha256 === null || checker.gameDigest !== checker.judgedTrimmedSha256.slice(0, 12)) return notRun;
+    // Only the pinned hidden checker's verdict counts, on the bytes the run itself published.
+    if (checker.checkerSha256 !== J1_PINNED_CHECKER_FILE_SHA256) return { checkerVerdict: 'NOT_RUN', checker };
+    const contextId = known(fields.get('context_id'), VERDICT_TASK);
+    if (checker.taskId === null || contextId === null || publishedSha256(checker.taskId, contextId) !== checker.judgedTrimmedSha256) {
+      return { checkerVerdict: 'NOT_RUN', checker };
+    }
     return { checkerVerdict: verdict, checker };
   }
   return { checkerVerdict: 'NOT_RUN', checker };
+}
+
+/** The trimmed sha256 a published `<task>.<context>.redacted.json` records, when it names this run, task and context. */
+function publishedFinalMessageSha256(text: string | null, taskId: string, contextId: string, runId: string): string | null {
+  if (text === null) return null;
+  let body: unknown;
+  try { body = JSON.parse(text); } catch { return null; }
+  const record = body !== null && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : null;
+  if (record === null || record.schema !== 'julius-final-message.v2' || record.taskId !== taskId || record.contextId !== contextId || record.runId !== runId) return null;
+  return typeof record.trimmedSha256 === 'string' && VERDICT_SHA.test(record.trimmedSha256) ? record.trimmedSha256 : null;
 }

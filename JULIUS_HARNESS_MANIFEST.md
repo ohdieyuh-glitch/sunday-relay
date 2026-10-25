@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **239 production files** across 20/20 subsystems (2 roots, 205 traced, 9 not composed by the live root, 23 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **240 production files** across 20/20 subsystems (2 roots, 206 traced, 9 not composed by the live root, 23 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -45,7 +45,7 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | executor + tool substrate (src/relay/workspace/julius-tools/) | kernel (src/relay/mission/julius/) | 10 | 8 |
 | executor + tool substrate (src/relay/workspace/julius-tools/) | persistence (src/relay/persistence/) | 2 | 0 |
 | kernel (src/relay/mission/julius/) | other | 7 | 0 |
-| live composition (relay-bridge/julius/) | bridge provider stacks (hosted Claude, Hermes, redaction) | 21 | 6 |
+| live composition (relay-bridge/julius/) | bridge provider stacks (hosted Claude, Hermes, redaction) | 22 | 6 |
 | live composition (relay-bridge/julius/) | connectors (gpt-architect, prompt-architect contracts) | 10 | 1 |
 | live composition (relay-bridge/julius/) | executor + tool substrate (src/relay/workspace/julius-tools/) | 3 | 0 |
 | live composition (relay-bridge/julius/) | kernel (src/relay/mission/julius/) | 36 | 12 |
@@ -203,6 +203,7 @@ The implementation role: one hosted Claude Agent SDK execution behind a pure saf
 | `relay-bridge/julius/claude-code-coding-provider.ts` | traced | `relay-bridge/julius/live-workers.ts` |
 | `relay-bridge/julius/coder-self-test.ts` | traced | `relay-bridge/julius/live-workers.ts` |
 | `relay-bridge/julius/coder-workspace.ts` | traced | `relay-bridge/julius/coder-self-test.ts` |
+| `relay-bridge/julius/julius-final-message.ts` | traced | `relay-bridge/julius/claude-code-coding-provider.ts` |
 | `scripts/julius-org-attribution.mjs` | asset (path-loaded) | `relay-bridge/julius/anthropic-org-attribution.ts` |
 | `scripts/julius-usage-limit.mjs` | traced | `relay-bridge/hosted-coding-agent/hosted-failure-reason.ts` |
 | `src/relay/connectors/claude-code/result-classification.ts` | traced | `relay-bridge/hosted-coding-agent/hosted-observation.ts` |
@@ -217,7 +218,7 @@ The judgement role: the Hermes reviewer process runner in an isolated profile, p
 | --- | --- | --- |
 | `relay-bridge/hermes-reviewer.ts` | traced | `relay-bridge/julius/live-workers.ts` |
 | `relay-bridge/julius/review-evidence-bound.ts` | traced | `relay-bridge/julius/live-workers.ts` |
-| `relay-bridge/redact.ts` | traced | `relay-bridge/hermes-reviewer.ts` |
+| `relay-bridge/redact.ts` | traced | `relay-bridge/julius/julius-final-message.ts` |
 | `relay-bridge/reviewer-deadline.ts` | traced | `relay-bridge/hosted-coding-agent/coder-envelope.ts` |
 | `relay-bridge/reviewer-harness/hermes/hermes-provider.ts` | traced | `relay-bridge/reviewer-harness/hermes/isolated-profile.ts` |
 | `relay-bridge/reviewer-harness/hermes/isolated-profile.ts` | traced | `relay-bridge/reviewer-harness/hermes/runner.ts` |

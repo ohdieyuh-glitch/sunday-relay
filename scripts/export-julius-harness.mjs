@@ -489,6 +489,7 @@ const FILE_RULES = [
   // session is launched, how its outcomes read, and the structural facts its
   // observation carries. Replaced wholesale when the provider is swapped.
   ['relay-bridge/julius/claude-code-coding-provider.ts', 'CODING AGENT'],
+  ['relay-bridge/julius/julius-final-message.ts', 'CODING AGENT'],
   // The spend-free organization gate the confirmed-live entrypoint runs
   // before it submits a Coding Agent call. It accepts only the closed line
   // from the path-loaded probe.
