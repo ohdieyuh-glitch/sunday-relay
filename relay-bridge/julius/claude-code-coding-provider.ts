@@ -39,6 +39,7 @@ import {
   readJuliusParticipationBlock,
   type JuliusParticipationReading,
 } from '../../src/relay/mission/julius/julius-worker-participation';
+import type { JuliusFileCreationGrant } from '../../src/relay/mission/julius/julius-file-authority';
 
 export const CLAUDE_CODE_PROVIDER_KIND = 'claude-code-hosted' as const;
 
@@ -401,6 +402,13 @@ export function createClaudeCodeCodingAgentProvider(input: {
   readonly authMode?: ClaudeAuthMode;
   /** The mission's declared coder effort; absent changes nothing. Forwarded to the runner. */
   readonly effort?: HostedEffort;
+  /**
+   * The mission's file-creation grant, looked up by the composition root from the
+   * VERIFIED contract's `markerNamespace`. Fixed for the provider's life and
+   * forwarded to every run; nothing in a request can select or widen it. Absent:
+   * no creation, exactly as before.
+   */
+  readonly fileCreation?: JuliusFileCreationGrant | null;
   /** Test seam for the SDK's tool helpers; production omits it. */
   readonly sdkHelpersLoader?: () => Promise<HostedSdkHelpers>;
 }): JuliusCodingAgentProvider {
@@ -477,6 +485,7 @@ export function createClaudeCodeCodingAgentProvider(input: {
         requestedModel: input.requestedModel,
         ...(input.authMode === undefined ? {} : { authMode: input.authMode }),
         ...(input.effort === undefined ? {} : { effort: input.effort }),
+        ...(input.fileCreation == null ? {} : { fileCreation: input.fileCreation }),
         ...(session?.selfTest === undefined || sdkHelpers === undefined ? {} : { selfTestTool: session.selfTest, sdkHelpers }),
         limits,
         now: nowIso,

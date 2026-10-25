@@ -117,7 +117,7 @@ function tickOverrideOf(value: string | null): { readonly ok: true; readonly ove
   if (!/^[1-9][0-9]{0,5}$/u.test(value)) return { ok: false };
   return { ok: true, override: Number(value) };
 }
-import { authorizeJuliusLiveSpend, JULIUS_QUALIFYING_PAIR_NAMESPACES, noJuliusResearch, type JuliusResearchPolicy } from '../src/relay/mission/julius';
+import { authorizeJuliusLiveSpend, JULIUS_QUALIFYING_PAIR_NAMESPACES, juliusFileCreationGrant, noJuliusResearch, type JuliusResearchPolicy } from '../src/relay/mission/julius';
 import { readJuliusPriorRunSpend, readJuliusSpentTagLedger } from './julius/julius-prior-spend';
 import {
   LIVE_REACH_ACTION_CAPABILITIES,
@@ -648,6 +648,13 @@ async function main(argv: readonly string[]): Promise<number> {
   const parsedContract = parseLiveMissionContract(rawContract);
   if (!parsedContract.ok) { out(`Mission Contract refused: ${parsedContract.problem}`); return 2; }
   const contract = parsedContract.contract;
+  /**
+   * THE MISSION'S FILE-CREATION GRANT, decided HERE and only here: from the
+   * parsed, verified contract's `markerNamespace` through a frozen table. It is
+   * handed to the Coding Agent as a typed option; no environment variable, request
+   * field or coder-reachable input selects it. Null for every mission but J1.
+   */
+  const coderFileCreation = juliusFileCreationGrant(contract.markerNamespace);
 
   const env = process.env as Record<string, string | undefined>;
   const cardRevision = env.RELAY_JULIUS_CARD_REVISION?.trim() || 'card:julius-live:1';
@@ -711,6 +718,7 @@ async function main(argv: readonly string[]): Promise<number> {
     contexts: { snapshotFor: () => null }, artifacts, shell: null,
     architectMaxOutputTokens: contract.limits?.architectMaxOutputTokens,
     architectEffort: contract.limits?.architectEffort, coderEffort: contract.limits?.coderEffort, coderSelfTestCalls: contract.limits?.coderSelfTestCalls,
+    coderFileCreation,
   });
 
   out('JULIUS LIVE MISSION — preflight');
@@ -983,6 +991,7 @@ async function main(argv: readonly string[]): Promise<number> {
       testCommand: contract.testCommand, contexts: handoffs.contexts, artifacts: liveArtifacts, shell,
       architectMaxOutputTokens: contract.limits?.architectMaxOutputTokens,
       architectEffort: contract.limits?.architectEffort, coderEffort: contract.limits?.coderEffort, coderSelfTestCalls: contract.limits?.coderSelfTestCalls,
+      coderFileCreation,
       researchPolicyFor: researchPolicyOf,
     });
     if (!resolution.ok) {

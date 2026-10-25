@@ -105,7 +105,7 @@ import {
   emptyJuliusResearchLedger, isJuliusResearchRole, recordJuliusResearch,
   type JuliusResearchRequest,
 } from '../../src/relay/mission/julius';
-import type { JuliusTimelineReader } from '../../src/relay/mission/julius';
+import type { JuliusFileCreationGrant, JuliusTimelineReader } from '../../src/relay/mission/julius';
 import { createLiveReachService } from '../live-reach-service';
 import type { BackendProbe } from '../../src/relay/mission/live-reach';
 import {
@@ -362,6 +362,12 @@ export function resolveLiveWorkers(options: {
   /** The mission contract's `limits.coderSelfTestCalls`, when it declares one; absent changes nothing. Diagnostic telemetry only. */
   readonly coderSelfTestCalls?: number | null;
   /**
+   * THE VERIFIED CONTRACT'S FILE-CREATION GRANT: `juliusFileCreationGrant` of the
+   * parsed contract's `markerNamespace`, looked up by the entrypoint. Handed to the
+   * Coding Agent only; absent or null grants no creation, exactly as before.
+   */
+  readonly coderFileCreation?: JuliusFileCreationGrant | null;
+  /**
    * The mission's sealed research policy, handed to every worker so each is TOLD
    * what it may ask for. The entrypoint passes the same function to the research
    * mediator, which is what DECIDES; absent, each prompt says it was not told.
@@ -488,6 +494,7 @@ export function resolveLiveWorkers(options: {
         ...(authMode.ok ? { authMode: authMode.mode } : {}),
         ...(options.coderEffort == null ? {} : { effort: options.coderEffort }),
         ...(options.coderSelfTestCalls == null ? {} : { selfTestCalls: options.coderSelfTestCalls }),
+        ...(options.coderFileCreation == null ? {} : { fileCreation: options.coderFileCreation }),
         requestedModel: requested.codingModel ?? '', workspacePath: options.workspacePath,
         testCommand: options.testCommand, shell: options.shell as ShellEffectPort,
         ...(options.researchPolicyFor === undefined ? {} : { researchPolicyFor: options.researchPolicyFor }),

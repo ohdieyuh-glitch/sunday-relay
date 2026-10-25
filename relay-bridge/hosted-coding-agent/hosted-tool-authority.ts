@@ -42,13 +42,16 @@ import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import {
   juliusFileEditDecision,
   type JuliusFileAuthorityRefusal,
+  type JuliusFileCreationGrant,
 } from '../../src/relay/mission/julius/julius-file-authority';
 import { juliusWorkspaceRelativePath } from '../../src/relay/mission/julius/julius-workspace-paths';
 
 /**
  * The tool that creates files. The envelope disallows it on every hosted run
- * (`HOSTED_DISALLOWED_TOOLS`); it is refused here as well, so a runtime that
- * offered it anyway would still create nothing.
+ * that carries no file-creation grant (`HOSTED_DISALLOWED_TOOLS`); it is refused
+ * here as well, so a runtime that offered it anyway would still create nothing.
+ * A mission WITH a grant (`juliusFileCreationGrant`) may create files strictly
+ * under the grant's prefix, judged by real path, and nowhere else.
  */
 const CREATION_TOOL = 'Write';
 /** Tools that change a file that already exists. */
@@ -203,10 +206,21 @@ export function juliusHostedToolAuthority(input: {
    */
   readonly signal?: AbortSignal;
   readonly fs?: HostedToolFs;
+  /**
+   * THE MISSION'S FILE-CREATION GRANT, from the composition root's lookup of the
+   * VERIFIED contract's `markerNamespace` -- never from anything a tool call
+   * carries. Absent or null: every `Write` is refused `creation_not_granted`,
+   * exactly as before. Present: a `Write` whose target really resolves strictly
+   * under `<workspace>/<prefix>` is allowed and recorded like an allowed edit;
+   * any other target is refused `creation_outside_grant`.
+   */
+  readonly fileCreation?: JuliusFileCreationGrant | null;
 }): (hookInput: unknown, toolUseId?: string, options?: { readonly signal?: AbortSignal }) => Promise<HostedHookOutput> {
   const fs = input.fs ?? NODE_HOSTED_TOOL_FS;
   const root = fs.realpath(resolve(input.workspacePath));
   const record = input.record ?? (() => undefined);
+  // Copied once, at construction: nothing a later call carries can change it.
+  const creationPrefix = input.fileCreation === undefined || input.fileCreation === null ? null : input.fileCreation.prefix;
 
   const deny = (tool: string, path: string | null, refusal: JuliusFileAuthorityRefusal, because: string): HostedHookOutput => {
     record({ tool, allowed: false, path, refusal, because });
@@ -267,7 +281,20 @@ export function juliusHostedToolAuthority(input: {
       const target = located[0];
       if (target === undefined) return deny(tool, null, 'path_unreadable', 'The tool named no path.');
       if (isWrite) {
-        return deny(tool, target.relativePath, 'creation_not_granted', 'This mission does not grant file creation; edit an existing file instead.');
+        if (creationPrefix === null) {
+          return deny(tool, target.relativePath, 'creation_not_granted', 'This mission does not grant file creation; edit an existing file instead.');
+        }
+        // THE SAME KERNEL JUDGEMENT AN EDIT GETS (spelling, control, credential and
+        // workflow locations), then the grant: strictly UNDER the prefix, by the real
+        // path `locate` produced -- so the prefix itself, a sibling, and a link inside
+        // it that resolves elsewhere are all outside.
+        const decision = juliusFileEditDecision({ path: target.relativePath });
+        if (!decision.allowed) return deny(tool, target.relativePath, decision.refusal, decision.because);
+        if (!(decision.path.startsWith(creationPrefix) && decision.path.length > creationPrefix.length)) {
+          return deny(tool, decision.path, 'creation_outside_grant', `This mission may create files only under ${creationPrefix}; write there, or edit an existing file instead.`);
+        }
+        record({ tool, allowed: true, path: decision.path, refusal: null, because: `Permitted creation of ${decision.path}.` });
+        return {};
       }
       if (isEdit) {
         const decision = juliusFileEditDecision({ path: target.relativePath });
