@@ -213,7 +213,7 @@ describe('adversarial refusals', () => {
     tipReviewerKeyPem: REAL_PEM,
     changedPaths: paths,
     changedPathsComplete: true,
-    headCommit: { sha: TRUSTED_CHECKPOINT_HEAD, authorLogin: 'julius-worker[bot]', treeSha: TRUSTED_CHECKPOINT_TREE },
+    headCommit: { sha: TRUSTED_CHECKPOINT_HEAD, treeSha: TRUSTED_CHECKPOINT_TREE, authenticatedAuthor: { login: 'julius-worker[bot]', source: 'pull-opener', accountType: 'Bot' } },
     externalReviewerKeySha256: PIN,
     ...over,
   } as Parameters<typeof evaluateMainProvenance>[0]);
@@ -248,7 +248,7 @@ describe('adversarial refusals', () => {
       tipReviewerKeyPem: attackerPem,
       changedPaths: ['src/a.ts'],
       changedPathsComplete: true,
-      headCommit: { sha: '3'.repeat(40), authorLogin: 'julius-worker[bot]', treeSha: '4'.repeat(40) },
+      headCommit: { sha: '3'.repeat(40), treeSha: '4'.repeat(40), authenticatedAuthor: { login: 'julius-worker[bot]', source: 'pull-opener', accountType: 'Bot' } },
       externalReviewerKeySha256: PIN,
     } as Parameters<typeof evaluateMainProvenance>[0]);
     expect(result.verdict).toBe('unprovenanced');
