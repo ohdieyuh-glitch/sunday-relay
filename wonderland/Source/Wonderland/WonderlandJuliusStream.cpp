@@ -501,8 +501,19 @@ FString UWonderlandJuliusStreamSubsystem::PreferLocalBridgeForMission(const FStr
 	}
 	const FString Base = BridgeUrl();
 	const bool bLoopback = !Base.IsEmpty() && WonderlandJuliusMissionClient::IsLoopbackBaseUrl(std::string(TCHAR_TO_UTF8(*Base)));
+	// THE PLAYER'S PAIRING DOOR. A player session has no console (WonderlandBeta::LockDownPlayer), so the founder pairs with
+	// "/brain pair <code>" in the terminal, which stays closed unless wl.Brain.PairingOffered says the bridge mints codes. The
+	// founder's loopback J1 bridge does, so the J1 terminal opens that door whenever this client's bridge is (or becomes) loopback.
+	const auto OfferPairing = []()
+	{
+		if (IConsoleVariable* Offered = IConsoleManager::Get().FindConsoleVariable(TEXT("wl.Brain.PairingOffered")))
+		{
+			if (!Offered->GetBool()) { Offered->Set(true, ECVF_SetByCode); }
+		}
+	};
 	if (bLoopback)
 	{
+		OfferPairing();
 		return IsPaired() ? FString() : FString::Printf(TEXT("Pair this client with your local bridge (%s): open the terminal (Ctrl+T) and type /brain pair <code>, with the code from the Wonderland website."), *Base);
 	}
 	if (IsPaired())
@@ -517,6 +528,7 @@ FString UWonderlandJuliusStreamSubsystem::PreferLocalBridgeForMission(const FStr
 			*LoopbackBase, *LoopbackBase);
 	}
 	WonderlandJuliusStreamTuning::CVarBridgeUrl->Set(*LoopbackBase, ECVF_SetByConsole);
+	OfferPairing();
 	UE_LOG(LogWonderlandJuliusStream, Display, TEXT("J1 terminal: unpaired client pointed at the local bridge %s"), *LoopbackBase);
 	return FString::Printf(TEXT("Pair this client with your local bridge (%s): open the terminal (Ctrl+T) and type /brain pair <code>, with the code from the Wonderland website."), *LoopbackBase);
 }
