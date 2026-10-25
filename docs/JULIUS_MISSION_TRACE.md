@@ -59,7 +59,7 @@ Further span ids for `wlj_0b7a1c2e-4f3d-4a6b-8c2d-3e4f5a6b7c8d`:
 
 ## Where it is served
 
-`GET /relay-api/wonderland/julius/missions/{wljRunId}/result` and `GET .../progress` include `traceId`. A phase list from the evidence reader carries `spanId: null` and `traceparent: null`. These routes do not fill a span id onto that list.
+`GET /relay-api/wonderland/julius/missions/{wljRunId}/result` and `GET .../progress` include `traceId`. `/progress` includes `spanId` on each phase that names a role, a stage, and an attempt.
 
 The companion `GET` on `bridge/wonderland-julius-companion-route-20261024` is not in this branch. Adding `traceId` there is a follow-up on that branch. This change does not edit it.
 

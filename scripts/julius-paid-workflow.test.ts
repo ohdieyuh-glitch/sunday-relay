@@ -533,7 +533,8 @@ describe('one spent tag per admission run id, before any provider call', () => {
     expect(tagJob).not.toMatch(/secrets\./u);
     expect(tagJob).toMatch(/\n    permissions:\n      contents: write\n/u);
     expect(job('paid-slot')).not.toMatch(/\n    permissions:\n/u);
-    expect(job('first-live-mission')).not.toMatch(/\n    permissions:\n/u);
+    // The paid job declares its own block (the read set plus statuses: write for the live-progress publisher), pinned below.
+    expect(job('first-live-mission')).toMatch(/\n    permissions:\n/u);
     expect(workflow).toMatch(/concurrency:\s*\n\s*group:\s*\$\{\{ inputs\.confirm_live == 'RUN LIVE MISSION' && 'julius-paid-provider-slot'/u);
   });
 
