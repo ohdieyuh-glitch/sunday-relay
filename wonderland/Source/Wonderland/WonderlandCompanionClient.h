@@ -81,7 +81,11 @@ public:
 	const WonderlandCompanionLogic::FAgentView* GetAgentView(const FString& AgentId) const;
 	const WonderlandCompanionLogic::FTurnHistory* GetHistory(const FString& AgentId) const;
 	/** Session-wide: origin, project, connect in flight, the last connect notice, unreadable slots, the SIMULATED banner. */
-	const WonderlandCompanionLogic::FCompanionSessionView& GetSessionView() const { return Session->SessionView(); }
+	const WonderlandCompanionLogic::FCompanionSessionView& GetSessionView() const
+	{
+		static const WonderlandCompanionLogic::FCompanionSessionView Offline;
+		return Session ? Session->SessionView() : Offline;
+	}
 
 	/** #447: the companion route's traceId for WljRunId as BRIDGE reported it; empty when absent, null, malformed or another run. */
 	/** The mission companion read for WljRunId as BRIDGE answered it (state, untrusted result, provenance), or null. */
