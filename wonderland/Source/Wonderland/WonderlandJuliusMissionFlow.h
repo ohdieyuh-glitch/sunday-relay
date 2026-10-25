@@ -481,7 +481,8 @@ namespace WonderlandJuliusMissionFlow
 
 	/** Client-side: no successful read for this long while the server last said live. */
 	inline constexpr std::uint64_t LiveNoReadAfterMs = 20000;
-	inline constexpr std::size_t LivePanelLines = 12;
+	/** At most this many finished steps are listed (newest last). */
+	inline constexpr std::size_t LivePanelLines = 8;
 	/** MsSinceLastRead: time since the last successful read (0 = just now). */
 	FLivePanel LivePanelFor(const FLiveFeed& Feed, std::uint64_t MsSinceLastRead);
 }

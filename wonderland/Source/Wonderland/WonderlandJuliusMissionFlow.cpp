@@ -1,6 +1,7 @@
 #include "WonderlandJuliusMissionFlow.h"
 
 #include <cctype>
+#include <algorithm>
 #include <cstdint>
 #include <limits>
 #include <string>
@@ -1541,26 +1542,55 @@ namespace WonderlandJuliusMissionFlow
 			Out.Lines.push_back("phase history is sampled every ~10 s; short tasks may not appear");
 			break;
 		}
-		const std::size_t First = Events.size() > LivePanelLines ? Events.size() - LivePanelLines : 0;
-		for (std::size_t I = First; I < Events.size(); ++I)
+		// Steps: each job/step collapsed to its LATEST reported state (rehearsal b: a raw tail of the stream was a wall of
+		// not-yet-started steps). What runs now first, then how far the run is, then what finished last.
+		struct FStepNow
 		{
-			const FLiveEvent& E = Events[I];
-			std::string Line;
-			if (E.Kind == "phase" && !E.Marker.empty())
+			const FLiveEvent* Latest = nullptr;
+			std::int64_t FirstSeq = 0;
+		};
+		std::vector<std::pair<std::string, FStepNow>> Steps;
+		for (const FLiveEvent& E : Events)
+		{
+			if (E.Kind == "phase") { continue; }
+			const std::string Key = E.Kind + "\n" + E.Job + "\n" + E.Name;
+			auto It = std::find_if(Steps.begin(), Steps.end(), [&Key](const std::pair<std::string, FStepNow>& Row) { return Row.first == Key; });
+			if (It == Steps.end()) { Steps.push_back({Key, FStepNow{&E, E.Seq}}); }
+			else { It->second.Latest = &E; }
+		}
+		std::size_t StepCount = 0;
+		std::size_t Finished = 0;
+		std::vector<const FLiveEvent*> Running;
+		std::vector<const FLiveEvent*> Done;
+		for (const auto& Row : Steps)
+		{
+			const FLiveEvent& E = *Row.second.Latest;
+			if (E.Kind == "job")
 			{
-				Line = "  sampled: " + E.Marker;
+				if (E.Status == "in_progress") { Running.push_back(&E); }
+				continue;
 			}
-			else if (E.Kind == "phase")
-			{
-				Line = "  sampled #" + std::to_string(E.Ordinal) + ": " + E.Role + " / " + E.TaskType + " -- " + E.State;
-				if (E.RepairCycle > 0) { Line += " (repair cycle " + std::to_string(E.RepairCycle) + " of 3)"; }
-			}
-			else
-			{
-				Line = E.Kind == "job" ? "job " + E.Name : "  " + E.Job + " / " + E.Name;
-				Line += ": " + E.Status;
-				if (!E.Conclusion.empty()) { Line += " (" + E.Conclusion + ")"; }
-			}
+			++StepCount;
+			if (E.Status == "completed") { ++Finished; Done.push_back(&E); }
+			else if (E.Status == "in_progress") { Running.push_back(&E); }
+		}
+		for (const FLiveEvent* E : Running)
+		{
+			// A running job is named only when none of its steps is reported running (the step is the better news).
+			if (E->Kind == "job" && std::any_of(Running.begin(), Running.end(), [E](const FLiveEvent* S) { return S->Kind == "step" && S->Job == E->Name; })) { continue; }
+			Out.Lines.push_back((Out.bLive ? "now running: " : "was running: ") + (E->Kind == "job" ? "job " + E->Name : E->Job + " / " + E->Name)); // FLOW_LIVE_NOW_RUNNING
+		}
+		if (StepCount > 0)
+		{
+			Out.Lines.push_back("steps: " + std::to_string(Finished) + " of " + std::to_string(StepCount) + " finished");
+		}
+		std::sort(Done.begin(), Done.end(), [](const FLiveEvent* A, const FLiveEvent* B) { return A->Seq < B->Seq; });
+		const std::size_t FirstDone = Done.size() > LivePanelLines ? Done.size() - LivePanelLines : 0;
+		for (std::size_t I = FirstDone; I < Done.size(); ++I)
+		{
+			const FLiveEvent& E = *Done[I];
+			std::string Line = "  done: " + E.Job + " / " + E.Name;
+			if (!E.Conclusion.empty()) { Line += " (" + E.Conclusion + ")"; }
 			Out.Lines.push_back(std::move(Line));
 		}
 		return Out;

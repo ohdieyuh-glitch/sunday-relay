@@ -468,6 +468,11 @@ MUTATIONS = [
         "EventList.clear();",
         "// reset keeps the old events",
     ),
+    (
+        "live_now_running_hidden",
+        'else if (E.Status == "in_progress") { Running.push_back(&E); }',
+        "else if (false) { Running.push_back(&E); }",
+    ),
 ]
 
 

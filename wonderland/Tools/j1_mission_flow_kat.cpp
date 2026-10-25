@@ -448,7 +448,8 @@ const ABSENT_PHASE = {
 		Expect(PanelHas(Panel, "GitHub Actions run 18733051234"), "header names the bound run");
 		Expect(PanelHas(Panel, "now: coder / repair_build -- active (repair cycle 1 of 3)"), "now line from the latest sample");
 		Expect(PanelHas(Panel, "sampled every ~10 s"), "phases are labelled as samples");
-		Expect(PanelHas(Panel, "Preflight, then the live mission / LIVE: run the first real Julius mission: in_progress"), "real step names");
+		Expect(PanelHas(Panel, "now running: Preflight, then the live mission / LIVE: run the first real Julius mission"), "real step names");
+		Expect(PanelHas(Panel, "steps: 0 of 1 finished"), "step count");
 		Expect(Feed.Cursor() == "c7", "cursor kept");
 		++LiveCases;
 
@@ -569,10 +570,27 @@ const ABSENT_PHASE = {
 			const std::string Step = Swap(LiveStep, "\"status\":\"in_progress\"", std::string("\"status\":\"") + Word + "\"");
 			FLiveFeed Waiting;
 			Waiting.Apply(ParseLiveEvents(LiveWlj, 200, LiveBody(Top, Step)));
-			Expect(Waiting.IsLive() && PanelHas(LivePanelFor(Waiting, 0), (std::string(": ") + Word).c_str()), Word);
+			Expect(Waiting.IsLive() && PanelHas(LivePanelFor(Waiting, 0), "steps: 0 of 1 finished"), Word);
 		}
 		Expect(!ParseLiveEvents(LiveWlj, 200, Swap(Good, "\"runStatus\":\"in_progress\"", "\"runStatus\":\"running\"")).bParsed, "unknown run status");
 		++LiveCases;
+		// Rehearsal b: a step reported pending, then in_progress, then completed is ONE step; pending ones are counted, not listed.
+		{
+			const std::string Pending = "{\"seq\":1,\"at\":null,\"kind\":\"step\",\"job\":\"J\",\"name\":\"A\",\"status\":\"pending\",\"conclusion\":null},"
+				"{\"seq\":2,\"at\":null,\"kind\":\"step\",\"job\":\"J\",\"name\":\"B\",\"status\":\"pending\",\"conclusion\":null},"
+				"{\"seq\":3,\"at\":\"2026-10-25T18:00:01Z\",\"kind\":\"step\",\"job\":\"J\",\"name\":\"A\",\"status\":\"in_progress\",\"conclusion\":null}";
+			FLiveFeed Steps;
+			Steps.Apply(ParseLiveEvents(LiveWlj, 200, LiveBody(LiveTop, Pending)));
+			FLivePanel P = LivePanelFor(Steps, 0);
+			Expect(PanelHas(P, "now running: J / A") && PanelHas(P, "steps: 0 of 2 finished") && !PanelHas(P, "J / B"), "running step first, pending counted");
+			Steps.Apply(ParseLiveEvents(LiveWlj, 200, LiveBody(Swap(LiveTop, "\"c7\"", "\"c9\""),
+				"{\"seq\":4,\"at\":\"2026-10-25T18:00:09Z\",\"kind\":\"step\",\"job\":\"J\",\"name\":\"A\",\"status\":\"completed\",\"conclusion\":\"success\"},"
+				"{\"seq\":5,\"at\":\"2026-10-25T18:00:09Z\",\"kind\":\"step\",\"job\":\"J\",\"name\":\"B\",\"status\":\"in_progress\",\"conclusion\":null}")));
+			P = LivePanelFor(Steps, 0);
+			Expect(PanelHas(P, "now running: J / B") && !PanelHas(P, "now running: J / A"), "now running moves on");
+			Expect(PanelHas(P, "steps: 1 of 2 finished") && PanelHas(P, "  done: J / A (success)"), "finished step listed once");
+			++LiveCases;
+		}
 		// The real folded step name from the workflow.
 		Expect(ParseLiveEvents(LiveWlj, 200, Swap(Good, "LIVE: run the first real Julius mission", "Preflight complete - stopping here (no confirm_live given)")).bParsed, "real folded step name");
 		++LiveCases;
