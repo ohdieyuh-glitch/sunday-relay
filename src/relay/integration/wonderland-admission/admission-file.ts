@@ -72,12 +72,15 @@ export type AdmissionStorePath =
 /**
  * A local absolute path whose parent directory exists and is writable.
  * Unset, relative, a URL, and a path this process cannot write are refused.
+ * On Windows a drive-absolute path (`C:\...` or `C:/...`) is a path, not a URL
+ * scheme. A drive-relative `C:foo` is still refused.
  */
-export function resolveAdmissionStorePath(raw: string | undefined): AdmissionStorePath {
+export function resolveAdmissionStorePath(raw: string | undefined, platform: NodeJS.Platform = process.platform): AdmissionStorePath {
   if (typeof raw !== 'string') return { ok: false };
   const trimmed = raw.trim();
+  const windowsDrivePath = platform === 'win32' && /^[a-zA-Z]:[\\/]/.test(trimmed);
   if (trimmed === '' || trimmed.includes('\0') || trimmed.includes('://')) return { ok: false };
-  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed)) return { ok: false };
+  if (!windowsDrivePath && /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed)) return { ok: false };
   if (!isAbsolute(trimmed) || trimmed.startsWith('//')) return { ok: false };
   const filePath = resolve(trimmed);
   const dir = dirname(filePath);
@@ -207,7 +210,13 @@ function writeAdmissionFileAtomic(filePath: string, data: string): void {
   fsyncDirectory(dirname(filePath));
 }
 
-function fsyncDirectory(dirPath: string): void {
+/**
+ * Windows cannot open a directory for fsync (EPERM), so the rename's directory
+ * entry is not flushed there. Every other platform still fsyncs the directory,
+ * and an error there still fails the write.
+ */
+function fsyncDirectory(dirPath: string, platform: NodeJS.Platform = process.platform): void {
+  if (platform === 'win32') return;
   const fd = openSync(dirPath, 'r');
   try {
     fsyncSync(fd);
