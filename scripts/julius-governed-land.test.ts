@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { createHash, createPublicKey, generateKeyPairSync, sign } from 'node:crypto';
+import { createHash, createPublicKey, generateKeyPairSync, sign, verify } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -35,6 +36,7 @@ const der = Buffer.from(createPublicKey(publicPem).export({ type: 'spki', format
 const spki = createHash('sha256').update(der).digest('hex');
 const raw = der.subarray(der.length - 32).toString('hex');
 const signWith = (text: string, key = pair.privateKey) => sign(null, Buffer.from(text, 'utf8'), key).toString('base64');
+const verifyBytes = (text: string, signatureB64: string) => verify(null, Buffer.from(text, 'utf8'), pair.publicKey, Buffer.from(signatureB64, 'base64'));
 /** H1: a throwaway founder-approval key, pinned only in the fixture copy. */
 const founder = generateKeyPairSync('ed25519');
 const founderPem = String(founder.publicKey.export({ type: 'spki', format: 'pem' }));
@@ -529,7 +531,7 @@ describe('eligibility fails closed', () => {
     expect(realLand.verifyClearanceSignature(clearance(['landing-method: squash']), '', publicPem).join('\n')).toMatch(/not 64 bytes/u);
     expect(realLand.verifyClearanceSignature(clearance(['landing-method: squash']), signWith(clearance(['landing-method: squash'])), publicPem).join('\n')).toMatch(/not the pinned reviewer key/u);
     const text = clearance(['landing-method: squash']);
-    expect(problemsOf({ clearanceText: text, signatureB64: '', publicKeyPem: publicPem })).toMatch(/not 64 bytes/u);
+    expect(problemsOf({ clearanceText: text, signatureB64: '', publicKeyPem: publicPem })).toMatch(/reviewer_signature_missing/u);
     expect(problemsOf({ clearanceText: text, signatureB64: signWith(text, other.privateKey), publicKeyPem: otherPem })).toMatch(/not the pinned reviewer key/u);
     expect(realGoverned.evaluateGovernedLanding(landingInput()).problems.join('\n')).toMatch(/not the pinned reviewer key/u);
   });
@@ -816,7 +818,7 @@ describe('H1: a reviewer signature alone does not land a governed path', () => {
   it('reviewer-only on a governed path is refused with a distinct reason, and no workflows token follows', () => {
     const refused = decide({ founderSignatures: [] });
     expect(refused.ok).toBe(false);
-    expect(refused.problems.join('\n')).toMatch(/founder approval required for \.github\/workflows\/not-in-tcb\.yml: founder approval: no founder-approval signature was supplied/u);
+    expect(refused.problems.join('\n')).toMatch(/founder approval required for \.github\/workflows\/not-in-tcb\.yml: founder approval: founder_signature_missing: no founder-approval signature was supplied/u);
     expect(refused.founderApproved).toBeUndefined();
   });
 
@@ -854,8 +856,8 @@ describe('H1: a reviewer signature alone does not land a governed path', () => {
 
   it('fails closed on an unset or different anchor, a wrong key file, and in the real tree, where no founder key is pinned', () => {
     expect(decide({ founderAnchor: '' }).problems.join('\n')).toMatch(/JULIUS_FOUNDER_APPROVAL_KEY_SHA256 is unset/u);
-    expect(decide({ founderAnchor: spki }).problems.join('\n')).toMatch(/does not match the pinned founder-approval key/u);
-    expect(decide({ founderPublicKeyPem: otherPem }).problems.join('\n')).toMatch(/not the pinned founder-approval key/u);
+    expect(decide({ founderAnchor: spki }).problems.join('\n')).toMatch(/founder_anchor_mismatch: JULIUS_FOUNDER_APPROVAL_KEY_SHA256 does not match/u);
+    expect(decide({ founderPublicKeyPem: otherPem }).problems.join('\n')).toMatch(/founder_anchor_mismatch/u);
     const real = realGoverned.evaluateGovernedLanding(landingInput({ files: [CI], clearanceText: text }));
     expect(real.ok).toBe(false);
     for (const path of ['.github/julius-landing/land-lib.mjs', 'scripts/julius-governed-bootstrap.mjs', 'package.json', `.github/julius-landing/checkpoints/${'e'.repeat(40)}.txt`]) {
@@ -911,8 +913,74 @@ describe('H1: a reviewer signature alone does not land a governed path', () => {
     // After the move the verifier pins the new key only through code constants and
     // JULIUS_FOUNDER_APPROVAL_KEY_SHA256: the old anchor refuses the new file.
     const pin = (fixtureTrust as unknown as { founderKeyPinRefusal: (pem: string, anchor: string) => string | null }).founderKeyPinRefusal;
-    expect(pin(nextPem, founderSpki)).toMatch(/not the pinned founder-approval key/u);
+    expect(pin(nextPem, founderSpki)).toMatch(/founder_anchor_mismatch/u);
     expect(pin(founderPem, founderSpki)).toBeNull();
+  });
+});
+
+describe('reviewer-tools sign prints the exact signed bytes for the founder', () => {
+  it('prints CLEARANCE_B64, CLEARANCE_SHA256 and SIGNATURE_B64 over the same bytes, with the governed lines', () => {
+    const keyPath = join(work, 'throwaway-reviewer.pem');
+    writeFileSync(keyPath, String(pair.privateKey.export({ type: 'pkcs8', format: 'pem' })));
+    const out = execFileSync(process.execPath, [
+      join(LANDING, 'reviewer-tools.mjs'), 'sign', keyPath, '7', H, T, B, 'CLEARED', DIGEST, '2',
+      '--protected-paths', WORKFLOW, '--landing-method', 'squash', '--depends', '-', '--comments-digest', 'excludes-delivery',
+    ], { encoding: 'utf8' });
+    rmSync(keyPath, { force: true });
+    const value = (name: string) => out.split('\n').find((line) => line.startsWith(`${name}=`))?.slice(name.length + 1) ?? '';
+    const bytes = Buffer.from(value('CLEARANCE_B64'), 'base64');
+    expect(value('CLEARANCE_SHA256')).toBe(createHash('sha256').update(bytes).digest('hex'));
+    const text = bytes.toString('utf8');
+    expect(realLand.parseClearance(text).problems).toEqual([]);
+    expect(text).toContain(`protected-paths: ${WORKFLOW}\nlanding-method: squash\ndepends: -\ncomments-digest: excludes-delivery\n`);
+    expect(createPublicKey(publicPem) && verifyBytes(text, value('SIGNATURE_B64'))).toBe(true);
+  });
+});
+
+describe('H1 as specified by REVIEW: both signatures over identical bytes, distinct refusal codes', () => {
+  const CI = '.github/workflows/not-in-tcb.yml';
+  const text = clearance(withRule([`protected-paths: ${CI}`, 'landing-method: squash']));
+  const decide = (over: Record<string, unknown> = {}) => fixture.evaluateGovernedLanding(landingInput({ files: [CI], clearanceText: text, ...over }));
+  const wrapped = (body: string, reviewer: string, founderSig?: string) => `-----BEGIN JULIUS CLEARANCE-----\n${body}-----END JULIUS CLEARANCE-----\n-----BEGIN JULIUS CLEARANCE SIGNATURE-----\n${reviewer}${founderSig === undefined ? '' : `\nfounder-signature-b64: ${founderSig}`}\n-----END JULIUS CLEARANCE SIGNATURE-----`;
+
+  it('refused: reviewer-only (founder_signature_missing)', () => {
+    expect(decide({ founderSignatures: [] }).problems.join('\n')).toMatch(/founder_signature_missing/u);
+  });
+
+  it('refused: founder-only (reviewer_signature_missing)', () => {
+    expect(decide({ signatureB64: '' }).problems.join('\n')).toMatch(/reviewer_signature_missing/u);
+    const chosen = fixture.chooseClearanceDelivery([{ body: wrapped(text, '', founderSign(text)), id: 1 }], publicPem, { head: H, tree: T, base: B });
+    expect(chosen.problem).toMatch(/^reviewer_signature_missing/u);
+  });
+
+  it('refused: both signatures over different bytes (founder_signature_invalid)', () => {
+    const other = text.replace(`nonce: ${NONCE}`, `nonce: ${'cd'.repeat(16)}`);
+    expect(decide({ founderSignatures: [founderSign(other)] }).problems.join('\n')).toMatch(/founder_signature_invalid/u);
+  });
+
+  it('refused: a valid founder signature under an unpinned key (founder_key_unpinned)', () => {
+    expect(decide({ founderPublicKeyPem: '' }).problems.join('\n')).toMatch(/founder_key_unpinned/u);
+    expect(decide({ founderPublicKeyPem: 'not a key\n' }).problems.join('\n')).toMatch(/founder_key_unpinned/u);
+    expect(decide({ founderPublicKeyPem: publicPem, founderSignatures: [signWith(text)], founderAnchor: spki }).problems.join('\n')).toMatch(/founder_key_unpinned: the founder-approval key is the reviewer key/u);
+  });
+
+  it('refused: anchor mismatch (founder_anchor_mismatch)', () => {
+    expect(decide({ founderAnchor: '0'.repeat(64) }).problems.join('\n')).toMatch(/founder_anchor_mismatch/u);
+    expect(decide({ founderAnchor: founderSpki.slice(0, 8) }).problems.join('\n')).toMatch(/founder_anchor_mismatch/u);
+  });
+
+  it('accepted: both signatures over the same bytes, delivered as the founder-signature-b64 field', () => {
+    const chosen = fixture.chooseClearanceDelivery([{ body: wrapped(text, signWith(text), founderSign(text)), id: 1 }], publicPem, { head: H, tree: T, base: B }) as {
+      delivery?: { signatureB64: string; founderSignatures?: string[] };
+    };
+    expect(chosen.delivery?.founderSignatures).toEqual([founderSign(text)]);
+    const both = decide({ signatureB64: chosen.delivery?.signatureB64, founderSignatures: chosen.delivery?.founderSignatures });
+    expect(both.ok, both.problems.join('\n')).toBe(true);
+  });
+
+  it('the ordinary path stays reviewer-only', () => {
+    const ordinary = fixture.evaluateGovernedLanding(landingInput({ founderSignatures: [], founderPublicKeyPem: '' }));
+    expect(ordinary.ok, ordinary.problems.join('\n')).toBe(true);
   });
 });
 
@@ -949,7 +1017,7 @@ describe('the main-provenance verifier accepts this landing and refuses a direct
     if (acceptedShape.state !== 'decided') return;
     expect(acceptedShape.result.verdict).toBe('unprovenanced');
     // H1: with the App committer verified, the real tree still refuses: no founder-approval key is pinned.
-    expect(acceptedShape.result.reason).toMatch(/founder approval: no founder-approval key is pinned/u);
+    expect(acceptedShape.result.reason).toMatch(/founder approval: founder_signature_missing/u);
     expect(acceptedShape.result.reason).not.toMatch(/coding worker/u);
     expect(acceptedShape.result.reason).not.toMatch(/founder-governed paths/u);
 

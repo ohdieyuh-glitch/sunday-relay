@@ -42,10 +42,16 @@ export const GOVERNED_SELF_CHECK = 'Land a governed pull request';
 const BEGIN = '-----BEGIN JULIUS CLEARANCE-----\n';
 const BETWEEN = '-----END JULIUS CLEARANCE-----\n-----BEGIN JULIUS CLEARANCE SIGNATURE-----\n';
 const SIGNATURE_END = '\n-----END JULIUS CLEARANCE SIGNATURE-----';
-const FOUNDER_BEGIN = '\n-----BEGIN JULIUS FOUNDER APPROVAL SIGNATURE-----\n';
-const FOUNDER_END = '\n-----END JULIUS FOUNDER APPROVAL SIGNATURE-----';
+const FOUNDER_FIELD = 'founder-signature-b64: ';
 
-/** Clearance blocks in one body, with the [start, end) offsets each block occupies. */
+/**
+ * Clearance blocks in one body, with the [start, end) offsets each block occupies.
+ * The signature block holds the reviewer signature on its first line and, for
+ * a governed change (H1), a second line `founder-signature-b64: <base64>`: the
+ * founder-approval signature over the same clearance bytes, outside the
+ * signed text. An empty first line with a founder field is kept, so the
+ * refusal can say reviewer_signature_missing.
+ */
 function deliverySpans(body) {
   const text = String(body ?? '');
   const spans = [];
@@ -59,20 +65,12 @@ function deliverySpans(body) {
     const signatureStart = mid + BETWEEN.length;
     const close = text.indexOf(SIGNATURE_END, signatureStart);
     if (close < 0) break;
-    const signatureB64 = text.slice(signatureStart, close);
-    let end = close + SIGNATURE_END.length;
-    // H1: an optional founder-approval signature over the same bytes, immediately after the reviewer's.
-    let founderSignatureB64;
-    if (text.startsWith(FOUNDER_BEGIN, end)) {
-      const founderStart = end + FOUNDER_BEGIN.length;
-      const founderClose = text.indexOf(FOUNDER_END, founderStart);
-      const candidate = founderClose < 0 ? '' : text.slice(founderStart, founderClose);
-      if (founderClose >= 0 && candidate !== '' && !candidate.includes('\n')) {
-        founderSignatureB64 = candidate;
-        end = founderClose + FOUNDER_END.length;
-      }
-    }
-    if (!signatureB64.includes('\n') && signatureB64 !== '') spans.push({ clearanceText, signatureB64, founderSignatureB64, start, end });
+    const lines = text.slice(signatureStart, close).split('\n');
+    const end = close + SIGNATURE_END.length;
+    const signatureB64 = lines[0];
+    const founderSignatureB64 = lines.length === 2 && lines[1].startsWith(FOUNDER_FIELD) ? lines[1].slice(FOUNDER_FIELD.length) : undefined;
+    const wellFormed = lines.length === 1 ? signatureB64 !== '' : (founderSignatureB64 !== undefined && founderSignatureB64 !== '');
+    if (wellFormed) spans.push({ clearanceText, signatureB64, founderSignatureB64, start, end });
     cursor = end;
   }
   return spans;
@@ -158,7 +156,12 @@ export function chooseClearanceDelivery(comments, publicKeyPem, expected = {}) {
       });
     }
   }
-  if (verified.length === 0) return { problem: 'no signed clearance is on the pull request' };
+  if (verified.length === 0) {
+    // A founder signature with no reviewer signature is its own refusal: the reviewer signature is always required.
+    const founderOnly = rows.some((comment) => extractClearanceDeliveries([comment.body]).some((delivery) => delivery.signatureB64 === '' && typeof delivery.founderSignatureB64 === 'string'));
+    if (founderOnly) return { problem: 'reviewer_signature_missing: a clearance delivery carries a founder-approval signature and no reviewer signature' };
+    return { problem: 'no signed clearance is on the pull request' };
+  }
   verified.sort((left, right) => {
     const issued = String(left.fields.issued).localeCompare(String(right.fields.issued));
     if (issued !== 0) return issued;
@@ -542,6 +545,7 @@ const sha256Hex = (text) => createHash('sha256').update(String(text ?? ''), 'utf
 export function evaluateGovernedLanding(input) {
   const parsed = parseClearance(input?.clearanceText);
   if (parsed.problems.length > 0) return { ok: false, problems: parsed.problems.map((problem) => `clearance format: ${problem}`) };
+  if (typeof input?.signatureB64 !== 'string' || input.signatureB64.trim() === '') return { ok: false, problems: ['reviewer_signature_missing: the clearance carries no reviewer signature'] };
   const signatureProblems = verifyClearanceSignature(input.clearanceText, input?.signatureB64, input?.publicKeyPem);
   if (signatureProblems.length > 0) return { ok: false, problems: signatureProblems };
   const fields = parsed.fields;

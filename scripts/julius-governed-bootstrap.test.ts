@@ -216,23 +216,34 @@ describe('the bootstrap decision fails closed', () => {
     expect(problems({ existingCheckpointNames: null })).toMatch(/checkpoint directory at the target could not be read/u);
   });
 
+  it('H1: the bootstrap requires both signatures over the same attestation bytes', () => {
+    expect(problems({ attestationSignatureB64: '' })).toMatch(/reviewer_signature_missing/u);
+    expect(problems({ attestationFounderSignatureB64: '' })).toMatch(/founder_signature_missing/u);
+    expect(problems({ founderPublicKeyPem: '' })).toMatch(/founder_key_unpinned/u);
+    expect(problems({ founderAnchor: '0'.repeat(64) })).toMatch(/founder_anchor_mismatch/u);
+    expect(problems({ attestationFounderSignatureB64: attest({ tree: OTHER }).founderSignature })).toMatch(/founder_signature_invalid/u);
+    expect(boot.evaluateGovernedBootstrap(good()).ok).toBe(true);
+  });
+
   it('H1: the attestation needs the founder-approval signature as well as the reviewer signature', () => {
-    expect(problems({ attestationFounderSignatureB64: '' })).toMatch(/founder approval: no founder-approval signature was supplied/u);
-    expect(problems({ attestationFounderSignatureB64: signed.signature })).toMatch(/founder approval: the founder-approval signature does not verify/u);
+    expect(problems({ attestationFounderSignatureB64: '' })).toMatch(/founder approval: founder_signature_missing: no founder-approval signature was supplied/u);
+    expect(problems({ attestationFounderSignatureB64: signed.signature })).toMatch(/founder approval: founder_signature_invalid: the founder-approval signature does not verify/u);
     const other = attest({ tree: OTHER });
     expect(problems({ attestationFounderSignatureB64: other.founderSignature })).toMatch(/founder-approval signature does not verify over these exact bytes/u);
     expect(problems({ founderAnchor: '' })).toMatch(/JULIUS_FOUNDER_APPROVAL_KEY_SHA256 is unset/u);
-    expect(problems({ founderPublicKeyPem: otherPem })).toMatch(/not the pinned founder-approval key/u);
+    expect(problems({ founderPublicKeyPem: otherPem })).toMatch(/founder_anchor_mismatch/u);
   });
 
-  it('H1: the real tree pins no founder-approval key, so the real bootstrap refuses', async () => {
+  it('H1: the real tree ships without the founder-approval key file, so every founder check is founder_key_unpinned', async () => {
     const real = (await import(pathToFileURL(join(ROOT, 'scripts/julius-main-provenance-trust.mjs')).href)) as {
-      PINNED_FOUNDER_APPROVAL_SPKI_SHA256: string | null;
+      FOUNDER_APPROVAL_KEY_PATH: string;
       founderApprovalProblem: (input: Record<string, unknown>) => string | null;
     };
-    expect(real.PINNED_FOUNDER_APPROVAL_SPKI_SHA256).toBeNull();
-    expect(real.founderApprovalProblem({ text: signed.text, signatureB64: signed.founderSignature, pem: founderPem, anchor: founderSpki }))
-      .toMatch(/no founder-approval key is pinned/u);
+    expect(existsSync(join(ROOT, real.FOUNDER_APPROVAL_KEY_PATH))).toBe(false);
+    expect(real.founderApprovalProblem({ text: signed.text, signatureB64: signed.founderSignature, pem: '', anchor: founderSpki }))
+      .toMatch(/founder approval: founder_key_unpinned/u);
+    // A valid founder signature under a key that is not pinned (no anchor for it) is refused.
+    expect(problems({ founderAnchor: spki })).toMatch(/founder_anchor_mismatch/u);
   });
 
   it('refuses an attestation whose commit list is not the first-parent chain from the prior', () => {

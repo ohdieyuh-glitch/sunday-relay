@@ -101,8 +101,9 @@ export function clearanceText(optional: string[], digest: string) {
 }
 
 export function delivery(text: string, signature = signWith(text), founderSignature?: string) {
-  const founderBlock = founderSignature === undefined ? '' : `\n-----BEGIN JULIUS FOUNDER APPROVAL SIGNATURE-----\n${founderSignature}\n-----END JULIUS FOUNDER APPROVAL SIGNATURE-----`;
-  return `-----BEGIN JULIUS CLEARANCE-----\n${text}-----END JULIUS CLEARANCE-----\n-----BEGIN JULIUS CLEARANCE SIGNATURE-----\n${signature}\n-----END JULIUS CLEARANCE SIGNATURE-----${founderBlock}`;
+  // H1 delivery: the founder signature is a separate field in the same block, outside the signed text.
+  const founderField = founderSignature === undefined ? '' : `\nfounder-signature-b64: ${founderSignature}`;
+  return `-----BEGIN JULIUS CLEARANCE-----\n${text}-----END JULIUS CLEARANCE-----\n-----BEGIN JULIUS CLEARANCE SIGNATURE-----\n${signature}${founderField}\n-----END JULIUS CLEARANCE SIGNATURE-----`;
 }
 
 type Route = { status: number; body?: unknown };
@@ -334,7 +335,7 @@ describe('H1: the governed lander needs the founder-approval signature for a gov
     const text = clearanceText(optional, seenDigest([botComment]));
     const result = await run({ files: [WORKFLOW], issueComments: [botComment, reviewerComment(delivery(text))] });
     expect(result.exitCode).toBe(1);
-    expect(result.text).toMatch(/founder approval required for \.github\/workflows\/ci\.yml: founder approval: no founder-approval signature was supplied/u);
+    expect(result.text).toMatch(/founder approval required for \.github\/workflows\/ci\.yml: founder approval: founder_signature_missing: no founder-approval signature was supplied/u);
     expect(minted(result.calls)).toEqual([]);
     expect(result.calls.some((call) => call.method === 'PATCH')).toBe(false);
   });

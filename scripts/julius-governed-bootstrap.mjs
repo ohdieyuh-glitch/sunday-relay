@@ -32,7 +32,7 @@ import { branchRulesProblems, governedCommitBody, readGovernedEnvironment } from
 import {
   CHECKPOINT_ATTESTATION_DIR,
   FOUNDER_APPROVAL_KEY_PATH,
-  PINNED_FOUNDER_APPROVAL_SPKI_SHA256,
+  FOUNDER_REFUSAL,
   PINNED_REVIEWER_SPKI_SHA256,
   TRUSTED_CHECKPOINT_SHA,
   TRUSTED_COMPUTING_BASE,
@@ -41,6 +41,7 @@ import {
   isCheckpointInstallerDiff,
   landingIdentityProblem,
   parseCheckpointAttestation,
+  reviewerKeyMaterial,
   reviewerKeyPinRefusal,
 } from './julius-main-provenance-trust.mjs';
 
@@ -76,10 +77,10 @@ const FOUNDER_MINT_JS = [
  * token lives only in a subshell variable and is revoked on exit. The block
  * stops at the first failed check (set -euo pipefail).
  */
-export function founderCommandBlock({ mainSha, target, targetTree, attestation, signature, founderSignature } = {}) {
+export function founderCommandBlock({ mainSha, target, targetTree, attestation, signature, founderSignature, founderKeySpkiSha256 } = {}) {
   const value = (text, placeholder) => (typeof text === 'string' && text !== '' ? text : placeholder);
-  const founderPin = typeof PINNED_FOUNDER_APPROVAL_SPKI_SHA256 === 'string' && PINNED_FOUNDER_APPROVAL_SPKI_SHA256 !== ''
-    ? PINNED_FOUNDER_APPROVAL_SPKI_SHA256
+  const founderPin = typeof founderKeySpkiSha256 === 'string' && /^[0-9a-f]{64}$/u.test(founderKeySpkiSha256)
+    ? founderKeySpkiSha256
     : 'NOT-PINNED-the-founder-approval-key-must-be-installed-in-the-target-first';
   const q = (text) => `'${String(text).replace(/'/gu, "'\\''")}'`;
   return [
@@ -383,6 +384,7 @@ export async function runBootstrap({ argv = [], env = {}, request, readFile, now
     attestation: attestationPath,
     signature: signaturePath,
     founderSignature: founderSignaturePath,
+    founderKeySpkiSha256: reviewerKeyMaterial(founderPublicKeyPem).spkiSha256,
   });
   if (token === '' || typeof request !== 'function' || problems.length > 0) {
     if (typeof request !== 'function' && token !== '') problems.push('the GitHub client is unavailable');

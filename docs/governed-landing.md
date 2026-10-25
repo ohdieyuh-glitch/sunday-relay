@@ -105,20 +105,33 @@ GitHub is not what makes the signature true. The ruleset is what stops every oth
 
 ## Founder approval (the second safeguard)
 
-A reviewer signature alone does not land a founder-governed path. Any hard-forbidden path, any trusted file, any `.github/workflows/**` path, any checkpoint attestation file, and anything a clearance lists in `protected-paths` also needs an ed25519 signature over the exact same clearance bytes from the founder-approval key. Ordinary paths land on the reviewer signature alone, as before.
+A reviewer signature alone does not land a founder-governed path. Any hard-forbidden path, any `protected-paths` entry, any trusted file, any `.github/workflows/**` change, and any checkpoint attestation, the bootstrap's included, needs two signatures over the identical bytes: the reviewer's and the founder-approval key's. Each verifies against its own pin, and each pin must equal its anchor. Ordinary paths are unchanged and land on the reviewer signature alone.
 
-- The key is `.github/julius-landing/founder-approval-ed25519.pub` (in the trusted computing base), the constants `PINNED_FOUNDER_APPROVAL_SPKI_SHA256` and `PINNED_FOUNDER_APPROVAL_RAW_KEY` in `scripts/julius-main-provenance-trust.mjs`, and the repository variable `JULIUS_FOUNDER_APPROVAL_KEY_SHA256`. All three must agree, and the key must not be the reviewer key.
-- No founder-approval key exists yet. The file is a placeholder and the constants are `null`, so every check that needs the founder refuses with `founder approval: no founder-approval key is pinned`. The founder generates the key on a machine where no Claude, Cursor or Grok session runs, and the public key and constants are committed into the bootstrap target before it is attested.
-- Delivery: the founder signature block follows the reviewer block in the same comment, as `-----BEGIN JULIUS FOUNDER APPROVAL SIGNATURE-----` / one base64 line / `-----END JULIUS FOUNDER APPROVAL SIGNATURE-----`. The squash landing carries it as an optional last line of the landing block, `founder-signature-b64: <base64>`, so the verifier and accept-main can check it again.
-- A checkpoint attestation needs `<checkpoint>.founder.sig` beside `<checkpoint>.sig`. The shape rule, `requireTrustedVerifier`, the governed lander and the bootstrap all verify it.
-- `workflows: write` is minted only after both signatures verified. The hourly schedule takes the same path and gets no exception.
-- Rotation: a change to either key file is a trusted-file change. Its clearance must verify under both keys pinned on main (the old keys). Its attestation is checked against the keys in the post-landing tree, whose bytes the attestation hashes, because that is what the verifier reads after the move. The verifier then refuses until `JULIUS_REVIEWER_KEY_SHA256` or `JULIUS_FOUNDER_APPROVAL_KEY_SHA256` is changed to the new key by a party other than the signer.
+- Algorithm: pure Ed25519 over the exact UTF-8 bytes of the `JULIUS-CLEARANCE-V1` or `JULIUS-CHECKPOINT-V1` text, LF line ends, no transformation. These are the bytes the reviewer signs.
+- Pin: the SPKI PEM at `.github/julius-landing/founder-approval-ed25519.pub`, in the trusted computing base, the accept-main heredoc and `expected-tcb.txt`. Anchor: the repository variable `JULIUS_FOUNDER_APPROVAL_KEY_SHA256`, the lowercase-hex sha256 of that key's SPKI DER. The founder key must not be the reviewer key.
+- This tree ships with the pin file absent, so every governed change fails closed. The founder generates the key on a machine where no Claude, Cursor or Grok session runs. The first pin goes into the bootstrap target: its attestation hashes the key file, and the founder signs that attestation. Later changes to it are governed landings that need both signatures.
+- Delivery: a separate line `founder-signature-b64: <base64>` in the same signature block as the reviewer signature, outside the signed text. It is standard padded base64 of the 64 raw bytes on one line:
+
+```
+-----BEGIN JULIUS CLEARANCE-----
+<the clearance text>-----END JULIUS CLEARANCE-----
+-----BEGIN JULIUS CLEARANCE SIGNATURE-----
+<reviewer signature base64>
+founder-signature-b64: <founder signature base64>
+-----END JULIUS CLEARANCE SIGNATURE-----
+```
+
+  The squash landing carries the same field as the last line of its landing block. A checkpoint attestation carries it as `<checkpoint>.founder.sig` beside `<checkpoint>.sig`.
+- `reviewer-tools.mjs sign` prints `CLEARANCE_B64` and `CLEARANCE_SHA256`, the base64 and the sha256 of the exact signed bytes, so the founder can decode, check and sign them off-device. It also takes `--protected-paths`, `--landing-method`, `--binds-draft`, `--depends` and `--comments-digest` for a governed clearance.
+- Refusal codes: `founder_signature_missing`, `founder_key_unpinned`, `founder_anchor_mismatch`, `founder_signature_invalid`, `reviewer_signature_missing`.
+- `workflows: write` is minted only after both signatures verified. The hourly schedule follows the same rule.
+- Rotation of either key: both current signatures on the clearance plus a change of that key's anchor variable. The attestation of a rotation is checked against the keys in the post-landing tree, whose bytes it hashes, because that is what the verifier reads after the move.
 
 ## Landing sequence
 
 None of #417, #451, #452, #453 or this repair is merged through GitHub. Under ruleset 25792058 (bypass: App 5457712 only) no GitHub merge of them is possible, and the earlier "fast-forward, do not squash" and "squash-merge" instructions in those pull requests are superseded by this sequence.
 
-1. Build target R: it descends from current `main` (`f539cab2`), and its tree is this repaired tree plus the founder-approval public key and its pinned constants. R carries no checkpoint attestation file.
+1. Build target R: it descends from current `main` (`f539cab2`), and its tree is this repaired tree plus the founder-approval public key at `.github/julius-landing/founder-approval-ed25519.pub`. R carries no checkpoint attestation file.
 2. Run Relay CI and the five real-infra checks on R.
 3. The Independent Reviewer signs a `JULIUS-CHECKPOINT-V1` over R: `prior` 2528ac5c, `commits` exactly the first-parent chain 2528ac5c..R (the bootstrap checks this list against GitHub), the trusted-file hashes of R, and a window of at most 184 days. The founder signs the same bytes with the founder-approval key.
 4. A party other than the signers sets `JULIUS_REVIEWER_KEY_SHA256` and `JULIUS_FOUNDER_APPROVAL_KEY_SHA256` to the pinned values. `governed-landing` (deployments from `main` only), `JULIUS_GOVERNED_LANDER_APP_ID=5457712` and `JULIUS_GOVERNED_LANDER_BOT_ID=347502603` already exist.

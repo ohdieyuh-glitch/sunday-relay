@@ -9,7 +9,7 @@
  */
 import { execFileSync } from 'node:child_process';
 import { createHash, generateKeyPairSync, sign } from 'node:crypto';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -116,7 +116,8 @@ async function buildFixture() {
     .replace('export const PINNED_FOUNDER_APPROVAL_RAW_KEY = null;', `export const PINNED_FOUNDER_APPROVAL_RAW_KEY = '${founderRaw}';`);
   for (const rel of TRUSTED_COMPUTING_BASE) {
     mkdirSync(join(repo, dirname(rel)), { recursive: true });
-    cpSync(join(ROOT, rel), join(repo, rel));
+    // The founder-approval key is absent from this tree (H1); the fixture writes its own below.
+    if (existsSync(join(ROOT, rel))) cpSync(join(ROOT, rel), join(repo, rel));
   }
   writeFileSync(join(repo, 'scripts/julius-main-provenance-trust.mjs'), rewritten);
   writeFileSync(join(repo, '.github/julius-landing/reviewer-ed25519.pub'), publicPem);
@@ -243,7 +244,7 @@ describe('signed checkpoint liveness', () => {
       { root: repo, now: NOW, identities: { [reviewerOnlySha]: { committerId: 347502603, verificationVerified: true, verificationReason: 'valid' } } },
     );
     expect(reviewerOnly.ok).toBe(false);
-    expect(reviewerOnly.reason).toMatch(/founder approval: no founder-approval signature was supplied/u);
+    expect(reviewerOnly.reason).toMatch(/founder approval: founder_signature_missing: no founder-approval signature was supplied/u);
     git(repo, ['reset', '-q', '--soft', 'HEAD~1']);
     const message = buildLandingCommitMessage({ clearanceText: clearance, signatureB64: signText(clearance), founderSignatureB64: founderSign(clearance) });
     writeFileSync(messagePath, message);
@@ -301,7 +302,7 @@ describe('signed checkpoint liveness', () => {
       // H1: a reviewer signature and the App committer alone do not make a workflow change provenant.
       const reviewerOnlyTip = provenance.evaluateMainProvenance({ ...fields, governedLanderBotId: '347502603', mainCommitMessage: buildLandingCommitMessage({ clearanceText: clearance, signatureB64: signText(clearance) }) });
       expect(reviewerOnlyTip.verdict).toBe('unprovenanced');
-      expect(reviewerOnlyTip.reason).toMatch(/founder approval: no founder-approval signature was supplied/u);
+      expect(reviewerOnlyTip.reason).toMatch(/founder approval: founder_signature_missing: no founder-approval signature was supplied/u);
       const noFounderKey = provenance.evaluateMainProvenance({ ...fields, governedLanderBotId: '347502603', founderKeyPem: undefined });
       expect(noFounderKey.reason).toMatch(/founder approval/u);
       const unset = provenance.evaluateMainProvenance(fields);

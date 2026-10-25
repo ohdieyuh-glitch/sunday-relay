@@ -89,12 +89,17 @@ export declare function checkpointAttestationProblems(input?: {
   readonly founderAnchor?: unknown;
   readonly founderPinned?: boolean;
 }): string[];
-/** H1: the founder-approval key. The constants are null while no key is pinned, and every founder check then refuses. */
+/** H1: the founder-approval key is the SPKI PEM at FOUNDER_APPROVAL_KEY_PATH, anchored by JULIUS_FOUNDER_APPROVAL_KEY_SHA256. Absent, every founder check refuses. */
 export declare const FOUNDER_APPROVAL_KEY_PATH: '.github/julius-landing/founder-approval-ed25519.pub';
-export declare const PINNED_FOUNDER_APPROVAL_SPKI_SHA256: string | null;
-export declare const PINNED_FOUNDER_APPROVAL_RAW_KEY: string | null;
 export declare const FOUNDER_ANCHOR_VARIABLE: 'JULIUS_FOUNDER_APPROVAL_KEY_SHA256';
 export declare const FOUNDER_KEY_NOT_PINNED: string;
+export declare const FOUNDER_REFUSAL: {
+  readonly signatureMissing: 'founder_signature_missing';
+  readonly keyUnpinned: 'founder_key_unpinned';
+  readonly anchorMismatch: 'founder_anchor_mismatch';
+  readonly signatureInvalid: 'founder_signature_invalid';
+  readonly reviewerSignatureMissing: 'reviewer_signature_missing';
+};
 export declare function founderKeyPinRefusal(pem: unknown, externalAnchor: unknown): string | null;
 export declare function founderApprovalProblem(input?: {
   readonly text?: unknown;

@@ -236,61 +236,66 @@ export function reviewerKeyPinRefusal(pem, externalAnchor) {
 
 /**
  * THE SECOND SAFEGUARD (H1). A reviewer signature alone does not land a
- * founder-governed path, a trusted file, a workflow, or a checkpoint
- * attestation. Those also need an ed25519 signature over the exact same bytes
- * from a founder-approval key that is held off the development machine.
+ * founder-governed path, a protected-paths entry, a trusted file, a workflow,
+ * or a checkpoint attestation (the bootstrap included). Those also need a pure
+ * Ed25519 signature over the exact same UTF-8 bytes from the founder-approval
+ * key, which is held off the development machine.
  *
- * The key is pinned three ways, all of which must agree: the public key file
- * FOUNDER_APPROVAL_KEY_PATH (in the trusted computing base), the constants
- * below, and the repository variable JULIUS_FOUNDER_APPROVAL_KEY_SHA256. It
- * must not be the reviewer key. No founder-approval key exists yet, so the
- * constants are null and every check that needs the founder refuses with
- * "no founder-approval key is pinned". Installing the key is a tree change
- * signed into the checkpoint attestation the bootstrap installs.
+ * The pin is the SPKI PEM at FOUNDER_APPROVAL_KEY_PATH, which is in the
+ * trusted computing base, so its bytes are signed into every attestation. The
+ * anchor is the repository variable JULIUS_FOUNDER_APPROVAL_KEY_SHA256, the
+ * lowercase-hex sha256 of that key's SPKI DER. The pin must equal the anchor,
+ * and it must not be the reviewer key. This tree ships with the pin file
+ * absent: every check that needs the founder refuses with
+ * founder_key_unpinned. The first pin arrives in the bootstrap target, whose
+ * attestation hashes the key file and which the founder signs.
  */
 export const FOUNDER_APPROVAL_KEY_PATH = '.github/julius-landing/founder-approval-ed25519.pub';
-/** Full SPKI SHA-256 of the founder-approval key, or null while no key is pinned. */
-export const PINNED_FOUNDER_APPROVAL_SPKI_SHA256 = null;
-/** The 32 raw ed25519 founder-approval key bytes, hex, or null while no key is pinned. */
-export const PINNED_FOUNDER_APPROVAL_RAW_KEY = null;
 export const FOUNDER_ANCHOR_VARIABLE = 'JULIUS_FOUNDER_APPROVAL_KEY_SHA256';
-export const FOUNDER_KEY_NOT_PINNED = 'founder approval: no founder-approval key is pinned, so a governed path, trusted file, workflow, or attestation cannot land';
+/** The distinct refusal codes. Each refusal text starts with "founder approval: <code>:" or "<code>:". */
+export const FOUNDER_REFUSAL = Object.freeze({
+  signatureMissing: 'founder_signature_missing',
+  keyUnpinned: 'founder_key_unpinned',
+  anchorMismatch: 'founder_anchor_mismatch',
+  signatureInvalid: 'founder_signature_invalid',
+  reviewerSignatureMissing: 'reviewer_signature_missing',
+});
+export const FOUNDER_KEY_NOT_PINNED = `founder approval: ${FOUNDER_REFUSAL.keyUnpinned}: no founder-approval key is pinned at ${FOUNDER_APPROVAL_KEY_PATH}, so a governed path, trusted file, workflow, or attestation cannot land`;
 
-/** Null when the founder-approval key file is the pinned key and its external anchor matches. Otherwise the refusal. */
+/** Null when the founder-approval key file is an ed25519 key, independent of the reviewer key, and equal to its anchor. */
 export function founderKeyPinRefusal(pem, externalAnchor) {
-  const pinnedSpki = PINNED_FOUNDER_APPROVAL_SPKI_SHA256;
-  const pinnedRaw = PINNED_FOUNDER_APPROVAL_RAW_KEY;
-  if (typeof pinnedSpki !== 'string' || pinnedSpki.length !== 64 || typeof pinnedRaw !== 'string' || pinnedRaw.length !== 64) return FOUNDER_KEY_NOT_PINNED;
-  if (exactFingerprintMatch(pinnedSpki, PINNED_REVIEWER_SPKI_SHA256)) return 'founder approval: the founder-approval key is the reviewer key; it must be an independent key';
+  if (typeof pem !== 'string' || pem.trim() === '') return FOUNDER_KEY_NOT_PINNED;
   const material = reviewerKeyMaterial(pem);
-  if (material.problem) return 'founder approval: the founder-approval key could not be read';
-  if (!exactFingerprintMatch(material.spkiSha256, pinnedSpki) || material.rawHex !== pinnedRaw) {
-    return `founder approval: the founder-approval key is not the pinned founder-approval key ${pinnedSpki}`;
+  if (material.problem) return `founder approval: ${FOUNDER_REFUSAL.keyUnpinned}: ${FOUNDER_APPROVAL_KEY_PATH} is not an ed25519 SPKI public key`;
+  if (exactFingerprintMatch(material.spkiSha256, PINNED_REVIEWER_SPKI_SHA256)) {
+    return `founder approval: ${FOUNDER_REFUSAL.keyUnpinned}: the founder-approval key is the reviewer key; it must be an independent key`;
   }
-  if (!exactFingerprintMatch(externalAnchor, pinnedSpki)) {
+  if (!exactFingerprintMatch(externalAnchor, material.spkiSha256)) {
     return externalAnchor === undefined || externalAnchor === null || externalAnchor === ''
-      ? `founder approval: ${FOUNDER_ANCHOR_VARIABLE} is unset`
-      : `founder approval: ${FOUNDER_ANCHOR_VARIABLE} does not match the pinned founder-approval key ${pinnedSpki}`;
+      ? `founder approval: ${FOUNDER_REFUSAL.anchorMismatch}: ${FOUNDER_ANCHOR_VARIABLE} is unset`
+      : `founder approval: ${FOUNDER_REFUSAL.anchorMismatch}: ${FOUNDER_ANCHOR_VARIABLE} does not match the sha256 of the pinned founder-approval key`;
   }
   return null;
 }
 
 /**
  * Null when `signatureB64` is the pinned founder-approval key's signature over
- * exactly `text`. `pem` is the founder-approval key file; it is pin-checked.
- * Pass `pinned: false` only to check a signature against a key whose bytes are
- * already bound by a signed attestation (a rotation's post-landing key).
+ * exactly `text`. `pem` is the founder-approval key file, checked against its
+ * anchor. Pass `pinned: false` only to check a signature against a key whose
+ * bytes are already bound by a signed attestation (a rotation's post-landing key).
  */
 export function founderApprovalProblem({ text, signatureB64, pem, anchor, pinned = true } = {}) {
+  if (typeof signatureB64 !== 'string' || signatureB64 === '') {
+    return `founder approval: ${FOUNDER_REFUSAL.signatureMissing}: no founder-approval signature was supplied`;
+  }
   if (pinned) {
     const refusal = founderKeyPinRefusal(pem, anchor);
     if (refusal) return refusal;
   }
-  if (typeof signatureB64 !== 'string' || signatureB64 === '') return 'founder approval: no founder-approval signature was supplied';
   const material = reviewerKeyMaterial(pem);
-  if (!material.key) return 'founder approval: the founder-approval key could not be read';
+  if (!material.key) return FOUNDER_KEY_NOT_PINNED;
   if (typeof text !== 'string' || !signatureVerifies(text, signatureB64, material)) {
-    return 'founder approval: the founder-approval signature does not verify over these exact bytes';
+    return `founder approval: ${FOUNDER_REFUSAL.signatureInvalid}: the founder-approval signature does not verify over these exact bytes`;
   }
   return null;
 }
@@ -480,8 +485,9 @@ export function attestationCoversCommits(parsed, commits, prior) {
  * was not verified.
  */
 export function checkpointAttestationProblems({ text, signatureB64, pem, treeHashes, now, founderSignatureB64, founderPem, founderAnchor, founderPinned = true } = {}) {
-  if (typeof text !== 'string' || text === '' || typeof signatureB64 !== 'string' || signatureB64 === '') {
-    return ['the checkpoint attestation was not verified'];
+  if (typeof text !== 'string' || text === '') return ['the checkpoint attestation was not verified'];
+  if (typeof signatureB64 !== 'string' || signatureB64 === '') {
+    return ['the checkpoint attestation was not verified', `${FOUNDER_REFUSAL.reviewerSignatureMissing}: the attestation has no reviewer signature`];
   }
   const parsed = parseCheckpointAttestation(text);
   if (parsed.problems.length > 0) return ['the checkpoint attestation was not verified'];
@@ -762,8 +768,8 @@ export function attestationShapeProblem({ names, text } = {}) {
   const allowed = new Set(CHECKPOINT_DIRECTORY_SUFFIXES.map((suffix) => `${stem}${suffix}`));
   const stray = list.filter((name) => !allowed.has(name)).sort();
   if (stray.length > 0) return `the checkpoint directory holds files that are not this attestation (${stray.join(', ')}). ${INSTALLER_RECOVERY}`;
-  if (!list.includes(`${stem}.sig`)) return `the checkpoint attestation is unsigned. ${INSTALLER_RECOVERY}`;
-  if (!list.includes(`${stem}.founder.sig`)) return `the checkpoint attestation has no founder-approval signature (${stem}.founder.sig). ${INSTALLER_RECOVERY}`;
+  if (!list.includes(`${stem}.sig`)) return `${FOUNDER_REFUSAL.reviewerSignatureMissing}: the checkpoint attestation is unsigned. ${INSTALLER_RECOVERY}`;
+  if (!list.includes(`${stem}.founder.sig`)) return `${FOUNDER_REFUSAL.signatureMissing}: the checkpoint attestation has no founder-approval signature (${stem}.founder.sig). ${INSTALLER_RECOVERY}`;
   if (typeof text !== 'string' || text === '') return `the checkpoint attestation is unsigned. ${INSTALLER_RECOVERY}`;
   const parsed = parseCheckpointAttestation(text);
   if (parsed.problems.length > 0) return parsed.problems[0];
