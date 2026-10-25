@@ -503,12 +503,12 @@ FString UWonderlandJuliusStreamSubsystem::PreferLocalBridgeForMission(const FStr
 	const bool bLoopback = !Base.IsEmpty() && WonderlandJuliusMissionClient::IsLoopbackBaseUrl(std::string(TCHAR_TO_UTF8(*Base)));
 	if (bLoopback)
 	{
-		return IsPaired() ? FString() : FString::Printf(TEXT("Pair this client with your local bridge (%s): wl.Julius.Pair <code>."), *Base);
+		return IsPaired() ? FString() : FString::Printf(TEXT("Pair this client with your local bridge (%s): open the terminal (Ctrl+T) and type /brain pair <code>, with the code from the Wonderland website."), *Base);
 	}
 	if (IsPaired())
 	{
-		return FString::Printf(TEXT("Paid missions run on your local bridge (%s). This client is paired with another bridge; set wl.Julius.Bridge.Url %s and pair again."),
-			*LoopbackBase, *LoopbackBase);
+		return FString::Printf(TEXT("Paid missions run on your local bridge (%s). This client is paired with another bridge: restart Wonderland, open this terminal (K) before pairing, then pair with /brain pair <code>."),
+			*LoopbackBase);
 	}
 	// A bridge someone chose explicitly (wl.Julius.Bridge.Url) is theirs: say how to switch, never retarget it.
 	if (!WonderlandJuliusStreamTuning::CVarBridgeUrl.GetValueOnGameThread().TrimStartAndEnd().IsEmpty())
@@ -518,7 +518,7 @@ FString UWonderlandJuliusStreamSubsystem::PreferLocalBridgeForMission(const FStr
 	}
 	WonderlandJuliusStreamTuning::CVarBridgeUrl->Set(*LoopbackBase, ECVF_SetByConsole);
 	UE_LOG(LogWonderlandJuliusStream, Display, TEXT("J1 terminal: unpaired client pointed at the local bridge %s"), *LoopbackBase);
-	return FString::Printf(TEXT("Pair this client with your local bridge (%s): wl.Julius.Pair <code>."), *LoopbackBase);
+	return FString::Printf(TEXT("Pair this client with your local bridge (%s): open the terminal (Ctrl+T) and type /brain pair <code>, with the code from the Wonderland website."), *LoopbackBase);
 }
 
 FString UWonderlandJuliusStreamSubsystem::BridgeUrl() const
