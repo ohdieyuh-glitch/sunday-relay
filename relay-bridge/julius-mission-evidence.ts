@@ -449,6 +449,12 @@ export function acceptJuliusMissionEvidence(wljRunId: string, value: unknown): J
 
 const TASK_ID = /^[A-Za-z0-9:_-]{1,128}$/;
 const DIGEST12 = /^[0-9a-f]{12}$/;
+/**
+ * The pinned hidden checker's own sha256 (J1_PINNED_CHECKER_FILE_SHA256 in
+ * relay-bridge/julius-inworld-checker.ts, on the paid stack). A verdict from any
+ * other checker is not this mission's grade. A drift test lands with that file.
+ */
+export const JULIUS_PINNED_CHECKER_SHA256 = '1a98f1a4d739ebe2da254715d81f56cd5fa08d534a1fbf10ef6214e8b262207e';
 
 /** A verdict outside the closed set is NOT_RUN. A PASS or FAIL must name the judged bytes. */
 function checkerVerdict(verdictValue: unknown, checkerValue: unknown): { readonly checkerVerdict: JuliusCheckerVerdict; readonly checker: JuliusCheckerEvidence | null } {
@@ -463,7 +469,7 @@ function checkerVerdict(verdictValue: unknown, checkerValue: unknown): { readonl
   };
   const verdict = oneOf(verdictValue, JULIUS_CHECKER_VERDICTS);
   if (verdict === 'PASS' || verdict === 'FAIL') {
-    if (checker === null || checker.judgedTrimmedSha256 === null || checker.checkerSha256 === null
+    if (checker === null || checker.judgedTrimmedSha256 === null || checker.checkerSha256 !== JULIUS_PINNED_CHECKER_SHA256
       || checker.gameDigest !== checker.judgedTrimmedSha256.slice(0, 12)) {
       return { checkerVerdict: 'NOT_RUN', checker };
     }

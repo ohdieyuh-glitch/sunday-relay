@@ -27,7 +27,7 @@ import {
   type GhResult,
   type GhSpawner,
 } from '../src/relay/integration/wonderland-admission/operator-claim';
-import { createJuliusMissionEvidenceTestDouble } from './julius-mission-evidence';
+import { JULIUS_PINNED_CHECKER_SHA256, createJuliusMissionEvidenceTestDouble } from './julius-mission-evidence';
 import {
   createWonderlandAdmissionService,
   handleWonderlandAdmissionRoute,
@@ -303,7 +303,7 @@ describe('OFFLINE / NOT A PAID RUN — wonderland mission result end to end', ()
         const ungraded = await handleWonderlandMissionReadRoute(readRequest('result', RUN), reading, createJuliusMissionEvidenceTestDouble({ [RUN]: readerCompletion() }));
         expect(ungraded?.body).toMatchObject({ state: 'completed', checkerVerdict: 'NOT_RUN' });
         const judged = 'b'.repeat(64);
-        const checker = { reason: 'none', taskId: 'task:build-1', judgedTrimmedSha256: judged, gameDigest: judged.slice(0, 12), checkerSha256: 'c'.repeat(64) };
+        const checker = { reason: 'none', taskId: 'task:build-1', judgedTrimmedSha256: judged, gameDigest: judged.slice(0, 12), checkerSha256: JULIUS_PINNED_CHECKER_SHA256 };
         for (const verdict of ['PASS', 'FAIL'] as const) {
           const graded = createJuliusMissionEvidenceTestDouble({ [RUN]: { ...(readerCompletion() as Record<string, unknown>), checkerVerdict: verdict, checker } });
           const gradedResult = await handleWonderlandMissionReadRoute(readRequest('result', RUN), reading, graded);

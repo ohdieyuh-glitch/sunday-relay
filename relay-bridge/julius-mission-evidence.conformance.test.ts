@@ -13,7 +13,7 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
 import { juliusMissionTraceId } from '../scripts/julius-mission-trace.mjs';
-import { acceptJuliusMissionEvidence } from './julius-mission-evidence';
+import { JULIUS_PINNED_CHECKER_SHA256, acceptJuliusMissionEvidence } from './julius-mission-evidence';
 
 const WLJ = 'wlj_01234567-89ab-4cde-8fab-0123456789ab';
 const SHA = 'a'.repeat(40);
@@ -394,7 +394,7 @@ describe('acceptJuliusMissionEvidence accepts the #454 projection', () => {
 
 describe('the hidden checker verdict is a closed field', () => {
   const judged = 'b'.repeat(64);
-  const checker = { reason: 'none', taskId: 'task:build-1', judgedTrimmedSha256: judged, gameDigest: judged.slice(0, 12), checkerSha256: 'c'.repeat(64) };
+  const checker = { reason: 'none', taskId: 'task:build-1', judgedTrimmedSha256: judged, gameDigest: judged.slice(0, 12), checkerSha256: JULIUS_PINNED_CHECKER_SHA256 };
   const withVerdict = (checkerVerdict: unknown, evidence: unknown = checker) => acceptJuliusMissionEvidence(WLJ, { ...(readerOutput() as Record<string, unknown>), checkerVerdict, checker: evidence });
 
   it('keeps PASS and FAIL with what was judged', () => {
@@ -409,5 +409,13 @@ describe('the hidden checker verdict is a closed field', () => {
     expect(withVerdict('PASS', null).completion?.checkerVerdict).toBe('NOT_RUN');
     expect(withVerdict('PASS', { ...checker, gameDigest: '000000000000' }).completion?.checkerVerdict).toBe('NOT_RUN');
     expect(withVerdict('PASS', { ...checker, judgedTrimmedSha256: 'not-a-sha' }).completion?.checkerVerdict).toBe('NOT_RUN');
+  });
+});
+
+describe('only the pinned hidden checker grades', () => {
+  it('a PASS from any other checker is NOT_RUN', () => {
+    const judged = 'b'.repeat(64);
+    const checker = { reason: 'none', taskId: 'task:build-1', judgedTrimmedSha256: judged, gameDigest: judged.slice(0, 12), checkerSha256: 'c'.repeat(64) };
+    expect(acceptJuliusMissionEvidence(WLJ, { ...(readerOutput() as Record<string, unknown>), checkerVerdict: 'PASS', checker }).completion?.checkerVerdict).toBe('NOT_RUN');
   });
 });
