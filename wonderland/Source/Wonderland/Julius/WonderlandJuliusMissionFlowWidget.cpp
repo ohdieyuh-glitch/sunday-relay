@@ -64,7 +64,13 @@ namespace
 		const WonderlandCompanionLogic::FCompanionMissionView* Mission = Companion->GetMissionView(Run);
 		if (Mission == nullptr) { return Lines; }
 		Lines.Add(TEXT("Companions on this mission"));
-		if (!Mission->bHasAnswer || Mission->State == WonderlandCompanionLogic::ECompanionTaskState::None)
+		if (!Mission->bHasAnswer)
+		{
+			// A refused, unavailable or unreadable read is NOT "no companion": say only that the bridge did not answer.
+			Lines.Add(TEXT("Companion status is not available from the bridge right now."));
+			return Lines;
+		}
+		if (Mission->State == WonderlandCompanionLogic::ECompanionTaskState::None)
 		{
 			Lines.Add(TEXT("No companion is taking part in this mission."));
 		}
