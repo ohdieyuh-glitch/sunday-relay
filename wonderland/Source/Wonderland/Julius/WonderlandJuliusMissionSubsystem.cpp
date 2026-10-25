@@ -699,10 +699,12 @@ bool UWonderlandJuliusMissionSubsystem::LatestLivePanel(bool& bOutLive, FString&
 	if (Host == nullptr || LiveRunId.IsEmpty() || LiveRunId != ClientRunId()) { return false; }
 	const uint64 NowMs = Host->Clock.NowUtcMs();
 	const uint64 Since = LastLiveOkUtcMs != 0 && NowMs > LastLiveOkUtcMs ? NowMs - LastLiveOkUtcMs : 0;
-	if (!Host->LiveFeed.HasRead() && LiveLastHttpStatus == 404)
+	if (!Host->LiveFeed.HasRead() && LiveLastHttpStatus != 0 && LiveLastHttpStatus != 200 && LiveLastHttpStatus != 401)
 	{
-		// A bridge without the live events route (the real-run bridge before #448): say so; never invent a stream.
-		OutHeader = TEXT("Live view unavailable: this bridge does not offer live run events yet");
+		// The bridge has never served this run's live events. A bridge without the route (8790 before #448) answers 403
+		// "a native Wonderland session reaches only the Julius world stream" (seen 2026-10-25), not 404. Say so plainly
+		// with the status; never invent a stream. (401 is the session path: dropped and "NOT CONNECTED" instead.)
+		OutHeader = FString::Printf(TEXT("Live view unavailable: this bridge did not serve live run events (HTTP %d)"), LiveLastHttpStatus);
 		return true;
 	}
 	const WonderlandJuliusMissionFlow::FLivePanel Panel = WonderlandJuliusMissionFlow::LivePanelFor(Host->LiveFeed, Since);
