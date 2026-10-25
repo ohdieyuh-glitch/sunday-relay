@@ -1498,6 +1498,7 @@ namespace WonderlandJuliusMissionFlow
 		if (Feed.Source() == ELiveSource::GithubActionsRecorded)
 		{
 			Out.Header = "RECORDED RUN, NOT LIVE" + RunRef; // FLOW_RECORDED_IS_NEVER_LIVE
+			if (!Feed.RunConclusion().empty()) { Out.Header += " -- GitHub conclusion: " + Feed.RunConclusion(); }
 		}
 		else if (Out.bLive)
 		{

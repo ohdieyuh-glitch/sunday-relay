@@ -430,7 +430,7 @@ void SWonderlandJuliusMissionFlow::Rebuild()
 		{
 			Body->AddSlot().AutoHeight().Padding(0.0f, 1.0f)
 			[
-				SNew(STextBlock).Text(FText::FromString(Line)).Font(FCoreStyle::GetDefaultFontStyle("Mono", 9)).AutoWrapText(true)
+				SNew(STextBlock).Text(FText::FromString(Line)).Font(FCoreStyle::GetDefaultFontStyle("Regular", 10)).AutoWrapText(true)
 			];
 		}
 	}

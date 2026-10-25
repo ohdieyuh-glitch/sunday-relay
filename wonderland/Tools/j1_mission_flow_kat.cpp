@@ -484,6 +484,9 @@ const ABSENT_PHASE = {
 		const FLivePanel RecPanel = LivePanelFor(Rec, 0);
 		Expect(RecPanel.bShow && !RecPanel.bLive && !Rec.IsLive() && PanelHas(RecPanel, "RECORDED RUN, NOT LIVE"), "recorded is labelled");
 		Expect(!ParseLiveEvents(LiveWlj, 200, LiveBody(Swap(LiveTop, "\"github_actions\"", "\"github_actions_recorded\""), LiveStep)).bParsed, "recorded+live refused");
+		FLiveFeed RecDone;
+		RecDone.Apply(ParseLiveEvents(LiveWlj, 200, LiveBody(Swap(RecTop, "\"runConclusion\":null", "\"runConclusion\":\"failure\""), LiveStep)));
+		Expect(PanelHas(LivePanelFor(RecDone, 0), "RECORDED RUN, NOT LIVE (GitHub Actions run 18733051234) -- GitHub conclusion: failure"), "recorded shows GitHub's conclusion");
 		++LiveCases;
 
 		// Finished run: not live, conclusion shown; completed+live refused.
