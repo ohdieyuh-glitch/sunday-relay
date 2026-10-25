@@ -50,6 +50,13 @@ namespace WonderlandJuliusMissionFlow
 	/** The bridge's own completion check, not an independent verdict (REVIEW #456 M4). Becomes "state: completed" only
 	 *  once the hidden-checker verdict (Julius PR-B) is part of the read. */
 	inline constexpr const char* CopyStateCompleted = "state: completed (bridge-reported; not independently verified)";
+	/** PR-B: the governed hidden checker PASSED this run. The only "Completed" the panel shows as verified. */
+	inline constexpr const char* CopyStateCompletedChecked = "state: completed (checker PASS)";
+	/** PR-B: the governed hidden checker FAILED this run. A failed evaluation, never shown as completed. */
+	inline constexpr const char* CopyCheckerFailed = "evaluation failed (checker FAIL)";
+
+	/** /result `checkerVerdict` (founder-approved PR-B, closed set). Absent or unreadable is NotRun. */
+	enum class ECheckerVerdict : std::uint8_t { NotRun, Pass, Fail };
 
 	enum class EFlowStep : std::uint8_t
 	{
@@ -231,6 +238,10 @@ namespace WonderlandJuliusMissionFlow
 		FReportedString ProviderMessageId;
 		/** Honest parse leaves it false. It exists so a display flip is observable. Secrets have no display path at all. */
 		bool bEchoProviderMessageId = false;
+		/** The checker's verdict as the bridge reported it; NotRun when absent or not one of PASS/FAIL/NOT_RUN. */
+		ECheckerVerdict Checker = ECheckerVerdict::NotRun;
+		/** True only when the field was present with one of the three words (so the panel names it, never invents it). */
+		bool bCheckerReported = false;
 	};
 
 	class IMissionResultReader
