@@ -26,6 +26,7 @@
 import type { ClaudeAuthMode } from '../hosted-coding-agent/hosted-auth';
 import { createHash } from 'node:crypto';
 import type { JuliusContractReviewCharge } from '../../src/relay/mission/julius/julius-task-contract';
+import type { JuliusFileCreationGrant } from '../../src/relay/mission/julius/julius-file-authority';
 import {
   JuliusDispatchError,
   juliusStoreErrorClass,
@@ -81,6 +82,7 @@ import {
   buildJuliusCodingAgentRequest,
   juliusCodingAgentFailureClass,
   juliusCodingAgentFailureDisposition,
+  juliusServedModelVerdict,
   renderJuliusCodingAgentContract,
   type JuliusCodingAgentProvider,
 } from '../../src/relay/mission/julius/julius-coding-agent';
@@ -585,6 +587,22 @@ const reviewerDiagnostics = (input: {
      * not draw. Null when the engine wrote no usage report.
      */
     engineApiCalls: input.usage?.apiCalls ?? null,
+    /**
+     * THE PROVIDER REQUEST ID, from the usage file only. Absent, unreadable,
+     * credential-shaped, or simply not in the file stays null, with
+     * `UNAVAILABLE` on its own field. The status word is not an id, and
+     * Hermes' session id is not copied into one.
+     */
+    providerRequestId: input.usage?.providerRequestAvailability === 'CAPTURED'
+      ? input.usage.providerRequestId
+      : null,
+    providerRequestAvailability: input.usage?.providerRequestAvailability ?? 'UNAVAILABLE',
+    providerRequestUnavailableReason: input.usage?.providerRequestAvailability === 'CAPTURED'
+      ? null
+      : input.usage?.providerRequestUnavailableReason ?? 'provider_request_id_not_reported',
+    responseId: input.usage?.providerRequestAvailability === 'CAPTURED'
+      ? input.usage.providerRequestId
+      : null,
     reviewReaskShape: input.reviewReaskShape,
     ...(input.startedAt === undefined ? {} : { startedAt: input.startedAt }),
     ...(input.completedAt === undefined ? {} : { completedAt: input.completedAt }),
@@ -1136,6 +1154,37 @@ export function createLiveArchitectAdapter(input: {
           default:
             throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, `Prompt Architect failed: ${outcome.failureClass}.`, outcome.failureClass, failed);
         }
+      }
+      /**
+       * A SUCCESSFUL ANSWER IS THE REQUESTED MODEL, OR THE RUN STOPS.
+       *
+       * Checked before JSON parse and before a correction is bought: a
+       * substitute is not a plan that failed validation, and buying another
+       * call from the same path cannot change what it serves. A provider
+       * failure above keeps its own class. No attested name is unattested,
+       * never a copy of the request.
+       */
+      const architectServed = typeof outcome.actualModel === 'string' && outcome.actualModel.trim() !== ''
+        ? outcome.actualModel : null;
+      // OpenAI snapshots: the id, `<id>-YYYY-MM-DD`, or `<id>-YYYYMMDD`. Same base only.
+      const architectVerdict = juliusServedModelVerdict(
+        input.config.model, architectServed, [], ['YYYYMMDD', 'YYYY-MM-DD'],
+      );
+      if (architectVerdict !== 'MATCH') {
+        const architectHaltClass = architectVerdict === 'MISMATCH'
+          ? 'architect_served_model_mismatch' : 'architect_served_model_unattested';
+        throw new JuliusDispatchError(
+          'WORKER_EXECUTION_FAILURE', false,
+          architectVerdict === 'MISMATCH'
+            ? 'Prompt Architect was answered by a model other than the one requested.'
+            : 'Prompt Architect finished without attesting which model answered.',
+          architectHaltClass,
+          planDiagnostics({
+            ...providerFacts(outcome, startedAtMs, input.config.maxOutputTokens),
+            requestedModel: input.config.model,
+            jsonParseable: null, validationPassed: null, attempts,
+          }),
+        );
       }
       let parsed: unknown;
       let parseFailed = false;
@@ -2017,6 +2066,10 @@ export function createLiveHostedCodingAdapter(input: {
   readonly effort?: HostedEffort;
   /** The mission's declared self-test cap; absent offers the coder no test tool. Diagnostic telemetry only. */
   readonly selfTestCalls?: number;
+  /** The verified contract's file-creation grant (`juliusFileCreationGrant`); absent grants no creation. */
+  readonly fileCreation?: JuliusFileCreationGrant | null;
+  /** The paid workflow's final-message directory (`JULIUS_FINAL_MESSAGE_DIR`); absent writes nothing. */
+  readonly finalMessageDir?: string | null;
   /** Test seam for the SDK's tool helpers; production omits it. */
   readonly sdkHelpersLoader?: () => Promise<HostedSdkHelpers>;
 }): JuliusProviderAdapter {
@@ -2041,6 +2094,8 @@ export function createLiveHostedCodingAdapter(input: {
       apiKey: input.apiKey, requestedModel: input.requestedModel,
       ...(input.authMode === undefined ? {} : { authMode: input.authMode }),
       ...(input.effort === undefined ? {} : { effort: input.effort }),
+      ...(input.fileCreation == null ? {} : { fileCreation: input.fileCreation }),
+      ...(input.finalMessageDir == null ? {} : { finalMessageDir: input.finalMessageDir }),
       ...(input.sdkHelpersLoader === undefined ? {} : { sdkHelpersLoader: input.sdkHelpersLoader }),
       ...(input.run === undefined ? {} : { run: input.run }),
       ...(input.queryLoader === undefined ? {} : { queryLoader: input.queryLoader }),
@@ -2338,6 +2393,40 @@ export function createLiveHermesReviewerAdapter(input: {
       }
       if (outcome.kind === 'launch_failed') {
         throw new JuliusDispatchError('PROVIDER_UNAVAILABLE', false, `Hermes reviewer could not launch: ${safeClaim(outcome.safeMessage, 120)}.`, 'reviewer_launch_failed');
+      }
+      if (outcome.kind === 'reviewed') {
+        /**
+         * A REVIEW THAT ARRIVED IS THE REQUESTED MODEL, OR THE RUN STOPS.
+         *
+         * `review_incomplete` keeps its own shape, including a timeout: that
+         * is not an unattested model. A reviewed answer with no served name
+         * is unattested. The check is before the verdict is accepted.
+         */
+        const reviewerServed = typeof outcome.servedModel === 'string' && outcome.servedModel.trim() !== ''
+          ? outcome.servedModel : null;
+        // HermesConfig.model is `string | undefined`. The verdict takes `string | null`.
+        // A missing served name is unattested. A served name with no requested id is a mismatch.
+        const reviewerVerdict = juliusServedModelVerdict(input.config.model ?? null, reviewerServed);
+        if (reviewerVerdict !== 'MATCH') {
+          const reviewerHaltClass = reviewerVerdict === 'MISMATCH'
+            ? 'reviewer_served_model_mismatch' : 'reviewer_served_model_unattested';
+          const reviewUsage: HermesUsage = outcome.usage !== null && typeof outcome.usage === 'object' ? outcome.usage : UNKNOWN_USAGE;
+          throw new JuliusDispatchError(
+            'WORKER_EXECUTION_FAILURE', false,
+            reviewerVerdict === 'MISMATCH'
+              ? 'Independent Reviewer was answered by a model other than the one requested.'
+              : 'Independent Reviewer finished without attesting which model answered.',
+            reviewerHaltClass,
+            {
+              ...reviewerDiagnostics({
+                diagnostics: outcome.diagnostics, stage, reviewAttempts, reviewReaskShape, billingPath, evidenceOmitted: shown.omitted,
+                startedAt: outcome.startedAt, completedAt: outcome.completedAt, usage: reviewUsage,
+              }),
+              requestedModel: input.config.model,
+              servedModel: reviewerServed,
+            },
+          );
+        }
       }
       if (outcome.kind === 'review_incomplete') {
         /**

@@ -130,7 +130,7 @@ const dispatchDiagnostics = async (outcome: GptRunOutcome): Promise<Record<strin
   }
 };
 const ok = (effort?: { sent: string | null; echoed: string | null }): GptRunOutcome => ({
-  ok: true, actualModel: 'gpt-5.6-sol-2026-04', responseId: 'resp_eff', status: 'completed', outputText: JSON.stringify(VALID_PLAN), usage: USAGE,
+  ok: true, actualModel: 'gpt-5.6-sol-2026-04-01', responseId: 'resp_eff', status: 'completed', outputText: JSON.stringify(VALID_PLAN), usage: USAGE,
   ...(effort === undefined ? {} : { effort }),
 });
 
@@ -254,6 +254,7 @@ describe('the kernel allowlist and the evidence dump', () => {
     // appended LAST, after the review-evidence columns, so every earlier column keeps its position
     expect(line.indexOf('AS review_evidence_test_output_omitted')).toBeLessThan(line.indexOf('AS effort_sent'));
     expect(line.indexOf('AS effort_sent')).toBeLessThan(line.indexOf('AS effort_echoed'));
-    expect(line).toMatch(/AS effort_echoed FROM relay_wonderland\.events e/u);
+    // the mission trace columns are appended after the effort columns, so neither moves
+    expect(line).toMatch(/AS effort_echoed,e\.payload->'facts'->>'diag_traceId' AS trace_id,e\.payload->'facts'->>'diag_spanId' AS span_id,e\.payload->'facts'->>'diag_traceparent' AS traceparent,e\.payload->'facts'->>'diag_finalMessageSha256' AS final_message_sha256,e\.payload->'facts'->>'diag_finalMessageContextId' AS final_message_context_id,e\.payload->'facts'->>'diag_finalMessageWrite' AS final_message_write FROM relay_wonderland\.events e/u);
   });
 });

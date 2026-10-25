@@ -60,6 +60,32 @@ describe('inspecting a run', () => {
     expect(result.value.taskCounts.ACTIVE).toBe(0);
     expect(result.value.cardRevision).toBe('card-r1');
     expect(result.value.revision).toBeGreaterThan(1);
+    expect(result.value.traceId, 'a legacy run id derives no trace id').toBeNull();
+    expect(result.value.spanId).toBeNull();
+    expect(result.value.traceparent).toBeNull();
+  });
+
+  it('derives the mission trace id from an admitted wlj id and does not invent a span', async () => {
+    const wlj = 'wlj_01234567-89ab-4cde-8fab-0123456789ab';
+    const harness = createJuliusHarness({
+      workers: [{ worker: CODER, script: [{ kind: 'succeed' }] }],
+      card: cardPolicy({ allowedProviders: [CODER.providerId] }),
+    });
+    seedRun(harness, { runId: wlj, tasks: [task({ taskId: 'task-wlj', ordinal: 0 })] });
+    const api = new JuliusRuntimeApi({
+      store: harness.store, timeline: harness.store, clock: harness.clock,
+      approvers: { async mayApprove() { return true; } },
+    });
+    const result = await api.inspectRun(identity(), wlj);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.traceId).toBe('192b1fbb866790da0ba590b4a8f45144');
+    expect(result.value.spanId).toBeNull();
+    expect(result.value.traceparent).toBeNull();
+    const route = 'wlj_0b7a1c2e-4f3d-4a6b-8c2d-3e4f5a6b7c8d';
+    seedRun(harness, { runId: route, tasks: [task({ taskId: 'task-route', ordinal: 0 })] });
+    const second = await api.inspectRun(identity(), route);
+    expect(second.ok && second.value.traceId).toBe('0ef34f0df7cf2cf89b844dcfa5fe084f');
   });
 
   it('returns tasks, evidence, decisions and findings for a run it may see', async () => {

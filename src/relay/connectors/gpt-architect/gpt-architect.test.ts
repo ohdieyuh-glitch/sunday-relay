@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { ARCHITECT_PLAN_SCHEMA, ARCHITECT_PLAN_SCHEMA_NAME } from './plan-schema';
 import { evaluateReadiness, readGptArchitectConfig } from './config';
 import { runFakeArchitect, FAKE_ARCHITECT_PLAN } from './fake-architect';
-import { redactResponseId } from './gpt-runner';
+import { openAiPinnedFetch, OPENAI_PINNED_BASE_URL, redactResponseId } from './gpt-runner';
 import { boundHandoff, planNeedsInput, validateArchitectPlan } from '../../mission/prompt-architect';
 
 /**
@@ -149,5 +149,25 @@ describe('the handoff can never widen permissions', () => {
     expect(bounded.handoff.prohibitedActions).toContain('Do not deploy.');
     expect(bounded.handoff.missionContractRef).toBe('contract:real');
     expect(bounded.handoff.environmentRef).toBe('env:worktree');
+  });
+});
+
+describe('OpenAI fetch origin pin', () => {
+  it('refuses evil.example.com, a look-alike host and userinfo, and sets redirect error on api.openai.com', async () => {
+    expect(() => openAiPinnedFetch('https://evil.example.com/v1/responses')).toThrow('openai_base_url_unpinned');
+    expect(() => openAiPinnedFetch('https://api.openai.com.evil.example.com/v1/responses')).toThrow('openai_base_url_unpinned');
+    expect(() => openAiPinnedFetch('https://user:pass@api.openai.com/v1/responses')).toThrow('openai_base_url_unpinned');
+    const original = globalThis.fetch;
+    let seen: RequestInit | undefined;
+    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      seen = init;
+      return new Response('{}', { status: 200 });
+    }) as typeof fetch;
+    try {
+      await openAiPinnedFetch(`${OPENAI_PINNED_BASE_URL}/responses`, { method: 'POST' });
+      expect(seen?.redirect).toBe('error');
+    } finally {
+      globalThis.fetch = original;
+    }
   });
 });

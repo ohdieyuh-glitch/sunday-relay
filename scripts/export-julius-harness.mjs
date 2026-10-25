@@ -109,6 +109,7 @@ const DECLARED_NOT_COMPOSED = [
   { path: 'relay-bridge/julius-mission-routes.ts', reason: 'the bridge\u2019s operator-only POST /julius/missions: the contract library\u2019s own parser (julius/mission-contract.ts, shared with the job rather than imported from the job\u2019s entry file, whose require.main guard is true inside the server bundle), the same compileBootstrapRequest and the same createLiveJuliusBootstrapPort the mission job uses, over the same PostgreSQL repositories \u2014 so a mission created here and one read from disk are one mission with one execution identity. Bootstrap only: it composes no provider, spends nothing and ticks nothing; the run lands durable in READY for the state routes to watch and the job to drive. Reached from the HTTP server, which is not a mission root' },
   { path: 'relay-bridge/julius-state-routes.ts', reason: 'the bridge\u2019s READ-ONLY mount of JuliusRuntimeApi for Wonderland \u2014 /julius/runs/<id>/<run|slots|tasks|evidence|verification|timeline>, operator-only, composed over the SAME createJuliusPostgresRuntimeStore the mission job writes through so there is one state authority. Reached from the HTTP server, which is a Relay surface and not a mission root, and never from a mission; it computes nothing about a run, every answer is the API\u2019s own. Also the first composition root for the subagent and lifecycle repositories' },
   { path: 'relay-bridge/julius-lifecycle-routes.ts', reason: 'the bridge’s operator-only POST /julius/runs/<id>/lifecycle {action: pause|resume|cancel, reason}: maps the action to JuliusRuntimeApi.pause/resume/cancel on the SAME api object the read routes serve (composeJuliusStateApi, over the same PostgreSQL store) and the kernel’s answer to a status. It records operator intent and drives nothing: no provider, no tick, no spend; the run loop in the mission job honours the recorded state. Reached from the HTTP server, which is not a mission root' },
+  { path: 'relay-bridge/julius-mission-evidence-reader.ts', reason: 'YUJI’s reader for one admitted mission: it matches the julius-run-spent.v1 tag to the Actions run and returns the typed evidence. Wonderland’s /missions/{wljRunId}/result and /progress routes call it; those routes are BRIDGE’s and are not mounted here. The live mission job does not call it, because that job is inside the run the reader reads and does not ask GitHub to describe itself' },
 ];
 
 /** Directories the trace does not enter. Crossing edges are reported, never hidden. */
@@ -133,6 +134,12 @@ const EXCLUDED_FILES = [
 
 /** Kernel dependants that are neither reached nor declared, what kind of file each is, and why it stays out. */
 const KERNEL_DEPENDANT_EXCLUSIONS = [
+  { path: 'relay-bridge/julius-dispatch.ts', category: 'unmounted route', reason: 'the J1 dispatch controller. It imports the spend ceiling so a pre-spend refusal uses that module and no other counter. It is not mounted from server.ts and it is not reached from the live mission root: a live composition refuses before claim, and paid execution stays the gated workflow. Reaching it from julius-live-mission.ts would put the route on the paid import graph.' },
+  { path: 'relay-bridge/julius-dispatch-spend.ts', category: 'unmounted route', reason: 'the J1 pre-spend port. It calls authorizeJuliusLiveSpend and records JuliusSettlementFact rows. It exists so the controller can use the runtime ceiling without becoming part of the live mission composition.' },
+  { path: 'relay-bridge/julius-dispatch-adapters.ts', category: 'unmounted route', reason: 'the J1 dispatch controller\'s provider adapters (the Anthropic coder and the direct xAI reviewer, pinned by #435). Imported only by the J1 wiring below; neither server.ts nor the live mission root reaches it, and a live composition refuses julius_dispatch_paid_path_is_workflow before any adapter is called.' },
+  { path: 'relay-bridge/julius-dispatch-wiring-core.ts', category: 'unmounted route', reason: 'composes the J1 dispatch controller from its pins, adapters, checker and ledger. Not mounted from server.ts and not reached from julius-live-mission.ts; paid J1 execution is the gated workflow, which runs the live mission root and grades in its own job.' },
+  { path: 'relay-bridge/julius-dispatch-wiring-real.ts', category: 'unmounted route', reason: 'the real-IO bindings for the J1 dispatch wiring (key store, file staging, process runner). Reached only from the unmounted J1 wiring, never from the live root.' },
+  { path: 'relay-bridge/julius-dispatch-wiring-testkit.ts', category: 'test harness', reason: 'test doubles for the J1 dispatch wiring, including the in-process stand-in for the durable spend record; imported by tests only, and nothing in production imports it.' },
   { path: 'src/relay/mission/julius/julius-carry-verify.ts', category: 'off-host evidence tooling', reason: 'the OFF-HOST verifier of Decision C’s four-point carry chain (C-7): it reads two arms’ evidence bundles and re-derives what arm WITH should have carried with the kernel’s own rule, fold, renderer and record. It runs on a reviewer’s machine after a paid pair, never inside a run, and no runtime path imports it' },
   { path: 'src/relay/persistence/julius-event-append-conformance.ts', category: 'conformance cases', reason: 'the event-append contract cases themselves: written once and run by BOTH the in-memory suite and the real-PostgreSQL one, so the two stores cannot drift again. Test support, imported by no root' },
   { path: 'src/relay/persistence/julius-criteria-scope-conformance.ts', category: 'conformance cases', reason: 'the criteria-scope contract cases themselves: a criterion belongs to a RUN, not to the database. Written once and run by BOTH the in-memory store, which was always right, and real PostgreSQL, where a global primary key on criterion_id silently gave every rerun no criteria at all. Test support, imported by no root' },
@@ -149,6 +156,14 @@ const KERNEL_DEPENDANT_EXCLUSIONS = [
 const MIGRATION_RUNNER = 'src/relay/persistence/wonderland-postgres.ts';
 const MIGRATION_DIR = 'src/relay/persistence/wonderland-migrations/';
 const DECLARED_ASSETS = [
+  {
+    path: 'scripts/julius-org-attribution.mjs',
+    reason: 'the spend-free Anthropic models read that keeps only anthropic-organization-id; the live entry and the hosted readiness step invoke it by path and never import it',
+    evidence: [
+      { file: 'relay-bridge/julius/anthropic-org-attribution.ts', mustContain: 'scripts/julius-org-attribution.mjs' },
+      { file: '.github/workflows/julius-first-live-mission.yml', mustContain: 'scripts/julius-org-attribution.mjs' },
+    ],
+  },
   {
     path: 'scripts/julius-docker-executor.sh',
     reason: 'the in-sandbox executor script that runs every untrusted invocation and seals the signed receipt chain; baked into the sandbox image by .github/workflows/julius-real-infra.yml and named by the Docker sandbox adapter',
@@ -288,6 +303,12 @@ const FILE_RULES = [
   // about what it DID spend, and on whose authority. Same subsystem: both are
   // the budget's own arithmetic, and neither is a worker's to state.
   ['src/relay/mission/julius/julius-cost-accounting.ts', 'LEASES / BUDGETS / PERMISSIONS'],
+  // The runtime's own namespace ceilings and the qualifying-pair cap. Same
+  // arithmetic as the cost ledger: a grant, not a worker's claim.
+  ['src/relay/mission/julius/julius-spend-ceiling.ts', 'LEASES / BUDGETS / PERMISSIONS'],
+  // The annotated-tag body the qualifying-pair cap counts. Reached from the
+  // ceiling module, and pinned by the same contract test as the writer.
+  ['src/relay/mission/julius/julius-spent-tag-record.ts', 'LEASES / BUDGETS / PERMISSIONS'],
   ['src/relay/mission/julius/julius-recovery.ts', 'RECOVERY / CONTINUATION'],
   ['src/relay/mission/julius/julius-continuation.ts', 'RECOVERY / CONTINUATION'],
   ['src/relay/mission/julius/julius-lease-protocol.ts', 'LEASES / BUDGETS / PERMISSIONS'],
@@ -437,6 +458,14 @@ const FILE_RULES = [
   ['relay-bridge/julius/live-report-lines.ts', 'MISSION CONTRACT / BOOTSTRAP'],
   ['relay-bridge/julius/mission-contract.ts', 'MISSION CONTRACT / BOOTSTRAP'],
   ['relay-bridge/julius/bootstrap.ts', 'MISSION CONTRACT / BOOTSTRAP'],
+  // The one parser of an admission id. Production imports the .mjs. The .d.mts
+  // is its type declaration and is not in the import closure, so it is not
+  // exported. The module never mints an id.
+  ['scripts/julius-admission-run-id.mjs', 'MISSION CONTRACT / BOOTSTRAP'],
+  // Derived mission trace ids. Production imports the .mjs. Correlation only;
+  // the spent tag stays the spend record. The .d.mts is its type declaration.
+  ['scripts/julius-mission-trace.mjs', 'MISSION CONTRACT / BOOTSTRAP'],
+  ['relay-bridge/julius-mission-evidence-reader.ts', 'MISSION CONTRACT / BOOTSTRAP'],
   ['relay-bridge/julius/mission-seed.ts', 'MISSION CONTRACT / BOOTSTRAP'],
   // What one mission verified, inherited by the next: the minimum truthful reuse.
   ['relay-bridge/julius/mission-knowledge.ts', 'DURABLE STATE / PROJECT BRAIN'],
@@ -447,6 +476,9 @@ const FILE_RULES = [
   // live shell port and the provider-free preflight, so both settle the same command.
   ['relay-bridge/julius/shell-settlement.ts', 'TOOLS'],
   ['relay-bridge/julius/live-composition.ts', 'LIVE PROVIDER COMPOSITION'],
+  // The live entry's read of prior runs of this mission, so the pair cap is a
+  // ledger fact. Path-adjacent to the composition that spends.
+  ['relay-bridge/julius/julius-prior-spend.ts', 'LIVE PROVIDER COMPOSITION'],
   // The one place the sealed mission policy and Live Reach's bounded fetch
   // meet, and the service it wraps. Composition, both of them: the domain has
   // no network and the connector may not import `/mission`.
@@ -457,12 +489,20 @@ const FILE_RULES = [
   // session is launched, how its outcomes read, and the structural facts its
   // observation carries. Replaced wholesale when the provider is swapped.
   ['relay-bridge/julius/claude-code-coding-provider.ts', 'CODING AGENT'],
+  ['relay-bridge/julius/julius-final-message.ts', 'CODING AGENT'],
+  // The spend-free organization gate the confirmed-live entrypoint runs
+  // before it submits a Coding Agent call. It accepts only the closed line
+  // from the path-loaded probe.
+  ['relay-bridge/julius/anthropic-org-attribution.ts', 'CODING AGENT'],
   ['relay-bridge/julius/coder-workspace.ts', 'CODING AGENT'],
   ['relay-bridge/julius/coder-self-test.ts', 'CODING AGENT'],
   ['relay-bridge/hosted-coding-agent/', 'CODING AGENT'],
   // The one recogniser of the subscription's usage-limit sentence (audit F5): the hosted classifier and the paid
   // workflow's subscription smoke both import it, so it lives as plain `.mjs` beside the smoke.
   ['scripts/julius-usage-limit.mjs', 'CODING AGENT'],
+  // The spend-free organization probe the hosted readiness step and the
+  // confirmed-live entrypoint invoke by path. It is not imported.
+  ['scripts/julius-org-attribution.mjs', 'CODING AGENT'],
   ['src/relay/connectors/claude-code/result-classification.ts', 'CODING AGENT'],
   ['relay-bridge/hermes-reviewer.ts', 'INDEPENDENT REVIEWER'],
   // The one derivation that decides how long a review may take, read by the

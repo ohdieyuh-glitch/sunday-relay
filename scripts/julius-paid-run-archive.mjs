@@ -37,6 +37,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } 
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { juliusMissionSpanId, juliusMissionTraceId, juliusMissionTraceparent } from './julius-mission-trace.mjs';
 
 export const ARCHIVE_VERSION = 'julius-paid-run-archive.v1';
 const REPO = process.env.JULIUS_ARCHIVE_REPO ?? 'ohdieyuh-glitch/sunday-relay';
@@ -115,6 +116,38 @@ export function parseTsv(text) {
 }
 
 /**
+ * Phase span ids for the archive, derived from the admitted run id plus the
+ * role, stage and attempt the receipt row names. `trace_id` / `span_id` columns
+ * on that row are not read. The run itself is not a span.
+ *
+ * @param {readonly {path: string, rows?: readonly Record<string, string>[] }[]} files
+ * @param {string | null} wljRunId
+ */
+function tracePhasesFromDiagnostics(files, wljRunId) {
+  const table = files.find((file) => file.path === 'worker-diagnostics.tsv' || file.path.endsWith('/worker-diagnostics.tsv'));
+  if (table === undefined || !Array.isArray(table.rows)) return [];
+  const seen = new Set();
+  const phases = [];
+  for (const row of table.rows) {
+    const role = row.role ?? '';
+    const stage = row.stage ?? '';
+    const attemptText = row.dispatch_attempt ?? '';
+    if (!/^[0-9]+$/u.test(attemptText)) continue;
+    const key = `${role}\t${stage}\t${attemptText}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const attempt = Number(attemptText);
+    const spanId = juliusMissionSpanId(wljRunId, role, stage, attempt);
+    if (spanId === null) continue;
+    phases.push({
+      role, stage, attempt, spanId,
+      traceparent: juliusMissionTraceparent(juliusMissionTraceId(wljRunId), spanId),
+    });
+  }
+  return phases;
+}
+
+/**
  * THE IMPORT DOCUMENT for one workflow run attempt. Refuses a bundle that is not
  * a live-evidence bundle, and refuses any credential-shaped content before a
  * single byte is persisted.
@@ -154,10 +187,17 @@ export function buildDocument({ meta, bundleDir, receipt, campaign, classificati
   }
   if (!STATE_MODES.includes(meta.state_mode)) throw new Error(`archive_state_mode_invalid: ${String(meta.state_mode)}`);
   const runs = documentFiles.find((file) => file.path.endsWith('runs.tsv'))?.rows ?? [];
+  const juliusRunId = runs[0]?.run_id ?? null;
+  // Derived from the admitted run id. A trace id written into the bundle is not read.
+  const traceId = juliusMissionTraceId(juliusRunId);
+  const tracePhases = tracePhasesFromDiagnostics(documentFiles, juliusRunId);
   return {
     run: {
       ...meta,
-      julius_run_id: runs[0]?.run_id ?? null,
+      julius_run_id: juliusRunId,
+      trace_id: traceId,
+      span_id: null,
+      trace_phases: tracePhases,
       julius_mission_id: runs[0]?.mission_id ?? null,
       julius_final_state: runs[0]?.state ?? null,
       campaign_id: campaign ?? null,
@@ -205,9 +245,19 @@ CREATE TABLE IF NOT EXISTS paid_runs.runs (
   null_rendering text NOT NULL,
   receipt_markdown text,
   archive_version text NOT NULL,
+  trace_id text,
+  span_id text,
+  trace_phases jsonb NOT NULL DEFAULT '[]'::jsonb,
   imported_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (workflow_run_id, workflow_run_attempt)
 );
+ALTER TABLE paid_runs.runs ADD COLUMN IF NOT EXISTS trace_id text;
+ALTER TABLE paid_runs.runs ADD COLUMN IF NOT EXISTS span_id text;
+ALTER TABLE paid_runs.runs ADD COLUMN IF NOT EXISTS trace_phases jsonb NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE paid_runs.runs DROP CONSTRAINT IF EXISTS paid_runs_trace_id_hex;
+ALTER TABLE paid_runs.runs ADD CONSTRAINT paid_runs_trace_id_hex CHECK (trace_id IS NULL OR trace_id ~ '^[0-9a-f]{32}$');
+ALTER TABLE paid_runs.runs DROP CONSTRAINT IF EXISTS paid_runs_span_id_hex;
+ALTER TABLE paid_runs.runs ADD CONSTRAINT paid_runs_span_id_hex CHECK (span_id IS NULL OR span_id ~ '^[0-9a-f]{16}$');
 CREATE TABLE IF NOT EXISTS paid_runs.files (
   workflow_run_id bigint NOT NULL,
   workflow_run_attempt integer NOT NULL,
@@ -248,13 +298,13 @@ BEGIN
   INSERT INTO paid_runs.runs (workflow_run_id, workflow_run_attempt, repository, display_title, mission, lane, mode, dispatch_key,
     classification, campaign_id, accepted_main_sha, julius_run_id, julius_mission_id, julius_final_state, conclusion, failed_steps,
     run_created_at, run_updated_at, execution_mode, state_mode, state_mode_basis, artifact_name, artifact_digest, file_count,
-    total_bytes, null_rendering, receipt_markdown, archive_version)
+    total_bytes, null_rendering, receipt_markdown, archive_version, trace_id, span_id, trace_phases)
   VALUES (run_id, attempt, run->>'repository', run->>'display_title', run->>'mission', run->>'lane', run->>'mode', run->>'dispatch_key',
     run->>'classification', run->>'campaign_id', run->>'accepted_main_sha', run->>'julius_run_id', run->>'julius_mission_id',
     run->>'julius_final_state', run->>'conclusion', COALESCE(run->'failed_steps', '[]'::jsonb), (run->>'run_created_at')::timestamptz,
     (run->>'run_updated_at')::timestamptz, run->>'execution_mode', run->>'state_mode', run->>'state_mode_basis', run->>'artifact_name',
     run->>'artifact_digest', (run->>'file_count')::integer, (run->>'total_bytes')::bigint, run->>'null_rendering',
-    run->>'receipt_markdown', run->>'archive_version');
+    run->>'receipt_markdown', run->>'archive_version', run->>'trace_id', run->>'span_id', COALESCE(run->'trace_phases', '[]'::jsonb));
   FOR file IN SELECT value FROM jsonb_array_elements(document->'files') LOOP
     INSERT INTO paid_runs.files (workflow_run_id, workflow_run_attempt, path, sha256, bytes, kind, table_status, columns, malformed_rows, content)
     VALUES (run_id, attempt, file->>'path', file->>'sha256', (file->>'bytes')::bigint, file->>'kind', file->>'table_status',
@@ -382,7 +432,7 @@ function main(argv) {
     const runId = integer(option(argv, 'run'), 'run');
     const attempt = integer(option(argv, 'attempt') ?? '1', 'attempt');
     ensureArchive();
-    const run = psql(`SELECT concat_ws(E'\\n', 'workflow_run_id=' || workflow_run_id, 'workflow_run_attempt=' || workflow_run_attempt, 'mission=' || coalesce(mission, ''), 'lane=' || coalesce(lane, ''), 'campaign=' || coalesce(campaign_id, ''), 'accepted_main=' || accepted_main_sha, 'julius_run=' || coalesce(julius_run_id, ''), 'julius_state=' || coalesce(julius_final_state, ''), 'conclusion=' || coalesce(conclusion, ''), 'failed_steps=' || failed_steps::text, 'execution_mode=' || execution_mode, 'state_mode=' || state_mode, 'artifact_digest=' || artifact_digest, 'receipt=' || (receipt_markdown IS NOT NULL)) FROM paid_runs.runs WHERE workflow_run_id = ${runId} AND workflow_run_attempt = ${attempt}`);
+    const run = psql(`SELECT concat_ws(E'\\n', 'workflow_run_id=' || workflow_run_id, 'workflow_run_attempt=' || workflow_run_attempt, 'mission=' || coalesce(mission, ''), 'lane=' || coalesce(lane, ''), 'campaign=' || coalesce(campaign_id, ''), 'accepted_main=' || accepted_main_sha, 'julius_run=' || coalesce(julius_run_id, ''), 'trace_id=' || coalesce(trace_id, ''), 'span_id=' || coalesce(span_id, ''), 'julius_state=' || coalesce(julius_final_state, ''), 'conclusion=' || coalesce(conclusion, ''), 'failed_steps=' || failed_steps::text, 'execution_mode=' || execution_mode, 'state_mode=' || state_mode, 'artifact_digest=' || artifact_digest, 'receipt=' || (receipt_markdown IS NOT NULL)) FROM paid_runs.runs WHERE workflow_run_id = ${runId} AND workflow_run_attempt = ${attempt}`);
     if (run.trim() === '') { process.stderr.write(`archive_run_not_found: ${runId} attempt ${attempt}\n`); process.exitCode = 1; return; }
     const files = psql(`SELECT concat_ws(E'\\t', f.path, f.kind, coalesce(f.table_status, ''), (SELECT count(*) FROM paid_runs.table_rows t WHERE t.workflow_run_id = f.workflow_run_id AND t.workflow_run_attempt = f.workflow_run_attempt AND t.source_file = f.path), f.bytes, left(f.sha256, 16)) FROM paid_runs.files f WHERE f.workflow_run_id = ${runId} AND f.workflow_run_attempt = ${attempt} ORDER BY f.path`);
     process.stdout.write(`${run.trim()}\n\nfile\tkind\ttable_status\trows\tbytes\tsha256\n${files}`);

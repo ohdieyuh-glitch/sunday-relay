@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { generateKeyPairSync, sign } from 'node:crypto';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -493,26 +493,46 @@ describe('the checkpoint workflow and the working tree', () => {
     expect(TRUSTED_COMPUTING_BASE).toContain('scripts/julius-main-provenance-trust.d.mts');
   });
 
-  it('this working tree is not a trusted verifier, and an env attestation is not a substitute', async () => {
-    const result = await requireTrustedVerifier({
-      ...process.env,
-      [EXTERNAL_ANCHOR_VARIABLE]: PIN,
-      JULIUS_CHECKPOINT_ATTESTATIONS: unsignedText,
-      JULIUS_CHECKPOINT_ATTESTATION_SIGNATURE: Buffer.alloc(64, 9).toString('base64'),
-    });
-    expect(result.ok).toBe(false);
-    expect(result.reason).toContain(INSTALLER_RECOVERY);
+  it('a tree without a signed checkpoint attestation is not a trusted verifier, and an env attestation is not a substitute', async () => {
+    // Since the bootstrap, this repository's own tree carries the signed attestation, so the rule is
+    // checked against a root without one: before or after the bootstrap, the env never stands in for it.
+    const bare = mkdtempSync(join(tmpdir(), 'julius-no-checkpoint-'));
+    try {
+      const result = await requireTrustedVerifier({
+        ...process.env,
+        [EXTERNAL_ANCHOR_VARIABLE]: PIN,
+        JULIUS_CHECKPOINT_ATTESTATIONS: unsignedText,
+        JULIUS_CHECKPOINT_ATTESTATION_SIGNATURE: Buffer.alloc(64, 9).toString('base64'),
+      }, { root: bare });
+      expect(result.ok).toBe(false);
+      expect(result.reason).toContain(INSTALLER_RECOVERY);
+      mkdirSync(join(bare, '.github/julius-landing/checkpoints'), { recursive: true });
+      const empty = await requireTrustedVerifier({
+        ...process.env,
+        [EXTERNAL_ANCHOR_VARIABLE]: PIN,
+        JULIUS_CHECKPOINT_ATTESTATIONS: unsignedText,
+      }, { root: bare });
+      expect(empty.ok).toBe(false);
+      expect(empty.reason).toContain(INSTALLER_RECOVERY);
+    } finally {
+      rmSync(bare, { recursive: true, force: true });
+    }
     expect(readFileSync(join(ROOT, '.github/julius-landing/README.md'), 'utf8')).toContain(INSTALLER_RECOVERY);
   });
 
-  it('B2: the target tree carries no stale checkpoint attestation, so the bootstrap leaves exactly one', () => {
+  it('B2: the tree carries no stale checkpoint attestation, so the bootstrap leaves exactly one', () => {
     // 10aedd11's unsigned attestation was on #453's head. The bootstrap only adds
     // <target>.txt and its signatures, so a stale file would leave two
-    // attestations on main and every gate would refuse.
+    // attestations on main and every gate would refuse. Before the bootstrap the
+    // tree has none; after it, exactly the one attested checkpoint's three files.
     const checkpoint = '10aedd11643a1d717311b5824d54e863aa94d763';
     const dir = join(ROOT, '.github/julius-landing/checkpoints');
-    const names = existsSync(dir) ? readdirSync(dir) : [];
-    expect(names.filter((name) => /^[0-9a-f]{40}\./u.test(name))).toEqual([]);
+    const names = (existsSync(dir) ? readdirSync(dir) : []).filter((name) => /^[0-9a-f]{40}\./u.test(name)).sort();
+    if (names.length > 0) {
+      const attested = names[0]?.slice(0, 40) ?? '';
+      expect(attested).not.toBe(checkpoint);
+      expect(names).toEqual([`${attested}.founder.sig`, `${attested}.sig`, `${attested}.txt`]);
+    }
     const stale = git(['show', `${PREVIOUS_PIN_HEAD}:.github/julius-landing/checkpoints/${checkpoint}.txt`]);
     expect(createHash('sha256').update(stale).digest('hex')).toBe('a4fde0b67e790890fa58b2998d8ed88b436f67c2ff2bde49c98fd59f70cb8d25');
     expect(parseCheckpointAttestation(stale).fields.checkpoint).toBe(checkpoint);

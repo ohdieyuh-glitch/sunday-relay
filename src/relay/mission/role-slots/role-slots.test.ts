@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ROLE_SLOTS, type RoleOccupant, type RoleSlot } from './role-slot-contracts';
 import {
-  DEVELOPMENT_DEFAULT_OCCUPANTS, ROLE_OCCUPANTS, findOccupant, occupantsForRole,
+  DEVELOPMENT_DEFAULT_OCCUPANTS, JULIUS_LIVE_REQUESTED_MODELS, ROLE_OCCUPANTS, findOccupant, occupantsForRole,
   registryIsComplete,
 } from './role-slot-registry';
 import {
@@ -35,6 +35,16 @@ const reasons = (result: ReturnType<typeof bindRoleSlots>): string[] =>
   result.ok ? [] : result.problems.map((p) => p.reason);
 
 describe('the role-slot registry', () => {
+  it('names the hosted live requested models, separate from any qualified served model', () => {
+    expect(JULIUS_LIVE_REQUESTED_MODELS).toEqual({
+      prompt_architect: 'gpt-5.6-sol',
+      coding_agent: 'claude-opus-5-5',
+      reviewer: 'grok-build-0.1',
+    });
+    const verified = ROLE_OCCUPANTS.filter((occupant) => occupant.qualification.status === 'VERIFIED');
+    expect(verified.map((occupant) => occupant.qualification.qualifiedServedModels)).toEqual([[JULIUS_LIVE_REQUESTED_MODELS.reviewer]]);
+  });
+
   it('registers at least one occupant and a resolvable default for every permanent role', () => {
     expect(registryIsComplete()).toBe(true);
     for (const role of ROLE_SLOTS) {

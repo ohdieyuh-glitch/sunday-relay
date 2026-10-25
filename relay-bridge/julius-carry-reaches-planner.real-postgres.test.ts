@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -15,7 +15,7 @@ import { JuliusContractPostgresRepository } from '../src/relay/persistence/juliu
 import { JuliusPostgresRepository } from '../src/relay/persistence/julius-postgres';
 import { juliusTestDatabaseUrl } from '../src/relay/persistence/julius-test-database';
 import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
-import { createLiveJuliusBootstrapPort, juliusBootstrapRunId, planTaskId } from './julius/bootstrap';
+import { createLiveJuliusBootstrapPort, planTaskId } from './julius/bootstrap';
 import {
   CODER_WORKER, architectWorker, assembleLiveJuliusRuntime, createContextAndClaimHandoffs, driveJuliusRunToTerminal, reviewerWorker,
 } from './julius/live-composition';
@@ -116,6 +116,7 @@ suite('the corrected carry reaches the next run’s planner, and only the planne
 
     const bootstrap = async (input: {
       readonly clause: Record<string, unknown>;
+      readonly admittedRunId: string;
       readonly scripts: { readonly architect: readonly ScriptedOutcome[]; readonly coder: readonly ScriptedOutcome[]; readonly reviewer: readonly ScriptedOutcome[] };
       readonly carry?: { readonly required: boolean; readonly fromRunIds?: readonly string[] };
     }) => {
@@ -143,7 +144,7 @@ suite('the corrected carry reaches the next run’s planner, and only the planne
         seeds: createPostgresMissionSeedStore(pool),
         knowledge: createPostgresMissionKnowledgeStore(pool),
         ...(input.carry === undefined ? {} : { carry: input.carry }),
-        tenantId: base.tenantId, executionId: `execution:julius-live:${base.missionId}`,
+        tenantId: base.tenantId, executionId: `execution:julius-live:${base.missionId}`, admittedRunId: input.admittedRunId,
       }).submit(request);
       const drive = async () => {
         if (!submitted.accepted) throw new Error(`${submitted.reasonCode}: ${submitted.safeMessage}`);
@@ -152,9 +153,7 @@ suite('the corrected carry reaches the next run’s planner, and only the planne
       };
       return { submitted, handoffs, architect, coder, reviewer, drive };
     };
-    /** The run an arm's clause names, known before the arm is submitted: the bootstrap's own derivation. */
-    const runIdOf = (clause: Record<string, unknown>): string => juliusBootstrapRunId(requestOf(clause));
-    return { id, digest, base, bootstrap, runIdOf };
+    return { id, digest, base, bootstrap };
   }
 
   const snapshotsOf = async (runId: string): Promise<readonly Snapshot[]> => (await pool.query<Snapshot>(
@@ -218,16 +217,18 @@ suite('the corrected carry reaches the next run’s planner, and only the planne
   };
 
   it('CASE 1 — arm WITHOUT’s resolved finding reaches arm WITH’s planner, structured, its design does not, and nothing reaches another worker', async () => {
-    const { digest, base, bootstrap, runIdOf } = pair();
+    const { digest, base, bootstrap } = pair();
 
     /* ---------------------------------------------------------------- arm WITHOUT */
     const withoutClause = { registrationDigest: digest, arm: 'WITHOUT', rerunKey: `without-${nonce()}`, policy: POLICY };
+    const withoutId = `wlj_${randomUUID()}`;
     const withoutArm = await bootstrap({
       clause: withoutClause,
+      admittedRunId: withoutId,
       scripts: { architect: [ARCHITECT_WITH_DESIGN], coder: [BUILD], reviewer: [REJECT_PLAN, PASS_AND_RESOLVE] },
     });
     expect(withoutArm.submitted.accepted, 'arm WITHOUT bootstraps: it is the first run of its mission').toBe(true);
-    expect(withoutArm.submitted.accepted && withoutArm.submitted.runId, 'the run its clause named before it was submitted').toBe(runIdOf(withoutClause));
+    expect(withoutArm.submitted.accepted && withoutArm.submitted.runId, 'the run the caller admitted before it was submitted').toBe(withoutId);
     const withoutOutcome = await withoutArm.drive();
     expect(withoutOutcome.state, String(withoutOutcome.haltCause)).toBe('COMPLETED');
     if (!withoutArm.submitted.accepted) throw new Error('unreachable');
@@ -266,7 +267,7 @@ suite('the corrected carry reaches the next run’s planner, and only the planne
        WITH run id its clause names, say what WITH will carry. Only CARRIES lets WITH be dispatched. */
     const exportedBefore = await carrySourcesOf(withoutRun);
     const withClause = { registrationDigest: digest, arm: 'WITH', rerunKey: `with-${nonce()}`, withoutRunId: withoutRun, policy: POLICY };
-    const promisedRun = runIdOf(withClause);
+    const promisedRun = `wlj_${randomUUID()}`;
     const promised = previewJuliusCarry({
       sources: exportedBefore.sources, withRunId: promisedRun, scopeTaskId: planTaskId(promisedRun), limit: JULIUS_CARRIED_KNOWLEDGE_LIMIT, sha256,
     });
@@ -277,6 +278,7 @@ suite('the corrected carry reaches the next run’s planner, and only the planne
     /* ---------------------------------------------------------------- arm WITH */
     const withArm = await bootstrap({
       clause: withClause,
+      admittedRunId: promisedRun,
       scripts: { architect: [ARCHITECT_WITH_DESIGN], coder: [BUILD], reviewer: [PASS_AND_RESOLVE] },
       carry: { required: true, fromRunIds: [withoutRun] },
     });
@@ -387,11 +389,12 @@ suite('the corrected carry reaches the next run’s planner, and only the planne
   });
 
   it('CASE 2 — an arm WITH whose arm WITHOUT left a design but no verified repair finding is REFUSED before READY, with the reason on the record', async () => {
-    const { digest, base, bootstrap, runIdOf } = pair();
+    const { digest, base, bootstrap } = pair();
     // Arm WITHOUT completes cleanly: no reviewer finding. What it leaves is verdict mirrors and its design in force,
     // the row draft r1 would have carried — and a design never satisfies the gate.
     const withoutArm = await bootstrap({
       clause: { registrationDigest: digest, arm: 'WITHOUT', rerunKey: `without-${nonce()}`, policy: POLICY },
+      admittedRunId: `wlj_${randomUUID()}`,
       scripts: { architect: [ARCHITECT_WITH_DESIGN], coder: [BUILD], reviewer: [PASS_AND_RESOLVE] },
     });
     const withoutOutcome = await withoutArm.drive();
@@ -401,7 +404,7 @@ suite('the corrected carry reaches the next run’s planner, and only the planne
 
     // THE PROCEDURE GATE says it first, from arm WITHOUT's export alone: EMPTY, so by procedure WITH is never dispatched.
     const withClause = { registrationDigest: digest, arm: 'WITH', rerunKey: `with-${nonce()}`, withoutRunId: withoutRun, policy: POLICY };
-    const promisedRun = runIdOf(withClause);
+    const promisedRun = `wlj_${randomUUID()}`;
     const promised = previewJuliusCarry({
       sources: (await carrySourcesOf(withoutRun)).sources, withRunId: promisedRun, scopeTaskId: planTaskId(promisedRun),
       limit: JULIUS_CARRIED_KNOWLEDGE_LIMIT, sha256,
@@ -411,6 +414,7 @@ suite('the corrected carry reaches the next run’s planner, and only the planne
     // AND THE RUN'S OWN GATE, had the procedure been skipped.
     const withArm = await bootstrap({
       clause: withClause,
+      admittedRunId: promisedRun,
       scripts: { architect: [ARCHITECT_PLAIN], coder: [BUILD], reviewer: [PASS_AND_RESOLVE] },
       carry: { required: true, fromRunIds: [withoutRun] },
     });

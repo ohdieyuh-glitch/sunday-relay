@@ -90,28 +90,43 @@ describe('present, it is one arm with an identity of its own and the SAME object
     }
   });
 
-  it('bootstraps the plain run and the two arms as three DISTINCT runs, so arm WITH is never arm WITHOUT’s replay', async () => {
+  it('refuses a bootstrap with no admitted id, and keys each caller-supplied wlj id', async () => {
+    const created: string[] = [];
     const runs: RunCreationStore = {
       loadRun: async () => null,
-      createRun: async (input) => ({ runId: input.runId, state: 'CREATED', version: 1 }),
+      createRun: async (input) => {
+        created.push(input.runId);
+        return { runId: input.runId, state: 'CREATED', version: 1 };
+      },
       addTask: async () => true,
       transition: async (input) => ({ state: input.to, version: input.expectedVersion + 1 }),
       putTaskContract: async () => true,
     };
     const seeds: MissionSeedStore = { ensureBase: async () => undefined, insertCriteria: async () => undefined, insertBrainEntries: async () => undefined };
-    const port = createLiveJuliusBootstrapPort({ runs, seeds, tenantId: BASE.tenantId, executionId: 'execution:learning' });
-    const runIdOf = async (contract: Record<string, unknown>): Promise<string> => {
-      const outcome = await port.submit(compiled(contract));
+    const submit = async (contract: Record<string, unknown>, admittedRunId: string) => createLiveJuliusBootstrapPort({
+      runs, seeds, tenantId: BASE.tenantId, executionId: 'execution:learning', admittedRunId,
+    }).submit(compiled(contract));
+    const missing = await submit(BASE, '');
+    expect(missing.accepted).toBe(false);
+    if (!missing.accepted) expect(missing.reasonCode).toBe('admission_run_id_required');
+    expect(created, 'a missing admission id creates nothing').toEqual([]);
+    const ids = [
+      'wlj_01234567-89ab-4cde-8fab-0123456789ab',
+      'wlj_aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+      'wlj_11111111-2222-4333-8444-555555555555',
+    ] as const;
+    const acceptedId = async (contract: Record<string, unknown>, admittedRunId: string): Promise<string> => {
+      const outcome = await submit(contract, admittedRunId);
       if (!outcome.accepted) throw new Error(`${outcome.reasonCode}: ${outcome.safeMessage}`);
       return outcome.runId;
     };
-    const plain = await runIdOf(BASE);
-    const without = await runIdOf({ ...BASE, learningPair: WITHOUT });
-    const withLearning = await runIdOf({ ...BASE, learningPair: WITH });
-    expect(plain).toBe(`run:${PINNED_IDEMPOTENCY_KEY}`);
+    const plain = await acceptedId(BASE, ids[0]);
+    const without = await acceptedId({ ...BASE, learningPair: WITHOUT }, ids[1]);
+    const withLearning = await acceptedId({ ...BASE, learningPair: WITH }, ids[2]);
+    expect([plain, without, withLearning]).toEqual([...ids]);
     expect(new Set([plain, without, withLearning]).size).toBe(3);
-    // And a retried arm is the same arm: one key, one run.
-    expect(await runIdOf({ ...BASE, learningPair: WITH })).toBe(withLearning);
+    expect(await acceptedId({ ...BASE, learningPair: WITH }, ids[2])).toBe(withLearning);
+    expect(created).toEqual([...ids, ids[2]]);
   });
 });
 
@@ -151,13 +166,18 @@ describe('every field is validated, and nothing else is accepted', () => {
     expect(parse({ ...BASE, learningPair: { ...WITHOUT, rerunKey: `p${'x'.repeat(127)}` } }).ok, 'the bound itself is accepted').toBe(true);
   });
 
-  it('requires arm WITHOUT’s run of arm WITH, in the bootstrap’s own shape, and refuses one on arm WITHOUT', () => {
+  it('requires arm WITHOUT’s run of arm WITH, as a wlj_ id or a legacy run: reference, and refuses one on arm WITHOUT', () => {
     const { withoutRunId: _absent, ...noRun } = WITH;
     void _absent;
+    const wlj = 'wlj_01234567-89ab-4cde-8fab-0123456789ab';
     refused(noRun, 'learning_pair_without_run_required');
     refused({ ...WITH, withoutRunId: 'run:not-hex' }, 'learning_pair_without_run_required');
     refused({ ...WITH, withoutRunId: WITHOUT_RUN.toUpperCase() }, 'learning_pair_without_run_required');
+    refused({ ...WITH, withoutRunId: 'wlj_not-a-uuid' }, 'learning_pair_without_run_required');
+    refused({ ...WITH, withoutRunId: `${wlj} ${wlj}` }, 'learning_pair_without_run_required');
     refused({ ...WITHOUT, withoutRunId: WITHOUT_RUN }, 'learning_pair_without_run_forbidden');
+    expect(parse({ ...BASE, learningPair: { ...WITH, withoutRunId: wlj } }).ok, 'a canonical wlj_ reference').toBe(true);
+    expect(parse({ ...BASE, learningPair: WITH }).ok, 'a legacy run: reference stays readable').toBe(true);
   });
 
   it('refuses a policy the gate could not be held to, with the gate’s own reasons', () => {

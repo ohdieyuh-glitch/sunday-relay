@@ -25,6 +25,11 @@ import {
  * run as running, because it never runs one.
  */
 
+const WLJ_A = 'wlj_01234567-89ab-4cde-8fab-0123456789ab';
+const WLJ_B = 'wlj_aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+const WLJ_C = 'wlj_11111111-2222-4333-8444-555555555555';
+const LEGACY = 'run:0123456789abcdef01234567';
+
 const CONTRACT = {
   missionId: 'mission:wonderland-1', markerNamespace: 'wonderland-one', projectId: 'prj-wonderland', tenantId: 'tenant-w',
   objective: 'Write a comparison of the three candidate save-file formats.',
@@ -77,18 +82,18 @@ interface Stage {
   readonly ports: JuliusMissionRoutePorts;
   readonly seedCalls: string[];
   readonly runCalls: Array<Record<string, unknown>>;
-  /** The (executionId, tenantId) pairs the route asked a port for. */
-  readonly composed: Array<readonly [string, string]>;
+  /** The (executionId, tenantId, admittedRunId) triples the route asked a port for. */
+  readonly composed: Array<readonly [string, string, string]>;
 }
 
 function stage(over: Partial<JuliusMissionRoutePorts> = {}): Stage {
   const seedCalls: string[] = [];
   const runCalls: Array<Record<string, unknown>> = [];
-  const composed: Array<readonly [string, string]> = [];
-  const bootstrap = (executionId: string, tenantId: string): JuliusBootstrapPort => {
-    composed.push([executionId, tenantId]);
+  const composed: Array<readonly [string, string, string]> = [];
+  const bootstrap = (executionId: string, tenantId: string, admittedRunId: string): JuliusBootstrapPort => {
+    composed.push([executionId, tenantId, admittedRunId]);
     return createLiveJuliusBootstrapPort({
-      runs: fakeRuns(runCalls) as never, seeds: fakeSeeds(seedCalls), tenantId, executionId,
+      runs: fakeRuns(runCalls) as never, seeds: fakeSeeds(seedCalls), tenantId, executionId, admittedRunId,
       now: () => '2026-09-27T12:00:00.000Z',
     });
   };
@@ -99,7 +104,7 @@ function stage(over: Partial<JuliusMissionRoutePorts> = {}): Stage {
 }
 
 const post = (body: string | undefined, over: Partial<JuliusMissionRouteRequest> = {}): JuliusMissionRouteRequest =>
-  ({ method: 'POST', path: '/julius/missions', operator: true, body, ...over });
+  ({ method: 'POST', path: '/julius/missions', operator: true, body, runId: WLJ_A, ...over });
 
 const errorOf = (result: { body: unknown } | null) => (result?.body as { error: { kind: string; message: string } }).error;
 const dataOf = <T = { runId: string; state: string; missionId: string; projectId: string; dispatched: boolean; rerun: boolean; next: string },>(
@@ -192,6 +197,23 @@ describe('POST /julius/missions', () => {
     expect(s.runCalls, 'the port refused before writing').toEqual([]);
   });
 
+  it('refuses a missing, malformed, or legacy admission id before creating a run', async () => {
+    const s = stage();
+    for (const [runId, kind] of [
+      [undefined, 'admission_run_id_required'],
+      ['', 'admission_run_id_required'],
+      ['not-an-id', 'admission_run_id_malformed'],
+      [LEGACY, 'admission_run_id_legacy_read_only'],
+    ] as const) {
+      const result = await handleJuliusMissionRoute(post(JSON.stringify(CONTRACT), { runId }), s.ports);
+      expect(result?.status, String(runId)).toBe(400);
+      expect(errorOf(result).kind, String(runId)).toBe(kind);
+      expect(errorOf(result).message, String(runId)).toContain('No run was created');
+    }
+    expect(s.runCalls, 'nothing was written').toEqual([]);
+    expect(s.composed, 'the port was never asked').toEqual([]);
+  });
+
   it('creates the run through the real bootstrap: run, criteria, brain, plan→build tasks, task contract, READY', async () => {
     const s = stage();
     const result = await handleJuliusMissionRoute(post(JSON.stringify(CONTRACT)), s.ports);
@@ -200,11 +222,11 @@ describe('POST /julius/missions', () => {
     expect(data.state).toBe('READY');
     expect(data.missionId).toBe(CONTRACT.missionId);
     expect(data.projectId).toBe(CONTRACT.projectId);
-    expect(data.runId.startsWith('run:')).toBe(true);
+    expect(data.runId).toBe(WLJ_A);
 
     // THE SAME EXECUTION IDENTITY THE JOB DERIVES, so a mission created here
     // and then driven by the job is one execution, and the same tenant.
-    expect(s.composed).toEqual([[`execution:julius-live:${CONTRACT.missionId}`, CONTRACT.tenantId]]);
+    expect(s.composed).toEqual([[`execution:julius-live:${CONTRACT.missionId}`, CONTRACT.tenantId, WLJ_A]]);
     expect(s.seedCalls[0]).toBe(`ensureBase:execution:julius-live:${CONTRACT.missionId}:${CONTRACT.tenantId}:${CONTRACT.missionId}`);
     expect(s.seedCalls).toContain(`criteria:${data.runId}:1`);
     // objective + 1 requirement + 1 constraint + the criteria digest
@@ -273,7 +295,7 @@ describe('POST /julius/missions', () => {
     expect(first.state).toBe('READY');
 
     const edited = { ...CONTRACT, objective: 'Compare only the two formats we actually ship.' };
-    const refused = await handleJuliusMissionRoute(post(JSON.stringify(edited)), s.ports);
+    const refused = await handleJuliusMissionRoute(post(JSON.stringify(edited), { runId: WLJ_B }), s.ports);
     expect(refused?.status).toBe(409);
     expect(errorOf(refused).kind).toBe('mission_run_already_active');
     expect(errorOf(refused).message).toContain(first.runId);
@@ -287,12 +309,12 @@ describe('POST /julius/missions', () => {
     const s = stage();
     const first = dataOf(await handleJuliusMissionRoute(post(JSON.stringify(CONTRACT)), s.ports));
     const edited = { ...CONTRACT, objective: 'Compare only the two formats we actually ship.' };
-    const rerun = await handleJuliusMissionRoute(post(JSON.stringify(edited), { rerun: 'explicit', rerunKey: 'token-1' }), s.ports);
+    const rerun = await handleJuliusMissionRoute(post(JSON.stringify(edited), { rerun: 'explicit', rerunKey: 'token-1', runId: WLJ_B }), s.ports);
     expect(rerun?.status).toBe(201);
     const data = dataOf<{ runId: string; rerun: boolean }>(rerun);
     expect(data.runId).not.toBe(first.runId);
     expect(data.rerun).toBe(true);
-    expect(dataOf<{ rerun: boolean }>(await handleJuliusMissionRoute(post(JSON.stringify({ ...CONTRACT, missionId: 'mission:other' }), {}), s.ports)).rerun).toBe(false);
+    expect(dataOf<{ rerun: boolean }>(await handleJuliusMissionRoute(post(JSON.stringify({ ...CONTRACT, missionId: 'mission:other' }), { runId: WLJ_C }), s.ports)).rerun).toBe(false);
   });
 
   it('is not an intent unless it says the word: any other header value is refused like no header at all', async () => {
@@ -300,11 +322,11 @@ describe('POST /julius/missions', () => {
     await handleJuliusMissionRoute(post(JSON.stringify(CONTRACT)), s.ports);
     const edited = JSON.stringify({ ...CONTRACT, objective: 'Something else entirely.' });
     for (const value of ['true', '1', 'yes', 'EXPLICIT rerun please', '']) {
-      const result = await handleJuliusMissionRoute(post(edited, { rerun: value, rerunKey: 'token-1' }), s.ports);
+      const result = await handleJuliusMissionRoute(post(edited, { rerun: value, rerunKey: 'token-1', runId: WLJ_B }), s.ports);
       expect(result?.status, value).toBe(409);
     }
     // The exact word, in any case, IS the intent — with a key of its own.
-    expect((await handleJuliusMissionRoute(post(edited, { rerun: ' Explicit ', rerunKey: 'token-1' }), s.ports))?.status).toBe(201);
+    expect((await handleJuliusMissionRoute(post(edited, { rerun: ' Explicit ', rerunKey: 'token-1', runId: WLJ_B }), s.ports))?.status).toBe(201);
   });
 
   it('an explicit rerun with no key of its own is refused by name, and creates nothing', async () => {
@@ -340,7 +362,7 @@ describe('POST /julius/missions', () => {
     const s = stage();
     const first = dataOf(await handleJuliusMissionRoute(post(JSON.stringify(CONTRACT)), s.ports));
     // Another mission, while the first is live: allowed, and a distinct run.
-    const other = await handleJuliusMissionRoute(post(JSON.stringify({ ...CONTRACT, missionId: 'mission:wonderland-2', markerNamespace: 'wonderland-two' })), s.ports);
+    const other = await handleJuliusMissionRoute(post(JSON.stringify({ ...CONTRACT, missionId: 'mission:wonderland-2', markerNamespace: 'wonderland-two' }), { runId: WLJ_B }), s.ports);
     expect(other?.status).toBe(201);
     expect(dataOf(other).runId).not.toBe(first.runId);
 
@@ -348,7 +370,7 @@ describe('POST /julius/missions', () => {
     // ordinary work, with no rerun intent required.
     activeRuns.set(`${CONTRACT.projectId}/${CONTRACT.missionId}`, { runId: first.runId, state: 'COMPLETED' });
     activeRuns.delete(`${CONTRACT.projectId}/${CONTRACT.missionId}`);
-    const next = await handleJuliusMissionRoute(post(JSON.stringify({ ...CONTRACT, objective: 'Now compare the fourth format too.' })), s.ports);
+    const next = await handleJuliusMissionRoute(post(JSON.stringify({ ...CONTRACT, objective: 'Now compare the fourth format too.' }), { runId: WLJ_C }), s.ports);
     expect(next?.status).toBe(201);
     expect(dataOf(next).runId).not.toBe(first.runId);
   });

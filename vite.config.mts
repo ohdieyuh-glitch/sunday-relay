@@ -31,7 +31,14 @@ export default defineConfig({
      * They are executed deliberately, by `julius-first-live-mission.test.ts`,
      * which asserts they FAIL. Nothing else should run them.
      */
-    exclude: ['**/node_modules/**', '**/dist/**', '.github/julius-missions/**'],
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '.github/julius-missions/**',
+      // format.test.mjs is a node:test the coder runs inside its workspace.
+      // It reads out/normalized.json, which is not in the repo. Exclude that file only.
+      'relay-bridge/julius-inworld-mission/**/format.test.mjs',
+    ],
   },
   envPrefix: ['VITE_', 'RELAY_PUBLIC_'],
   build: {

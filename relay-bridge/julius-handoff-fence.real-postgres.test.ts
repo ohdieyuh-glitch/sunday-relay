@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -45,7 +45,7 @@ suite('(a2) the fenced handoff against a real PostgreSQL', () => {
     events = new JuliusEventPostgresRepository(pool);
     recovery = new JuliusRecoveryPostgresRepository(pool);
     const ports = { bootstrap: composeJuliusMissionBootstrap(pool), missingConfig: [], reviewerProvider: 'xai', cardRevision: 'card:fence:1' };
-    create = (body) => handleJuliusMissionRoute({ method: 'POST', path: '/julius/missions', operator: true, body }, ports);
+    create = (body) => handleJuliusMissionRoute({ method: 'POST', path: '/julius/missions', operator: true, body, runId: `wlj_${randomUUID()}` }, ports);
   });
   afterAll(async () => pool?.end());
 
