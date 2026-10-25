@@ -1089,6 +1089,17 @@ describe('the main-provenance verifier accepts this landing and refuses a direct
     ...over,
   });
 
+  it('L-2: a protected-paths entry on an ORDINARY path still needs the governed lander here, as in the walk', () => {
+    // Nothing in the change is hard-forbidden or TCB: only the clearance's protected-paths entry makes
+    // this a governed landing. Without that rule a hand push with this clearance would be accepted.
+    const text = clearance(['protected-paths: src/relay/ordinary.ts', 'landing-method: squash']);
+    const pushed = evaluateSignedLanding(signedInput(text, { changedPaths: ['src/relay/ordinary.ts'] }), tip);
+    expect(pushed.state).toBe('decided');
+    if (pushed.state !== 'decided') return;
+    expect(pushed.result.verdict).toBe('unprovenanced');
+    expect(pushed.result.reason).toMatch(/JULIUS_GOVERNED_LANDER_BOT_ID is unset|governed lander/u);
+  });
+
   it('a governed clearance skips the worker check and still dies on the real pin after the path check', () => {
     const text = clearance([`protected-paths: ${WORKFLOW}`, 'landing-method: squash']);
     const handPushed = evaluateSignedLanding(signedInput(text, { changedPaths: [WORKFLOW] }), tip);

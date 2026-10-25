@@ -471,8 +471,20 @@ describe('runBootstrap talks to GitHub only with a token and never prints it', (
     expect(block).not.toMatch(/curl[^\n]*TOKEN/u);
     expect(block).not.toContain('|| true\' EXIT');
     expect(block).toContain('WARNING: THE INSTALLATION TOKEN WAS NOT REVOKED');
-    // F5c: untracked files make the checkout dirty.
-    expect(block).toContain('test -z "$(git status --porcelain)"');
+    // F5c / L-4: untracked files make the checkout dirty, including files inside untracked
+    // directories and files a local status.showUntrackedFiles setting would hide.
+    expect(block).toContain('test -z "$(git status --porcelain --untracked-files=all)"');
+    expect(block).not.toContain('test -z "$(git status --porcelain)"');
+    // F4 / L-1: the founder must TYPE the confirmation, and nothing reaches --execute without it.
+    // Deleting the comparison would turn the checkpoint into "press Enter".
+    const lines = block.split('\n').map((line) => line.trim());
+    const prompt = lines.findIndex((line) => line.startsWith('read -r -p "Type EXECUTE ${TARGET:0:12}') && line.endsWith('CONFIRM </dev/tty'));
+    const compare = lines.indexOf('test "$CONFIRM" = "EXECUTE ${TARGET:0:12}"');
+    const execute = lines.findIndex((line) => line.includes('--execute'));
+    expect(prompt, 'the typed confirmation prompt').toBeGreaterThan(-1);
+    expect(compare, 'the exact comparison of what was typed').toBeGreaterThan(prompt);
+    expect(execute, '--execute runs only after the comparison').toBeGreaterThan(compare);
+    expect(lines.filter((line) => line.includes('--execute') && !line.startsWith('#')).length, 'exactly one --execute').toBe(1);
     // F5d: the escaped checkpoints pattern and the tree comparison.
     expect(block).toContain("grep -v '^[.]github/julius-landing/checkpoints/'");
     expect(block).toContain('diff <(git ls-tree -r "$TARGET"');
