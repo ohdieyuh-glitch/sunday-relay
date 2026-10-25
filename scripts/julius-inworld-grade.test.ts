@@ -75,6 +75,13 @@ describe('the grader holds the same pins as the runtime', () => {
     });
     expect([...J1_PIN_FILES]).toEqual([...INWORLD_PIN_FILES]);
   });
+
+  it('the checker command is a literal, and its expected self-hash is the pinned checker sha256', () => {
+    const source = readFileSync(join('scripts', 'julius-inworld-grade.mjs'), 'utf8');
+    const call = source.slice(source.indexOf("spawnSync('node', ["), source.indexOf('], {', source.indexOf("spawnSync('node', [")));
+    expect(call).toContain(`'--expect-self-sha256', '${J1_PINNED_CHECKER_FILE_SHA256}'`);
+    expect(call).not.toMatch(/\$\{|join\(|opts\./u);
+  });
 });
 
 describe('grading a paid J1 run with the real pinned checker', () => {

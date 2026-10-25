@@ -185,16 +185,25 @@ export function gradeInworld(opts) {
     return { exit: 2, verdict: { ...withHashes, verdict: 'NOT_RUN', reason: 'integrity_mismatch' } };
   }
   // 4. The checker, as its own process, with only PATH and the temp dir in its env, in the staging dir.
-  const run = spawnSync(opts.nodePath ?? process.execPath, [
-    join(opts.staging, 'checker', 'check.mjs'), rawPath,
-    join(opts.staging, 'seed', 'data', 'legacy_ledger.csv'), join(opts.staging, 'seed', 'data', 'posts.json'),
-    '--expect-self-sha256', J1_GRADE_PINS.checkerFileSha256,
-  ], {
-    cwd: opts.staging, encoding: 'utf8', timeout: 120_000, maxBuffer: 1024 * 1024,
-    env: { PATH: process.env.PATH ?? '', ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}), TEMP: opts.staging, TMPDIR: opts.staging, HOME: opts.staging },
-  });
-  // 5. The raw text is not kept past grading.
-  try { rmSync(rawPath, { force: true }); } catch { /* the job's runner is discarded with it */ }
+  // The command is a literal, and every path is relative to the staging dir it runs in, so the
+  // repository boundary scan can read exactly what runs. The hash is J1_GRADE_PINS.checkerFileSha256
+  // (a test holds the two equal).
+  const judgedCopy = join(opts.staging, 'final-message.txt');
+  let run;
+  try {
+    writeFileSync(judgedCopy, raw, { mode: 0o600 });
+    run = spawnSync('node', [
+      'checker/check.mjs', 'final-message.txt', 'seed/data/legacy_ledger.csv', 'seed/data/posts.json',
+      '--expect-self-sha256', '1a98f1a4d739ebe2da254715d81f56cd5fa08d534a1fbf10ef6214e8b262207e'
+    ], {
+      cwd: opts.staging, encoding: 'utf8', timeout: 120_000, maxBuffer: 1024 * 1024,
+      env: { PATH: process.env.PATH ?? '', ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}), TEMP: opts.staging, TMPDIR: opts.staging, HOME: opts.staging },
+    });
+  } finally {
+    // 5. The raw text is not kept past grading.
+    try { rmSync(judgedCopy, { force: true }); } catch { /* the job's runner is discarded with it */ }
+    try { rmSync(rawPath, { force: true }); } catch { /* the job's runner is discarded with it */ }
+  }
   const judged = judgeCheckerRun(run, { checkerFileSha256: J1_GRADE_PINS.checkerFileSha256, trimmedSha256 });
   const verdict = { ...withHashes, ...judged };
   const exit = judged.verdict === 'NOT_RUN' && (judged.reason === 'checker_crashed' || judged.reason === 'pin_mismatch' || judged.reason === 'integrity_mismatch') ? 2 : 0;

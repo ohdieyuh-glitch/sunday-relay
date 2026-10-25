@@ -1919,11 +1919,12 @@ jobs:
             git show "$GITHUB_SHA:$MISSION_SRC/$f" > "$stage/$f" || { echo "stage_failed: $f" >&2; exit 2; }
           done
           mkdir -p j1-final-message j1-evidence julius-inworld-verdict
-          grader="$GITHUB_WORKSPACE/scripts/julius-inworld-grade.mjs"
+          # This job's own fresh checkout at GITHUB_SHA: the coder never ran on this
+          # runner. The checker child runs with the staging dir as its cwd and HOME.
           set +e
-          ( cd "$stage" && env -i PATH="$PATH" HOME="$stage" node "$grader" \
-              --staging "$stage" --final-message "$GITHUB_WORKSPACE/j1-final-message" \
-              --evidence "$GITHUB_WORKSPACE/j1-evidence" --out "$GITHUB_WORKSPACE/julius-inworld-verdict/checker-verdict.txt" )
+          env -i PATH="$PATH" HOME="$stage" node scripts/julius-inworld-grade.mjs \
+            --staging "$stage" --final-message j1-final-message \
+            --evidence j1-evidence --out julius-inworld-verdict/checker-verdict.txt
           status=$?
           set -e
           rm -rf "$stage" "$GITHUB_WORKSPACE/j1-final-message"

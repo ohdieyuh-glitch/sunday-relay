@@ -39,5 +39,4 @@ export declare function gradeInworld(opts: {
   readonly finalMessage: string;
   readonly evidence: string;
   readonly graderSha256?: string;
-  readonly nodePath?: string;
 }): { readonly exit: number; readonly verdict: JuliusInworldVerdictRecord & { readonly verdict: JuliusInworldVerdict } };
