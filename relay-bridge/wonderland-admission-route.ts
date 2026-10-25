@@ -250,7 +250,7 @@ const STATUS_NOT_FOUND = {
  * The guards shared with admission. A status read uses this function and then
  * only reads the admission file. It does not admit, claim, or start a process.
  */
-function juliusLoopbackGuard(
+export function juliusLoopbackGuard(
   request: WonderlandAdmissionRouteRequest,
   ports: WonderlandAdmissionRoutePorts,
 ): { readonly native: WonderlandNativeSession } | { readonly status: number; readonly body: unknown } {
