@@ -69,10 +69,25 @@ export declare function attestationNonceProblems(fields: { readonly nonce?: stri
 export declare function judgeAttestationWindow(fields: { readonly issued?: string; readonly expires?: string } | undefined, now: number): string | null;
 export declare const CHECKPOINT_INSTALLER_EXACT_PATHS: readonly string[];
 export declare function isCheckpointInstallerDiff(paths: unknown): boolean;
-export declare function landingIdentityProblem(input?: {
+export declare const GOVERNED_LANDER_BOT_LOGIN: 'julius-governed-lander[bot]';
+/** GitHub's signer (login web-flow). Checked as the committer and signer, never as the lander identity. */
+export declare const GITHUB_WEB_FLOW_ID: 19864447;
+export declare const GITHUB_SIGNER_EMAIL: 'noreply@github.com';
+export declare const GITHUB_SIGNER_NAME: 'GitHub';
+export interface CommitIdentityFields {
+  readonly authorId?: unknown;
+  readonly authorType?: unknown;
+  readonly authorEmail?: unknown;
   readonly committerId?: unknown;
+  readonly committerEmail?: unknown;
+  readonly committerName?: unknown;
   readonly verificationVerified?: unknown;
   readonly verificationReason?: unknown;
+}
+/** The identity fields of a REST commits/{sha} body. */
+export declare function commitIdentityFields(body: unknown): CommitIdentityFields;
+/** Null only for the App bot as author, GitHub's web-flow as committer and signer, verified and valid. */
+export declare function landingIdentityProblem(input?: CommitIdentityFields & {
   readonly botId?: unknown;
   readonly verificationReadProblem?: unknown;
 }): string | null;

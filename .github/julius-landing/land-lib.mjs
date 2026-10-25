@@ -353,7 +353,8 @@ export const LANDER_IDENTITY = { name: LANDER_BOT_LOGIN, email: `${LANDER_BOT_US
 
 /** The commit the lander CREATED, read back from GitHub (REST `commits/{sha}`), against exactly what it asked for: the cleared tree, ONE parent = the cleared base, the exact message
  * and the julius-lander[bot] identity. Any difference means the ref update must not follow. */
-export function checkCreatedCommit({ created, sha, base, tree, message, identity = LANDER_IDENTITY }) {
+/** `committerIdentity` defaults to `identity`. The governed lander passes GitHub's signer: GitHub commits the App's API commits as web-flow. */
+export function checkCreatedCommit({ created, sha, base, tree, message, identity = LANDER_IDENTITY, committerIdentity = identity }) {
   const problems = [];
   if (!SHA.test(String(sha))) problems.push('the created commit has no valid sha');
   if (created?.sha !== undefined && created.sha !== sha) problems.push(`the read-back commit is ${created.sha}, expected ${sha}`);
@@ -366,8 +367,8 @@ export function checkCreatedCommit({ created, sha, base, tree, message, identity
   // Read-back of the commit THIS job just created, not an authorization of an untrusted author. The name and email
   // are the bytes the lander sent and GitHub stored on that sha. They are not accepted as identity evidence for a
   // commit somebody else authored.
-  for (const who of ['author', 'committer']) {
-    if (created?.commit?.[who]?.name !== identity.name || created?.commit?.[who]?.email !== identity.email) problems.push(`the created commit ${who} is not ${identity.name}`);
+  for (const [who, expected] of [['author', identity], ['committer', committerIdentity]]) {
+    if (created?.commit?.[who]?.name !== expected.name || created?.commit?.[who]?.email !== expected.email) problems.push(`the created commit ${who} is not ${expected.name}`);
   }
   return problems;
 }

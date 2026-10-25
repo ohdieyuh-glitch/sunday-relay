@@ -35,6 +35,24 @@ const otherPem = String(other.publicKey.export({ type: 'spki', format: 'pem' }))
 const der = Buffer.from(createPublicKey(publicPem).export({ type: 'spki', format: 'der' }));
 const spki = createHash('sha256').update(der).digest('hex');
 const raw = der.subarray(der.length - 32).toString('hex');
+/** The identity GitHub reports for a commit the governed App created through the API: bot author, web-flow signer, valid signature. */
+const appSigned = (bot: string | number) => ({
+  authorId: Number(bot), authorType: 'Bot', authorEmail: `${bot}+julius-governed-lander[bot]@users.noreply.github.com`,
+  committerId: 19864447, committerEmail: 'noreply@github.com', committerName: 'GitHub',
+  verificationVerified: true, verificationReason: 'valid',
+});
+/** The same, as a REST commits/{sha} body. */
+const appSignedBody = (bot: string | number, rest: Record<string, unknown> = {}, commit: Record<string, unknown> = {}) => ({
+  ...rest,
+  author: { login: 'julius-governed-lander[bot]', id: Number(bot), type: 'Bot' },
+  committer: { login: 'web-flow', id: 19864447, type: 'User' },
+  commit: {
+    author: { name: 'julius-governed-lander[bot]', email: `${bot}+julius-governed-lander[bot]@users.noreply.github.com` },
+    committer: { name: 'GitHub', email: 'noreply@github.com' },
+    verification: { verified: true, reason: 'valid' },
+    ...commit,
+  },
+});
 const signWith = (text: string, key = pair.privateKey) => sign(null, Buffer.from(text, 'utf8'), key).toString('base64');
 const verifyBytes = (text: string, signatureB64: string) => verify(null, Buffer.from(text, 'utf8'), pair.publicKey, Buffer.from(signatureB64, 'base64'));
 /** H1: a throwaway founder-approval key, pinned only in the fixture copy. */
@@ -63,7 +81,7 @@ const realGoverned = (await import(pathToFileURL(join(LANDING, 'governed-land.mj
   formatLandingRecord: (record: Record<string, unknown>) => string;
   parseAuditRecord: (message: string) => { status: string; pr: number; method: string; main: string } | null;
   landedPullsFromAudits: (
-    audits: { sha: string; message: string; committerId?: number; verificationVerified?: boolean; verificationReason?: string }[],
+    audits: Record<string, unknown>[],
     mainSha: string,
     contains: (ancestor: string, descendant: string) => boolean,
     botId?: string,
@@ -339,11 +357,11 @@ describe('queue, record, and workflow', () => {
     expect(parsed).toEqual({ status: 'pending', pr: 7, method: 'squash', main: OTHER });
     const bot = '347502603';
     const audit = {
-      sha: OTHER, message: record, committerId: 347502603, verificationVerified: true, verificationReason: 'valid',
+      sha: OTHER, message: record, ...appSigned(347502603),
     };
     expect([...realGoverned.landedPullsFromAudits([audit], OTHER, (ancestor) => ancestor === OTHER, bot)]).toEqual([7]);
     expect([...realGoverned.landedPullsFromAudits([audit], H, () => false, bot)]).toEqual([]);
-    const forged = { sha: OTHER, message: record, committerId: 1, verificationVerified: false, verificationReason: 'unsigned' };
+    const forged = { sha: OTHER, message: record, ...appSigned(347502603), committerId: 347502603, committerEmail: '347502603+julius-governed-lander[bot]@users.noreply.github.com', committerName: 'julius-governed-lander[bot]', verificationVerified: false, verificationReason: 'unsigned' };
     expect([...realGoverned.landedPullsFromAudits([forged], OTHER, () => true, bot)]).toEqual([]);
     expect([...realGoverned.landedPullsFromAudits([audit], OTHER, () => true)]).toEqual([]);
   });
@@ -521,9 +539,7 @@ describe('eligibility fails closed', () => {
     expect(forgedTag).not.toMatch(/already used/u);
     expect(problemsOf({
       nonceTagExists: true,
-      nonceTagCommitterId: 347502603,
-      nonceTagVerificationVerified: true,
-      nonceTagVerificationReason: 'valid',
+      nonceTagIdentity: appSigned(347502603),
       governedLanderBotId: '347502603',
     })).toMatch(/already used/u);
     expect(problemsOf({ nonceTagExists: true, governedLanderBotId: '' })).toMatch(/JULIUS_GOVERNED_LANDER_BOT_ID is unset/u);
@@ -1078,7 +1094,63 @@ describe('REVIEW batch 2 on the lander', () => {
       { pem: publicPem, anchor: spki, now: NOW + 1000, seenNonces: new Set<string>(), governedLanderBotId: '424242' },
     );
     expect(judged.ok).toBe(false);
-    expect(judged.reason).toMatch(/governed lander bot|founder approval/u);
+    expect(judged.reason).toMatch(/governed lander bot|founder approval|no GitHub-verified signature/u);
+  });
+});
+
+describe('IDENTITY: the same App-signed rule in nonce tags, audits, the walk and the single-tip check', () => {
+  const fixtures = JSON.parse(readFileSync(join(ROOT, 'scripts/julius-landing-identity-fixtures.json'), 'utf8')) as Record<string, Record<string, unknown>>;
+  const fields = (name: string) => (fixtureTrust as unknown as { commitIdentityFields: (body: unknown) => Record<string, unknown> }).commitIdentityFields(fixtures[name]);
+
+  it('a nonce tag counts as spent only when its target is App-signed', () => {
+    const spent = realGoverned.nonceTagProblem({ exists: true, nonce: NONCE, identity: fields('appSignedConstructed'), botId: '347502603' });
+    expect(spent).toMatch(/already used/u);
+    for (const name of ['spoofBotUnsigned', 'userTokenUnsigned', 'webUiHuman']) {
+      expect(realGoverned.nonceTagProblem({ exists: true, nonce: NONCE, identity: fields(name), botId: '347502603' }), name).toMatch(/was not created by the governed lander app/u);
+    }
+  });
+
+  it('an audit counts only when its commit is App-signed', () => {
+    const record = realGoverned.formatLandingRecord({ pr: 7, head: H, tree: T, base: B, clearanceDigest: DIGEST, checkRunIds: [1], resultingMainSha: OTHER, method: 'squash' });
+    expect([...realGoverned.landedPullsFromAudits([{ sha: OTHER, message: record, ...fields('appSignedConstructed') }], OTHER, () => true, '347502603')]).toEqual([7]);
+    for (const name of ['spoofBotUnsigned', 'userTokenUnsigned', 'webUiHuman']) {
+      expect([...realGoverned.landedPullsFromAudits([{ sha: OTHER, message: record, ...fields(name) }], OTHER, () => true, '347502603')], name).toEqual([]);
+    }
+  });
+
+  it('the walk accepts a protected landing only from the App-signed shape', async () => {
+    const text = clearance([`protected-paths: ${WORKFLOW}`, 'landing-method: squash']);
+    const built = (await import(pathToFileURL(fixtureLib).href) as {
+      buildLandingCommitMessage: (input: { clearanceText: string; signatureB64: string; founderSignatureB64?: string }) => string;
+    }).buildLandingCommitMessage({ clearanceText: text, signatureB64: signWith(text), founderSignatureB64: founderSign(text) });
+    const commit = { message: built, committerTime: NOW, tree: T, parent: B, parentCount: 1, headTree: T, headParentCount: 2, paths: [WORKFLOW] };
+    const options = { pem: publicPem, anchor: spki, now: NOW + 1000, governedLanderBotId: '347502603', founderPem, founderAnchor: founderSpki };
+    const ok = await fixtureTrust.judgeCommitLanding({ ...commit, ...fields('appSignedConstructed') }, { ...options, seenNonces: new Set<string>() });
+    expect(ok.ok, ok.reason).toBe(true);
+    for (const name of ['spoofBotUnsigned', 'userTokenUnsigned', 'webUiHuman']) {
+      const refused = await fixtureTrust.judgeCommitLanding({ ...commit, ...fields(name) }, { ...options, seenNonces: new Set<string>() });
+      expect(refused.ok, name).toBe(false);
+    }
+  });
+
+  it('the single-tip check refuses the spoof shape for a governed path', () => {
+    const tip = { mainSha: OTHER, mainTreeSha: T, parentSha: B };
+    const text = clearance([`protected-paths: ${WORKFLOW}`, 'landing-method: squash']);
+    const input = {
+      repo: REPO,
+      mainCommitMessage: `Landed PR #7 (${H.slice(0, 12)})\n\n${block(text)}\n`,
+      reviewerKeyPem: publicPem, reviewerKeyAtSha: B, tipReviewerKeyPem: publicPem,
+      changedPaths: [WORKFLOW], changedPathsComplete: true,
+      headCommit: { sha: H, treeSha: T },
+      governedLanderBotId: '347502603',
+    };
+    for (const name of ['spoofBotUnsigned', 'userTokenUnsigned', 'webUiHuman']) {
+      const result = evaluateSignedLanding({ ...input, landingIdentity: fields(name) } as never, tip);
+      expect(result.state, name).toBe('decided');
+      if (result.state !== 'decided') continue;
+      expect(result.result.verdict, name).toBe('unprovenanced');
+      expect(result.result.reason, name).toMatch(/no GitHub-verified signature|author is not the governed lander bot/u);
+    }
   });
 });
 
@@ -1117,9 +1189,7 @@ describe('the main-provenance verifier accepts this landing and refuses a direct
     expect(handPushed.result.prNumber).toBeUndefined();
     const acceptedShape = evaluateSignedLanding(signedInput(text, {
       changedPaths: [WORKFLOW],
-      landingCommitterId: 424242,
-      landingVerificationVerified: true,
-      landingVerificationReason: 'valid',
+      landingIdentity: appSigned(424242),
       governedLanderBotId: '424242',
     }), tip);
     expect(acceptedShape.state).toBe('decided');
@@ -1176,9 +1246,7 @@ describe('the main-provenance verifier accepts this landing and refuses a direct
       headTree: T,
       headParentCount: 2,
       paths: [WORKFLOW],
-      committerId: 424242,
-      verificationVerified: true,
-      verificationReason: 'valid',
+      ...appSigned(424242),
     };
     const seen = new Set<string>();
     const bot = { governedLanderBotId: '424242' };
@@ -1194,7 +1262,7 @@ describe('the main-provenance verifier accepts this landing and refuses a direct
     if (previousBot === undefined) delete process.env.JULIUS_GOVERNED_LANDER_BOT_ID;
     else process.env.JULIUS_GOVERNED_LANDER_BOT_ID = previousBot;
     const hand = await fixtureTrust.judgeCommitLanding(
-      { ...commit, committerId: 111, verificationVerified: true, verificationReason: 'valid' },
+      { ...commit, authorId: 111 },
       { pem: publicPem, anchor: spki, now: Date.parse('2026-10-25T00:00:00Z'), seenNonces: new Set<string>(), ...bot },
     );
     expect(hand.ok).toBe(false);
@@ -1243,3 +1311,5 @@ function block(text: string) {
     '-----END JULIUS LANDING-----',
   ].join('\n');
 }
+
+void appSignedBody;

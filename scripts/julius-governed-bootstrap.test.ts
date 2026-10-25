@@ -38,6 +38,24 @@ const otherPem = other.publicKey.export({ type: 'spki', format: 'pem' }).toStrin
 const der = Buffer.from(pair.publicKey.export({ type: 'spki', format: 'der' }));
 const spki = createHash('sha256').update(der).digest('hex');
 const raw = der.subarray(der.length - 32).toString('hex');
+/** The identity GitHub reports for a commit the governed App created through the API: bot author, web-flow signer, valid signature. */
+const appSigned = (bot: string | number) => ({
+  authorId: Number(bot), authorType: 'Bot', authorEmail: `${bot}+julius-governed-lander[bot]@users.noreply.github.com`,
+  committerId: 19864447, committerEmail: 'noreply@github.com', committerName: 'GitHub',
+  verificationVerified: true, verificationReason: 'valid',
+});
+/** The same, as a REST commits/{sha} body. */
+const appSignedBody = (bot: string | number, rest: Record<string, unknown> = {}, commit: Record<string, unknown> = {}) => ({
+  ...rest,
+  author: { login: 'julius-governed-lander[bot]', id: Number(bot), type: 'Bot' },
+  committer: { login: 'web-flow', id: 19864447, type: 'User' },
+  commit: {
+    author: { name: 'julius-governed-lander[bot]', email: `${bot}+julius-governed-lander[bot]@users.noreply.github.com` },
+    committer: { name: 'GitHub', email: 'noreply@github.com' },
+    verification: { verified: true, reason: 'valid' },
+    ...commit,
+  },
+});
 const signWith = (text: string) => sign(null, Buffer.from(text, 'utf8'), pair.privateKey).toString('base64');
 /** H1: a throwaway founder-approval key, pinned only in the fixture copy. */
 const founder = generateKeyPairSync('ed25519');
@@ -419,8 +437,8 @@ describe('runBootstrap talks to GitHub only with a token and never prints it', (
       if (path.endsWith('/git/trees') && init.method === 'POST') return { status: 201, body: { sha: 'c'.repeat(40) } };
       if (path.endsWith('/git/commits') && init.method === 'POST') return { status: 201, body: { sha: INSTALLER } };
       if (path === `/repos/${REPO}/commits/${INSTALLER}`) {
-        const id = mode === 'identity' ? 1 : Number(BOT);
-        return { status: 200, body: { committer: { id }, commit: { verification: { verified: true, reason: 'valid' } } } };
+        const body = appSignedBody(BOT);
+        return { status: 200, body: mode === 'identity' ? { ...body, author: { ...body.author, id: 1 } } : body };
       }
       if (path.endsWith('/git/refs/heads/main') && init.method === 'PATCH') {
         if (mode === 'patch-timeout-moved' || mode === 'patch-timeout-unmoved') return { status: 504, body: null };
@@ -661,6 +679,31 @@ describe('runBootstrap talks to GitHub only with a token and never prints it', (
     expect(refused.problems.join('\n')).toMatch(/the ref update was refused; no retry and no force: 422/u);
   });
 
+  it('IDENTITY: the installer read-back accepts only the App-signed shape; the spoof, user-token and web-UI shapes never move main', async () => {
+    const fixtures = JSON.parse(readFileSync(join(ROOT, 'scripts/julius-landing-identity-fixtures.json'), 'utf8')) as Record<string, unknown>;
+    for (const name of ['spoofBotUnsigned', 'userTokenUnsigned', 'webUiHuman']) {
+      const base = client();
+      const result = await boot.runBootstrap({
+        argv: [...argv, '--execute'],
+        env,
+        request: async (path, init) => (path === `/repos/${REPO}/commits/${INSTALLER}` ? { status: 200, body: fixtures[name] } : base.request(path, init)),
+        now: NOW,
+      });
+      expect(result.ok, name).toBe(false);
+      expect(result.problems.join('\n'), name).toMatch(/no GitHub-verified signature|author is not the governed lander bot|not GitHub's web-flow signer/u);
+      expect(base.calls.some((call) => call.method === 'PATCH'), name).toBe(false);
+    }
+    const constructed = client();
+    const accepted = await boot.runBootstrap({
+      argv: [...argv, '--execute'],
+      env,
+      request: async (path, init) => (path === `/repos/${REPO}/commits/${INSTALLER}` ? { status: 200, body: fixtures.appSignedConstructed } : constructed.request(path, init)),
+      now: NOW,
+    });
+    expect(accepted.ok, accepted.problems.join('\n')).toBe(true);
+    expect(constructed.calls.filter((call) => call.method === 'PATCH')).toHaveLength(1);
+  });
+
   it('B1: refuses before any request when --target-tree is omitted, so base_tree is never undefined', async () => {
     const { calls, request } = client();
     const withoutTree = argv.filter((value, index) => value !== '--target-tree' && argv[index - 1] !== '--target-tree');
@@ -859,3 +902,5 @@ describe('a Windows checkout cannot hand the founder CRLF copies of the trusted 
     expect(block).toContain("JULIUS_FOUNDER_APPROVAL_KEY_SHA256 --jq .value | tr -d '[:space:]')\" = \"$(printf '%s' \"$FOUNDER_FINGERPRINT\" | tr -d '[:space:]')\"");
   });
 });
+
+void appSigned;

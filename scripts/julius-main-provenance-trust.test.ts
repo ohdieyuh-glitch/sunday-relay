@@ -25,6 +25,8 @@ import {
   TRUSTED_CHECKPOINT_TREE,
   TRUSTED_COMPUTING_BASE,
   attestationNonce,
+  commitIdentityFields,
+  landingIdentityProblem,
   attestationShapeProblem,
   attestationNonceProblems,
   canonicalCheckpointAttestation,
@@ -224,6 +226,53 @@ describe('anchor variables are a trimmed sha256 hex, nothing else', () => {
     expect(founderKeyPinRefusal(founderPem, base64Spki)).toMatch(/founder approval: founder_anchor_not_sha256: anchor is not a sha256 hex/u);
     expect(founderKeyPinRefusal(founderPem, founderSpki.toUpperCase())).toMatch(/founder_anchor_not_sha256/u);
     expect(founderKeyPinRefusal(founderPem, '0'.repeat(64))).toMatch(/founder_anchor_mismatch/u);
+  });
+});
+
+describe('the landing identity is the App bot author, signed by GitHub as web-flow (real response shapes)', () => {
+  // FETCHED: spoofBotUnsigned (ac05075be7), userTokenUnsigned (910e81d3ef), webUiHuman (f539cab2).
+  // CONSTRUCTED: appSignedConstructed (f539cab2 with the bot as author). See _provenance in the file.
+  const fixtures = JSON.parse(readFileSync(join(ROOT, 'scripts/julius-landing-identity-fixtures.json'), 'utf8')) as Record<string, Record<string, unknown>>;
+  const BOT = '347502603';
+  const judge = (body: Record<string, unknown>) => landingIdentityProblem({ ...commitIdentityFields(body), botId: BOT });
+  const variant = (change: (body: Record<string, any>) => void) => {
+    const body = JSON.parse(JSON.stringify(fixtures.appSignedConstructed));
+    change(body);
+    return judge(body);
+  };
+
+  it('accepts the App-created shape: bot author, web-flow committer GitHub <noreply@github.com>, verified valid (constructed)', () => {
+    expect(judge(fixtures.appSignedConstructed!)).toBeNull();
+  });
+
+  it('refuses REVIEW\'s probe ac05075be7: a user token naming the bot as author gives author = committer = bot, unsigned (fetched)', () => {
+    expect(judge(fixtures.spoofBotUnsigned!)).toMatch(/no GitHub-verified signature/u);
+    // Even if such a commit were signed, a committer equal to the bot is not GitHub's signer.
+    const signed = JSON.parse(JSON.stringify(fixtures.spoofBotUnsigned));
+    signed.commit.verification = { verified: true, reason: 'valid' };
+    expect(judge(signed)).toMatch(/not GitHub's web-flow signer/u);
+  });
+
+  it('refuses 910e81d3ef: a user-token API commit, unsigned (fetched)', () => {
+    expect(judge(fixtures.userTokenUnsigned!)).toMatch(/no GitHub-verified signature/u);
+  });
+
+  it('refuses f539cab2: a web-UI commit, web-flow signed and valid, with a human author (fetched)', () => {
+    expect(judge(fixtures.webUiHuman!)).toMatch(/the landing author is not the governed lander bot 347502603/u);
+  });
+
+  it('refuses each single deviation from the App shape', () => {
+    expect(variant((b) => { b.author.type = 'User'; })).toMatch(/author is not the governed lander bot/u);
+    expect(variant((b) => { b.author.id = 225496319; })).toMatch(/author is not the governed lander bot/u);
+    expect(variant((b) => { b.commit.verification = { verified: false, reason: 'unsigned' }; })).toMatch(/no GitHub-verified signature/u);
+    expect(variant((b) => { b.commit.verification = { verified: true, reason: 'unknown_key' }; })).toMatch(/no GitHub-verified signature/u);
+    expect(variant((b) => { b.committer = { login: 'ohdieyuh-glitch', id: 225496319, type: 'User' }; })).toMatch(/not GitHub's web-flow signer/u);
+    expect(variant((b) => { b.committer = { login: 'julius-governed-lander[bot]', id: 347502603, type: 'Bot' }; })).toMatch(/not GitHub's web-flow signer/u);
+    expect(variant((b) => { b.commit.committer = { name: 'GitHub', email: 'someone@example.com' }; })).toMatch(/not GitHub's web-flow signer/u);
+    expect(variant((b) => { b.commit.committer = { name: 'Not GitHub', email: 'noreply@github.com' }; })).toMatch(/not GitHub's web-flow signer/u);
+    expect(variant((b) => { b.commit.author.email = 'ohdieyuh@gmail.com'; })).toMatch(/author email is not the noreply address/u);
+    expect(variant((b) => { b.commit.author.email = '1+julius-governed-lander[bot]@users.noreply.github.com'; })).toMatch(/author email is not the noreply address/u);
+    expect(landingIdentityProblem({ ...commitIdentityFields(fixtures.appSignedConstructed!), botId: '' })).toMatch(/JULIUS_GOVERNED_LANDER_BOT_ID is unset/u);
   });
 });
 

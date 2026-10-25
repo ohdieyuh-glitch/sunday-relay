@@ -46,6 +46,24 @@ const founderPem = founder.publicKey.export({ type: 'spki', format: 'pem' }).toS
 const founderDer = Buffer.from(founder.publicKey.export({ type: 'spki', format: 'der' }));
 const founderSpki = createHash('sha256').update(founderDer).digest('hex');
 const founderEnv = { JULIUS_FOUNDER_APPROVAL_KEY_SHA256: founderSpki };
+/** The identity GitHub reports for a commit the governed App created through the API: bot author, web-flow signer, valid signature. */
+const appSigned = (bot: string | number) => ({
+  authorId: Number(bot), authorType: 'Bot', authorEmail: `${bot}+julius-governed-lander[bot]@users.noreply.github.com`,
+  committerId: 19864447, committerEmail: 'noreply@github.com', committerName: 'GitHub',
+  verificationVerified: true, verificationReason: 'valid',
+});
+/** The same, as a REST commits/{sha} body. */
+const appSignedBody = (bot: string | number, rest: Record<string, unknown> = {}, commit: Record<string, unknown> = {}) => ({
+  ...rest,
+  author: { login: 'julius-governed-lander[bot]', id: Number(bot), type: 'Bot' },
+  committer: { login: 'web-flow', id: 19864447, type: 'User' },
+  commit: {
+    author: { name: 'julius-governed-lander[bot]', email: `${bot}+julius-governed-lander[bot]@users.noreply.github.com` },
+    committer: { name: 'GitHub', email: 'noreply@github.com' },
+    verification: { verified: true, reason: 'valid' },
+    ...commit,
+  },
+});
 const founderSign = (text: string) => sign(null, Buffer.from(text, 'utf8'), founder.privateKey).toString('base64');
 const attackerPem = attacker.publicKey.export({ type: 'spki', format: 'pem' }).toString();
 
@@ -61,7 +79,7 @@ type TrustModule = {
   requireTrustedVerifier: (env?: NodeJS.ProcessEnv, options?: {
     root?: string;
     now?: number;
-    identities?: Record<string, { committerId?: number; verificationVerified?: boolean; verificationReason?: string }>;
+    identities?: Record<string, Record<string, unknown>>;
   }) => Promise<{ ok: boolean; reason: string }>;
   annotateChainLandings: (
     commits: Array<Record<string, unknown>>,
@@ -238,7 +256,7 @@ describe('signed checkpoint liveness', () => {
     const reviewerOnlySha = git(repo, ['rev-parse', 'HEAD']).trim();
     const reviewerOnly = await mod.requireTrustedVerifier(
       { [mod.EXTERNAL_ANCHOR_VARIABLE]: spki, ...founderEnv, JULIUS_GOVERNED_LANDER_BOT_ID: '347502603' },
-      { root: repo, now: NOW, identities: { [reviewerOnlySha]: { committerId: 347502603, verificationVerified: true, verificationReason: 'valid' } } },
+      { root: repo, now: NOW, identities: { [reviewerOnlySha]: appSigned(347502603) } },
     );
     expect(reviewerOnly.ok).toBe(false);
     expect(reviewerOnly.reason).toMatch(/founder approval: founder_signature_missing: no founder-approval signature was supplied/u);
@@ -248,7 +266,7 @@ describe('signed checkpoint liveness', () => {
     git(repo, ['commit', '-F', messagePath]);
     const landingSha = git(repo, ['rev-parse', 'HEAD']).trim();
     const identities = {
-      [landingSha]: { committerId: 347502603, verificationVerified: true as const, verificationReason: 'valid' },
+      [landingSha]: appSigned(347502603),
     };
     const previousBot = process.env.JULIUS_GOVERNED_LANDER_BOT_ID;
     delete process.env.JULIUS_GOVERNED_LANDER_BOT_ID;
@@ -287,9 +305,7 @@ describe('signed checkpoint liveness', () => {
         changedPaths: ['.github/workflows/ci.yml'],
         changedPathsComplete: true,
         headCommit: { sha: head, authorLogin: 'not-the-coding-worker', treeSha: landingTree },
-        landingCommitterId: 347502603,
-        landingVerificationVerified: true,
-        landingVerificationReason: 'valid',
+        landingIdentity: appSigned(347502603),
         externalReviewerKeySha256: spki,
         founderKeyPem: founderPem,
         externalFounderKeySha256: founderSpki,
@@ -369,10 +385,7 @@ describe('signed checkpoint liveness', () => {
         expect(String(url)).toContain(`/commits/${landingSha}`);
         return {
           ok: true,
-          json: async () => ({
-            committer: { id: 347502603 },
-            commit: { verification: { verified: true, reason: 'valid' } },
-          }),
+          json: async () => appSignedBody(347502603),
         };
       }) as typeof fetch;
       const accepted = await mod.requireTrustedVerifier(

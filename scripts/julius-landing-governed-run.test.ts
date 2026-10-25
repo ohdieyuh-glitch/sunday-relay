@@ -29,6 +29,24 @@ const publicPem = String(pair.publicKey.export({ type: 'spki', format: 'pem' }))
 const der = Buffer.from(pair.publicKey.export({ type: 'spki', format: 'der' }));
 const spki = createHash('sha256').update(der).digest('hex');
 const raw = der.subarray(der.length - 32).toString('hex');
+/** The identity GitHub reports for a commit the governed App created through the API: bot author, web-flow signer, valid signature. */
+const appSigned = (bot: string | number) => ({
+  authorId: Number(bot), authorType: 'Bot', authorEmail: `${bot}+julius-governed-lander[bot]@users.noreply.github.com`,
+  committerId: 19864447, committerEmail: 'noreply@github.com', committerName: 'GitHub',
+  verificationVerified: true, verificationReason: 'valid',
+});
+/** The same, as a REST commits/{sha} body. */
+const appSignedBody = (bot: string | number, rest: Record<string, unknown> = {}, commit: Record<string, unknown> = {}) => ({
+  ...rest,
+  author: { login: 'julius-governed-lander[bot]', id: Number(bot), type: 'Bot' },
+  committer: { login: 'web-flow', id: 19864447, type: 'User' },
+  commit: {
+    author: { name: 'julius-governed-lander[bot]', email: `${bot}+julius-governed-lander[bot]@users.noreply.github.com` },
+    committer: { name: 'GitHub', email: 'noreply@github.com' },
+    verification: { verified: true, reason: 'valid' },
+    ...commit,
+  },
+});
 const signWith = (text: string, key = pair.privateKey) => sign(null, Buffer.from(text, 'utf8'), key).toString('base64');
 /** H1: a throwaway founder-approval key, pinned only in the fixture copy. */
 const founder = generateKeyPairSync('ed25519');
@@ -172,16 +190,7 @@ export function fakeGithub(scenario: Scenario) {
       return { status: 201, body: { sha: S } };
     }
     if (method === 'GET' && at(`/commits/${S}`)) {
-      const who = { name: BOT_LOGIN, email: `${BOT}+${BOT_LOGIN}@users.noreply.github.com` };
-      return {
-        status: 200,
-        body: {
-          sha: S,
-          parents: [{ sha: B }],
-          committer: { id: Number(BOT) },
-          commit: { tree: { sha: T }, message: landingMessage.replace(/\n$/u, ''), author: who, committer: who, verification: { verified: true, reason: 'valid' } },
-        },
-      };
+      return { status: 200, body: appSignedBody(BOT, { sha: S, parents: [{ sha: B }] }, { tree: { sha: T }, message: landingMessage.replace(/\n$/u, '') }) };
     }
     if (method === 'POST' && at('/git/refs')) {
       const ref = String((call.body as { ref?: string })?.ref ?? '');
@@ -433,8 +442,7 @@ describe('H3: an ambiguous ref update is not a clean refusal, and a lost audit r
     const tag = first.calls.find((call) => call.method === 'POST' && String((call.body as { ref?: string })?.ref).startsWith('refs/tags/julius-landing-nonce-'));
     expect((tag?.body as { sha?: string })?.sha).toBe(S);
     const landingMessage = String((first.calls.find((call) => call.method === 'POST' && call.path.endsWith('/git/commits'))?.body as { message?: string })?.message);
-    const who = { name: BOT_LOGIN, email: `${BOT}+${BOT_LOGIN}@users.noreply.github.com` };
-    const landedCommit = { sha: S, parents: [{ sha: B }], committer: { id: Number(BOT) }, commit: { tree: { sha: T }, message: landingMessage, author: who, committer: who, verification: { verified: true, reason: 'valid' } } };
+    const landedCommit = appSignedBody(BOT, { sha: S, parents: [{ sha: B }] }, { tree: { sha: T }, message: landingMessage });
     const later = await run({
       main: S,
       issueComments: comments(),
@@ -451,7 +459,7 @@ describe('H3: an ambiguous ref update is not a clean refusal, and a lost audit r
       main: S,
       issueComments: comments(),
       nonceTags: [{ ref: `refs/tags/julius-landing-nonce-${NONCE}`, object: { sha: S } }],
-      override: (call) => (call.method === 'GET' && call.path === `/repos/${REPO}/commits/${S}` ? { status: 200, body: { ...landedCommit, committer: { id: 1 } } } : undefined),
+      override: (call) => (call.method === 'GET' && call.path === `/repos/${REPO}/commits/${S}` ? { status: 200, body: { ...landedCommit, committer: { login: 'julius-governed-lander[bot]', id: Number(BOT), type: 'Bot' }, commit: { ...landedCommit.commit, verification: { verified: false, reason: 'unsigned' } } } } : undefined),
     }, { GITHUB_SHA: S, GITHUB_WORKFLOW_SHA: S });
     expect(auditRefs(forged.calls)).toEqual([]);
     expect(forged.text).not.toMatch(/already on main/u);
@@ -476,10 +484,9 @@ describe('REVIEW batch 2 end to end', () => {
   it('L1: a decoy nonce tag naming the same pull request does not hide the App-signed audit commit', async () => {
     const first = await run({ issueComments: [botComment, reviewerComment(delivery(text()))], auditRef: 'fail' });
     const landingMessage = String((first.calls.find((call) => call.method === 'POST' && call.path.endsWith('/git/commits'))?.body as { message?: string })?.message);
-    const who = { name: BOT_LOGIN, email: `${BOT}+${BOT_LOGIN}@users.noreply.github.com` };
     const DECOY = '9'.repeat(40);
-    const landed = { sha: S, parents: [{ sha: B }], committer: { id: Number(BOT) }, commit: { tree: { sha: T }, message: landingMessage, author: who, committer: who, verification: { verified: true, reason: 'valid' } } };
-    const decoy = { ...landed, sha: DECOY, committer: { id: 1 }, commit: { ...landed.commit, verification: { verified: false, reason: 'unsigned' } } };
+    const landed = appSignedBody(BOT, { sha: S, parents: [{ sha: B }] }, { tree: { sha: T }, message: landingMessage });
+    const decoy = { ...landed, sha: DECOY, committer: { login: 'julius-governed-lander[bot]', id: Number(BOT), type: 'Bot' }, commit: { ...landed.commit, verification: { verified: false, reason: 'unsigned' } } };
     const later = await run({
       main: S,
       issueComments: [botComment, reviewerComment(delivery(text()))],
@@ -497,3 +504,24 @@ describe('REVIEW batch 2 end to end', () => {
     expect(later.text).toMatch(/recovered refs\/heads\/julius-governed-audit\/pr\/7 at 5{40}/u);
   });
 });
+
+describe('IDENTITY: the governed squash read-back moves main only for the App-signed shape', () => {
+  const fixtures = JSON.parse(readFileSync(join(ROOT, 'scripts/julius-landing-identity-fixtures.json'), 'utf8')) as Record<string, Record<string, any>>;
+  const text = () => clearanceText(governedOptional, seenDigest([botComment]));
+  for (const name of ['spoofBotUnsigned', 'userTokenUnsigned', 'webUiHuman']) {
+    it(`refuses the ${name} shape and never PATCHes main`, async () => {
+      const result = await run({
+        issueComments: [botComment, reviewerComment(delivery(text()))],
+        override: (call) => {
+          if (call.method !== 'GET' || call.path !== `/repos/${REPO}/commits/${S}`) return undefined;
+          const body = JSON.parse(JSON.stringify(fixtures[name]));
+          return { status: 200, body: { ...body, sha: S, parents: [{ sha: B }], commit: { ...body.commit, tree: { sha: T }, message: 'x' } } };
+        },
+      });
+      expect(result.exitCode).toBe(1);
+      expect(result.calls.some((call) => call.method === 'PATCH' && call.path.endsWith('/git/refs/heads/main'))).toBe(false);
+    });
+  }
+});
+
+void appSigned;

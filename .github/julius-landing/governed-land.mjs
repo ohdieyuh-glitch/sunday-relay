@@ -39,6 +39,9 @@ import {
   governedLandingShapeProblem,
   judgeClearanceWindow,
   landingIdentityProblem,
+  commitIdentityFields,
+  GITHUB_SIGNER_EMAIL,
+  GITHUB_SIGNER_NAME,
 } from '../../scripts/julius-main-provenance-trust.mjs';
 
 export const GOVERNED_SELF_CHECK = 'Land a governed pull request';
@@ -280,12 +283,8 @@ export function parseAuditRecord(message) {
 export function landedPullsFromAudits(audits, mainSha, contains, botId) {
   const landed = new Set();
   for (const audit of Array.isArray(audits) ? audits : []) {
-    if (landingIdentityProblem({
-      committerId: audit?.committerId,
-      verificationVerified: audit?.verificationVerified === true,
-      verificationReason: audit?.verificationReason,
-      botId,
-    })) continue;
+    // An audit carries commitIdentityFields of its commit: App bot author, web-flow signer, verified and valid.
+    if (landingIdentityProblem({ ...audit, botId })) continue;
     const record = parseAuditRecord(audit?.message);
     if (!record || typeof contains !== 'function') continue;
     const proven = record.method === 'squash'
@@ -436,10 +435,11 @@ export function branchRulesProblems(liveRules, snapshot, appId) {
  * refusal, and it is not recorded as a used nonce. The lander does not delete
  * or move the tag, so that pre-created tag blocks this nonce until it is removed.
  */
-export function nonceTagProblem({ exists, nonce, committerId, verificationVerified, verificationReason, botId, unreadable } = {}) {
+export function nonceTagProblem({ exists, nonce, identity: tagged, botId, unreadable } = {}) {
   if (exists !== true) return null;
   if (unreadable === true) return 'the nonce tag could not be read';
-  const identity = landingIdentityProblem({ committerId, verificationVerified, verificationReason, botId });
+  // `identity` is commitIdentityFields of the tag's target commit.
+  const identity = landingIdentityProblem({ ...(tagged && typeof tagged === 'object' ? tagged : {}), botId });
   if (identity === null) return 'this clearance nonce was already used on main';
   if (identity === 'JULIUS_GOVERNED_LANDER_BOT_ID is unset') return identity;
   return `the nonce tag refs/tags/julius-landing-nonce-${nonce} already exists and was not created by the governed lander app`;
@@ -573,9 +573,7 @@ export function evaluateGovernedLanding(input) {
   const tagProblem = nonceTagProblem({
     exists: input?.nonceTagExists === true,
     nonce: fields.nonce,
-    committerId: input?.nonceTagCommitterId,
-    verificationVerified: input?.nonceTagVerificationVerified === true,
-    verificationReason: input?.nonceTagVerificationReason,
+    identity: input?.nonceTagIdentity,
     botId: input?.governedLanderBotId,
     unreadable: input?.nonceTagUnreadable === true,
   });
@@ -882,6 +880,8 @@ async function landQueue({ env, fetchImpl, readLocal, now, stdout, stderr, state
     return;
   }
   const identity = { name: bot.login, email: `${botId}+${bot.login}@users.noreply.github.com` };
+  // GitHub commits and signs the App's API commits itself, as web-flow.
+  const GITHUB_SIGNER = { name: GITHUB_SIGNER_NAME, email: GITHUB_SIGNER_EMAIL };
   const mintWriteToken = async (permissions) => {
     const jwt = githubAppJwt(appId, privateKey, now());
     const headers = { Authorization: `Bearer ${jwt}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
@@ -933,19 +933,8 @@ async function landQueue({ env, fetchImpl, readLocal, now, stdout, stderr, state
   };
   /** True when this App-signed audit commit proves pull request `pr` is on main. */
   const proveAudit = async (pr, sha, commit) => {
-    const audit = {
-      sha,
-      message: commit?.commit?.message ?? '',
-      committerId: commit?.committer?.id,
-      verificationVerified: commit?.commit?.verification?.verified === true,
-      verificationReason: typeof commit?.commit?.verification?.reason === 'string' ? commit.commit.verification.reason : '',
-    };
-    if (landingIdentityProblem({
-      committerId: audit.committerId,
-      verificationVerified: audit.verificationVerified,
-      verificationReason: audit.verificationReason,
-      botId,
-    })) return false;
+    const audit = { sha, message: commit?.commit?.message ?? '', ...commitIdentityFields(commit) };
+    if (landingIdentityProblem({ ...audit, botId })) return false;
     const record = parseAuditRecord(audit.message);
     if (!record || record.pr !== pr) return false;
     const ancestor = record.method === 'squash' ? sha : (record.main !== 'pending' ? record.main : '');
@@ -1086,18 +1075,14 @@ async function landQueue({ env, fetchImpl, readLocal, now, stdout, stderr, state
         if (tag.status === 200) {
           try { tagBody = await tag.json(); } catch { tagBody = null; }
         }
-        let nonceTagCommitterId;
-        let nonceTagVerificationVerified = false;
-        let nonceTagVerificationReason = '';
+        let nonceTagIdentity;
         let nonceTagUnreadable = tag.status !== 200 && tag.status !== 404;
         if (tag.status === 200) {
           const tagSha = tagBody?.object?.sha;
           if (typeof tagSha !== 'string') nonceTagUnreadable = true;
           else {
             const tagged = await api(`/repos/${REPO}/commits/${tagSha}`);
-            nonceTagCommitterId = tagged?.committer?.id;
-            nonceTagVerificationVerified = tagged?.commit?.verification?.verified === true;
-            nonceTagVerificationReason = typeof tagged?.commit?.verification?.reason === 'string' ? tagged.commit.verification.reason : '';
+            nonceTagIdentity = commitIdentityFields(tagged);
           }
         }
         const checksComplete = Array.isArray(checkBody?.check_runs) && checkBody.total_count === checkBody.check_runs.length;
@@ -1179,9 +1164,7 @@ async function landQueue({ env, fetchImpl, readLocal, now, stdout, stderr, state
           digest: governedCommentsDigest({ issueComments, inlineComments, reviews, clearanceText: chosen.delivery.clearanceText, publicKeyPem }),
           commitMessages: [],
           nonceTagExists: tag.status === 200,
-          nonceTagCommitterId,
-          nonceTagVerificationVerified,
-          nonceTagVerificationReason,
+          nonceTagIdentity,
           nonceTagUnreadable,
           governedLanderBotId: botId,
           checkRuns: checkBody.check_runs,
@@ -1203,12 +1186,7 @@ async function landQueue({ env, fetchImpl, readLocal, now, stdout, stderr, state
           const tree = decision.fields.tree;
           const writeToken = await mintWriteToken(governedWritePermissions(decision.changedPaths, { founderApproved: decision.founderApproved === true }));
           const apiWrite = apiWith(writeToken);
-          const identityProblemOf = (readBack) => landingIdentityProblem({
-            committerId: readBack?.committer?.id,
-            verificationVerified: readBack?.commit?.verification?.verified === true,
-            verificationReason: typeof readBack?.commit?.verification?.reason === 'string' ? readBack.commit.verification.reason : '',
-            botId,
-          });
+          const identityProblemOf = (readBack) => landingIdentityProblem({ ...commitIdentityFields(readBack), botId });
           let sha = null;
           let auditSha = null;
           const rememberSha = (value) => {
@@ -1223,7 +1201,7 @@ async function landQueue({ env, fetchImpl, readLocal, now, stdout, stderr, state
             });
             rememberSha(created?.sha);
             const readBack = await api(`/repos/${REPO}/commits/${sha}`);
-            const createdProblems = checkCreatedCommit({ created: readBack, sha, base, tree, message: decision.message, identity });
+            const createdProblems = checkCreatedCommit({ created: readBack, sha, base, tree, message: decision.message, identity, committerIdentity: GITHUB_SIGNER });
             const identityProblem = identityProblemOf(readBack);
             if (createdProblems.length > 0 || identityProblem) {
               decision = { ok: false, problems: [...createdProblems, ...(identityProblem ? [identityProblem] : [])] };
@@ -1254,8 +1232,8 @@ async function landQueue({ env, fetchImpl, readLocal, now, stdout, stderr, state
               if (readBack?.commit?.tree?.sha !== mainTree) problems.push('the audit commit tree is not the tree of main before the move');
               const stored = readBack?.commit?.message;
               if (stored !== auditMessage && !(auditMessage.endsWith('\n') && stored === auditMessage.slice(0, -1))) problems.push('the audit commit message differs from the pending record');
-              for (const who of ['author', 'committer']) {
-                if (readBack?.commit?.[who]?.name !== identity.name || readBack?.commit?.[who]?.email !== identity.email) problems.push(`the audit commit ${who} is not ${identity.name}`);
+              for (const [who, expected] of [['author', identity], ['committer', GITHUB_SIGNER]]) {
+                if (readBack?.commit?.[who]?.name !== expected.name || readBack?.commit?.[who]?.email !== expected.email) problems.push(`the audit commit ${who} is not ${expected.name}`);
               }
               const identityProblem = identityProblemOf(readBack);
               if (identityProblem) problems.push(identityProblem);

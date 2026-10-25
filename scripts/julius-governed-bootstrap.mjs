@@ -38,6 +38,7 @@ import {
   TRUSTED_COMPUTING_BASE,
   attestationShapeProblem,
   checkpointAttestationProblems,
+  commitIdentityFields,
   founderApprovalProblem,
   isCheckpointInstallerDiff,
   parseAnchor,
@@ -651,12 +652,8 @@ export async function runBootstrap({ argv = [], env = {}, request, readFile, now
       : ['the installer commit could not be read back'];
     if (shape.length > 0) return { ok: false, execute: true, problems: [...shape, 'main was not moved'], record: null };
     const readBack = await github(request, token, `/repos/${REPO}/commits/${installerSha}`);
-    const identity = landingIdentityProblem({
-      committerId: readBack.body?.committer?.id,
-      verificationVerified: readBack.body?.commit?.verification?.verified === true,
-      verificationReason: typeof readBack.body?.commit?.verification?.reason === 'string' ? readBack.body.commit.verification.reason : '',
-      botId: env.JULIUS_GOVERNED_LANDER_BOT_ID,
-    });
+    // The App bot as author, GitHub's web-flow as signer and committer, verified and valid. Any other shape: main does not move.
+    const identity = landingIdentityProblem({ ...commitIdentityFields(readBack.body), botId: env.JULIUS_GOVERNED_LANDER_BOT_ID });
     if (readBack.status !== 200 || identity) {
       return { ok: false, execute: true, problems: [identity ?? 'the installer commit could not be read back'], record: null };
     }

@@ -569,12 +569,54 @@ export function governedAuditBranchProblem(ref) {
   return null;
 }
 
-export function landingIdentityProblem({ committerId, verificationVerified, verificationReason, botId, verificationReadProblem } = {}) {
+/** The governed lander App's bot account. Its id comes from JULIUS_GOVERNED_LANDER_BOT_ID; the login is fixed. */
+export const GOVERNED_LANDER_BOT_LOGIN = 'julius-governed-lander[bot]';
+/** GitHub's signer for commits it creates and signs itself (login web-flow). Never a lander identity. */
+export const GITHUB_WEB_FLOW_ID = 19864447;
+export const GITHUB_SIGNER_EMAIL = 'noreply@github.com';
+export const GITHUB_SIGNER_NAME = 'GitHub';
+
+/** The identity fields of a REST `GET /repos/{r}/commits/{sha}` body, for landingIdentityProblem. */
+export function commitIdentityFields(body) {
+  return {
+    authorId: body?.author?.id,
+    authorType: body?.author?.type,
+    authorEmail: body?.commit?.author?.email,
+    committerId: body?.committer?.id,
+    committerEmail: body?.commit?.committer?.email,
+    committerName: body?.commit?.committer?.name,
+    verificationVerified: body?.commit?.verification?.verified === true,
+    verificationReason: typeof body?.commit?.verification?.reason === 'string' ? body.commit.verification.reason : '',
+  };
+}
+
+/**
+ * A commit the governed lander App created through the API with its
+ * installation token, with no author, committer or signature in the request.
+ * GitHub then records the App bot as the AUTHOR and signs the commit itself:
+ * the COMMITTER is GitHub's web-flow signer (id 19864447, git committer
+ * `GitHub <noreply@github.com>`)
+ * and the verification is verified with reason valid. That is the only shape
+ * accepted. The bot is the identity; web-flow is checked as the signer only.
+ *
+ * The top-level author is GitHub's account match for the author email, which
+ * alone never authorizes (#397): anyone can put the bot's noreply address in
+ * a commit. It counts here only together with GitHub's own valid signature
+ * as web-flow, which GitHub produces only for commits it created itself. A
+ * user token that names the bot as author gets author = committer = the bot,
+ * unsigned (REVIEW's probe ac05075be7), so a committer equal to the bot is
+ * refused, whatever its signature.
+ */
+export function landingIdentityProblem({ authorId, authorType, authorEmail, committerId, committerEmail, committerName, verificationVerified, verificationReason, botId, verificationReadProblem } = {}) {
   if (typeof verificationReadProblem === 'string' && verificationReadProblem !== '') return verificationReadProblem;
   const id = typeof botId === 'string' ? botId.trim() : '';
   if (!/^[1-9][0-9]{0,16}$/u.test(id)) return `${GOVERNED_LANDER_BOT_VARIABLE} is unset`;
-  if (String(committerId ?? '') !== id) return `the landing committer id is not the governed lander bot ${id}`;
   if (verificationVerified !== true || verificationReason !== 'valid') return 'the landing commit has no GitHub-verified signature';
+  if (String(authorId ?? '') !== id || authorType !== 'Bot') return `the landing author is not the governed lander bot ${id}`;
+  if (authorEmail !== `${id}+${GOVERNED_LANDER_BOT_LOGIN}@users.noreply.github.com`) return `the landing author email is not the noreply address of the governed lander bot ${id}`;
+  if (String(committerId ?? '') !== String(GITHUB_WEB_FLOW_ID) || committerEmail !== GITHUB_SIGNER_EMAIL || committerName !== GITHUB_SIGNER_NAME) {
+    return `the landing committer is not GitHub's web-flow signer ${GITHUB_WEB_FLOW_ID}`;
+  }
   return null;
 }
 
@@ -971,7 +1013,12 @@ export async function judgeCommitLanding(commit, options = {}) {
   if (needsLander) {
     const botId = options.governedLanderBotId ?? options.env?.[GOVERNED_LANDER_BOT_VARIABLE] ?? process.env[GOVERNED_LANDER_BOT_VARIABLE];
     const identity = landingIdentityProblem({
+      authorId: commit?.authorId,
+      authorType: commit?.authorType,
+      authorEmail: commit?.authorEmail,
       committerId: commit?.committerId,
+      committerEmail: commit?.committerEmail,
+      committerName: commit?.committerName,
       verificationVerified: commit?.verificationVerified,
       verificationReason: commit?.verificationReason,
       verificationReadProblem: commit?.verificationReadProblem,
@@ -1148,11 +1195,7 @@ async function fetchGithubCommitIdentity(sha, env) {
   if (!response.ok) return { problem: 'the GitHub commit verification could not be read' };
   let body;
   try { body = await response.json(); } catch { return { problem: 'the GitHub commit verification could not be read' }; }
-  return {
-    committerId: body?.committer?.id,
-    verificationVerified: body?.commit?.verification?.verified === true,
-    verificationReason: typeof body?.commit?.verification?.reason === 'string' ? body.commit.verification.reason : '',
-  };
+  return commitIdentityFields(body);
 }
 
 async function attachLanderIdentity(commit, env, identities) {

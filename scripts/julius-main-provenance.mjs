@@ -57,6 +57,7 @@ import {
   TRUSTED_COMPUTING_BASE,
   annotateChainLandings,
   landingIdentityProblem,
+  commitIdentityFields,
   firstParentWalkCapReason,
   applyTrustChain,
   attestedCheckpointFloor,
@@ -488,10 +489,9 @@ export function evaluateSignedLanding(input, tip) {
   // L6: a protected-paths entry needs the App and the founder, as in the governed lander.
   const needsLander = protectedPaths.length > 0 || changed.some((path) => SIGNED_LANDING_HARD_FORBIDDEN.test(path) || TRUSTED_COMPUTING_BASE.includes(path));
   if (needsLander) {
+    // `landingIdentity` is commitIdentityFields of the tip's REST commit: App bot author, web-flow signer, verified and valid.
     const identity = landingIdentityProblem({
-      committerId: input?.landingCommitterId,
-      verificationVerified: input?.landingVerificationVerified,
-      verificationReason: input?.landingVerificationReason,
+      ...(input?.landingIdentity && typeof input.landingIdentity === 'object' ? input.landingIdentity : {}),
       verificationReadProblem: input?.verificationReadProblem,
       botId: input?.governedLanderBotId ?? process.env[GOVERNED_LANDER_BOT_VARIABLE],
     });
@@ -609,9 +609,7 @@ export function readFirstParentChain(gh, repo, tipSha, floorSha = TRUSTED_CHECKP
       parent: commit?.parents?.[0]?.sha,
       parentCount: Array.isArray(commit?.parents) ? commit.parents.length : undefined,
       committerTime: Number.isFinite(committerTime) ? committerTime : undefined,
-      committerId: commit?.committer?.id,
-      verificationVerified: commit?.commit?.verification?.verified === true,
-      verificationReason: typeof commit?.commit?.verification?.reason === 'string' ? commit.commit.verification.reason : '',
+      ...commitIdentityFields(commit),
     });
     const parent = commit?.parents?.[0]?.sha;
     if (parent === floorSha) return reversed.reverse();
@@ -1067,9 +1065,7 @@ async function main(argv) {
       changedPathsComplete,
       headCommit,
       founderKeyPem,
-      landingCommitterId: mainCommit?.committer?.id,
-      landingVerificationVerified: mainCommit?.commit?.verification?.verified === true,
-      landingVerificationReason: mainCommit?.commit?.verification?.reason,
+      landingIdentity: commitIdentityFields(mainCommit),
       governedLanderBotId: process.env[GOVERNED_LANDER_BOT_VARIABLE],
     });
     let chainCommits;
