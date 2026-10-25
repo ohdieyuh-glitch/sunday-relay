@@ -13,6 +13,7 @@ export type JuliusInworldVerdict = 'PASS' | 'FAIL' | 'NOT_RUN';
 export interface JuliusInworldVerdictRecord {
   readonly verdict: JuliusInworldVerdict | string;
   readonly reason?: string | null;
+  readonly runId?: string | null;
   readonly taskId?: string | null;
   readonly taskType?: string | null;
   readonly trimmedSha256?: string | null;
@@ -25,8 +26,8 @@ export interface JuliusInworldVerdictRecord {
 
 export declare function combinedPin(entries: readonly (readonly [string, Uint8Array])[]): string;
 export declare function parsePsqlTsv(text: string): Record<string, string>[] | null;
-export declare function selectGradedAttempt(tasks: readonly Record<string, string>[]):
-  | { readonly ok: true; readonly taskId: string; readonly taskType: string }
+export declare function selectGradedAttempt(tasks: readonly Record<string, string>[], runs: readonly Record<string, string>[] | null):
+  | { readonly ok: true; readonly taskId: string; readonly taskType: string; readonly runId: string }
   | { readonly ok: false; readonly reason: string; readonly taskIds?: readonly string[] };
 export declare function judgeCheckerRun(
   run: { readonly status: number | null; readonly signal: string | null; readonly stdout?: string; readonly error?: unknown },

@@ -43,7 +43,7 @@ export const J1_PIN_FILES = Object.freeze(['contract.json', 'checker/check.mjs',
 export const VERDICTS = Object.freeze(['PASS', 'FAIL', 'NOT_RUN']);
 export const NOT_RUN_REASONS = Object.freeze([
   'pin_mismatch', 'no_completed_build', 'ambiguous_attempt', 'final_message_missing',
-  'integrity_mismatch', 'checker_crashed', 'evidence_unreadable',
+  'integrity_mismatch', 'checker_crashed', 'evidence_unreadable', 'run_not_completed',
 ]);
 
 const BUILD_TYPES = new Set(['build', 'repair:build']);
@@ -68,14 +68,37 @@ export function parsePsqlTsv(text) {
   });
 }
 
-/** The one SUCCEEDED Coding Agent build that no same-role repair names as its parent. */
-export function selectGradedAttempt(tasks) {
-  const builds = tasks.filter((t) => t.role === 'CODING_AGENT' && BUILD_TYPES.has(t.task_type));
+/**
+ * The attempt graded: in the ONE run whose durable state is COMPLETED, the one
+ * SUCCEEDED Coding Agent build that no same-role repair names as its parent,
+ * and whose repair chain traces back to that run's own first build. The run's
+ * state row names no task, so the run id is the binding: a build of another
+ * run never counts. Anything else is refused, never resolved by a choice.
+ */
+export function selectGradedAttempt(tasks, runs) {
+  if (!Array.isArray(runs)) return { ok: false, reason: 'evidence_unreadable' };
+  const completed = runs.filter((r) => r.state === 'COMPLETED');
+  if (completed.length === 0) return { ok: false, reason: 'run_not_completed' };
+  if (completed.length > 1) return { ok: false, reason: 'ambiguous_attempt' };
+  const runId = completed[0].run_id;
+  const builds = tasks.filter((t) => t.run_id === runId && t.role === 'CODING_AGENT' && BUILD_TYPES.has(t.task_type));
+  const byId = new Map(builds.map((t) => [t.task_id, t]));
   const superseded = new Set(builds.filter((t) => t.task_type === 'repair:build' && t.parent_task_id !== '').map((t) => t.parent_task_id));
   const leaves = builds.filter((t) => t.state === 'SUCCEEDED' && !superseded.has(t.task_id));
   if (leaves.length === 0) return { ok: false, reason: 'no_completed_build' };
   if (leaves.length > 1) return { ok: false, reason: 'ambiguous_attempt', taskIds: leaves.map((t) => t.task_id) };
-  return { ok: true, taskId: leaves[0].task_id, taskType: leaves[0].task_type };
+  // The chain: repair:build -> its parent -> ... -> the run's first build, with no parent.
+  const seen = new Set();
+  let cursor = leaves[0];
+  while (cursor.task_type === 'repair:build') {
+    if (seen.has(cursor.task_id)) return { ok: false, reason: 'ambiguous_attempt' };
+    seen.add(cursor.task_id);
+    const parent = byId.get(cursor.parent_task_id);
+    if (parent === undefined) return { ok: false, reason: 'ambiguous_attempt' };
+    cursor = parent;
+  }
+  if (cursor.task_type !== 'build' || cursor.parent_task_id !== '') return { ok: false, reason: 'ambiguous_attempt' };
+  return { ok: true, taskId: leaves[0].task_id, taskType: leaves[0].task_type, runId };
 }
 
 /** The checker's own protocol (check.mjs): checker_sha256=, judged_trimmed_sha256=, then PASS or FAIL. */
@@ -99,6 +122,7 @@ export function verdictText(v) {
     'schema=julius-inworld-verdict.v1',
     `verdict=${VERDICTS.includes(v.verdict) ? v.verdict : 'NOT_RUN'}`,
     `reason=${v.reason ?? 'none'}`,
+    `run_id=${v.runId ?? 'none'}`,
     `task_id=${v.taskId ?? 'none'}`,
     `task_type=${v.taskType ?? 'none'}`,
     `judged_trimmed_sha256=${v.trimmedSha256 ?? 'none'}`,
@@ -131,15 +155,19 @@ export function gradeInworld(opts) {
   }
   // 2. The attempt, from the run's durable task rows.
   let tasks = null;
-  try { tasks = parsePsqlTsv(readFileSync(join(opts.evidence, 'tasks.tsv'), 'utf8')); } catch { tasks = null; }
-  if (tasks === null) return { exit: 0, verdict: { ...pinRecord, verdict: 'NOT_RUN', reason: 'evidence_unreadable' } };
-  const attempt = selectGradedAttempt(tasks);
+  let runs = null;
+  try {
+    tasks = parsePsqlTsv(readFileSync(join(opts.evidence, 'tasks.tsv'), 'utf8'));
+    runs = parsePsqlTsv(readFileSync(join(opts.evidence, 'runs.tsv'), 'utf8'));
+  } catch { tasks = null; }
+  if (tasks === null || runs === null) return { exit: 0, verdict: { ...pinRecord, verdict: 'NOT_RUN', reason: 'evidence_unreadable' } };
+  const attempt = selectGradedAttempt(tasks, runs);
   if (!attempt.ok) return { exit: 0, verdict: { ...pinRecord, verdict: 'NOT_RUN', reason: attempt.reason } };
   if (!TASK_ID.test(attempt.taskId)) return { exit: 0, verdict: { ...pinRecord, verdict: 'NOT_RUN', reason: 'evidence_unreadable' } };
   const stem = attempt.taskId.replace(/:/gu, '_');
   const rawPath = join(opts.finalMessage, `${stem}.raw.txt`);
   const manifestPath = join(opts.finalMessage, `${stem}.manifest.json`);
-  const withTask = { ...pinRecord, taskId: attempt.taskId, taskType: attempt.taskType };
+  const withTask = { ...pinRecord, taskId: attempt.taskId, taskType: attempt.taskType, runId: attempt.runId };
   // 3. The final message, checked against its manifest. Missing is a failed step.
   if (!existsSync(rawPath) || !existsSync(manifestPath)) return { exit: 3, verdict: { ...withTask, verdict: 'NOT_RUN', reason: 'final_message_missing' } };
   let raw;
@@ -153,7 +181,7 @@ export function gradeInworld(opts) {
   const trimmedSha256 = sha256(raw);
   const rawSha256 = typeof manifest?.rawSha256 === 'string' && SHA.test(manifest.rawSha256) ? manifest.rawSha256 : null;
   const withHashes = { ...withTask, trimmedSha256, rawSha256 };
-  if (manifest?.schema !== 'julius-final-message.v1' || manifest.taskId !== attempt.taskId || manifest.trimmedSha256 !== trimmedSha256 || rawSha256 === null) {
+  if (manifest?.schema !== 'julius-final-message.v1' || manifest.taskId !== attempt.taskId || manifest.runId !== attempt.runId || manifest.trimmedSha256 !== trimmedSha256 || rawSha256 === null) {
     return { exit: 2, verdict: { ...withHashes, verdict: 'NOT_RUN', reason: 'integrity_mismatch' } };
   }
   // 4. The checker, as its own process, with only PATH and the temp dir in its env, in the staging dir.

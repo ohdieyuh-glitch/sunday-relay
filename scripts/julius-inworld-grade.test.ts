@@ -29,7 +29,7 @@ const sha256 = (bytes: string | Uint8Array): string => createHash('sha256').upda
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 
-function rig(opts: { readonly artifact: string | null; readonly tasks?: string; readonly manifest?: (m: Record<string, unknown>) => Record<string, unknown> }) {
+function rig(opts: { readonly artifact: string | null; readonly tasks?: string; readonly runs?: string; readonly manifest?: (m: Record<string, unknown>) => Record<string, unknown> }) {
   const root = mkdtempSync(join(tmpdir(), 'julius-grade-'));
   roots.push(root);
   const staging = join(root, 'staging');
@@ -41,6 +41,12 @@ function rig(opts: { readonly artifact: string | null; readonly tasks?: string; 
   }
   mkdirSync(finalMessage);
   mkdirSync(evidence);
+  writeFileSync(join(evidence, 'runs.tsv'), opts.runs ?? [
+    'run_id\tmission_id\tstate\tcard_revision\tcreated_at\tupdated_at\tproject_brain_revision',
+    'wlj_x\tmission:julius-inworld-data-1\tCOMPLETED\tc\tt0\tt1\t0',
+    '(1 row)',
+    '',
+  ].join('\n'));
   writeFileSync(join(evidence, 'tasks.tsv'), opts.tasks ?? [
     'task_id\ttask_type\trole\tstate\tordinal\tparent_task_id\trun_id\tlease_generation',
     'task:plan-1\tplan\tPROMPT_ARCHITECT\tSUCCEEDED\t1\t\twlj_x\t1',
@@ -116,22 +122,44 @@ describe('grading a paid J1 run with the real pinned checker', () => {
   });
 });
 
-describe('the graded attempt comes from the durable task rows only', () => {
-  const t = (task_id: string, task_type: string, state: string, parent_task_id = '', role = 'CODING_AGENT') => ({ task_id, task_type, state, parent_task_id, role });
+describe('the graded attempt comes from the durable task and run rows only', () => {
+  const t = (task_id: string, task_type: string, state: string, parent_task_id = '', role = 'CODING_AGENT', run_id = 'wlj_x') => ({ task_id, task_type, state, parent_task_id, role, run_id });
+  const completedRun = [{ run_id: 'wlj_x', state: 'COMPLETED' }];
 
   it('a repaired build is superseded by its repair, and the repair is graded', () => {
-    expect(selectGradedAttempt([t('b1', 'build', 'SUCCEEDED'), t('r1', 'repair:build', 'SUCCEEDED', 'b1')]))
-      .toEqual({ ok: true, taskId: 'r1', taskType: 'repair:build' });
+    expect(selectGradedAttempt([t('b1', 'build', 'SUCCEEDED'), t('r1', 'repair:build', 'SUCCEEDED', 'b1')], completedRun))
+      .toEqual({ ok: true, taskId: 'r1', taskType: 'repair:build', runId: 'wlj_x' });
   });
 
   it('two unsuperseded succeeded builds are ambiguous; the grader never picks one', () => {
-    expect(selectGradedAttempt([t('b1', 'build', 'SUCCEEDED'), t('b2', 'build', 'SUCCEEDED')]))
+    expect(selectGradedAttempt([t('b1', 'build', 'SUCCEEDED'), t('b2', 'build', 'SUCCEEDED')], completedRun))
       .toMatchObject({ ok: false, reason: 'ambiguous_attempt' });
   });
 
   it('a failed repair leaves no completed build, and other roles never count', () => {
-    expect(selectGradedAttempt([t('b1', 'build', 'SUCCEEDED'), t('r1', 'repair:build', 'FAILED', 'b1'), t('p1', 'plan', 'SUCCEEDED', '', 'PROMPT_ARCHITECT')]))
+    expect(selectGradedAttempt([t('b1', 'build', 'SUCCEEDED'), t('r1', 'repair:build', 'FAILED', 'b1'), t('p1', 'plan', 'SUCCEEDED', '', 'PROMPT_ARCHITECT')], completedRun))
       .toEqual({ ok: false, reason: 'no_completed_build' });
+  });
+
+  it('a run that is not COMPLETED is not graded, and two completed runs are ambiguous', () => {
+    expect(selectGradedAttempt([t('b1', 'build', 'SUCCEEDED')], [{ run_id: 'wlj_x', state: 'FAILED' }])).toEqual({ ok: false, reason: 'run_not_completed' });
+    expect(selectGradedAttempt([t('b1', 'build', 'SUCCEEDED')], [{ run_id: 'wlj_x', state: 'COMPLETED' }, { run_id: 'wlj_y', state: 'COMPLETED' }]))
+      .toMatchObject({ ok: false, reason: 'ambiguous_attempt' });
+  });
+
+  it('a build of another run never counts', () => {
+    expect(selectGradedAttempt([t('b9', 'build', 'SUCCEEDED', '', 'CODING_AGENT', 'wlj_other')], completedRun)).toEqual({ ok: false, reason: 'no_completed_build' });
+  });
+
+  it('a repair whose chain does not reach the run\'s first build is ambiguous', () => {
+    expect(selectGradedAttempt([t('r1', 'repair:build', 'SUCCEEDED', 'missing')], completedRun)).toMatchObject({ ok: false, reason: 'ambiguous_attempt' });
+    expect(selectGradedAttempt([t('b1', 'build', 'SUCCEEDED', 'p0'), t('r1', 'repair:build', 'SUCCEEDED', 'b1')], completedRun)).toMatchObject({ ok: false, reason: 'ambiguous_attempt' });
+  });
+
+  it('a run graded end to end records its run id and task', () => {
+    const result = gradeInworld(rig({ artifact: passing() }));
+    expect(result.verdict).toMatchObject({ verdict: 'PASS', runId: 'wlj_x', taskId: 'task:build-1' });
+    expect(verdictText(result.verdict)).toContain('run_id=wlj_x\n');
   });
 
   it('reads psql\'s aligned-off output, header, rows and footer', () => {
@@ -143,6 +171,6 @@ describe('the graded attempt comes from the durable task rows only', () => {
 describe('the verdict file is a closed record', () => {
   it('an unknown verdict is written NOT_RUN, never PASS, and every reason is in the closed list', () => {
     expect(verdictText({ verdict: 'MAYBE' })).toContain('verdict=NOT_RUN\n');
-    expect(NOT_RUN_REASONS).toEqual(['pin_mismatch', 'no_completed_build', 'ambiguous_attempt', 'final_message_missing', 'integrity_mismatch', 'checker_crashed', 'evidence_unreadable']);
+    expect(NOT_RUN_REASONS).toEqual(['pin_mismatch', 'no_completed_build', 'ambiguous_attempt', 'final_message_missing', 'integrity_mismatch', 'checker_crashed', 'evidence_unreadable', 'run_not_completed']);
   });
 });

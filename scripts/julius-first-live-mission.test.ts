@@ -3094,8 +3094,15 @@ describe('the trust gate runs before anything the candidate controls', () => {
     // carries a pinned ref and a path. spend-tag checks out the candidate once,
     // with credentials persistence off, and does not check out a verifier: it
     // locks the run id and does not judge the candidate.
+    // The J1 grade job checks out the candidate once more, to stage the pinned
+    // checker from git objects. It needs the paid job, so it runs only after that
+    // job's trust gate passed, and it persists no credential.
     const checkouts = workflow.split('- uses: actions/checkout').length - 1;
-    expect(checkouts, 'two verifier pairs, plus the spend-tag candidate checkout').toBe(5);
+    expect(checkouts, 'two verifier pairs, the spend-tag candidate checkout, and the J1 grade job').toBe(6);
+    const grade = workflow.slice(workflow.indexOf('\n  grade-inworld:\n'));
+    expect(grade).toContain('needs: [first-live-mission]');
+    expect(grade.split('- uses: actions/checkout').length - 1).toBe(1);
+    expect(grade).toContain('persist-credentials: false');
     const pinned = workflow.split('ref: f131098cc4e8f35d7231cf2e9693b83c05dab75c').length - 1;
     expect(pinned, 'each job that judges the candidate checks out the pinned verifier exactly once').toBe(2);
     expect(verifierCheckout()).toContain('path: .julius-trusted-verifier');

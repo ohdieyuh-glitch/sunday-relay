@@ -417,6 +417,10 @@ jobs:
       group: ${{ inputs.confirm_live == 'RUN LIVE MISSION' && 'julius-paid-provider-slot' || format('julius-preflight-{0}', github.run_id) }}
       cancel-in-progress: false
     runs-on: ubuntu-24.04
+    # THE J1 HAND-OFF. The grade job takes the coder's final message from this
+    # upload's id and deletes the artifact once it has graded it.
+    outputs:
+      final_message_artifact_id: ${{ steps.final_message_upload.outputs.artifact-id }}
     # THE JOB BUDGET IS SHARED OUT, not a taste. It is `JOB_BUDGET_MS` in
     # relay-bridge/reviewer-deadline.ts and a structural test fails if the two
     # disagree. 60 -> 90 when the reviewer deadline was derived (50 minutes: six
@@ -1404,6 +1408,10 @@ jobs:
           RELAY_HERMES_EXECUTABLE: /tmp/julius-hermes-bin/hermes
           MAX_TICKS: ${{ inputs.max_ticks }}
           JULIUS_JOB_STARTED_AT: ${{ steps.inputs_gate.outputs.job_started_at }}
+          # J1 ONLY: the coder's final message is kept here, outside the workspace,
+          # for the hidden checker (relay-bridge/julius/julius-final-message.ts).
+          # Empty for every other mission, so nothing is written for them.
+          JULIUS_FINAL_MESSAGE_DIR: ${{ inputs.mission == 'julius-inworld-data-1' && '/tmp/julius-final-message' || '' }}
         run: |
           set -uo pipefail
           # The bundle was built in an earlier step and is invoked directly,
@@ -1416,6 +1424,29 @@ jobs:
           set -e
           echo "julius_exit=$status"
           exit "$status"
+
+      # THE J1 HAND-OFF TO THE GRADE JOB. Only the raw trimmed final message and
+      # its manifest (task, run, raw and trimmed sha256) leave this job, in an
+      # artifact of their own that lives one day and that the grade job deletes.
+      # They never enter julius-live-evidence/. A paid J1 run that wrote no final
+      # message uploads nothing, and the grade job reports it as missing.
+      - name: 'J1: hand the final message to the grade job'
+        if: always() && inputs.mission == 'julius-inworld-data-1' && inputs.confirm_live == 'RUN LIVE MISSION'
+        run: |
+          set -uo pipefail
+          mkdir -p j1-final-message
+          if [ -d /tmp/julius-final-message ]; then
+            find /tmp/julius-final-message -maxdepth 1 -type f \( -name '*.raw.txt' -o -name '*.manifest.json' \) -exec cp {} j1-final-message/ \;
+          fi
+          ls -1 j1-final-message | sed 's/^/j1_final_message_file=/'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        id: final_message_upload
+        if: always() && inputs.mission == 'julius-inworld-data-1' && inputs.confirm_live == 'RUN LIVE MISSION'
+        with:
+          name: j1-final-message
+          path: j1-final-message
+          if-no-files-found: ignore
+          retention-days: 1
 
       # ------------------------------------------------------------- EVIDENCE
 
@@ -1670,6 +1701,20 @@ jobs:
             rm -rf /tmp/julius-capability-proofs
           fi
 
+      # THE PUBLISHED FINAL MESSAGE IS THE REDACTED, CAPPED COPY ONLY. The raw
+      # text went to the grade job above; it is never part of this evidence.
+      - name: 'J1: publish the redacted final message'
+        if: always() && inputs.mission == 'julius-inworld-data-1'
+        run: |
+          set -uo pipefail
+          if [ -d /tmp/julius-final-message ] && [ -d julius-live-evidence ]; then
+            mkdir -p julius-live-evidence/final-message
+            find /tmp/julius-final-message -maxdepth 1 -type f -name '*.redacted.json' -exec cp {} julius-live-evidence/final-message/ \;
+          fi
+          if find julius-live-evidence -name '*.raw.txt' 2>/dev/null | grep -q .; then
+            echo 'final_message_raw_in_evidence: refused' >&2; exit 1
+          fi
+
       - name: Refuse to publish evidence that contains credential material
         if: always()
         env:
@@ -1828,4 +1873,75 @@ jobs:
           sudo rm -rf /tmp/julius-executor 2>/dev/null || true
           sudo umount /tmp/julius-workspace/tenant/ws 2>/dev/null || true
           sudo rm -rf /tmp/julius-workspace 2>/dev/null || true
+          rm -rf /tmp/julius-final-message 2>/dev/null || true
           echo 'cleanup complete'
+
+  # THE HIDDEN CHECKER, IN A JOB OF ITS OWN. A fresh runner with no provider
+  # credential, no environment and read-only contents. It stages the pinned
+  # checker, oracle, contract and seed from git objects at this run's own
+  # commit, never from a working tree the coder could have touched, grades the
+  # final message the live job handed over, and publishes a closed
+  # PASS / FAIL / NOT_RUN verdict. Only this job's artifact carries the verdict
+  # the evidence reader accepts.
+  grade-inworld:
+    name: 'J1: grade the final message with the pinned hidden checker'
+    needs: [first-live-mission]
+    if: ${{ always() && inputs.mission == 'julius-inworld-data-1' && inputs.confirm_live == 'RUN LIVE MISSION' && needs.first-live-mission.result != 'skipped' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      # Only to delete the one-day final-message artifact once it is graded.
+      actions: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        continue-on-error: true
+        with:
+          name: j1-final-message
+          path: j1-final-message
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        continue-on-error: true
+        with:
+          name: julius-live-evidence
+          path: j1-evidence
+      - name: 'J1: stage the pinned checker from git objects and grade'
+        id: grade
+        env:
+          MISSION_SRC: relay-bridge/julius-inworld-mission/julius-inworld-data-1
+        run: |
+          set -uo pipefail
+          stage=$(mktemp -d "$RUNNER_TEMP/j1-grade.XXXXXX")
+          for f in contract.json checker/check.mjs checker/oracle.mjs seed/data/legacy_ledger.csv seed/data/posts.json; do
+            mkdir -p "$stage/$(dirname "$f")"
+            git show "$GITHUB_SHA:$MISSION_SRC/$f" > "$stage/$f" || { echo "stage_failed: $f" >&2; exit 2; }
+          done
+          mkdir -p j1-final-message j1-evidence julius-inworld-verdict
+          grader="$GITHUB_WORKSPACE/scripts/julius-inworld-grade.mjs"
+          set +e
+          ( cd "$stage" && env -i PATH="$PATH" HOME="$stage" node "$grader" \
+              --staging "$stage" --final-message "$GITHUB_WORKSPACE/j1-final-message" \
+              --evidence "$GITHUB_WORKSPACE/j1-evidence" --out "$GITHUB_WORKSPACE/julius-inworld-verdict/checker-verdict.txt" )
+          status=$?
+          set -e
+          rm -rf "$stage" "$GITHUB_WORKSPACE/j1-final-message"
+          echo "grade_exit=$status"
+          exit "$status"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: julius-inworld-verdict
+          path: julius-inworld-verdict
+          if-no-files-found: ignore
+          retention-days: 90
+      - name: 'J1: delete the graded final message'
+        if: always() && needs.first-live-mission.outputs.final_message_artifact_id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ needs.first-live-mission.outputs.final_message_artifact_id }}
+        run: |
+          set -uo pipefail
+          case "$ARTIFACT_ID" in *[!0-9]*|'') echo 'artifact_id_not_numeric' >&2; exit 1;; esac
+          gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID" && echo "j1_final_message_deleted artifact_id=$ARTIFACT_ID"
