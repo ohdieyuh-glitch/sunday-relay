@@ -349,11 +349,15 @@ which only reads GitHub and appends one outcome, never deleting or rewriting a
 record:
 
 - `dispatched` when the spent tag exists, its `julius-run-spent.v1` message
-  names this run and a `workflow_run_id`, and that id is the one paid run
-  whose run name ends `mode=paid key=<dispatch key>`;
+  names this run and a `workflow_run_id`, and that id is the one paid run on
+  `main`, at attempt 1, whose run name ends `mode=paid key=<dispatch key>`;
 - `dispatch_failed` (journal error `workflow_run_unspent`; `/status` shows
-  `dispatch_failed` with no cause) when no spent tag exists and that one paid
-  run completed without success, so the workflow ended before it spent the id;
+  `dispatch_failed` with no cause) when that one first-attempt run had
+  completed without success when the runs were listed, and no spent tag
+  existed when read after the listing, so the workflow ended before it spent
+  the id. The runs are listed first: a run that already ended cannot tag
+  later. A Re-run keeps the run id and raises its attempt, so any attempt
+  above 1 leaves the record `dispatching`;
 - otherwise the record stays `dispatching` and the tool prints what GitHub
   showed (`reconcile_indeterminate`, `spent_tag_unverified`, …).
 

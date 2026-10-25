@@ -466,6 +466,38 @@ describe('wonderland status', () => {
     }
   });
 
+  it('D8: reconcile\'s workflow_run_unspent is dispatch_failed with no cause on /status, and never reaches the client', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wlj-status-'));
+    const storePath = join(dir, 'admission.json');
+    const ports = service(storePath);
+    try {
+      const admitted = await handleWonderlandAdmissionRoute(admitRequest(), ports);
+      expect(admitted?.status).toBe(202);
+      const journalPath = `${storePath}.operator.json`;
+      const journal = (existsSync(journalPath)
+        ? JSON.parse(readFileSync(journalPath, 'utf8'))
+        : { schemaVersion: 3, revision: 0, claims: [], progress: [], owners: {} }) as { revision: number; claims: unknown[] };
+      const base = {
+        wonderlandRunId: RUN, serverRunId: SERVER, spentTag: `julius-run-spent-${SERVER.slice(4).replaceAll('-', '')}`,
+        at: WHEN, halt: null, githubDate: '2026-10-23T17:18:05Z',
+      };
+      journal.claims.push(
+        { ...base, state: 'dispatching', spentTagState: 'absent', dispatchAttempted: false, dispatchError: null, workflowRunId: null },
+        { ...base, state: 'dispatch_failed', spentTagState: 'absent', dispatchAttempted: true, dispatchError: 'workflow_run_unspent', workflowRunId: '36568129865' },
+      );
+      journal.revision += 2;
+      writeFileSync(journalPath, `${JSON.stringify(journal)}\n`);
+      const status = await handleWonderlandStatusRoute(statusRequest(SERVER), ports);
+      expect(status?.status).toBe(200);
+      expect(status?.body).toMatchObject({ state: 'dispatch_failed' });
+      expect(status?.body).not.toHaveProperty('cause');
+      expect(JSON.stringify(status?.body)).not.toContain('workflow_run_unspent');
+    } finally {
+      ports.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('a different player, a malformed run id, and an unknown run id are one 404 and write nothing', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'wlj-status-'));
     const storePath = join(dir, 'admission.json');
