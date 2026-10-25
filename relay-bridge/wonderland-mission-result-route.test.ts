@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { juliusMissionTraceId } from '../scripts/julius-mission-trace.mjs';
 import { handleJuliusMissionRoute } from './julius-mission-routes';
 import {
+  JULIUS_PINNED_CHECKER_SHA256,
   createJuliusMissionEvidenceTestDouble,
   type JuliusMissionEvidenceReader,
 } from './julius-mission-evidence';
@@ -607,6 +608,85 @@ describe('wonderland mission result and progress', () => {
       });
       expect(bridged?.body).toMatchObject({ state: 'awaiting_operator', completion: null });
       expect(JSON.stringify(bridged?.body)).not.toContain('"completed"');
+      ports.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('no completion and no verdict before the operator dispatched the run', () => {
+  const judged = 'b'.repeat(64);
+  const graded = (verdict: 'PASS' | 'FAIL') => ({
+    ...completionValue(), checkerVerdict: verdict,
+    checker: { reason: 'none', taskId: 'task:build-1', judgedTrimmedSha256: judged, gameDigest: judged.slice(0, 12), checkerSha256: JULIUS_PINNED_CHECKER_SHA256 },
+  });
+  // The fields operator-claim.ts records for each refused outcome.
+  const REFUSED: Record<string, Record<string, unknown>> = {
+    dispatch_failed: { state: 'dispatch_failed', spentTagState: 'absent', dispatchError: 'gh_workflow_run_failed', halt: null },
+    already_spent: { state: 'already_spent', spentTagState: 'present', dispatchError: null, halt: 'RUN_ID_ALREADY_SPENT' },
+  };
+  const recordClaim = (storePath: string, state: string): void => {
+    recordDispatch(storePath);
+    const journalPath = `${storePath}.operator.json`;
+    const journal = JSON.parse(readFileSync(journalPath, 'utf8')) as { claims: Array<Record<string, unknown>> };
+    journal.claims[0] = { ...journal.claims[0], ...REFUSED[state] };
+    writeFileSync(journalPath, `${JSON.stringify(journal)}\n`);
+  };
+
+  it('a PASS or FAIL fixture on a row still awaiting the operator is NOT_RUN and never completed', async () => {
+    const { dir, ports } = await admitted();
+    try {
+      for (const verdict of ['PASS', 'FAIL'] as const) {
+        const reader = createJuliusMissionEvidenceTestDouble({ [RUN]: graded(verdict) });
+        const result = await handleWonderlandMissionReadRoute(readRequest('result', RUN), ports, reader);
+        const progress = await handleWonderlandMissionReadRoute(readRequest('progress', RUN), ports, reader);
+        expect(result?.body, verdict).toMatchObject({ state: 'awaiting_operator', checkerVerdict: 'NOT_RUN', completion: null, phases: null });
+        expect(progress?.body, verdict).toMatchObject({ state: 'awaiting_operator', phases: null });
+      }
+      ports.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('a refused or failed claim keeps the ceiling and NOT_RUN', async () => {
+    for (const state of ['dispatch_failed', 'already_spent']) {
+      const { dir, storePath, ports } = await admitted();
+      try {
+        recordClaim(storePath, state);
+        const reader = createJuliusMissionEvidenceTestDouble({ [RUN]: graded('PASS') });
+        const result = await handleWonderlandMissionReadRoute(readRequest('result', RUN), ports, reader);
+        expect(result?.body, state).toMatchObject({ state, checkerVerdict: 'NOT_RUN', completion: null });
+        ports.close();
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    }
+  });
+
+  it('an expired held row (failed / AWAITING_OPERATOR_EXPIRED) keeps the ceiling and NOT_RUN', async () => {
+    const { dir, storePath, ports } = await admitted();
+    try {
+      const journalPath = `${storePath}.operator.json`;
+      const journal = JSON.parse(readFileSync(journalPath, 'utf8')) as { revision: number; progress: unknown[] };
+      journal.revision += 1;
+      journal.progress = [...journal.progress, { serverRunId: RUN, state: 'failed', cause: 'AWAITING_OPERATOR_EXPIRED', updatedAt: WHEN }];
+      writeFileSync(journalPath, `${JSON.stringify(journal)}\n`);
+      const result = await handleWonderlandMissionReadRoute(readRequest('result', RUN), ports, createJuliusMissionEvidenceTestDouble({ [RUN]: graded('PASS') }));
+      expect(result?.body).toMatchObject({ state: 'failed', cause: 'AWAITING_OPERATOR_EXPIRED', checkerVerdict: 'NOT_RUN', completion: null });
+      ports.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('a dispatched run with a pinned PASS is completed and PASS', async () => {
+    const { dir, storePath, ports } = await admitted();
+    try {
+      recordDispatch(storePath);
+      const result = await handleWonderlandMissionReadRoute(readRequest('result', RUN), ports, createJuliusMissionEvidenceTestDouble({ [RUN]: graded('PASS') }));
+      expect(result?.body).toMatchObject({ state: 'completed', checkerVerdict: 'PASS', completion: { checkerVerdict: 'PASS' } });
       ports.close();
     } finally {
       rmSync(dir, { recursive: true, force: true });

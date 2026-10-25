@@ -138,7 +138,12 @@ export function handleWonderlandMissionReadRoute(
     if (status.status !== 200) return status;
     const admission = record(status.body);
     if (admission === null) return { status: 500, body: {} };
-    const evidence = await readEvidence(evidenceReader, parsed.runId);
+    // NO COMPLETION BEFORE DISPATCH. A run the operator never dispatched cannot have run, so
+    // evidence (a completion, phases, a verdict) is read only once the admission row records
+    // `dispatched`. Every other state keeps the status ceiling and a NOT_RUN verdict.
+    const evidence = admission.state === 'dispatched'
+      ? await readEvidence(evidenceReader, parsed.runId)
+      : { completion: null, phases: null };
     const state = evidence.completion === null ? ceilingState(admission.state) : 'completed';
     // Null from the reader is the ceiling. A null phase list stays null.
     // A revision of 0 is kept; only a missing revision is null.
