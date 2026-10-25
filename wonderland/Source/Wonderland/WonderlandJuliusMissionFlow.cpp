@@ -1075,13 +1075,13 @@ namespace WonderlandJuliusMissionFlow
 
 	bool FMissionFlow::ResumeWatching(std::string_view MissionId)
 	{
-		if (bDispatchHanded || MissionId.empty()) { return false; }
+		if (bDispatchHanded || MissionId.empty()) { return false; } // FLOW_RESUME_ONLY_BEFORE_A_HANDOFF
 		bool bOffered = false;
 		for (const FMissionOffer& Offer : OfferList)
 		{
 			if (Offer.Id == MissionId) { bOffered = true; break; }
 		}
-		if (!bOffered) { return false; }
+		if (!bOffered) { return false; } // FLOW_RESUME_ONLY_AN_OFFER
 		ChosenId.assign(MissionId.data(), MissionId.size());
 		bDispatchHanded = true;
 		Step = EFlowStep::Watching;
@@ -1090,7 +1090,7 @@ namespace WonderlandJuliusMissionFlow
 
 	bool FMissionFlow::StartAgain()
 	{
-		if (Step != EFlowStep::Watching) { return false; }
+		if (Step != EFlowStep::Watching) { return false; } // FLOW_START_AGAIN_ONLY_FROM_WATCHING
 		const std::vector<FMissionOffer> Kept = OfferList;
 		*this = FMissionFlow();
 		OfferList = Kept;

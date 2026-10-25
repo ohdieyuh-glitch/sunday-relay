@@ -343,11 +343,26 @@ MUTATIONS = [
         "constexpr bool bAcceptNullAccountingAsSettled = false; // FLOW_NULL_SPEND_ACCOUNTING_NOT_COMPLETION",
         "constexpr bool bAcceptNullAccountingAsSettled = true; // FLOW_NULL_SPEND_ACCOUNTING_NOT_COMPLETION",
     ),
+    (
+        "resume_after_handoff",
+        "if (bDispatchHanded || MissionId.empty()) { return false; } // FLOW_RESUME_ONLY_BEFORE_A_HANDOFF",
+        "if (MissionId.empty()) { return false; } // FLOW_RESUME_ONLY_BEFORE_A_HANDOFF",
+    ),
+    (
+        "resume_unoffered_mission",
+        "if (!bOffered) { return false; } // FLOW_RESUME_ONLY_AN_OFFER",
+        "(void)bOffered; // FLOW_RESUME_ONLY_AN_OFFER",
+    ),
+    (
+        "start_again_from_any_step",
+        "if (Step != EFlowStep::Watching) { return false; } // FLOW_START_AGAIN_ONLY_FROM_WATCHING",
+        "// FLOW_START_AGAIN_ONLY_FROM_WATCHING",
+    ),
 ]
 
 
 def main():
-    cxx = os.environ.get("CXX", "g++")
+    cxx = os.environ.get("CXX", "g++").strip()
     source = open(os.path.join(ROOT, FLOW), encoding="utf-8").read()
     for name, old, _new in MUTATIONS:
         count = source.count(old)
@@ -367,18 +382,21 @@ def main():
             text = open(path, encoding="utf-8").read()
             open(path, "w", encoding="utf-8").write(text.replace(old, new, 1))
             exe = os.path.join(tmp, "kat")
-            build = subprocess.run(
-                [
-                    cxx, "-std=c++17", "-O0", "-w",
-                    "-I", os.path.join(tmp, "wonderland/Source/Wonderland"),
-                    os.path.join(tmp, "wonderland/Tools/j1_mission_flow_kat.cpp"),
-                    os.path.join(tmp, FLOW),
-                    os.path.join(tmp, "wonderland/Source/Wonderland/WonderlandJuliusMissionProgress.cpp"),
-                    os.path.join(tmp, "wonderland/Source/Wonderland/WonderlandJuliusMissionLogic.cpp"),
-                    "-o", exe,
-                ],
-                capture_output=True, text=True,
-            )
+            sources = [
+                os.path.join(tmp, "wonderland/Tools/j1_mission_flow_kat.cpp"),
+                os.path.join(tmp, FLOW),
+                os.path.join(tmp, "wonderland/Source/Wonderland/WonderlandJuliusMissionProgress.cpp"),
+                os.path.join(tmp, "wonderland/Source/Wonderland/WonderlandJuliusMissionLogic.cpp"),
+            ]
+            include = os.path.join(tmp, "wonderland/Source/Wonderland")
+            if os.path.splitext(os.path.basename(cxx))[0].lower() == "cl":
+                # MSVC (CXX=cl from a VS developer prompt): the box that builds UE has no g++.
+                exe += ".exe"
+                command = [cxx, "/nologo", "/std:c++17", "/EHsc", "/Od", "/w", "/I", include] + sources + [
+                    "/Fe" + exe, "/Fo" + tmp + os.sep]
+            else:
+                command = [cxx, "-std=c++17", "-O0", "-w", "-I", include] + sources + ["-o", exe]
+            build = subprocess.run(command, capture_output=True, text=True)
             if build.returncode != 0:
                 survived.append(name)
                 print(f"SABOTAGE COMPILE FAIL {name}: not a catch")
