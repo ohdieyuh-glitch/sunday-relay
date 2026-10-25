@@ -28,7 +28,7 @@ import { readFileSync, realpathSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { branchRulesProblems, governedCommitBody } from '../.github/julius-landing/governed-land.mjs';
+import { branchRulesProblems, governedCommitBody, readGovernedEnvironment } from '../.github/julius-landing/governed-land.mjs';
 import {
   CHECKPOINT_ATTESTATION_DIR,
   FOUNDER_APPROVAL_KEY_PATH,
@@ -346,6 +346,9 @@ export async function runBootstrap({ argv = [], env = {}, request, readFile, now
     now,
   });
   problems.push(...decision.problems);
+  // H2: the App key this token came from lives on governed-landing; that environment must deploy from main only.
+  const environment = await readGovernedEnvironment((path) => github(request, token, path));
+  problems.push(...environment.problems);
   if (problems.length > 0) return { ok: false, execute, problems, record: null };
   const pending = bootstrapAuditRecord({
     status: 'pending',

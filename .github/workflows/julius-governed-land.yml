@@ -26,6 +26,7 @@ on:
 permissions:
   contents: read
   statuses: read
+  actions: read
 
 concurrency:
   group: julius-governed-land
@@ -48,6 +49,14 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
+
+      # H2: refuse before any step can read the App private key unless the
+      # governed-landing environment deploys from main only. GitHub creates a
+      # referenced environment with no branch policy, which would expose the key.
+      - name: Require the governed-landing environment to deploy from main only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/julius-landing/governed-land.mjs --require-environment
 
       - name: Require the checkpoint verifier
         env:

@@ -316,7 +316,7 @@ describe('runBootstrap talks to GitHub only with a token and never prints it', (
     '--founder-signature', founderSignaturePath,
   ];
 
-  type Mode = 'ok' | 'identity' | 'moved' | 'tree' | 'readback-tree' | 'readback-parents' | 'readback-message' | 'readback-extra' | 'stale';
+  type Mode = 'ok' | 'identity' | 'moved' | 'tree' | 'readback-tree' | 'readback-parents' | 'readback-message' | 'readback-extra' | 'stale' | 'env-missing' | 'env-open' | 'env-extra';
   function client(mode: Mode = 'ok') {
     const calls: { path: string; method: string; body?: string; token: string }[] = [];
     const request = async (path: string, init: { method: string; body?: string; token: string }) => {
@@ -338,6 +338,16 @@ describe('runBootstrap talks to GitHub only with a token and never prints it', (
         return { status: 200, body: { behind_by: 0, status: 'ahead', ahead_by: 1, files } };
       }
       if (path.includes('/compare/')) return { status: 200, body: { behind_by: 0, status: 'ahead', ahead_by: 1 } };
+      if (path === `/repos/${REPO}/environments/governed-landing`) {
+        if (mode === 'env-missing') return { status: 404, body: null };
+        const policy = mode === 'env-open' ? null : { protected_branches: false, custom_branch_policies: true };
+        return { status: 200, body: { name: 'governed-landing', deployment_branch_policy: policy } };
+      }
+      if (path === `/repos/${REPO}/environments/governed-landing/deployment-branch-policies?per_page=100`) {
+        const rows = mode === 'env-extra' ? [{ name: 'main', type: 'branch' }, { name: 'relay/*', type: 'branch' }] : [{ name: 'main', type: 'branch' }];
+        return { status: 200, body: { total_count: rows.length, branch_policies: rows } };
+      }
+
       if (path === `/repos/${REPO}/commits/${TARGET}`) {
         return { status: 200, body: { commit: { tree: { sha: mode === 'tree' ? OTHER : TREE } }, parents: [{ sha: TRUSTED_CHECKPOINT_SHA }] } };
       }
@@ -443,6 +453,16 @@ describe('runBootstrap talks to GitHub only with a token and never prints it', (
     expect(mismatch.ok).toBe(false);
     expect(mismatch.problems.join('\n')).toMatch(new RegExp(`the target tree is ${OTHER}, not ${TREE}`));
     expect(tree.calls.every((call) => call.method === 'GET')).toBe(true);
+  });
+
+  it('H2: refuses without writing unless governed-landing deploys from main only', async () => {
+    for (const mode of ['env-missing', 'env-open', 'env-extra'] as const) {
+      const { calls, request } = client(mode);
+      const result = await boot.runBootstrap({ argv: [...argv, '--execute'], env, request, now: NOW });
+      expect(result.ok, mode).toBe(false);
+      expect(result.problems.join('\n'), mode).toMatch(/governed-landing/u);
+      expect(calls.every((call) => call.method === 'GET'), mode).toBe(true);
+    }
   });
 
   it('B1: refuses before any request when --target-tree is omitted, so base_tree is never undefined', async () => {

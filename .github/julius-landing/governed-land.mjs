@@ -459,6 +459,45 @@ export async function ensureAuditRef(ref, sha, io) {
   }
 }
 
+export const GOVERNED_ENVIRONMENT = 'governed-landing';
+
+/**
+ * H2. The App private key lives on the governed-landing environment. GitHub
+ * auto-creates a referenced environment with no branch policy, so a workflow
+ * on another branch could reach the key. Refuse unless the environment exists
+ * with custom branch policies (not "protected branches") and exactly one
+ * policy, the branch `main`.
+ */
+export function environmentPolicyProblems(environment, policies) {
+  if (!environment || typeof environment !== 'object' || environment.name !== GOVERNED_ENVIRONMENT) {
+    return [`the ${GOVERNED_ENVIRONMENT} environment could not be read`];
+  }
+  const policy = environment.deployment_branch_policy;
+  if (!policy || policy.custom_branch_policies !== true || policy.protected_branches !== false) {
+    return [`the ${GOVERNED_ENVIRONMENT} environment does not restrict deployments to main (no custom branch policy)`];
+  }
+  const rows = Array.isArray(policies?.branch_policies) ? policies.branch_policies : null;
+  if (rows === null || policies.total_count !== rows.length) return [`the ${GOVERNED_ENVIRONMENT} deployment branch policies could not be read completely`];
+  const named = rows.map((row) => `${row?.type ?? 'branch'}:${row?.name}`);
+  if (named.length !== 1 || named[0] !== 'branch:main') {
+    return [`the ${GOVERNED_ENVIRONMENT} environment deploys from ${named.join(', ') || 'no branch'}, not main only`];
+  }
+  return [];
+}
+
+/** Reads the environment and its branch policies through `read(path) -> { status, body }`. */
+export async function readGovernedEnvironment(read) {
+  try {
+    const environment = await read(`/repos/${REPO}/environments/${GOVERNED_ENVIRONMENT}`);
+    if (environment?.status !== 200) return { problems: [`the ${GOVERNED_ENVIRONMENT} environment could not be read (${environment?.status ?? 'no answer'})`] };
+    const policies = await read(`/repos/${REPO}/environments/${GOVERNED_ENVIRONMENT}/deployment-branch-policies?per_page=100`);
+    if (policies?.status !== 200) return { problems: [`the ${GOVERNED_ENVIRONMENT} deployment branch policies could not be read (${policies?.status ?? 'no answer'})`] };
+    return { problems: environmentPolicyProblems(environment.body, policies.body) };
+  } catch (error) {
+    return { problems: [`the ${GOVERNED_ENVIRONMENT} environment could not be read: ${error instanceof Error ? error.message : 'unknown'}`] };
+  }
+}
+
 /** The commits status API. 401 and 403 are the missing statuses:read permission, not an empty list. */
 export function commitStatusPage(body, httpStatus) {
   if (httpStatus === 401 || httpStatus === 403) return { ok: false, problem: 'the commit status list could not be read: statuses:read is required' };
@@ -812,6 +851,13 @@ async function landQueue({ env, fetchImpl, readLocal, now, stdout, stderr, state
   const rulesetProblems = branchRulesProblems(liveRules, snapshot, appId);
   if (rulesetProblems.length > 0) {
     fail(rulesetProblems);
+    return;
+  }
+  // H2: the private key is on the governed-landing environment. Refuse unless that
+  // environment deploys from main only, before the key is used to mint anything.
+  const environment = await readGovernedEnvironment((path) => readRaw(path));
+  if (environment.problems.length > 0) {
+    fail(environment.problems);
     return;
   }
   const bot = await api(`/user/${botId}`);
@@ -1222,7 +1268,25 @@ async function landQueue({ env, fetchImpl, readLocal, now, stdout, stderr, state
   return walked;
 }
 
-if (entrypoint !== '' && import.meta.url === entrypoint) {
+if (entrypoint !== '' && import.meta.url === entrypoint && process.argv.includes('--require-environment')) {
+  // The workflow runs this with the job token, before any step reads the App private key.
+  const token = typeof process.env.GH_TOKEN === 'string' ? process.env.GH_TOKEN : '';
+  const result = token === ''
+    ? { problems: ['GH_TOKEN is unset: the governed-landing environment could not be read'] }
+    : await readGovernedEnvironment(async (path) => {
+      const response = await fetch(`https://api.github.com${path}`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
+        signal: AbortSignal.timeout(30_000),
+      });
+      const text = await response.text();
+      let body = null;
+      try { body = text ? JSON.parse(text) : null; } catch { body = null; }
+      return { status: response.status, body };
+    });
+  const stream = result.problems.length === 0 ? process.stdout : process.stderr;
+  stream.write(`${result.problems.length === 0 ? `the ${GOVERNED_ENVIRONMENT} environment deploys from main only` : result.problems.join('\n')}\n`);
+  process.exitCode = result.problems.length === 0 ? 0 : 1;
+} else if (entrypoint !== '' && import.meta.url === entrypoint) {
   const result = await runGovernedLand();
   process.exitCode = result.exitCode;
 }

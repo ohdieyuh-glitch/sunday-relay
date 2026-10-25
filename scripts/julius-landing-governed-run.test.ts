@@ -114,6 +114,7 @@ export type Scenario = {
   patch?: 'ok' | 'timeout-moved' | 'timeout-unmoved' | 'timeout-unreadable' | 'conflict';
   auditRef?: 'ok' | 'fail';
   comment?: 'ok' | 'fail';
+  environment?: 'ok' | 'env-missing' | 'env-open' | 'env-extra';
   override?: (call: Call, state: { main: string }) => Route | undefined;
 };
 
@@ -141,6 +142,16 @@ export function fakeGithub(scenario: Scenario) {
       return { status: 200, body: { object: { sha: state.main } } };
     }
     if (method === 'GET' && at('/rules/branches/main')) return { status: 200, body: liveRules };
+    if (path === `/repos/${REPO}/environments/governed-landing`) {
+      if ((scenario.environment ?? 'ok') === 'env-missing') return { status: 404, body: null };
+      const policy = (scenario.environment ?? 'ok') === 'env-open' ? null : { protected_branches: false, custom_branch_policies: true };
+      return { status: 200, body: { name: 'governed-landing', deployment_branch_policy: policy } };
+    }
+    if (path === `/repos/${REPO}/environments/governed-landing/deployment-branch-policies?per_page=100`) {
+      const rows = (scenario.environment ?? 'ok') === 'env-extra' ? [{ name: 'main', type: 'branch' }, { name: 'relay/*', type: 'branch' }] : [{ name: 'main', type: 'branch' }];
+      return { status: 200, body: { total_count: rows.length, branch_policies: rows } };
+    }
+
     if (method === 'GET' && path === `/user/${BOT}`) return { status: 200, body: { id: Number(BOT), login: BOT_LOGIN } };
     if (method === 'GET' && at('/pulls/7')) return { status: 200, body: pr };
     if (method === 'GET' && at(`/commits/${H}`)) return { status: 200, body: { sha: H, commit: { tree: { sha: T }, message: 'head\n' }, parents: [{ sha: B }] } };
@@ -346,5 +357,33 @@ describe('H1: the governed lander needs the founder-approval signature for a gov
     expect(scheduled.exitCode).toBe(1);
     expect(scheduled.text).toMatch(/founder approval required/u);
     expect(minted(scheduled.calls)).toEqual([]);
+  });
+});
+
+describe('H2: the governed-landing environment must deploy from main only before the App key is used', () => {
+  const minted = (calls: { method: string; path: string }[]) => calls.filter((call) => call.path.endsWith('/access_tokens') || call.path.endsWith('/installation'));
+  for (const [environment, why] of [
+    ['env-missing', /governed-landing environment could not be read \(404\)/u],
+    ['env-open', /does not restrict deployments to main/u],
+    ['env-extra', /deploys from branch:main, branch:relay\/\*, not main only/u],
+  ] as const) {
+    it(`refuses ${environment} before any App JWT or write token`, async () => {
+      const text = clearanceText(governedOptional, seenDigest([botComment]));
+      const result = await run({ environment, issueComments: [botComment, reviewerComment(delivery(text))] });
+      expect(result.exitCode).toBe(1);
+      expect(result.text).toMatch(why);
+      expect(minted(result.calls)).toEqual([]);
+      expect(result.calls.some((call) => call.method !== 'GET')).toBe(false);
+    });
+  }
+
+  it('the workflow checks the environment with the job token before any step names the App private key', () => {
+    const workflow = readFileSync(join(ROOT, '.github/workflows/julius-governed-land.yml'), 'utf8');
+    const check = workflow.indexOf('node .github/julius-landing/governed-land.mjs --require-environment');
+    const firstKey = workflow.indexOf('secrets.JULIUS_GOVERNED_LANDER_PRIVATE_KEY');
+    expect(check).toBeGreaterThan(-1);
+    expect(firstKey).toBeGreaterThan(check);
+    expect(workflow.slice(workflow.lastIndexOf('- name:', check), check)).toContain('GH_TOKEN: ${{ github.token }}');
+    expect(workflow).toMatch(/^permissions:\n  contents: read\n  statuses: read\n  actions: read\n/mu);
   });
 });
