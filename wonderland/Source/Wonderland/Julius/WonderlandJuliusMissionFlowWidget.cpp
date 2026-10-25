@@ -118,7 +118,8 @@ FString SWonderlandJuliusMissionFlow::QaDescribe() const
 	TArray<FString> LiveLines;
 	if (Live != nullptr) { (void)Live->LatestLivePanel(bLive, LiveHeader, LiveLines); }
 	return FString::Printf(
-		TEXT("step=%d choice=%d confirm=%d progress=%d result=%d finished=%d verified=%d wlj=%s progress_line=\"%s\" result_line=\"%s\" result_lines=\"%s\" live=%d live_header=\"%s\" live_lines=\"%s\""),
+		TEXT("julius=%s step=%d choice=%d confirm=%d progress=%d result=%d finished=%d verified=%d wlj=%s progress_line=\"%s\" result_line=\"%s\" result_lines=\"%s\" live=%d live_header=\"%s\" live_lines=\"%s\""),
+		Live == nullptr ? TEXT("none") : Live->HasNativeSession() ? TEXT("connected") : TEXT("not_connected"),
 		static_cast<int32>(View.Step),
 		View.bShowChoice ? 1 : 0,
 		View.bShowConfirm ? 1 : 0,
@@ -302,6 +303,14 @@ void SWonderlandJuliusMissionFlow::Rebuild()
 		ProgressLine = WrapperLabel;
 	}
 	// LIVE RUN VIEW: worded by the flow core from the bridge's /events feed; LIVE only on the server's live flag.
+	// JULIUS CONNECTION (founder blocker 2026-10-25): an admitted run with no paired session is not watched.
+	FString JuliusLine;
+	if (View.bShowProgress && Live != nullptr && !Live->ClientRunId().IsEmpty())
+	{
+		JuliusLine = Live->HasNativeSession()
+			? FString::Printf(TEXT("Julius: connected to the mission bridge (%s)."), *Live->EndpointBase())
+			: FString(TEXT("Julius: NOT CONNECTED. This mission is still admitted and nothing is re-sent. To watch it, open the terminal (Ctrl+T) and type /brain pair <code>."));
+	}
 	bool bLiveRun = false;
 	FString LiveHeader;
 	TArray<FString> LiveLines;
@@ -325,6 +334,7 @@ void SWonderlandJuliusMissionFlow::Rebuild()
 		View.Result.bShowsArtifact ? 1 : 0,
 		View.Result.bFinished ? 1 : 0,
 		*Reported) + TEXT("|") + Notice + (bCanStartAgain ? TEXT("|again") : TEXT(""))
+		+ TEXT("|") + JuliusLine
 		+ (bShowLive ? FString::Printf(TEXT("|live%d|%s|%s"), bLiveRun ? 1 : 0, *LiveHeader, *FString::Join(LiveLines, TEXT("\n"))) : FString());
 	if (Key == ShownKey) { return; }
 	ShownKey = Key;
@@ -400,6 +410,11 @@ void SWonderlandJuliusMissionFlow::Rebuild()
 				SNew(STextBlock).Text(FText::FromString(TEXT("Back")))
 			]
 		];
+	}
+
+	if (!JuliusLine.IsEmpty())
+	{
+		AddText(JuliusLine);
 	}
 
 	if (View.bShowProgress)

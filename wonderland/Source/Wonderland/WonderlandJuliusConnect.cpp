@@ -705,7 +705,15 @@ void UWonderlandJuliusConnectSubsystem::SetLink(EJuliusConnectLink NewLink, cons
 	}
 	if (NewLink == EJuliusConnectLink::Offline && Link != EJuliusConnectLink::Offline)
 	{
-		UE_LOG(LogJuliusConnect, Warning, TEXT("WLCONNECT offline: %s"), *Why);
+		if (Why == WonderlandBeta::AiUnavailableSentence())
+		{
+			// Not an outage: the companion surface is simply not enabled in this build. Say that, not "offline".
+			UE_LOG(LogJuliusConnect, Display, TEXT("WLCONNECT companions not enabled: %s"), *Why);
+		}
+		else
+		{
+			UE_LOG(LogJuliusConnect, Warning, TEXT("WLCONNECT offline: %s"), *Why);
+		}
 	}
 	Link = NewLink;
 	Problem = Why;

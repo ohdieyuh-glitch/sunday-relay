@@ -142,6 +142,8 @@ private:
 	uint64 LastLiveOkUtcMs = 0;
 	int32 LiveReadFailures = 0;
 	FString LiveRefusedSavedFor;
+	bool bLoggedNotConnected = false;
+	int32 LiveLastHttpStatus = 0;
 	uint32 AdoptedTokenCrc = 0;
 	bool bAdoptedToken = false;
 	FString AdoptedProjectId;

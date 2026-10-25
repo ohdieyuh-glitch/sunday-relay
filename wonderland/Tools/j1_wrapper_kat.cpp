@@ -1120,6 +1120,36 @@ int main()
 	}
 
 	{
+		// FOUNDER BLOCKER 2026-10-25: a run restored after a restart has no native session until the player pairs. The
+		// status poll must wait (no empty "Relay-Session " header into a 401), then go out for the SAME run once paired.
+		const char* const Server = "run:0123456789abcdef01234567";
+		FRig Rig(1);
+		Expect(Rig.Session.Dispatch("demo-mission", "").bSent, "nosession_dispatch");
+		const std::string Run = Rig.Session.RunId();
+		Rig.Session.OnDispatchHttp(Http(202, AdmissionBody(Run, "ADMISSION_HELD", Server, false, false), false));
+		FRig Restored(0);
+		Restored.Store.Text = Rig.Store.Text;
+		Restored.Clock.Now = Rig.Clock.Now + 1000;
+		Restored.Session.SetNativeSessionToken("");
+		Expect(Restored.Session.Load(), "nosession_restore_loads");
+		Expect(!Restored.Session.HasSessionToken(), "nosession_restored_holds_no_token");
+		bool bSentWithoutSession = false;
+		for (int Step = 0; Step < 6; ++Step)
+		{
+			Restored.Clock.Now += 5000;
+			const FTickOutcome Tick = Restored.Session.Tick();
+			if (Tick.bSend) { bSentWithoutSession = true; }
+		}
+		Expect(!bSentWithoutSession, "nosession_no_status_poll_without_a_session");
+		Restored.Session.SetNativeSessionToken("PAIRED_AGAIN");
+		const FTickOutcome Paired = Restored.Session.Tick();
+		Expect(Paired.bSend && Paired.Request.bStatusPoll, "nosession_polls_on_the_first_tick_after_pairing");
+		Expect(Contains(Paired.Request.Url, "runId=" + Run), "nosession_same_wlj_after_pairing");
+		Expect(Contains(Paired.Request.Url, "/status?"), "nosession_status_not_dispatch");
+		Expect(Restored.Session.RunId() == Run && Restored.Random.Fills == 0, "nosession_nothing_minted");
+	}
+
+	{
 		// LIVE RUN VIEW: /events under the current run, the paired project, and the bridge's cursor; nothing else.
 		FRig Rig(1);
 		Expect(!Rig.Session.LiveEventsRequest("").bSent, "live_events_need_a_run");

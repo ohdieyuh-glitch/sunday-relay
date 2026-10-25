@@ -254,6 +254,8 @@ namespace WonderlandJuliusMissionClient
 		 * when it is not empty. Same refusals as MissionReadRequest, and a malformed cursor sends nothing.
 		 */
 		FCommandOutcome LiveEventsRequest(const std::string& Cursor) const;
+		/** True when a well-formed native session token is held (nothing about its validity on the bridge). */
+		bool HasSessionToken() const { return !SessionToken.empty() && SessionToken.find_first_of(" \r\n\t") == std::string::npos; }
 
 		void OnDispatchHttp(const FHttpResult& Http);
 		void OnStatusHttp(const FHttpResult& Http);

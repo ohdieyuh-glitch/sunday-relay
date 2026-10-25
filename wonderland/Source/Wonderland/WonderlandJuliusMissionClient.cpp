@@ -1257,7 +1257,11 @@ namespace WonderlandJuliusMissionClient
 			if (Sent.bSent) { Outcome.bSend = true; Outcome.Request = Sent.Request; }
 			return Outcome;
 		}
-		if (bAdmitted && !bFinished && !bRefused && NextPollAtUtcMs != 0 && NowMs >= NextPollAtUtcMs)
+		// NO SESSION, NO POLL: a run restored after a restart has no native session until the player pairs again (the
+		// bridge keeps sessions in memory; the client never saves the token). The poll waits, due, and goes out on the
+		// first tick after pairing -- same wlj_, nothing re-sent, nothing minted.
+		const bool bSessionReady = !SessionToken.empty() && SessionToken.find_first_of(" \r\n\t") == std::string::npos;
+		if (bAdmitted && !bFinished && !bRefused && NextPollAtUtcMs != 0 && NowMs >= NextPollAtUtcMs && bSessionReady) // CLIENT_NO_POLL_WITHOUT_SESSION
 		{
 			std::uint32_t DelayMs = StatusPollPeriodMs;
 			if (ProgressOwnsPoll())

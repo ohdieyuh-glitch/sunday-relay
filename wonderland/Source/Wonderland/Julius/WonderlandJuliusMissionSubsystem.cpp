@@ -377,6 +377,13 @@ bool UWonderlandJuliusMissionSubsystem::HandleTick(float DeltaSeconds)
 	if (Outcome.bSend) { (void)FJuliusJ1Transport::Send(*this, Outcome.Request); }
 	PollMissionReads();
 	PollLiveEvents();
+	if (!bAdoptedToken && !bLoggedNotConnected && !ClientRunId().IsEmpty() && !CanStartNewMission())
+	{
+		// A run restored from the save, before pairing: say so once, instead of polling into a 401.
+		bLoggedNotConnected = true;
+		UE_LOG(LogJuliusJ1, Display, TEXT("JULIUS J1: run %s restored; not connected to the mission bridge yet -- pair (/brain pair <code>) to resume watching; nothing is re-sent"),
+			*ClientRunId());
+	}
 	return true;
 }
 
@@ -389,6 +396,9 @@ void UWonderlandJuliusMissionSubsystem::AdoptPairedSession(const FString& Token,
 		bAdoptedToken = true;
 		AdoptedTokenCrc = Crc;
 		SetNativeSession(Token);
+		UE_LOG(LogJuliusJ1, Display, TEXT("JULIUS J1: connected to the mission bridge at %s (paired native session)%s"),
+			*EndpointBase(), ClientRunId().IsEmpty() ? TEXT("") : *FString::Printf(TEXT("; watching %s"), *ClientRunId()));
+		bLoggedNotConnected = false;
 	}
 	if (InProjectId != AdoptedProjectId)
 	{
@@ -418,6 +428,8 @@ void UWonderlandJuliusMissionSubsystem::DropAdoptedSession(const TCHAR* Why)
 	AdoptedTokenCrc = 0;
 	Host->Session.SetNativeSessionToken(std::string());
 	UE_LOG(LogJuliusJ1, Display, TEXT("native session dropped: %s"), Why);
+	UE_LOG(LogJuliusJ1, Display, TEXT("JULIUS J1: not connected to the mission bridge -- pair again to keep watching%s (nothing is re-sent)"),
+		ClientRunId().IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" %s"), *ClientRunId()));
 }
 
 FString UWonderlandJuliusMissionSubsystem::EndpointBase() const
@@ -573,6 +585,7 @@ void UWonderlandJuliusMissionSubsystem::PollLiveEvents()
 		NextLiveReadAtUtcMs = 0;
 		LastLiveOkUtcMs = 0;
 		LiveReadFailures = 0;
+		LiveLastHttpStatus = 0;
 	}
 	if (bLiveInFlight) { return; }
 	const FLiveFeed& Feed = Host->LiveFeed;
@@ -630,6 +643,7 @@ void UWonderlandJuliusMissionSubsystem::CompleteLiveRead(
 			Stream->NoteSessionRefused();
 		}
 	}
+	LiveLastHttpStatus = Status;
 	const TArray<uint8>& Content = Response->GetContent();
 	FLiveRead Read;
 	if (Content.Num() <= MissionReadMaxBytes)
@@ -684,6 +698,12 @@ bool UWonderlandJuliusMissionSubsystem::LatestLivePanel(bool& bOutLive, FString&
 	if (Host == nullptr || LiveRunId.IsEmpty() || LiveRunId != ClientRunId()) { return false; }
 	const uint64 NowMs = Host->Clock.NowUtcMs();
 	const uint64 Since = LastLiveOkUtcMs != 0 && NowMs > LastLiveOkUtcMs ? NowMs - LastLiveOkUtcMs : 0;
+	if (!Host->LiveFeed.HasRead() && LiveLastHttpStatus == 404)
+	{
+		// A bridge without the live events route (the real-run bridge before #448): say so; never invent a stream.
+		OutHeader = TEXT("Live view unavailable: this bridge does not offer live run events yet");
+		return true;
+	}
 	const WonderlandJuliusMissionFlow::FLivePanel Panel = WonderlandJuliusMissionFlow::LivePanelFor(Host->LiveFeed, Since);
 	if (!Panel.bShow) { return false; }
 	bOutLive = Panel.bLive;
@@ -714,6 +734,16 @@ void UWonderlandJuliusMissionSubsystem::CompleteHttp(
 	}
 	const std::uint64_t NowMs = Host->Clock.NowUtcMs();
 	Result.LatencyMs = NowMs >= StartUtcMs ? NowMs - StartUtcMs : 0;
+	if (bStatusPoll && Result.Status == 401)
+	{
+		// The same rule as the reads: a session the bridge refuses is forgotten, and the player is told to pair again.
+		DropAdoptedSession(TEXT("bridge answered 401 on a status poll"));
+		UGameInstance* Instance = GetGameInstance();
+		if (UWonderlandJuliusStreamSubsystem* Stream = Instance != nullptr ? Instance->GetSubsystem<UWonderlandJuliusStreamSubsystem>() : nullptr)
+		{
+			Stream->NoteSessionRefused();
+		}
+	}
 	if (bStatusPoll) { Host->Session.OnStatusHttp(Result); }
 	else { Host->Session.OnDispatchHttp(Result); }
 }

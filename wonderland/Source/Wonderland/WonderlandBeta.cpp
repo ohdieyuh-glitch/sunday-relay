@@ -583,7 +583,7 @@ namespace WonderlandBeta
 
 	const TCHAR* AiUnavailableSentence()
 	{
-		return TEXT("Julius and the AI companions are not part of this private beta build: nothing here calls an AI service.");
+		return TEXT("The AI companions are not enabled in this build yet: nothing here calls an AI provider. The Julius mission bridge is separate; its state is in the mission terminal (K).");
 	}
 
 	namespace
