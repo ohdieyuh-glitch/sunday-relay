@@ -170,6 +170,20 @@ void SWonderlandJuliusMissionFlow::NotifyTerminalUsed()
 	Rebuild();
 }
 
+void SWonderlandJuliusMissionFlow::Refresh()
+{
+	PullMissionReads();
+	PullWrapper();
+	Rebuild();
+}
+
+void SWonderlandJuliusMissionFlow::SetNotice(const FString& InNotice, bool bInUntilPaired)
+{
+	Notice = InNotice;
+	bNoticeUntilPaired = bInUntilPaired;
+	Rebuild();
+}
+
 void SWonderlandJuliusMissionFlow::SetOffers(TArray<TPair<FString, FString>> InOffers)
 {
 	std::vector<WonderlandJuliusMissionFlow::FMissionOffer> Next;
@@ -211,6 +225,17 @@ void SWonderlandJuliusMissionFlow::SetMissionResponses(
 void SWonderlandJuliusMissionFlow::PullWrapper()
 {
 	UWonderlandJuliusMissionSubsystem* Live = Session.Get();
+	if (Live != nullptr && !Live->ClientRunId().IsEmpty() && !Flow.View().bDispatchHanded)
+	{
+		// A run restored from the save after a restart: watch it, never offer a second paid Confirm over it.
+		Flow.ResumeWatching(TCHAR_TO_UTF8(*Live->CurrentMissionId()));
+	}
+	if (Live != nullptr && bNoticeUntilPaired && Live->HasNativeSession())
+	{
+		// The pairing hint is done once the J1 subsystem holds the paired session.
+		Notice.Reset();
+		bNoticeUntilPaired = false;
+	}
 	if (Live != nullptr)
 	{
 		Flow.NoteWrapperToken(TCHAR_TO_UTF8(*Live->UiStateToken()));
@@ -284,7 +309,7 @@ void SWonderlandJuliusMissionFlow::Rebuild()
 		*MissionFlowUtf8(View.PaidOnDispatch),
 		View.Result.bShowsArtifact ? 1 : 0,
 		View.Result.bFinished ? 1 : 0,
-		*Reported);
+		*Reported) + TEXT("|") + Notice;
 	if (Key == ShownKey) { return; }
 	ShownKey = Key;
 
@@ -293,9 +318,13 @@ void SWonderlandJuliusMissionFlow::Rebuild()
 	{
 		Body->AddSlot().AutoHeight().Padding(0.0f, 4.0f)
 		[
-			SNew(STextBlock).Text(FText::FromString(Text))
+			SNew(STextBlock).Text(FText::FromString(Text)).AutoWrapText(true)
 		];
 	};
+	if (!Notice.IsEmpty())
+	{
+		AddText(Notice);
+	}
 
 	if (View.Step == WonderlandJuliusMissionFlow::EFlowStep::AtTerminal)
 	{

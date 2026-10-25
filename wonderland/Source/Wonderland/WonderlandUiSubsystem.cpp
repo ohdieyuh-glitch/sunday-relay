@@ -822,8 +822,17 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 			// The one J1 mission BRIDGE admits (contract.json has no title; the id is shown as itself).
 			JuliusMissionPanel->SetOffers({ TPair<FString, FString>(TEXT("julius-inworld-data-1"), TEXT("julius-inworld-data-1")) });
 		}
+		// J1 runs only on the founder's local bridge: an unpaired client is pointed there; a paired one is told how.
+		{
+			UGameInstance* Instance = Controller->GetGameInstance();
+			UWonderlandJuliusStreamSubsystem* Stream = Instance != nullptr ? Instance->GetSubsystem<UWonderlandJuliusStreamSubsystem>() : nullptr;
+			const UWonderlandJuliusMissionSubsystem* J1 = Instance != nullptr ? Instance->GetSubsystem<UWonderlandJuliusMissionSubsystem>() : nullptr;
+			JuliusMissionPanel->SetNotice(Stream != nullptr && J1 != nullptr ? Stream->PreferLocalBridgeForMission(J1->EndpointBase()) : FString(),
+				J1 != nullptr && !J1->HasNativeSession());
+		}
 		// Opening the terminal is using it. A second open after a dispatch keeps the run on screen.
 		JuliusMissionPanel->NotifyTerminalUsed();
+		JuliusMissionPanel->Refresh();
 		UE_LOG(LogWonderlandUi, Display, TEXT("WLUI julius mission terminal opened"));
 		Panel = JuliusMissionPanel;
 		Focus = JuliusMissionPanel;
@@ -5863,6 +5872,7 @@ namespace WonderlandJuliusMissionQa
 			UWorld* Live = WeakWorld.Get();
 			UWonderlandUiSubsystem* Self = Ui(Live);
 			const TSharedPtr<SWonderlandJuliusMissionFlow> Panel = Self != nullptr ? Self->GetJuliusMissionPanel() : nullptr;
+			if (Panel.IsValid()) { Panel->Refresh(); }
 			const FString Path = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots") / TEXT("WLJ1") / (Name + TEXT(".png")));
 			UE_LOG(LogWonderlandUi, Display, TEXT("WLJ1PANEL shot=%s %s"), *Name, Panel.IsValid() ? *Panel->QaDescribe() : TEXT("panel never opened"));
 			if (!Panel.IsValid()) { return false; }
@@ -5893,6 +5903,35 @@ namespace WonderlandJuliusMissionQa
 		Ar.Log(FString::Printf(TEXT("shot %s in %.1fs"), *Name, Delay));
 	}
 
+	/** QA sequencing for -ExecCmds: run one wl.Julius.* console command after N seconds (pair, then confirm, then read). */
+	void After(const TArray<FString>& Args, UWorld* World, FOutputDevice& Ar)
+	{
+		if (Args.Num() < 2 || !Args[0].IsNumeric() || !Args[1].StartsWith(TEXT("wl.Julius.")))
+		{
+			Ar.Log(TEXT("usage: wl.Julius.J1.Qa.After <seconds> wl.Julius.<command> [args]"));
+			return;
+		}
+		const float Delay = FMath::Max(0.0f, FCString::Atof(*Args[0]));
+		FString Command;
+		for (int32 I = 1; I < Args.Num(); ++I) { if (I > 1) { Command += TEXT(" "); } Command += Args[I]; }
+		const TWeakObjectPtr<UWorld> WeakWorld(World);
+		FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([WeakWorld, Command](float) -> bool
+		{
+			if (UWorld* Live = WeakWorld.Get())
+			{
+				// The pairing code is single-use and expires in five minutes; it is still not logged.
+				const bool bQuiet = Command.StartsWith(TEXT("wl.Julius.Pair"));
+				UE_LOG(LogWonderlandUi, Display, TEXT("WLJ1QA after: %s"), bQuiet ? TEXT("wl.Julius.Pair <code>") : *Command);
+				if (GEngine != nullptr) { GEngine->Exec(Live, *Command); }
+			}
+			return false;
+		}), Delay);
+		Ar.Log(FString::Printf(TEXT("scheduled in %.1fs"), Delay));
+	}
+
+	FAutoConsoleCommandWithWorldArgsAndOutputDevice GAfter(TEXT("wl.Julius.J1.Qa.After"),
+		TEXT("Usage: wl.Julius.J1.Qa.After <seconds> wl.Julius.<command> [args]. Runs one Julius console command later (QA sequencing)."),
+		FConsoleCommandWithWorldArgsAndOutputDeviceDelegate::CreateStatic(&After));
 	FAutoConsoleCommandWithWorldArgsAndOutputDevice GShotIn(TEXT("wl.Julius.J1.Panel.ShotIn"),
 		TEXT("Usage: wl.Julius.J1.Panel.ShotIn <name> <seconds>. Logs the panel line and saves a UI screenshot under Saved/Screenshots/WLJ1."),
 		FConsoleCommandWithWorldArgsAndOutputDeviceDelegate::CreateStatic(&ShotIn));

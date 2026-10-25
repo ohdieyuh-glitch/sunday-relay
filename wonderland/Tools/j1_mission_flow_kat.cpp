@@ -1044,6 +1044,22 @@ int main()
 	Expect(Flow.View().Result.bFinished == false, "absent reader is not finished");
 	++FlowSteps;
 
+	// RESUME: the wrapper restored an open pair after a restart. Watch it; never offer a second paid Confirm.
+	FMissionFlow Resumed;
+	Resumed.SetOffers({FMissionOffer{"julius-inworld-data-1", "julius-inworld-data-1"}});
+	Expect(Resumed.ResumeWatching("other") == false && Resumed.View().Step == EFlowStep::AtTerminal, "resume refuses an unoffered id");
+	Expect(Resumed.ResumeWatching("") == false, "resume refuses an empty id");
+	++FlowSteps;
+	Expect(Resumed.ResumeWatching("julius-inworld-data-1"), "resume an offered id");
+	const FFlowView ResumedView = Resumed.View();
+	Expect(ResumedView.Step == EFlowStep::Watching && ResumedView.bDispatchHanded && ResumedView.bShowProgress, "resume watches");
+	Expect(!ResumedView.bShowConfirm && Resumed.Confirm().bSend == false, "resume offers no second confirm");
+	Expect(Same(ResumedView.Result.Line, CopyNoResultYet) && ResumedView.Result.bFinished == false, "resume invents no result");
+	++FlowSteps;
+	Expect(Resumed.ResumeWatching("julius-inworld-data-1") == false, "resume is once");
+	Expect(Flow.ResumeWatching("julius-first-live") == false, "no resume after a handed dispatch");
+	++FlowSteps;
+
 	BridgeRouteFixtures();
 	PhaseFixtures();
 

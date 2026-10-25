@@ -82,7 +82,7 @@ namespace WonderlandJuliusMissionClient
 	inline constexpr const char* DispatchRelativePath = "/relay-api/wonderland/julius/dispatch";
 	/** GET status. The body is the top-level status route, not a data wrapper. */
 	inline constexpr const char* StatusRelativePath = "/relay-api/wonderland/julius/status";
-	/** GET {prefix}{wljRunId}/result and {prefix}{wljRunId}/progress (BRIDGE #448). Bodies go to the flow panel unread here. */
+	/** GET {prefix}{wljRunId}/result?projectId= and .../progress?projectId= (BRIDGE #448). Bodies go to the flow panel unread here. */
 	inline constexpr const char* MissionReadRelativePrefix = "/relay-api/wonderland/julius/missions/";
 	inline constexpr std::uint64_t HeartbeatPeriodMs = 5000;
 	inline constexpr std::uint64_t StatusPollPeriodMs = 5000;
@@ -256,6 +256,7 @@ namespace WonderlandJuliusMissionClient
 		/** First 12 hex digits of a verified artifact digest. Empty unless the result completed the digest check. */
 		const std::string& ArtifactDigest12() const { return Digest12; }
 		const std::string& RunId() const { return CurrentRunId; }
+		const std::string& CurrentMissionId() const { return MissionId; }
 		const std::string& ServerRunId() const { return CurrentServerRunId; }
 		bool HasServerRunId() const { return bServerRunIdKnown; }
 		bool IsFailClosed() const { return bFailClosed; }

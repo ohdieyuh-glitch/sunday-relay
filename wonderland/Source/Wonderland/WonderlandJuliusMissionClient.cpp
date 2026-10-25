@@ -993,6 +993,10 @@ namespace WonderlandJuliusMissionClient
 		Request.Url = JoinBase(BaseUrl, MissionReadRelativePrefix);
 		Request.Url += PercentEncode(CurrentRunId);
 		Request.Url += bProgress ? "/progress" : "/result";
+		// juliusLoopbackGuard (#448) checks ?projectId= against the paired project on every route, reads included;
+		// without it the bridge answers 403 julius_dispatch_wrong_project (seen in the loopback rehearsal).
+		Request.Url += "?projectId=";
+		Request.Url += PercentEncode(ProjectId);
 		Request.Headers.emplace_back("Authorization", std::string("Relay-Session ") + SessionToken);
 		Outcome.bSent = true;
 		Outcome.Request = std::move(Request);

@@ -473,6 +473,24 @@ bool UWonderlandJuliusStreamSubsystem::HandNativeSessionToMission(UWonderlandJul
 	return true;
 }
 
+FString UWonderlandJuliusStreamSubsystem::PreferLocalBridgeForMission(const FString& LoopbackBase)
+{
+	const FString Base = BridgeUrl();
+	const bool bLoopback = !Base.IsEmpty() && WonderlandJuliusMissionClient::IsLoopbackBaseUrl(std::string(TCHAR_TO_UTF8(*Base)));
+	if (bLoopback)
+	{
+		return IsPaired() ? FString() : FString::Printf(TEXT("Pair this client with your local bridge (%s): wl.Julius.Pair <code>."), *Base);
+	}
+	if (IsPaired())
+	{
+		return FString::Printf(TEXT("Paid missions run on your local bridge (%s). This client is paired with another bridge; set wl.Julius.Bridge.Url %s and pair again."),
+			*LoopbackBase, *LoopbackBase);
+	}
+	WonderlandJuliusStreamTuning::CVarBridgeUrl->Set(*LoopbackBase, ECVF_SetByConsole);
+	UE_LOG(LogWonderlandJuliusStream, Display, TEXT("J1 terminal: unpaired client pointed at the local bridge %s"), *LoopbackBase);
+	return FString::Printf(TEXT("Pair this client with your local bridge (%s): wl.Julius.Pair <code>."), *LoopbackBase);
+}
+
 FString UWonderlandJuliusStreamSubsystem::BridgeUrl() const
 {
 	FString Problem;

@@ -41,6 +41,10 @@ public:
 	/** The in-world terminal calls this when the player uses it. */
 	void NotifyTerminalUsed();
 	void SetOffers(TArray<TPair<FString, FString>> InOffers);
+	/** One line above the flow (the local-bridge pairing state); empty hides it. Never a token. */
+	void SetNotice(const FString& InNotice, bool bInUntilPaired = false);
+	/** Pull the wrapper and the mission reads now (opening the overlay, QA captures), not only on Slate tick. */
+	void Refresh();
 
 	/**
 	 * Hands the host's result and progress response bodies to FBridgeMissionResultClient.
@@ -67,4 +71,6 @@ private:
 	bool bHaveMissionRead = false;
 	WonderlandJuliusMissionFlow::FBridgeMissionResultClient MissionRead;
 	FString PulledReadKey;
+	FString Notice;
+	bool bNoticeUntilPaired = false;
 };

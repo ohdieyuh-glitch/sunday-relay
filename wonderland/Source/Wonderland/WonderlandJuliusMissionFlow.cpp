@@ -1080,6 +1080,21 @@ namespace WonderlandJuliusMissionFlow
 		Step = EFlowStep::Watching;
 	}
 
+	bool FMissionFlow::ResumeWatching(std::string_view MissionId)
+	{
+		if (bDispatchHanded || MissionId.empty()) { return false; }
+		bool bOffered = false;
+		for (const FMissionOffer& Offer : OfferList)
+		{
+			if (Offer.Id == MissionId) { bOffered = true; break; }
+		}
+		if (!bOffered) { return false; }
+		ChosenId.assign(MissionId.data(), MissionId.size());
+		bDispatchHanded = true;
+		Step = EFlowStep::Watching;
+		return true;
+	}
+
 	void FMissionFlow::NoteClientRunId(std::string_view WljRunId)
 	{
 		if (!WonderlandJuliusMissionLogic::IsClientMintedRunId(WljRunId))

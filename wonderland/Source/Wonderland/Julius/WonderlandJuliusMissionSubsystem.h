@@ -71,6 +71,12 @@ public:
 	FString ArtifactLabel() const;
 	FString ServerRunId() const;
 	bool HasServerRunId() const;
+	/** The loopback base J1 sends to (wl.Julius.J1.Endpoint; Shipping: http://127.0.0.1:8790). */
+	FString EndpointBase() const;
+	/** True once a paired native session was adopted (the token itself is never exposed). */
+	bool HasNativeSession() const { return bAdoptedToken; }
+	/** The mission id of the current attempt (restored from the save after a restart), or empty. */
+	FString CurrentMissionId() const;
 	/** The client-minted wlj_ id of the current attempt, or empty. */
 	FString ClientRunId() const;
 

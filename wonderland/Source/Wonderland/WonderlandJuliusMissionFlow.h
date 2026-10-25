@@ -324,6 +324,12 @@ namespace WonderlandJuliusMissionFlow
 		/** Does not send. The host hands MissionId to the wrapper, then calls NoteDispatchHandedToWrapper. */
 		FDispatchIntent Confirm() const;
 		void NoteDispatchHandedToWrapper(bool bAccepted);
+		/**
+		 * The wrapper restored an open pair from its save (the game restarted after Confirm). Goes straight to Watching
+		 * for that offered mission without a second Confirm and without sending: the wrapper already owns the run.
+		 * False when the id is not offered or a dispatch was already handed in this flow.
+		 */
+		bool ResumeWatching(std::string_view MissionId);
 
 		void NoteClientRunId(std::string_view WljRunId);
 		void NoteProgress(WonderlandJuliusMissionLogic::EMissionProgress Meaning);

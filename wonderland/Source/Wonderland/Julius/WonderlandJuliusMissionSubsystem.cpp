@@ -396,6 +396,21 @@ void UWonderlandJuliusMissionSubsystem::SyncFromPairing()
 	if (Stream != nullptr) { (void)Stream->HandNativeSessionToMission(*this); }
 }
 
+FString UWonderlandJuliusMissionSubsystem::EndpointBase() const
+{
+#if UE_BUILD_SHIPPING
+	return ToF(WonderlandJuliusMissionClient::DefaultBridgeBaseUrl);
+#else
+	return CVarJuliusJ1Endpoint.GetValueOnGameThread();
+#endif
+}
+
+FString UWonderlandJuliusMissionSubsystem::CurrentMissionId() const
+{
+	if (Host == nullptr) { return FString(); }
+	return ToF(Host->Session.CurrentMissionId());
+}
+
 FString UWonderlandJuliusMissionSubsystem::ClientRunId() const
 {
 	if (Host == nullptr) { return FString(); }
