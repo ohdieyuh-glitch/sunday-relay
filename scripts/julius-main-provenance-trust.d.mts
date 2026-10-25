@@ -84,6 +84,8 @@ export interface CommitIdentityFields {
   readonly verificationVerified?: unknown;
   readonly verificationReason?: unknown;
 }
+/** One closed line for a refused created commit: sha, author and committer accounts, git committer, verification. */
+export declare function commitIdentitySummary(sha: unknown, body: unknown): string;
 /** The identity fields of a REST commits/{sha} body. */
 export declare function commitIdentityFields(body: unknown): CommitIdentityFields;
 /** Null only for the App bot as author, GitHub's web-flow as committer and signer, verified and valid. */

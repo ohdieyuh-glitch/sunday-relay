@@ -704,6 +704,24 @@ describe('runBootstrap talks to GitHub only with a token and never prints it', (
     expect(constructed.calls.filter((call) => call.method === 'PATCH')).toHaveLength(1);
   });
 
+  it('EVIDENCE: a refused installer read-back prints the created sha and exactly the closed identity summary, and no token', async () => {
+    const fixtures = JSON.parse(readFileSync(join(ROOT, 'scripts/julius-landing-identity-fixtures.json'), 'utf8')) as Record<string, unknown>;
+    const base = client();
+    const result = await boot.runBootstrap({
+      argv: [...argv, '--execute'],
+      env,
+      request: async (path, init) => (path === `/repos/${REPO}/commits/${INSTALLER}` ? { status: 200, body: { ...(fixtures.spoofBotUnsigned as object), token: TOKEN, files: [{ patch: 'secret-body-marker' }] } } : base.request(path, init)),
+      now: NOW,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.problems).toContain(`created commit ${INSTALLER}: author julius-governed-lander[bot]/347502603/Bot; committer julius-governed-lander[bot]/347502603/Bot; git committer julius-governed-lander[bot] <347502603+julius-governed-lander[bot]@users.noreply.github.com>; verification false/unsigned`);
+    const printed = JSON.stringify(result);
+    expect(printed).not.toContain(TOKEN);
+    expect(printed).not.toMatch(/gh[pousr]_[A-Za-z0-9_]{8,}/u);
+    expect(printed).not.toContain('secret-body-marker');
+    expect(base.calls.some((call) => call.method === 'PATCH')).toBe(false);
+  });
+
   it('B1: refuses before any request when --target-tree is omitted, so base_tree is never undefined', async () => {
     const { calls, request } = client();
     const withoutTree = argv.filter((value, index) => value !== '--target-tree' && argv[index - 1] !== '--target-tree');

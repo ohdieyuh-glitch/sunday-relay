@@ -577,6 +577,24 @@ export const GITHUB_SIGNER_EMAIL = 'noreply@github.com';
 export const GITHUB_SIGNER_NAME = 'GitHub';
 
 /** The identity fields of a REST `GET /repos/{r}/commits/{sha}` body, for landingIdentityProblem. */
+/**
+ * One closed line of what GitHub reported for a commit this system created and
+ * then refused: its sha, the author and committer accounts, the git committer,
+ * and the verification. Every value is reduced to a short run of safe
+ * characters. No token, signature payload or other part of the body is printed.
+ */
+export function commitIdentitySummary(sha, body) {
+  const safe = (value) => (value === undefined || value === null ? '-' : String(value).replace(/[^A-Za-z0-9 ._@+[\]-]/gu, '?').slice(0, 80));
+  const account = (who) => `${safe(who?.login)}/${safe(who?.id)}/${safe(who?.type)}`;
+  return [
+    `created commit ${/^[0-9a-f]{40}$/u.test(String(sha)) ? sha : 'unreadable'}:`,
+    `author ${account(body?.author)};`,
+    `committer ${account(body?.committer)};`,
+    `git committer ${safe(body?.commit?.committer?.name)} <${safe(body?.commit?.committer?.email)}>;`,
+    `verification ${safe(body?.commit?.verification?.verified)}/${safe(body?.commit?.verification?.reason)}`,
+  ].join(' ');
+}
+
 export function commitIdentityFields(body) {
   return {
     authorId: body?.author?.id,

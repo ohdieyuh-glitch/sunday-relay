@@ -525,3 +525,22 @@ describe('IDENTITY: the governed squash read-back moves main only for the App-si
 });
 
 void appSigned;
+
+describe('EVIDENCE: a refused squash read-back names what GitHub reported, in one closed line', () => {
+  it('prints the created sha and the identity summary, and no token-shaped string', async () => {
+    const fixtures = JSON.parse(readFileSync(join(ROOT, 'scripts/julius-landing-identity-fixtures.json'), 'utf8')) as Record<string, Record<string, any>>;
+    const text = clearanceText(governedOptional, seenDigest([botComment]));
+    const result = await run({
+      issueComments: [botComment, reviewerComment(delivery(text))],
+      override: (call) => {
+        if (call.method !== 'GET' || call.path !== `/repos/${REPO}/commits/${S}`) return undefined;
+        const body = JSON.parse(JSON.stringify(fixtures.webUiHuman));
+        return { status: 200, body: { ...body, sha: S, parents: [{ sha: B }], token: 'ghs_never_print_me', commit: { ...body.commit, tree: { sha: T }, message: 'x' } } };
+      },
+    });
+    expect(result.exitCode).toBe(1);
+    expect(result.text).toContain(`created commit ${S}: author ohdieyuh-glitch/225496319/User; committer web-flow/19864447/User; git committer GitHub <noreply@github.com>; verification true/valid`);
+    expect(result.text).not.toMatch(/gh[pousr]_[A-Za-z0-9_]{8,}/u);
+    expect(result.calls.some((call) => call.method === 'PATCH' && call.path.endsWith('/git/refs/heads/main'))).toBe(false);
+  });
+});

@@ -40,6 +40,7 @@ import {
   judgeClearanceWindow,
   landingIdentityProblem,
   commitIdentityFields,
+  commitIdentitySummary,
   GITHUB_SIGNER_EMAIL,
   GITHUB_SIGNER_NAME,
 } from '../../scripts/julius-main-provenance-trust.mjs';
@@ -1204,7 +1205,7 @@ async function landQueue({ env, fetchImpl, readLocal, now, stdout, stderr, state
             const createdProblems = checkCreatedCommit({ created: readBack, sha, base, tree, message: decision.message, identity, committerIdentity: GITHUB_SIGNER });
             const identityProblem = identityProblemOf(readBack);
             if (createdProblems.length > 0 || identityProblem) {
-              decision = { ok: false, problems: [...createdProblems, ...(identityProblem ? [identityProblem] : [])] };
+              decision = { ok: false, problems: [...createdProblems, ...(identityProblem ? [identityProblem] : []), commitIdentitySummary(sha, readBack)] };
               rememberSha(null);
             } else {
               auditSha = sha;
@@ -1238,7 +1239,7 @@ async function landQueue({ env, fetchImpl, readLocal, now, stdout, stderr, state
               const identityProblem = identityProblemOf(readBack);
               if (identityProblem) problems.push(identityProblem);
               if (problems.length > 0) {
-                decision = { ok: false, problems };
+                decision = { ok: false, problems: [...problems, commitIdentitySummary(auditSha, readBack)] };
                 rememberSha(null);
               } else {
                 rememberSha(decision.fields.head);
