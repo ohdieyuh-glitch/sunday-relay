@@ -109,7 +109,7 @@ export declare function founderApprovalProblem(input?: {
   readonly pinned?: boolean;
 }): string | null;
 export declare const CHECKPOINT_DIRECTORY_SUFFIXES: readonly string[];
-export declare function attestationShapeProblem(input?: { readonly names?: unknown; readonly text?: unknown }): string | null;
+export declare function attestationShapeProblem(input?: { readonly names?: unknown; readonly text?: unknown; readonly allowedPriors?: readonly string[]; readonly keySpkiSha256?: string }): string | null;
 export declare function judgeClearanceWindow(fields: { readonly issued?: string; readonly expires?: string } | undefined, now: number): string | null;
 
 export interface LandingJudgement {

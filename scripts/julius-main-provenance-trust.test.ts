@@ -25,6 +25,7 @@ import {
   TRUSTED_CHECKPOINT_TREE,
   TRUSTED_COMPUTING_BASE,
   attestationNonce,
+  attestationShapeProblem,
   attestationNonceProblems,
   canonicalCheckpointAttestation,
   classifyCommit,
@@ -37,6 +38,7 @@ import {
   parseCheckpointAttestation,
   requireTrustedVerifier,
   reviewerKeyPinRefusal,
+  founderKeyPinRefusal,
 } from './julius-main-provenance-trust.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
@@ -110,7 +112,8 @@ describe('the pinned reviewer key', () => {
     expect(reviewerKeyPinRefusal(REAL_PEM, undefined)?.reason).toBe(`${EXTERNAL_ANCHOR_VARIABLE} is unset`);
     expect(reviewerKeyPinRefusal(REAL_PEM, '')?.reason).toBe(`${EXTERNAL_ANCHOR_VARIABLE} is unset`);
     expect(reviewerKeyPinRefusal(REAL_PEM, `${PIN.slice(0, 8)}${'0'.repeat(56)}`)?.reason).toContain('does not match');
-    expect(reviewerKeyPinRefusal(REAL_PEM, PIN.slice(0, 8))?.reason).toContain('does not match');
+    // Not 64 lowercase hex: refused before any compare, with its own reason.
+    expect(reviewerKeyPinRefusal(REAL_PEM, PIN.slice(0, 8))?.reason).toMatch(/^reviewer_anchor_not_sha256/u);
     expect(reviewerKeyPinRefusal(attackerPem, PIN)?.reason).toContain(`not the pinned reviewer key ${PIN}`);
   });
 });
@@ -194,6 +197,54 @@ describe('JULIUS-CHECKPOINT-V1', () => {
     expect(chain.accepted).toBe(false);
     expect(chain.tipProvenant).toBe(false);
     expect(chain.reason).toMatch(/key-spki-sha256 is not the pinned reviewer key/u);
+  });
+});
+
+describe('anchor variables are a trimmed sha256 hex, nothing else', () => {
+  const founderPair = generateKeyPairSync('ed25519');
+  const founderPem = founderPair.publicKey.export({ type: 'spki', format: 'pem' }).toString();
+  const founderDer = Buffer.from(founderPair.publicKey.export({ type: 'spki', format: 'der' }));
+  const founderSpki = createHash('sha256').update(founderDer).digest('hex');
+  const base64Spki = founderDer.toString('base64');
+
+  it('the reviewer anchor: a 64-hex value with a trailing CRLF passes; base64 SPKI text is reviewer_anchor_not_sha256', async () => {
+    expect(reviewerKeyPinRefusal(REAL_PEM, `${PIN}\r\n`)).toBeNull();
+    expect(reviewerKeyPinRefusal(REAL_PEM, `  ${PIN}\n`)).toBeNull();
+    expect(reviewerKeyPinRefusal(REAL_PEM, Buffer.from(REAL_PEM).toString('base64'))?.reason).toMatch(/^reviewer_anchor_not_sha256: anchor is not a sha256 hex/u);
+    expect(reviewerKeyPinRefusal(REAL_PEM, REAL_PEM)?.reason).toMatch(/^reviewer_anchor_not_sha256/u);
+    expect(reviewerKeyPinRefusal(REAL_PEM, PIN.toUpperCase())?.reason).toMatch(/^reviewer_anchor_not_sha256/u);
+    expect(reviewerKeyPinRefusal(REAL_PEM, '\r\n')?.reason).toMatch(/is unset/u);
+    const land = await import(pathToFileURL(join(ROOT, '.github/julius-landing/land-lib.mjs')).href) as { externalAnchorProblems: (value: unknown) => string[] };
+    expect(land.externalAnchorProblems(`${PIN}\r\n`)).toEqual([]);
+    expect(land.externalAnchorProblems(Buffer.from(REAL_PEM).toString('base64')).join('\n')).toMatch(/^reviewer_anchor_not_sha256: anchor is not a sha256 hex/u);
+  });
+
+  it('the founder anchor: a 64-hex value with a trailing CRLF passes the parse; base64 SPKI text is founder_anchor_not_sha256', () => {
+    expect(founderKeyPinRefusal(founderPem, `${founderSpki}\r\n`)).toBeNull();
+    expect(founderKeyPinRefusal(founderPem, base64Spki)).toMatch(/founder approval: founder_anchor_not_sha256: anchor is not a sha256 hex/u);
+    expect(founderKeyPinRefusal(founderPem, founderSpki.toUpperCase())).toMatch(/founder_anchor_not_sha256/u);
+    expect(founderKeyPinRefusal(founderPem, '0'.repeat(64))).toMatch(/founder_anchor_mismatch/u);
+  });
+});
+
+describe('the checkpoint directory shape (L4)', () => {
+  const cp = 'a'.repeat(40);
+  const text = canonicalCheckpointAttestation({ checkpoint: cp, commits: [{ sha: cp, tree: 'b'.repeat(40), basis: 'shape' }], tcb: [{ path: 'x', sha256: 'c'.repeat(64) }] });
+  it('requires <checkpoint>.founder.sig beside the .txt and .sig', () => {
+    expect(attestationShapeProblem({ names: [`${cp}.sig`, `${cp}.txt`], text })).toMatch(/^founder_signature_missing: the checkpoint attestation has no founder-approval signature/u);
+    expect(attestationShapeProblem({ names: [`${cp}.founder.sig`, `${cp}.txt`], text })).toMatch(/^reviewer_signature_missing/u);
+    expect(attestationShapeProblem({ names: [`${cp}.founder.sig`, `${cp}.sig`, `${cp}.txt`], text })).toBeNull();
+  });
+  it('F5f: the monotonicity gate accept-main runs is in the trusted computing base and the heredoc', () => {
+    expect(TRUSTED_COMPUTING_BASE).toContain('scripts/julius-main-monotonicity.mjs');
+    expect(readFileSync(join(ROOT, '.github/workflows/julius-accept-main.yml'), 'utf8')).toContain('          scripts/julius-main-monotonicity.mjs\n          EOF');
+  });
+  it('M2: accepts a prior only from the allowed list', () => {
+    const prev = 'd'.repeat(40);
+    const refreshed = canonicalCheckpointAttestation({ prior: prev, checkpoint: cp, commits: [{ sha: cp, tree: 'b'.repeat(40), basis: 'shape' }], tcb: [{ path: 'x', sha256: 'c'.repeat(64) }] });
+    const names = [`${cp}.founder.sig`, `${cp}.sig`, `${cp}.txt`];
+    expect(attestationShapeProblem({ names, text: refreshed })).toMatch(/prior is not the trusted checkpoint/u);
+    expect(attestationShapeProblem({ names, text: refreshed, allowedPriors: [TRUSTED_CHECKPOINT_SHA, prev] })).toBeNull();
   });
 });
 
@@ -478,9 +529,9 @@ describe('the lander pin compare, against the real module', () => {
     expect(land.reviewerKeyMaterialProblems(attackerPem).join(' ')).toContain(`not the pinned reviewer key ${pin}`);
     expect(land.externalAnchorProblems(undefined)).toEqual([`${EXTERNAL_ANCHOR_VARIABLE} is unset`]);
     expect(land.externalAnchorProblems('')).toEqual([`${EXTERNAL_ANCHOR_VARIABLE} is unset`]);
-    expect(land.externalAnchorProblems(pin.slice(0, 8)).join(' ')).toContain('does not match');
+    expect(land.externalAnchorProblems(pin.slice(0, 8)).join(' ')).toMatch(/reviewer_anchor_not_sha256/u);
     expect(land.externalAnchorProblems(`${pin.slice(0, 8)}${'0'.repeat(56)}`).join(' ')).toContain('does not match');
-    expect(land.externalAnchorProblems(pin.toUpperCase()).join(' ')).toContain('does not match');
+    expect(land.externalAnchorProblems(pin.toUpperCase()).join(' ')).toMatch(/reviewer_anchor_not_sha256/u);
     expect(land.externalAnchorProblems(pin)).toEqual([]);
     const bad = Buffer.alloc(64, 3).toString('base64');
     expect(land.verifyClearanceSignature('not a clearance\n', bad, REAL_PEM).join(' ')).toContain('does not verify');
@@ -563,7 +614,7 @@ describe('mutation of the lander pin compare', () => {
     const cases: Array<[string, (text: string) => string]> = [
       ['prefix fingerprint', (text) => text.replace('spkiSha256 === PINNED_REVIEWER_SPKI_SHA256', 'spkiSha256.slice(0, 8) === PINNED_REVIEWER_SPKI_SHA256.slice(0, 8)')],
       ['raw key ignored', (text) => text.replace('&& rawHex === PINNED_REVIEWER_RAW_KEY', '&& true')],
-      ['prefix anchor', (text) => text.replace('external.length === 64 && external === PINNED_REVIEWER_SPKI_SHA256', 'typeof external === \'string\' && external.slice(0, 8) === PINNED_REVIEWER_SPKI_SHA256.slice(0, 8)')],
+      ['prefix anchor', (text) => text.replace('  if (external === PINNED_REVIEWER_SPKI_SHA256) return [];', '  if (external.slice(0, 8) === PINNED_REVIEWER_SPKI_SHA256.slice(0, 8)) return [];')],
     ];
     const survivors: string[] = [];
     for (const [name, transform] of cases) {

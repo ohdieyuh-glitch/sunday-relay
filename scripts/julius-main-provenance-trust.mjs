@@ -122,6 +122,8 @@ export const TRUSTED_COMPUTING_BASE = Object.freeze([
   'scripts/julius-main-provenance-trust.d.mts',
   'scripts/julius-review-currency.mjs',
   'scripts/julius-governed-bootstrap.mjs',
+  // F5f: accept-main runs this gate on main, so a change to it changes what main accepts.
+  'scripts/julius-main-monotonicity.mjs',
 ]);
 
 /** Governed directory. HARD_FORBIDDEN_PATH already matches this prefix. No App PR can add or swap a file here. */
@@ -214,7 +216,24 @@ export function reviewerKeyMaterial(pem) {
  * @returns {null | {verdict:'unprovenanced'|'indeterminate', reason:string}}
  * Null means the key is the pinned key and the external anchor matches it.
  */
-export function reviewerKeyPinRefusal(pem, externalAnchor) {
+/**
+ * An anchor variable as GitHub returns it: surrounding whitespace, including a
+ * trailing CR/LF, is not part of the value. What remains must be 64 lowercase
+ * hex, the sha256 of a SPKI DER. A raw key, a base64 key, a PEM or uppercase
+ * hex is not an anchor and gets its own refusal. Returns { value } or { empty } or { problem }.
+ */
+export function parseAnchor(raw, code) {
+  if (raw === undefined || raw === null) return { empty: true };
+  const value = String(raw).trim();
+  if (value === '') return { empty: true };
+  if (!/^[0-9a-f]{64}$/u.test(value)) return { problem: `${code}: anchor is not a sha256 hex` };
+  return { value };
+}
+
+export function reviewerKeyPinRefusal(pem, rawAnchor) {
+  const parsedAnchor = parseAnchor(rawAnchor, 'reviewer_anchor_not_sha256');
+  if (parsedAnchor.problem) return { verdict: 'unprovenanced', reason: `${parsedAnchor.problem} (${EXTERNAL_ANCHOR_VARIABLE})` };
+  const externalAnchor = parsedAnchor.value;
   const material = reviewerKeyMaterial(pem);
   if (material.problem) return { verdict: 'indeterminate', reason: material.problem };
   if (!exactFingerprintMatch(material.spkiSha256, PINNED_REVIEWER_SPKI_SHA256) || material.rawHex !== PINNED_REVIEWER_RAW_KEY) {
@@ -263,8 +282,11 @@ export const FOUNDER_REFUSAL = Object.freeze({
 export const FOUNDER_KEY_NOT_PINNED = `founder approval: ${FOUNDER_REFUSAL.keyUnpinned}: no founder-approval key is pinned at ${FOUNDER_APPROVAL_KEY_PATH}, so a governed path, trusted file, workflow, or attestation cannot land`;
 
 /** Null when the founder-approval key file is an ed25519 key, independent of the reviewer key, and equal to its anchor. */
-export function founderKeyPinRefusal(pem, externalAnchor) {
+export function founderKeyPinRefusal(pem, rawAnchor) {
   if (typeof pem !== 'string' || pem.trim() === '') return FOUNDER_KEY_NOT_PINNED;
+  const parsedAnchor = parseAnchor(rawAnchor, 'founder_anchor_not_sha256');
+  if (parsedAnchor.problem) return `founder approval: ${parsedAnchor.problem} (${FOUNDER_ANCHOR_VARIABLE})`;
+  const externalAnchor = parsedAnchor.value;
   const material = reviewerKeyMaterial(pem);
   if (material.problem) return `founder approval: ${FOUNDER_REFUSAL.keyUnpinned}: ${FOUNDER_APPROVAL_KEY_PATH} is not an ed25519 SPKI public key`;
   if (exactFingerprintMatch(material.spkiSha256, PINNED_REVIEWER_SPKI_SHA256)) {
@@ -390,7 +412,13 @@ export function canonicalCheckpointAttestation(fields = {}) {
 const UTC = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/u;
 
 /** Parse a JULIUS-CHECKPOINT-V1 body. Does not check a signature and does not look at the clock. */
-export function parseCheckpointAttestation(text) {
+/**
+ * `options.keySpkiSha256` is the reviewer key the attestation must name. It
+ * defaults to the running pin. A rotation's attestation names the post-landing
+ * key, and the governed lander passes that key here (M1).
+ */
+export function parseCheckpointAttestation(text, options = {}) {
+  const expectedKey = typeof options.keySpkiSha256 === 'string' ? options.keySpkiSha256 : PINNED_REVIEWER_SPKI_SHA256;
   const problems = [];
   const lines = String(text ?? '').split('\n');
   if (lines[0] !== CHECKPOINT_HEADER) problems.push(`first line must be ${CHECKPOINT_HEADER}`);
@@ -415,8 +443,8 @@ export function parseCheckpointAttestation(text) {
   if (repo !== undefined && repo.toLowerCase() !== LANDING_REPO.toLowerCase()) problems.push(`the attestation is for ${repo}, not ${LANDING_REPO}`);
   if (prior !== undefined && !SHA.test(prior)) problems.push('prior must be a full 40-hex sha');
   if (checkpoint !== undefined && !SHA.test(checkpoint)) problems.push('checkpoint must be a full 40-hex sha');
-  if (keySpkiSha256 !== undefined && !exactFingerprintMatch(keySpkiSha256, PINNED_REVIEWER_SPKI_SHA256)) {
-    problems.push(`key-spki-sha256 is not the pinned reviewer key ${PINNED_REVIEWER_SPKI_SHA256}`);
+  if (keySpkiSha256 !== undefined && !exactFingerprintMatch(keySpkiSha256, expectedKey)) {
+    problems.push(`key-spki-sha256 is not the pinned reviewer key ${expectedKey}`);
   }
   if (nonce !== undefined && !/^[0-9a-f]{32}$/u.test(nonce)) problems.push('nonce must be 32 hex characters');
   for (const [name, value] of [['issued', issued], ['expires', expires]]) {
@@ -484,12 +512,12 @@ export function attestationCoversCommits(parsed, commits, prior) {
  * is not that proof. Any failure is a refusal; the caller says the attestation
  * was not verified.
  */
-export function checkpointAttestationProblems({ text, signatureB64, pem, treeHashes, now, founderSignatureB64, founderPem, founderAnchor, founderPinned = true } = {}) {
+export function checkpointAttestationProblems({ text, signatureB64, pem, treeHashes, now, founderSignatureB64, founderPem, founderAnchor, founderPinned = true, keySpkiSha256 } = {}) {
   if (typeof text !== 'string' || text === '') return ['the checkpoint attestation was not verified'];
   if (typeof signatureB64 !== 'string' || signatureB64 === '') {
     return ['the checkpoint attestation was not verified', `${FOUNDER_REFUSAL.reviewerSignatureMissing}: the attestation has no reviewer signature`];
   }
-  const parsed = parseCheckpointAttestation(text);
+  const parsed = parseCheckpointAttestation(text, { keySpkiSha256 });
   if (parsed.problems.length > 0) return ['the checkpoint attestation was not verified'];
   const material = reviewerKeyMaterial(pem);
   if (!material.key || !signatureVerifies(text, signatureB64, material)) return ['the checkpoint attestation was not verified'];
@@ -669,7 +697,7 @@ export function evaluateTrustChain(input) {
   const signatureOk = pin === null && Boolean(material.key) && parsed.problems.length === 0
     && signaturePresent
     && signatureVerifies(text, input?.signatureB64, material)
-    && parsed.fields.prior === TRUSTED_CHECKPOINT_SHA
+    && typeof parsed.fields.prior === 'string' && SHA.test(parsed.fields.prior)
     && parsed.fields.repo?.toLowerCase() === LANDING_REPO.toLowerCase();
   const nonceProblem = signatureOk ? attestationNonceProblems(parsed.fields) : null;
   const windowProblem = signatureOk && typeof input?.now === 'number' ? judgeAttestationWindow(parsed.fields, input.now) : null;
@@ -759,7 +787,7 @@ function checkpointFileName(name) {
  * head it is about to land, so neither can produce a main the verifier refuses
  * for its shape. Returns the first problem, or null.
  */
-export function attestationShapeProblem({ names, text } = {}) {
+export function attestationShapeProblem({ names, text, allowedPriors = [TRUSTED_CHECKPOINT_SHA], keySpkiSha256 } = {}) {
   const list = Array.isArray(names) ? names.map(String) : [];
   const texts = list.filter(checkpointFileName).sort();
   if (texts.length === 0) return INSTALLER_RECOVERY;
@@ -771,14 +799,15 @@ export function attestationShapeProblem({ names, text } = {}) {
   if (!list.includes(`${stem}.sig`)) return `${FOUNDER_REFUSAL.reviewerSignatureMissing}: the checkpoint attestation is unsigned. ${INSTALLER_RECOVERY}`;
   if (!list.includes(`${stem}.founder.sig`)) return `${FOUNDER_REFUSAL.signatureMissing}: the checkpoint attestation has no founder-approval signature (${stem}.founder.sig). ${INSTALLER_RECOVERY}`;
   if (typeof text !== 'string' || text === '') return `the checkpoint attestation is unsigned. ${INSTALLER_RECOVERY}`;
-  const parsed = parseCheckpointAttestation(text);
+  const parsed = parseCheckpointAttestation(text, { keySpkiSha256 });
   if (parsed.problems.length > 0) return parsed.problems[0];
   if (`${parsed.fields.checkpoint}.txt` !== texts[0]) {
     return `the attestation file ${texts[0]} is not named for checkpoint ${parsed.fields.checkpoint}. ${INSTALLER_RECOVERY}`;
   }
   const nonceProblem = attestationNonceProblems(parsed.fields);
   if (nonceProblem) return nonceProblem;
-  if (parsed.fields.prior !== TRUSTED_CHECKPOINT_SHA) return `the attestation prior is not the trusted checkpoint ${TRUSTED_CHECKPOINT_SHA}`;
+  const priors = (Array.isArray(allowedPriors) ? allowedPriors : []).filter((sha) => typeof sha === 'string' && SHA.test(sha));
+  if (!priors.includes(parsed.fields.prior)) return `the attestation prior is not the trusted checkpoint ${TRUSTED_CHECKPOINT_SHA} or the previously attested checkpoint`;
   return null;
 }
 
@@ -816,7 +845,8 @@ export function attestedCheckpointFloor(root = process.cwd(), env = process.env,
   if (reviewerKeyPinRefusal(pem, env[EXTERNAL_ANCHOR_VARIABLE])) return null;
   const material = reviewerKeyMaterial(pem);
   if (!material.key || !signatureVerifies(found.text, found.signatureB64, material)) return null;
-  if (parsed.fields.prior !== TRUSTED_CHECKPOINT_SHA) return null;
+  // M2: a refreshed attestation may name the previous checkpoint as prior; both signatures already verified.
+  if (!SHA.test(String(parsed.fields.prior))) return null;
   let founderPem;
   try { founderPem = readFileSync(join(root, FOUNDER_APPROVAL_KEY_PATH), 'utf8'); } catch { return null; }
   if (founderApprovalProblem({ text: found.text, signatureB64: found.founderSignatureB64 ?? '', pem: founderPem, anchor: env[FOUNDER_ANCHOR_VARIABLE] })) return null;
@@ -935,7 +965,9 @@ export async function judgeCommitLanding(commit, options = {}) {
     return { ok: false, absent: false, nonce, reason: `the signed clearance lists protected paths this landing does not change: ${unused.slice(0, 5).join(', ')}` };
   }
   const { HARD_FORBIDDEN_PATH } = await landingLib();
-  const needsLander = paths.some((path) => HARD_FORBIDDEN_PATH.test(path) || TRUSTED_COMPUTING_BASE.includes(path));
+  // L6: the same rule as the governed lander: a protected-paths entry needs the App and the founder even on an ordinary path.
+  const listedProtected = clearance['protected-paths'] !== undefined && clearance['protected-paths'] !== '-';
+  const needsLander = listedProtected || paths.some((path) => HARD_FORBIDDEN_PATH.test(path) || TRUSTED_COMPUTING_BASE.includes(path));
   if (needsLander) {
     const botId = options.governedLanderBotId ?? options.env?.[GOVERNED_LANDER_BOT_VARIABLE] ?? process.env[GOVERNED_LANDER_BOT_VARIABLE];
     const identity = landingIdentityProblem({
@@ -1127,8 +1159,9 @@ async function attachLanderIdentity(commit, env, identities) {
   const message = typeof commit?.message === 'string' ? commit.message : '';
   const paths = Array.isArray(commit?.paths) ? commit.paths : [];
   if (!message.includes('BEGIN JULIUS LANDING')) return commit;
-  const { HARD_FORBIDDEN_PATH } = await landingLib();
-  const needs = paths.some((path) => HARD_FORBIDDEN_PATH.test(path) || TRUSTED_COMPUTING_BASE.includes(path));
+  const { HARD_FORBIDDEN_PATH, parseLandingCommitMessage } = await landingLib();
+  const listed = parseLandingCommitMessage(withSingleTrailingNewline(message)).fields?.clearance?.['protected-paths'];
+  const needs = (listed !== undefined && listed !== '-') || paths.some((path) => HARD_FORBIDDEN_PATH.test(path) || TRUSTED_COMPUTING_BASE.includes(path));
   if (!needs) return commit;
   const preset = identities && typeof commit?.sha === 'string' ? identities[commit.sha] : undefined;
   if (preset && typeof preset === 'object') return { ...commit, ...preset };
@@ -1167,7 +1200,18 @@ export async function requireTrustedVerifier(env = process.env, options = {}) {
   const texts = names.filter(checkpointFileName).sort();
   if (texts.length === 0) return { ok: false, reason: INSTALLER_RECOVERY };
   const found = texts.length === 1 ? readCheckpointAttestation(root) : null;
-  const shape = attestationShapeProblem({ names, text: found?.signatureB64 ? found.text : '' });
+  // M2: a refreshed attestation may name the previously attested checkpoint as its prior.
+  // That prior has to be an ancestor of the checkpoint it covers; 2528ac5c always is.
+  const claimed = found ? parseCheckpointAttestation(found.text).fields : {};
+  const allowedPriors = [TRUSTED_CHECKPOINT_SHA];
+  if (SHA.test(String(claimed.prior)) && SHA.test(String(claimed.checkpoint)) && claimed.prior !== TRUSTED_CHECKPOINT_SHA) {
+    try {
+      await git(['merge-base', '--is-ancestor', claimed.prior, claimed.checkpoint], { cwd: root });
+      await git(['merge-base', '--is-ancestor', TRUSTED_CHECKPOINT_SHA, claimed.prior], { cwd: root });
+      allowedPriors.push(claimed.prior);
+    } catch { /* not a descendant of the trusted checkpoint: refused below */ }
+  }
+  const shape = attestationShapeProblem({ names, text: found?.signatureB64 ? found.text : '', allowedPriors });
   if (shape) return { ok: false, reason: shape };
   const parsed = parseCheckpointAttestation(found.text);
   const windowProblem = judgeAttestationWindow(parsed.fields, now);

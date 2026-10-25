@@ -42,7 +42,6 @@ const founder = generateKeyPairSync('ed25519');
 const founderPem = String(founder.publicKey.export({ type: 'spki', format: 'pem' }));
 const founderDer = Buffer.from(founder.publicKey.export({ type: 'spki', format: 'der' }));
 const founderSpki = createHash('sha256').update(founderDer).digest('hex');
-const founderRaw = founderDer.subarray(founderDer.length - 32).toString('hex');
 const founderSign = (text: string) => signWith(text, founder.privateKey);
 
 const realLand = (await import(pathToFileURL(join(LANDING, 'land-lib.mjs')).href)) as {
@@ -100,8 +99,6 @@ writeFileSync(fixtureLib, readFileSync(fixtureLib, 'utf8')
 cpSync(join(ROOT, 'scripts/julius-main-provenance-trust.mjs'), join(fixtureRoot, 'scripts/julius-main-provenance-trust.mjs'));
 const fixtureTrustPath = join(fixtureRoot, 'scripts/julius-main-provenance-trust.mjs');
 writeFileSync(fixtureTrustPath, readFileSync(fixtureTrustPath, 'utf8')
-  .replace('export const PINNED_FOUNDER_APPROVAL_SPKI_SHA256 = null;', `export const PINNED_FOUNDER_APPROVAL_SPKI_SHA256 = '${founderSpki}';`)
-  .replace('export const PINNED_FOUNDER_APPROVAL_RAW_KEY = null;', `export const PINNED_FOUNDER_APPROVAL_RAW_KEY = '${founderRaw}';`)
   .replace(/export const PINNED_REVIEWER_SPKI_SHA256 = '[0-9a-f]+';/u, `export const PINNED_REVIEWER_SPKI_SHA256 = '${spki}';`)
   .replace(/export const PINNED_REVIEWER_RAW_KEY = '[0-9a-f]+';/u, `export const PINNED_REVIEWER_RAW_KEY = '${raw}';`));
 const fixture = (await import(pathToFileURL(join(fixtureLanding, 'governed-land.mjs')).href)) as {
@@ -621,8 +618,9 @@ describe('eligibility fails closed', () => {
     expect(evidence).toContain('julius-governed-audit/');
     expect(fixtureTrust.TRUSTED_COMPUTING_BASE).not.toContain('.github/workflows/julius-governed-evidence.yml');
     const relay = readFileSync(join(ROOT, '.github/workflows/relay-ci.yml'), 'utf8');
-    expect(relay).toContain('gatekeeper/prov1-review-fixes-20261024');
-    expect(relay).toContain('gatekeeper/governed-lander-20261024');
+    // The temporary gatekeeper bases are gone: Relay CI runs on pull requests to main only.
+    expect(relay).not.toContain('gatekeeper/prov1-review-fixes-20261024');
+    expect(relay).not.toContain('gatekeeper/governed-lander-20261024');
     expect(relay).toContain('npm run typecheck');
     expect(relay).toContain('npm test');
     expect(relay).toContain("!startsWith(github.head_ref, 'julius-governed-audit/')");
@@ -966,7 +964,8 @@ describe('H1 as specified by REVIEW: both signatures over identical bytes, disti
 
   it('refused: anchor mismatch (founder_anchor_mismatch)', () => {
     expect(decide({ founderAnchor: '0'.repeat(64) }).problems.join('\n')).toMatch(/founder_anchor_mismatch/u);
-    expect(decide({ founderAnchor: founderSpki.slice(0, 8) }).problems.join('\n')).toMatch(/founder_anchor_mismatch/u);
+    expect(decide({ founderAnchor: founderSpki.slice(0, 8) }).problems.join('\n')).toMatch(/founder_anchor_not_sha256/u);
+    expect(decide({ founderAnchor: `${founderSpki}\r\n` }).ok).toBe(true);
   });
 
   it('accepted: both signatures over the same bytes, delivered as the founder-signature-b64 field', () => {
@@ -981,6 +980,98 @@ describe('H1 as specified by REVIEW: both signatures over identical bytes, disti
   it('the ordinary path stays reviewer-only', () => {
     const ordinary = fixture.evaluateGovernedLanding(landingInput({ founderSignatures: [], founderPublicKeyPem: '' }));
     expect(ordinary.ok, ordinary.problems.join('\n')).toBe(true);
+  });
+});
+
+describe('REVIEW batch 2 on the lander', () => {
+  it('PRACTICAL: a failing non-required status (Vercel) does not block; a failing required one still does', () => {
+    const vercel = [{ context: 'Vercel', state: 'failure' }, { context: 'Vercel Preview Comments', state: 'error' }];
+    const ok = fixture.evaluateGovernedLanding(landingInput({ statuses: vercel }));
+    expect(ok.ok, ok.problems.join('\n')).toBe(true);
+    const required = fixture.evaluateGovernedLanding(landingInput({ statuses: [{ context: 'Verify Relay', state: 'failure' }] }));
+    expect(required.ok).toBe(false);
+    expect(required.problems.join('\n')).toMatch(/status "Verify Relay" is failure/u);
+    const historical = (realLand as unknown as { checkCi: (input: Record<string, unknown>) => string[] }).checkCi({
+      checkRuns: [{ name: 'Verify Relay', status: 'completed', conclusion: 'success', app: { id: 15368 } }],
+      statuses: vercel,
+      self: 'x',
+      required: [{ name: 'Verify Relay', appId: 15368 }],
+    });
+    expect(historical.join('\n')).toMatch(/status "Vercel" is failure/u);
+  });
+
+  const checkpoint = 'e'.repeat(40);
+  const att = `.github/julius-landing/checkpoints/${checkpoint}`;
+  const material = (over: { prior?: string; keySpkiSha256?: string; reviewerSigner?: typeof pair.privateKey; reviewerPathPem?: string } = {}) => {
+    const tcb = fixtureTrust.TRUSTED_COMPUTING_BASE.map((path) => ({
+      path,
+      sha256: path === '.github/julius-landing/reviewer-ed25519.pub' && over.reviewerPathPem
+        ? createHash('sha256').update(over.reviewerPathPem, 'utf8').digest('hex')
+        : createHash('sha256').update(path).digest('hex'),
+    }));
+    const text = fixtureTrust.canonicalCheckpointAttestation({
+      checkpoint,
+      commits: [{ sha: checkpoint, tree: T, basis: 'batch 2' }],
+      tcb,
+      issued: '2026-10-23T18:00:00Z',
+      expires: '2027-01-20T18:00:00Z',
+      ...(over.prior ? { prior: over.prior } : {}),
+      ...(over.keySpkiSha256 ? { keySpkiSha256: over.keySpkiSha256 } : {}),
+    });
+    return {
+      attestationText: text,
+      attestationSignatureB64: signWith(text, over.reviewerSigner ?? pair.privateKey),
+      attestationFounderSignatureB64: founderSign(text),
+      treeHashes: Object.fromEntries(tcb.map((row) => [row.path, row.sha256])),
+      checkpointNames: [`${checkpoint}.founder.sig`, `${checkpoint}.sig`, `${checkpoint}.txt`],
+    };
+  };
+
+  it('M2: a checkpoint refresh may name main\'s current checkpoint as its prior', () => {
+    const PREV = '6'.repeat(40);
+    const files = [`${att}.founder.sig`, `${att}.sig`, `${att}.txt`];
+    const land = (over: Record<string, unknown>) => fixture.evaluateGovernedLanding(landingInput({
+      fastForward: true, files, pr: openPr({ changed_files: files.length }), ...material({ prior: PREV }), ...over,
+    }, [`protected-paths: ${files.join(',')}`, 'landing-method: fast-forward']));
+    const ok = land({ mainCheckpoint: PREV });
+    expect(ok.ok, ok.problems.join('\n')).toBe(true);
+    expect(land({}).problems.join('\n')).toMatch(/prior is not the trusted checkpoint/u);
+    expect(land({ mainCheckpoint: OTHER }).problems.join('\n')).toMatch(/prior is not the trusted checkpoint/u);
+  });
+
+  it('M1: the lander rotates the reviewer key with both current signatures; the attestation names and is signed by the new key', () => {
+    const PUB = '.github/julius-landing/reviewer-ed25519.pub';
+    const next = generateKeyPairSync('ed25519');
+    const nextPem = String(next.publicKey.export({ type: 'spki', format: 'pem' }));
+    const nextSpki = createHash('sha256').update(Buffer.from(next.publicKey.export({ type: 'spki', format: 'der' }))).digest('hex');
+    const files = [PUB, `${att}.founder.sig`, `${att}.sig`, `${att}.txt`].sort();
+    const text = clearance(withRule([`protected-paths: ${files.join(',')}`, 'landing-method: fast-forward']));
+    const land = (over: Record<string, unknown>) => fixture.evaluateGovernedLanding(landingInput({
+      fastForward: true, files, pr: openPr({ changed_files: files.length }), clearanceText: text, headPublicKeyPem: nextPem, ...over,
+    }));
+    const rotated = land({ ...material({ keySpkiSha256: nextSpki, reviewerSigner: next.privateKey, reviewerPathPem: nextPem }) });
+    expect(rotated.ok, rotated.problems.join('\n')).toBe(true);
+    // The attestation signed by the outgoing key, or naming it, would lock the verifier after the move.
+    expect(land({ ...material({ keySpkiSha256: nextSpki, reviewerPathPem: nextPem }) }).ok).toBe(false);
+    expect(land({ ...material({ reviewerSigner: next.privateKey, reviewerPathPem: nextPem }) }).ok).toBe(false);
+    // The clearance must be signed by the current reviewer key: the new key alone is refused.
+    expect(land({ ...material({ keySpkiSha256: nextSpki, reviewerSigner: next.privateKey, reviewerPathPem: nextPem }), signatureB64: signWith(text, next.privateKey) }).ok).toBe(false);
+    // And by the current founder key.
+    expect(land({ ...material({ keySpkiSha256: nextSpki, reviewerSigner: next.privateKey, reviewerPathPem: nextPem }), founderSignatures: [] }).problems.join('\n')).toMatch(/founder_signature_missing/u);
+  });
+
+  it('L6: a protected-paths entry on an ordinary path needs the governed App and the founder in the walk too', async () => {
+    const path = 'src/relay/ordinary.ts';
+    const text = clearance([`protected-paths: ${path}`, 'landing-method: squash']);
+    const built = (await import(pathToFileURL(fixtureLib).href) as {
+      buildLandingCommitMessage: (input: { clearanceText: string; signatureB64: string }) => string;
+    }).buildLandingCommitMessage({ clearanceText: text, signatureB64: signWith(text) });
+    const judged = await fixtureTrust.judgeCommitLanding(
+      { message: built, committerTime: NOW, tree: T, parent: B, parentCount: 1, paths: [path] },
+      { pem: publicPem, anchor: spki, now: NOW + 1000, seenNonces: new Set<string>(), governedLanderBotId: '424242' },
+    );
+    expect(judged.ok).toBe(false);
+    expect(judged.reason).toMatch(/governed lander bot|founder approval/u);
   });
 });
 

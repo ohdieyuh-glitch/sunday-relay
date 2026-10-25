@@ -485,7 +485,8 @@ export function evaluateSignedLanding(input, tip) {
   if (unusedProtected.length > 0) {
     return signedVerdict('unprovenanced', `the signed clearance lists protected paths this landing does not change: ${unusedProtected.slice(0, 5).join(', ')}`, base);
   }
-  const needsLander = changed.some((path) => SIGNED_LANDING_HARD_FORBIDDEN.test(path) || TRUSTED_COMPUTING_BASE.includes(path));
+  // L6: a protected-paths entry needs the App and the founder, as in the governed lander.
+  const needsLander = protectedPaths.length > 0 || changed.some((path) => SIGNED_LANDING_HARD_FORBIDDEN.test(path) || TRUSTED_COMPUTING_BASE.includes(path));
   if (needsLander) {
     const identity = landingIdentityProblem({
       committerId: input?.landingCommitterId,

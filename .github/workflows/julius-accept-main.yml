@@ -191,6 +191,7 @@ jobs:
           scripts/julius-main-provenance-trust.d.mts
           scripts/julius-review-currency.mjs
           scripts/julius-governed-bootstrap.mjs
+          scripts/julius-main-monotonicity.mjs
           EOF
           # end-trusted-computing-base
           shopt -s nullglob

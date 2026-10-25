@@ -27,8 +27,11 @@ import {
 import {
   CHECKPOINT_ATTESTATION_DIR,
   FOUNDER_APPROVAL_KEY_PATH,
+  TRUSTED_CHECKPOINT_SHA,
   TRUSTED_COMPUTING_BASE,
   founderApprovalProblem,
+  parseCheckpointAttestation,
+  reviewerKeyMaterial,
   attestationShapeProblem,
   checkpointAttestationProblems,
   checkpointPairingRequired,
@@ -97,7 +100,7 @@ const CANONICAL_SIGNATURE = (b64) => typeof b64 === 'string' && /^[A-Za-z0-9+/]+
  * digest it carries. Any other comment, including one that adds a word to a
  * delivery or delivers a different clearance, stays in the digest.
  */
-export function isClearanceDeliveryComment(body, clearanceText) {
+export function isClearanceDeliveryComment(body, clearanceText, publicKeyPem) {
   const text = String(body ?? '');
   const spans = deliverySpans(text);
   if (spans.length === 0 || typeof clearanceText !== 'string' || clearanceText === '') return false;
@@ -105,6 +108,7 @@ export function isClearanceDeliveryComment(body, clearanceText) {
   let cursor = 0;
   for (const span of spans) {
     if (span.clearanceText !== clearanceText || !CANONICAL_SIGNATURE(span.signatureB64)) return false;
+    if (typeof publicKeyPem !== 'string' || verifyClearanceSignature(span.clearanceText, span.signatureB64, publicKeyPem).length > 0) return false;
     if (span.founderSignatureB64 !== undefined && !CANONICAL_SIGNATURE(span.founderSignatureB64)) return false;
     outside += text.slice(cursor, span.start);
     cursor = span.end;
@@ -119,8 +123,8 @@ export function isClearanceDeliveryComment(body, clearanceText) {
  * over every inline comment, every review, and every issue comment except
  * those that only deliver this exact clearance.
  */
-export function governedCommentsDigest({ issueComments, inlineComments, reviews, clearanceText }) {
-  const kept = (Array.isArray(issueComments) ? issueComments : []).filter((comment) => !isClearanceDeliveryComment(comment?.body, clearanceText));
+export function governedCommentsDigest({ issueComments, inlineComments, reviews, clearanceText, publicKeyPem }) {
+  const kept = (Array.isArray(issueComments) ? issueComments : []).filter((comment) => !isClearanceDeliveryComment(comment?.body, clearanceText, publicKeyPem));
   return botCommentsDigest({
     issueComments: kept,
     inlineComments: Array.isArray(inlineComments) ? inlineComments : [],
@@ -624,6 +628,7 @@ export function evaluateGovernedLanding(input) {
     statuses: Array.isArray(input?.statuses) ? input.statuses : [],
     self: input?.selfCheck ?? GOVERNED_SELF_CHECK,
     required: Array.isArray(input?.required) ? input.required : [],
+    requiredStatusesOnly: true,
   }));
   if (fields['landing-method'] === 'fast-forward' && input?.fastForward !== true) {
     problems.push('the pull request head is not a fast-forward of the signed base');
@@ -635,7 +640,13 @@ export function evaluateGovernedLanding(input) {
   }
   if (checkpointPairingRequired(files)) {
     // The checkpoint directory at the head is what main will carry: the same shape every gate requires afterwards.
-    const shape = attestationShapeProblem({ names: input?.checkpointNames, text: input?.attestationText });
+    // M2: a refresh may name main's current checkpoint as its prior.
+    const allowedPriors = [TRUSTED_CHECKPOINT_SHA, ...(typeof input?.mainCheckpoint === 'string' && /^[0-9a-f]{40}$/u.test(input.mainCheckpoint) ? [input.mainCheckpoint] : [])];
+    // M1: a reviewer-key rotation's attestation names, and is signed by, the post-landing reviewer key.
+    const rotatedReviewer = typeof input?.headPublicKeyPem === 'string' && input.headPublicKeyPem !== input?.publicKeyPem
+      ? reviewerKeyMaterial(input.headPublicKeyPem).spkiSha256
+      : undefined;
+    const shape = attestationShapeProblem({ names: input?.checkpointNames, text: input?.attestationText, allowedPriors, keySpkiSha256: rotatedReviewer });
     if (shape) problems.push(`the checkpoint directory at the head would be refused: ${shape}`);
     // A key rotation: the clearance above was signed by both keys pinned on main
     // (the old keys). The attestation is what the verifier checks after the move,
@@ -661,6 +672,7 @@ export function evaluateGovernedLanding(input) {
       founderPem: headFounderPem,
       founderAnchor: input?.founderAnchor,
       founderPinned: !founderRotates,
+      keySpkiSha256: rotatedReviewer,
     });
     if (attestationProblems.length > 0) problems.push('the checkpoint attestation was not verified', ...attestationProblems);
   }
@@ -911,31 +923,16 @@ async function landQueue({ env, fetchImpl, readLocal, now, stdout, stderr, state
       const rows = await paged(`/repos/${REPO}/git/matching-refs/tags/julius-landing-nonce-`);
       nonceTagTargets = [...new Set(rows.map((row) => row?.object?.sha).filter((sha) => typeof sha === 'string' && /^[0-9a-f]{40}$/u.test(sha)))];
     }
+    const candidates = [];
     for (const sha of nonceTagTargets) {
       const commit = await api(`/repos/${REPO}/commits/${sha}`);
       const record = parseAuditRecord(commit?.commit?.message ?? '');
-      if (record?.pr === pr) return { sha, commit };
+      if (record?.pr === pr) candidates.push({ sha, commit });
     }
-    return null;
+    return candidates;
   };
-  const readAudit = async (pr) => {
-    if (seenAudits.has(pr)) return;
-    seenAudits.add(pr);
-    const response = await readRaw(`/repos/${REPO}/git/ref/heads/julius-governed-audit/pr/${pr}`);
-    let sha;
-    let commit;
-    if (response.status === 404) {
-      const found = await auditFromNonceTags(pr);
-      if (found === null) return;
-      sha = found.sha;
-      commit = found.commit;
-    } else if (response.status !== 200 || typeof response.body?.object?.sha !== 'string') {
-      throw new Error(`GET /repos/${REPO}/git/ref/heads/julius-governed-audit/pr/${pr} -> ${response.status}`);
-    } else {
-      sha = response.body.object.sha;
-      commit = await api(`/repos/${REPO}/commits/${sha}`);
-    }
-    const fromTag = response.status === 404;
+  /** True when this App-signed audit commit proves pull request `pr` is on main. */
+  const proveAudit = async (pr, sha, commit) => {
     const audit = {
       sha,
       message: commit?.commit?.message ?? '',
@@ -943,26 +940,45 @@ async function landQueue({ env, fetchImpl, readLocal, now, stdout, stderr, state
       verificationVerified: commit?.commit?.verification?.verified === true,
       verificationReason: typeof commit?.commit?.verification?.reason === 'string' ? commit.commit.verification.reason : '',
     };
-    audits.push(audit);
     if (landingIdentityProblem({
       committerId: audit.committerId,
       verificationVerified: audit.verificationVerified,
       verificationReason: audit.verificationReason,
       botId,
-    })) return;
+    })) return false;
     const record = parseAuditRecord(audit.message);
-    if (!record) return;
-    if (record.pr !== pr) return;
+    if (!record || record.pr !== pr) return false;
     const ancestor = record.method === 'squash' ? sha : (record.main !== 'pending' ? record.main : '');
-    if (ancestor === '') return;
+    if (ancestor === '') return false;
     let proven = ancestor === mainShaNow;
     if (!proven) {
       const compared = await api(`/repos/${REPO}/compare/${ancestor}...${mainShaNow}`);
       proven = compared?.status === 'ahead' || compared?.status === 'identical';
     }
-    if (!proven) return;
+    if (!proven) return false;
+    audits.push(audit);
     provenAncestors.add(ancestor);
-    if (fromTag) recoveredAudits.set(pr, sha);
+    return true;
+  };
+  const readAudit = async (pr) => {
+    if (seenAudits.has(pr)) return;
+    seenAudits.add(pr);
+    const response = await readRaw(`/repos/${REPO}/git/ref/heads/julius-governed-audit/pr/${pr}`);
+    if (response.status === 404) {
+      // L1: a decoy tag naming the same pull request must not hide the real one. Try every candidate.
+      for (const candidate of await auditFromNonceTags(pr)) {
+        if (await proveAudit(pr, candidate.sha, candidate.commit)) {
+          recoveredAudits.set(pr, candidate.sha);
+          return;
+        }
+      }
+      return;
+    }
+    if (response.status !== 200 || typeof response.body?.object?.sha !== 'string') {
+      throw new Error(`GET /repos/${REPO}/git/ref/heads/julius-governed-audit/pr/${pr} -> ${response.status}`);
+    }
+    const sha = response.body.object.sha;
+    await proveAudit(pr, sha, await api(`/repos/${REPO}/commits/${sha}`));
   };
   try {
     for (const entry of entries) {
@@ -1133,6 +1149,16 @@ async function landQueue({ env, fetchImpl, readLocal, now, stdout, stderr, state
           }
         }
         const mainSha = (await api('/repos/ohdieyuh-glitch/sunday-relay/git/ref/heads/main')).object.sha;
+        let mainCheckpoint;
+        if (checkpointNames !== null) {
+          const mainListing = await readRaw(`/repos/${REPO}/contents/${CHECKPOINT_ATTESTATION_DIR}?ref=${mainSha}`);
+          const mainTexts = mainListing.status === 200 && Array.isArray(mainListing.body)
+            ? mainListing.body.map((row) => row?.name).filter((name) => typeof name === 'string' && /^[0-9a-f]{40}[.]txt$/u.test(name))
+            : [];
+          if (mainTexts.length === 1) {
+            mainCheckpoint = parseCheckpointAttestation((await blobBytes(`${CHECKPOINT_ATTESTATION_DIR}/${mainTexts[0]}`, mainSha)).toString('utf8')).fields.checkpoint;
+          }
+        }
         decision = evaluateGovernedLanding({
           clearanceText: chosen.delivery.clearanceText,
           signatureB64: chosen.delivery.signatureB64,
@@ -1150,7 +1176,7 @@ async function landQueue({ env, fetchImpl, readLocal, now, stdout, stderr, state
           treeDiffComplete,
           compare: { behind_by: compare?.behind_by, ahead_by: compare?.ahead_by, status: compare?.status },
           mainSha,
-          digest: governedCommentsDigest({ issueComments, inlineComments, reviews, clearanceText: chosen.delivery.clearanceText }),
+          digest: governedCommentsDigest({ issueComments, inlineComments, reviews, clearanceText: chosen.delivery.clearanceText, publicKeyPem }),
           commitMessages: [],
           nonceTagExists: tag.status === 200,
           nonceTagCommitterId,
@@ -1167,6 +1193,7 @@ async function landQueue({ env, fetchImpl, readLocal, now, stdout, stderr, state
           attestationSignatureB64,
           treeHashes,
           checkpointNames,
+          mainCheckpoint,
         });
         decision.changedPaths = changedPaths;
         }

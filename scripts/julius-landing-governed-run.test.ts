@@ -35,7 +35,6 @@ const founder = generateKeyPairSync('ed25519');
 const founderPem = String(founder.publicKey.export({ type: 'spki', format: 'pem' }));
 const founderDer = Buffer.from(founder.publicKey.export({ type: 'spki', format: 'der' }));
 const founderSpki = createHash('sha256').update(founderDer).digest('hex');
-const founderRaw = founderDer.subarray(founderDer.length - 32).toString('hex');
 const founderSign = (text: string) => sign(null, Buffer.from(text, 'utf8'), founder.privateKey).toString('base64');
 const appKey = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
 
@@ -49,12 +48,6 @@ const repin = (path: string) => writeFileSync(path, readFileSync(path, 'utf8')
 repin(join(fixtureLanding, 'land-lib.mjs'));
 cpSync(join(ROOT, 'scripts/julius-main-provenance-trust.mjs'), join(fixtureRoot, 'scripts/julius-main-provenance-trust.mjs'));
 repin(join(fixtureRoot, 'scripts/julius-main-provenance-trust.mjs'));
-{
-  const trustPath = join(fixtureRoot, 'scripts/julius-main-provenance-trust.mjs');
-  writeFileSync(trustPath, readFileSync(trustPath, 'utf8')
-    .replace('export const PINNED_FOUNDER_APPROVAL_SPKI_SHA256 = null;', `export const PINNED_FOUNDER_APPROVAL_SPKI_SHA256 = '${founderSpki}';`)
-    .replace('export const PINNED_FOUNDER_APPROVAL_RAW_KEY = null;', `export const PINNED_FOUNDER_APPROVAL_RAW_KEY = '${founderRaw}';`));
-}
 writeFileSync(join(fixtureLanding, 'reviewer-ed25519.pub'), publicPem);
 
 type RunResult = { exitCode: number; notes: string[]; walked: { pr: number; ok: boolean; problems: string[] }[] };
@@ -118,6 +111,7 @@ export type Scenario = {
   environment?: 'ok' | 'env-missing' | 'env-open' | 'env-extra';
   nonceTags?: { ref: string; object: { sha: string } }[];
   main?: string;
+  statuses?: { context: string; state: string }[];
   override?: (call: Call, state: { main: string }) => Route | undefined;
 };
 
@@ -167,7 +161,7 @@ export function fakeGithub(scenario: Scenario) {
     if (method === 'GET' && at(`/compare/${B}...${H}`)) {
       return { status: 200, body: { behind_by: 0, ahead_by: 1, status: 'ahead', files: (scenario.files ?? ['src/relay/ordinary.ts']).map((filename) => ({ filename })) } };
     }
-    if (method === 'GET' && at(`/commits/${H}/status?per_page=100`)) return { status: 200, body: { total_count: 0, statuses: [] } };
+    if (method === 'GET' && at(`/commits/${H}/status?per_page=100`)) return { status: 200, body: { total_count: (scenario.statuses ?? []).length, statuses: scenario.statuses ?? [] } };
     if (method === 'GET' && at(`/git/ref/tags/julius-landing-nonce-${NONCE}`)) return { status: 404 };
     if (method === 'GET' && path.startsWith(`/repos/${REPO}/git/ref/heads/julius-governed-audit/pr/`)) return { status: 404 };
     if (method === 'GET' && at('/git/matching-refs/tags/julius-landing-nonce-?per_page=100&page=1')) return { status: 200, body: scenario.nonceTags ?? [] };
@@ -389,6 +383,9 @@ describe('H2: the governed-landing environment must deploy from main only before
     const firstKey = workflow.indexOf('secrets.JULIUS_GOVERNED_LANDER_PRIVATE_KEY');
     expect(check).toBeGreaterThan(-1);
     expect(firstKey).toBeGreaterThan(check);
+    // F5e: the trusted verifier runs before the environment check, and both before the key.
+    expect(workflow.indexOf('node scripts/julius-main-provenance-trust.mjs --require-trusted-verifier')).toBeGreaterThan(-1);
+    expect(workflow.indexOf('node scripts/julius-main-provenance-trust.mjs --require-trusted-verifier')).toBeLessThan(check);
     expect(workflow.slice(workflow.lastIndexOf('- name:', check), check)).toContain('GH_TOKEN: ${{ github.token }}');
     expect(workflow).toMatch(/^permissions:\n  contents: read\n  statuses: read\n  actions: read\n/mu);
   });
@@ -458,5 +455,45 @@ describe('H3: an ambiguous ref update is not a clean refusal, and a lost audit r
     }, { GITHUB_SHA: S, GITHUB_WORKFLOW_SHA: S });
     expect(auditRefs(forged.calls)).toEqual([]);
     expect(forged.text).not.toMatch(/already on main/u);
+  });
+});
+
+describe('REVIEW batch 2 end to end', () => {
+  const text = () => clearanceText(governedOptional, seenDigest([botComment]));
+
+  it('PRACTICAL: a failing Vercel status does not stop a landing gated on required-checks.txt', async () => {
+    const result = await run({ issueComments: [botComment, reviewerComment(delivery(text()))], statuses: [{ context: 'Vercel', state: 'failure' }] });
+    expect(result.exitCode, result.text).toBe(0);
+  });
+
+  it('L2: a delivery of the same text with a signature that does not verify is not left out of the digest', async () => {
+    const forged = Buffer.alloc(64, 7).toString('base64');
+    const result = await run({ issueComments: [botComment, reviewerComment(delivery(text())), reviewerComment(delivery(text(), forged), 13)] });
+    expect(result.exitCode).toBe(1);
+    expect(result.text).toMatch(/differs from what the reviewer saw/u);
+  });
+
+  it('L1: a decoy nonce tag naming the same pull request does not hide the App-signed audit commit', async () => {
+    const first = await run({ issueComments: [botComment, reviewerComment(delivery(text()))], auditRef: 'fail' });
+    const landingMessage = String((first.calls.find((call) => call.method === 'POST' && call.path.endsWith('/git/commits'))?.body as { message?: string })?.message);
+    const who = { name: BOT_LOGIN, email: `${BOT}+${BOT_LOGIN}@users.noreply.github.com` };
+    const DECOY = '9'.repeat(40);
+    const landed = { sha: S, parents: [{ sha: B }], committer: { id: Number(BOT) }, commit: { tree: { sha: T }, message: landingMessage, author: who, committer: who, verification: { verified: true, reason: 'valid' } } };
+    const decoy = { ...landed, sha: DECOY, committer: { id: 1 }, commit: { ...landed.commit, verification: { verified: false, reason: 'unsigned' } } };
+    const later = await run({
+      main: S,
+      issueComments: [botComment, reviewerComment(delivery(text()))],
+      nonceTags: [
+        { ref: `refs/tags/julius-landing-nonce-${'0'.repeat(32)}`, object: { sha: DECOY } },
+        { ref: `refs/tags/julius-landing-nonce-${NONCE}`, object: { sha: S } },
+      ],
+      override: (call) => {
+        if (call.method === 'GET' && call.path === `/repos/${REPO}/commits/${S}`) return { status: 200, body: landed };
+        if (call.method === 'GET' && call.path === `/repos/${REPO}/commits/${DECOY}`) return { status: 200, body: decoy };
+        return undefined;
+      },
+    }, { GITHUB_SHA: S, GITHUB_WORKFLOW_SHA: S });
+    expect(later.exitCode, later.text).toBe(0);
+    expect(later.text).toMatch(/recovered refs\/heads\/julius-governed-audit\/pr\/7 at 5{40}/u);
   });
 });

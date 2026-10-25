@@ -38,7 +38,9 @@ import {
   TRUSTED_COMPUTING_BASE,
   attestationShapeProblem,
   checkpointAttestationProblems,
+  founderApprovalProblem,
   isCheckpointInstallerDiff,
+  parseAnchor,
   landingIdentityProblem,
   parseCheckpointAttestation,
   reviewerKeyMaterial,
@@ -54,76 +56,123 @@ export const GOVERNED_LANDER_BOT_ID = '347502603';
  * which the block captures into a shell variable. This script never runs it,
  * never reads a PEM, and never prints a token.
  */
-const FOUNDER_MINT_JS = [
+export const WORKFLOWS_PERMISSION_MESSAGE = 'the julius-governed-lander App lacks Workflows: Read and write; enable it in the App\'s settings and accept the updated permissions on the installation, then rerun';
+
+export const FOUNDER_MINT_JS = [
   'import { createSign } from "node:crypto"; import { readFileSync } from "node:fs";',
+  `const WORKFLOWS = ${JSON.stringify(WORKFLOWS_PERMISSION_MESSAGE)};`,
   'const now = Math.floor(Date.now() / 1000); const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");',
   'const unsigned = b64({ alg: "RS256", typ: "JWT" }) + "." + b64({ iat: now - 60, exp: now + 540, iss: process.env.JULIUS_GOVERNED_LANDER_APP_ID });',
   'const jwt = unsigned + "." + createSign("RSA-SHA256").update(unsigned).sign(readFileSync(process.env.JULIUS_APP_PEM_FILE)).toString("base64url");',
   'const h = { Authorization: "Bearer " + jwt, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" };',
   'const inst = await fetch("https://api.github.com/repos/ohdieyuh-glitch/sunday-relay/installation", { headers: h });',
   'if (!inst.ok) { console.error("installation lookup answered " + inst.status); process.exit(1); }',
-  'const { id } = await inst.json();',
-  'const body = JSON.stringify({ repositories: ["sunday-relay"], permissions: { contents: "write", metadata: "read", actions: "read" } });',
+  'const installed = await inst.json(); const id = installed.id; const have = installed.permissions ?? {};',
+  // HIGH-1: the target changes workflow files, so the installer commit needs workflows:write. The anchors are
+  // read from the variables API. Refuse here, before any write, when the App was not granted those permissions.
+  'const need = { contents: "write", metadata: "read", actions: "read", workflows: "write", actions_variables: "read" };',
+  'const rank = (v) => (v === "write" ? 2 : v === "read" ? 1 : 0);',
+  'const missing = Object.entries(need).filter(([k, v]) => rank(have[k]) < rank(v)).map(([k, v]) => k + ":" + v);',
+  'if (missing.includes("workflows:write")) { console.error(WORKFLOWS); process.exit(1); }',
+  'if (missing.length > 0) { console.error("the julius-governed-lander App lacks " + missing.join(", ") + "; enable it in the App\'s settings and accept the updated permissions on the installation, then rerun"); process.exit(1); }',
+  'const body = JSON.stringify({ repositories: ["sunday-relay"], permissions: need });',
   'const res = await fetch("https://api.github.com/app/installations/" + id + "/access_tokens", { method: "POST", headers: { ...h, "Content-Type": "application/json" }, body });',
+  // GitHub answers 422 when a requested permission was not granted to the App. Nothing has been written yet.
+  // Only the status is printed, never the response body, the token or the PEM.
+  'if (res.status === 422) { console.error(WORKFLOWS + " (or Variables: Read-only is missing)"); process.exit(1); }',
   'if (!res.ok) { console.error("token mint answered " + res.status); process.exit(1); }',
   'process.stdout.write((await res.json()).token);',
 ];
+
+/** F4: every required-checks.txt entry is one green check run from its App on TARGET. Reads gh, prints only names. */
+export const FOUNDER_CI_GATE_JS = [
+  'const { execFileSync } = require("node:child_process"); const { readFileSync } = require("node:fs");',
+  'const target = process.argv[1];',
+  'const required = readFileSync(".github/julius-landing/required-checks.txt", "utf8").split("\\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"))',
+  '  .map((l) => { const m = /^(.*\\S)\\s+@([0-9]+)$/u.exec(l); return m ? { name: m[1], app: Number(m[2]) } : { name: l, app: undefined }; });',
+  'const body = JSON.parse(execFileSync("gh", ["api", "repos/ohdieyuh-glitch/sunday-relay/commits/" + target + "/check-runs?per_page=100"], { encoding: "utf8" }));',
+  'const runs = Array.isArray(body.check_runs) && body.total_count === body.check_runs.length ? body.check_runs : null;',
+  'if (runs === null) { console.error("the check runs on the target could not be read completely"); process.exit(1); }',
+  'const bad = required.filter(({ name, app }) => { const hits = runs.filter((r) => r.name === name); return hits.length !== 1 || hits[0].status !== "completed" || hits[0].conclusion !== "success" || (app !== undefined && hits[0].app?.id !== app); });',
+  'if (required.length === 0 || bad.length > 0) { console.error("required checks are not all green on the target: " + (bad.map((r) => r.name).join(", ") || "required-checks.txt is empty")); process.exit(1); }',
+];
+
+/** F5d: the live branch rules still match the committed snapshot after the move. */
+const FOUNDER_RULES_JS = [
+  'const { execFileSync } = require("node:child_process"); const { readFileSync } = require("node:fs");',
+  'const snap = JSON.parse(readFileSync(".github/julius-landing/main-ruleset.json", "utf8"));',
+  'const live = JSON.parse(execFileSync("gh", ["api", "repos/ohdieyuh-glitch/sunday-relay/rules/branches/main"], { encoding: "utf8" }));',
+  'const same = Array.isArray(live) && live.length === snap.rules.length && live.every((r) => r.ruleset_id === snap.id) && snap.rules.every((r) => live.some((l) => l.type === r.type));',
+  'if (!same) { console.error("the live main branch rules no longer match main-ruleset.json"); process.exit(1); }',
+];
+
+/** Revokes the token through node, so it never sits on a command line. Exits non-zero when the revoke fails. */
+const FOUNDER_REVOKE_JS = 'fetch("https://api.github.com/installation/token", { method: "DELETE", headers: { Authorization: "Bearer " + process.env.JULIUS_GOVERNED_LANDER_TOKEN, Accept: "application/vnd.github+json" } }).then((r) => process.exit(r.status === 204 ? 0 : 1), () => process.exit(1))';
 
 /**
  * The one command block the founder runs, on the founder's own machine, from a
  * clean checkout of the target. No workflow on main can mint the App token
  * before this bootstrap, and no agent may handle the App private key, so the
- * founder mints a one-hour installation token from the PEM they hold. The
- * token lives only in a subshell variable and is revoked on exit. The block
- * stops at the first failed check (set -euo pipefail).
+ * founder mints a one-hour installation token from the PEM they hold. The PEM
+ * path reaches only the mint process; the token reaches only the bootstrap and
+ * the revoke, never a command line, and is revoked on exit with a loud warning
+ * if that fails. The block stops at the first failed check (set -euo pipefail).
+ * The founder's own lines (the .founder.sig path, the fingerprint, the PEM
+ * path) are never pre-filled from arguments (F2).
  */
-export function founderCommandBlock({ mainSha, target, targetTree, attestation, signature, founderSignature, founderKeySpkiSha256 } = {}) {
+export function founderCommandBlock({ mainSha, target, targetTree, attestation, signature } = {}) {
   const value = (text, placeholder) => (typeof text === 'string' && text !== '' ? text : placeholder);
-  const founderPin = typeof founderKeySpkiSha256 === 'string' && /^[0-9a-f]{64}$/u.test(founderKeySpkiSha256)
-    ? founderKeySpkiSha256
-    : 'NOT-PINNED-the-founder-approval-key-must-be-installed-in-the-target-first';
   const q = (text) => `'${String(text).replace(/'/gu, "'\\''")}'`;
   return [
     '# ---- FOUNDER: run this whole block in bash on your own machine, from a clean checkout of the target. ----',
     '# Nothing in it prints the token or the PEM. It stops at the first failed check.',
     '(',
     'set -euo pipefail',
-    '# 1. The values this landing is bound to. Export JULIUS_APP_PEM_FILE (the App private key file you hold) first.',
+    '# 1. The values this landing is bound to. Fill in the three founder lines yourself.',
     `MAIN_SHA=${q(value(mainSha, '<main sha>'))}`,
     `TARGET=${q(value(target, '<target sha>'))}`,
     `TARGET_TREE=${q(value(targetTree, '<target tree>'))}`,
     `ATTESTATION=${q(value(attestation, '<path to the signed attestation .txt>'))}`,
     `SIGNATURE=${q(value(signature, '<path to the reviewer .sig>'))}`,
-    `FOUNDER_SIGNATURE=${q(value(founderSignature, '<path to your founder-approval .founder.sig>'))}`,
-    ': "${JULIUS_APP_PEM_FILE:?export JULIUS_APP_PEM_FILE=<the App private key file> first}"',
+    `FOUNDER_SIGNATURE=${q('<path to the .founder.sig you wrote on the offline device>')}`,
+    `FOUNDER_FINGERPRINT=${q('<the SPKI-DER sha256 of your founder-approval key, from your offline record>')}`,
+    `APP_PEM_FILE=${q('<path to the App private key file you hold>')}`,
     `export JULIUS_GOVERNED_LANDER_APP_ID=${GOVERNED_LANDER_APP_ID} JULIUS_GOVERNED_LANDER_BOT_ID=${GOVERNED_LANDER_BOT_ID}`,
-    `export JULIUS_REVIEWER_KEY_SHA256=${PINNED_REVIEWER_SPKI_SHA256}`,
-    `export JULIUS_FOUNDER_APPROVAL_KEY_SHA256=${founderPin}`,
+    `REVIEWER_PIN=${PINNED_REVIEWER_SPKI_SHA256}`,
     '# 2. Prerequisites. Each line fails the block if it does not hold.',
-    'command -v node >/dev/null; command -v git >/dev/null; command -v gh >/dev/null; command -v curl >/dev/null',
+    'command -v node >/dev/null; command -v git >/dev/null; command -v gh >/dev/null',
     'node -e \'process.exit(Number(process.versions.node.split(".")[0]) >= 22 ? 0 : 1)\'',
-    'git diff --quiet; git diff --cached --quiet',
+    'test -z "$(git status --porcelain)"',
     'test "$(git rev-parse HEAD)" = "$TARGET"',
     'test "$(git rev-parse "HEAD^{tree}")" = "$TARGET_TREE"',
-    'test -s "$ATTESTATION"; test -s "$SIGNATURE"; test -s "$FOUNDER_SIGNATURE"; test -r "$JULIUS_APP_PEM_FILE"',
+    'test -s "$ATTESTATION"; test -s "$SIGNATURE"; test -s "$FOUNDER_SIGNATURE"; test -r "$APP_PEM_FILE"',
     `test "$(gh api repos/${REPO}/git/ref/heads/main --jq .object.sha)" = "$MAIN_SHA"`,
-    `test "$(gh api repos/${REPO}/actions/variables/JULIUS_REVIEWER_KEY_SHA256 --jq .value)" = "$JULIUS_REVIEWER_KEY_SHA256"`,
-    `test "$(gh api repos/${REPO}/actions/variables/JULIUS_FOUNDER_APPROVAL_KEY_SHA256 --jq .value)" = "$JULIUS_FOUNDER_APPROVAL_KEY_SHA256"`,
-    '# 3. Mint a one-hour installation token for this repository only. It stays in this subshell and is revoked on exit.',
-    `JULIUS_GOVERNED_LANDER_TOKEN="$(node --input-type=module -e ${q(FOUNDER_MINT_JS.join('\n'))})"`,
+    `test "$(gh api repos/${REPO}/actions/variables/JULIUS_REVIEWER_KEY_SHA256 --jq .value)" = "$REVIEWER_PIN"`,
+    `test "$(gh api repos/${REPO}/actions/variables/JULIUS_FOUNDER_APPROVAL_KEY_SHA256 --jq .value)" = "$FOUNDER_FINGERPRINT"`,
+    `test "$(node -e 'const c=require("node:crypto");process.stdout.write(c.createHash("sha256").update(c.createPublicKey(require("node:fs").readFileSync(process.argv[1])).export({type:"spki",format:"der"})).digest("hex"))' ${FOUNDER_APPROVAL_KEY_PATH})" = "$FOUNDER_FINGERPRINT"`,
+    '# 3. CI gate: every entry of required-checks.txt is one green check run from its App on the target.',
+    `node -e ${q(FOUNDER_CI_GATE_JS.join('\n'))} "$TARGET"`,
+    '# 4. Mint a one-hour installation token for this repository only. Only this process sees the PEM path.',
+    `JULIUS_GOVERNED_LANDER_TOKEN="$(JULIUS_APP_PEM_FILE="$APP_PEM_FILE" node --input-type=module -e ${q(FOUNDER_MINT_JS.join('\n'))})"`,
     'export JULIUS_GOVERNED_LANDER_TOKEN',
-    'trap \'curl -fsS -o /dev/null -X DELETE -H "Authorization: Bearer $JULIUS_GOVERNED_LANDER_TOKEN" https://api.github.com/installation/token || true\' EXIT',
-    'ARGS=(--main-sha "$MAIN_SHA" --target "$TARGET" --target-tree "$TARGET_TREE" --attestation "$ATTESTATION" --signature "$SIGNATURE" --founder-signature "$FOUNDER_SIGNATURE")',
-    '# 4. Dry run. It only reads. It must print "DRY RUN: every check passed" and exit 0.',
+    `revoke() { node -e ${q(FOUNDER_REVOKE_JS)} || echo "WARNING: THE INSTALLATION TOKEN WAS NOT REVOKED. It expires within one hour; revoke it from a trusted shell now." >&2; }`,
+    'trap revoke EXIT',
+    'ARGS=(--main-sha "$MAIN_SHA" --target "$TARGET" --target-tree "$TARGET_TREE" --attestation "$ATTESTATION" --signature "$SIGNATURE" --founder-signature "$FOUNDER_SIGNATURE" --founder-fingerprint "$FOUNDER_FINGERPRINT")',
+    '# 5. Dry run. It only reads, prints the planned target..installer diff, and must exit 0.',
     'node scripts/julius-governed-bootstrap.mjs "${ARGS[@]}"',
-    '# 5. Execute. Creates the installer commit as the App and moves main with force:false.',
+    '# 6. Your checkpoint: read the planned diff above, then type the confirmation.',
+    'read -r -p "Type EXECUTE ${TARGET:0:12} to move main: " CONFIRM </dev/tty',
+    'test "$CONFIRM" = "EXECUTE ${TARGET:0:12}"',
+    '# 7. Execute. Creates the installer commit as the App and moves main with force:false. Exit 2 means main is in doubt: stop and check main.',
     'node scripts/julius-governed-bootstrap.mjs "${ARGS[@]}" --execute',
-    '# 6. Verify: main is one installer commit on the target, it only touches the checkpoint directory, and the verifier accepts it.',
+    '# 8. Verify: main has exactly one parent, the target; the tree differs only in the checkpoint directory; the rules still match; the verifier accepts main.',
     'git fetch -q origin main',
-    'test "$(git rev-parse origin/main^)" = "$TARGET"',
-    `test -z "$(git diff --name-only "$TARGET" origin/main | grep -v '^${CHECKPOINT_ATTESTATION_DIR}/' || true)"`,
+    'test "$(git rev-list --parents -n 1 origin/main)" = "$(git rev-parse origin/main) $TARGET"',
+    `test -z "$(git diff --name-only "$TARGET" origin/main | grep -v '^[.]github/julius-landing/checkpoints/' || true)"`,
+    `diff <(git ls-tree -r "$TARGET" | grep -v '	[.]github/julius-landing/checkpoints/') <(git ls-tree -r origin/main | grep -v '	[.]github/julius-landing/checkpoints/')`,
+    `node -e ${q(FOUNDER_RULES_JS.join('\n'))}`,
     'VERIFY="$(mktemp -d)/main"; git worktree add -q --detach "$VERIFY" origin/main',
-    '(cd "$VERIFY" && env -u GH_TOKEN -u JULIUS_GOVERNED_LANDER_TOKEN node scripts/julius-main-provenance-trust.mjs --require-trusted-verifier)',
+    '(cd "$VERIFY" && env -u GH_TOKEN -u JULIUS_GOVERNED_LANDER_TOKEN JULIUS_REVIEWER_KEY_SHA256="$REVIEWER_PIN" JULIUS_FOUNDER_APPROVAL_KEY_SHA256="$FOUNDER_FINGERPRINT" node scripts/julius-main-provenance-trust.mjs --require-trusted-verifier)',
     'git worktree remove --force "$VERIFY"',
     'echo "bootstrap verified: main is $(git rev-parse origin/main)"',
     ')',
@@ -132,8 +181,8 @@ export function founderCommandBlock({ mainSha, target, targetTree, attestation, 
   ].join('\n');
 }
 
-/** The longest window this script installs. Six months, the default the reviewer is asked to sign. */
-export const ATTESTATION_MAX_WINDOW_MS = 184 * 24 * 60 * 60 * 1000;
+/** The longest window this script installs: 90 days. Recovery re-attests before or after expiry. */
+export const ATTESTATION_MAX_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
 /** Kept for callers of the earlier name. It is the same ceiling. */
 export const BOOTSTRAP_MAX_WINDOW_MS = ATTESTATION_MAX_WINDOW_MS;
 /** An attestation that expires sooner than this after it is installed is refused: it would need recovery at once. */
@@ -229,6 +278,39 @@ export function evaluateGovernedBootstrap(input) {
   if (!descends) problems.push('the target is not main and does not descend from main');
   const pin = reviewerKeyPinRefusal(input?.publicKeyPem, input?.externalAnchor);
   if (pin) problems.push(pin.reason);
+  // HIGH-2: the founder types the founder-approval key fingerprint computed on the offline
+  // device. The key file in the target and the repository variable must both be that key,
+  // so neither an agent-set variable nor a key file in the target authorizes itself.
+  const typed = input?.founderFingerprint;
+  if (typeof typed !== 'string' || !/^[0-9a-f]{64}$/u.test(typed)) {
+    problems.push(`${FOUNDER_REFUSAL.anchorMismatch}: --founder-fingerprint is required: the lowercase-hex SPKI-DER sha256 of the founder-approval key, computed on the offline device`);
+  } else {
+    if (reviewerKeyMaterial(input?.founderPublicKeyPem).spkiSha256 !== typed) {
+      problems.push(`${FOUNDER_REFUSAL.anchorMismatch}: the founder-approval key file in the target is not the key in --founder-fingerprint`);
+    }
+    if (input?.founderAnchor !== typed) problems.push(`${FOUNDER_REFUSAL.anchorMismatch}: the repository variable JULIUS_FOUNDER_APPROVAL_KEY_SHA256 is not the key in --founder-fingerprint`);
+  }
+  // BLOCKER-1: once main carries an attestation or a founder pin, the target cannot bring its
+  // own keys. The attestation must verify under main's current reviewer and founder keys too,
+  // and each of those must still equal its anchor. A target that changes either key file can
+  // then never pass, because one signature cannot verify under two different keys.
+  const mainFounderPem = typeof input?.mainFounderPem === 'string' ? input.mainFounderPem : '';
+  const mainPinned = input?.mainHasAttestation === true || mainFounderPem !== '';
+  if (mainPinned) {
+    const mainReviewer = reviewerKeyMaterial(input?.mainReviewerPem);
+    if (!mainReviewer.key || mainReviewer.spkiSha256 !== input?.externalAnchor) {
+      problems.push('main\'s reviewer key is not the key in JULIUS_REVIEWER_KEY_SHA256; a bootstrap cannot change keys');
+    } else if (founderApprovalProblem({ text: input?.attestationText, signatureB64: input?.attestationSignatureB64, pem: input?.mainReviewerPem, pinned: false })) {
+      problems.push('the attestation is not signed by main\'s current reviewer key; a bootstrap cannot change keys');
+    }
+    if (mainFounderPem === '') {
+      problems.push(`${FOUNDER_REFUSAL.keyUnpinned}: main carries a checkpoint attestation but no founder-approval pin; a bootstrap cannot add one over it`);
+    } else {
+      const current = founderApprovalProblem({ text: input?.attestationText, signatureB64: input?.attestationFounderSignatureB64, pem: mainFounderPem, anchor: input?.founderAnchor });
+      if (current) problems.push(`the attestation is not founder-approved under main's current founder-approval key (a bootstrap cannot change keys): ${current}`);
+    }
+  }
+  const allowedPriors = [TRUSTED_CHECKPOINT_SHA, ...(typeof input?.mainCheckpoint === 'string' && SHA.test(input.mainCheckpoint) ? [input.mainCheckpoint] : [])];
   const text = input?.attestationText;
   const parsed = typeof text === 'string' && text !== '' ? parseCheckpointAttestation(text) : null;
   const existing = Array.isArray(input?.existingCheckpointNames) ? input.existingCheckpointNames : null;
@@ -253,14 +335,14 @@ export function evaluateGovernedBootstrap(input) {
     if (typeof target === 'string' && SHA.test(target)) {
       const plan = installerDiffPlan(target, existing ?? []);
       const after = plan.added.map((path) => path.slice(CHECKPOINT_ATTESTATION_DIR.length + 1));
-      const shape = attestationShapeProblem({ names: after, text });
+      const shape = attestationShapeProblem({ names: after, text, allowedPriors });
       if (shape) problems.push(`the installed checkpoint directory would be refused: ${shape}`);
       if (isCheckpointInstallerDiff([...plan.added, ...plan.removed]) !== true) problems.push('the installer diff is not a checkpoint attestation');
     }
     const issued = Date.parse(parsed.fields.issued ?? '');
     const expires = Date.parse(parsed.fields.expires ?? '');
     if (!Number.isFinite(issued) || !Number.isFinite(expires) || !(expires > issued) || expires - issued > ATTESTATION_MAX_WINDOW_MS) {
-      problems.push('the attestation window is longer than the six-month ceiling');
+      problems.push('the attestation window is longer than the 90-day ceiling');
     } else if (typeof input?.now === 'number' && expires - input.now < BOOTSTRAP_MIN_REMAINING_MS) {
       problems.push('the attestation expires within seven days of being installed');
     }
@@ -268,12 +350,13 @@ export function evaluateGovernedBootstrap(input) {
     if (parsed.fields.checkpoint !== target || last?.sha !== target) problems.push('the attestation checkpoint is not the target commit');
     if (last?.tree !== targetTree) problems.push('the attestation does not bind the target tree');
     const chain = input?.attestedRange;
-    if (!Array.isArray(chain)) problems.push(`the first-parent chain from ${TRUSTED_CHECKPOINT_SHA} to the target could not be read`);
+    const prior = parsed.fields.prior;
+    if (!Array.isArray(chain)) problems.push(`the first-parent chain from ${prior} to the target could not be read`);
     else {
       const listed = (parsed.fields.commits ?? []).map((row) => `${row.sha} ${row.tree}`);
       const actual = chain.map((row) => `${row.sha} ${row.tree}`);
       if (listed.length !== actual.length || listed.some((row, index) => row !== actual[index])) {
-        problems.push(`the attestation does not list the first-parent chain ${TRUSTED_CHECKPOINT_SHA}..target exactly`);
+        problems.push(`the attestation does not list the first-parent chain ${prior}..target exactly`);
       }
     }
   }
@@ -353,6 +436,7 @@ export async function runBootstrap({ argv = [], env = {}, request, readFile, now
   const attestationPath = argValue(argv, '--attestation');
   const signaturePath = argValue(argv, '--signature');
   const founderSignaturePath = argValue(argv, '--founder-signature');
+  const founderFingerprint = argValue(argv, '--founder-fingerprint');
   let attestationText = '';
   let attestationSignatureB64 = '';
   let attestationFounderSignatureB64 = '';
@@ -384,7 +468,6 @@ export async function runBootstrap({ argv = [], env = {}, request, readFile, now
     attestation: attestationPath,
     signature: signaturePath,
     founderSignature: founderSignaturePath,
-    founderKeySpkiSha256: reviewerKeyMaterial(founderPublicKeyPem).spkiSha256,
   });
   if (token === '' || typeof request !== 'function' || problems.length > 0) {
     if (typeof request !== 'function' && token !== '') problems.push('the GitHub client is unavailable');
@@ -400,6 +483,50 @@ export async function runBootstrap({ argv = [], env = {}, request, readFile, now
     ? await github(request, token, `/repos/${REPO}/commits/${targetSha}`)
     : { status: 0, body: null };
   const liveTree = commitResponse.status === 200 ? commitResponse.body?.commit?.tree?.sha : undefined;
+  // BLOCKER-1: the anchors come from the repository variables API, never from this process's environment.
+  const variable = async (name) => {
+    const response = await github(request, token, `/repos/${REPO}/actions/variables/${name}`);
+    return response.status === 200 && typeof response.body?.value === 'string' ? response.body.value : undefined;
+  };
+  const rawReviewerAnchor = await variable('JULIUS_REVIEWER_KEY_SHA256');
+  const rawFounderAnchor = await variable('JULIUS_FOUNDER_APPROVAL_KEY_SHA256');
+  const reviewerParsed = parseAnchor(rawReviewerAnchor, 'reviewer_anchor_not_sha256');
+  const founderParsed = parseAnchor(rawFounderAnchor, 'founder_anchor_not_sha256');
+  if (reviewerParsed.problem) problems.push(`${reviewerParsed.problem} (JULIUS_REVIEWER_KEY_SHA256)`);
+  if (founderParsed.problem) problems.push(`${founderParsed.problem} (JULIUS_FOUNDER_APPROVAL_KEY_SHA256)`);
+  const externalAnchor = reviewerParsed.value ?? (rawReviewerAnchor === undefined ? undefined : '');
+  const founderAnchor = founderParsed.value ?? (rawFounderAnchor === undefined ? undefined : '');
+  if (externalAnchor === undefined) problems.push('the repository variable JULIUS_REVIEWER_KEY_SHA256 could not be read');
+  if (founderAnchor === undefined) problems.push(`${FOUNDER_REFUSAL.anchorMismatch}: the repository variable JULIUS_FOUNDER_APPROVAL_KEY_SHA256 could not be read`);
+  // Main's current pins, read from main, not from the target checkout.
+  const fileAt = async (path, ref) => {
+    const response = await github(request, token, `/repos/${REPO}/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${ref}`);
+    if (response.status === 404) return '';
+    if (response.status !== 200 || response.body?.encoding !== 'base64' || typeof response.body?.content !== 'string') return null;
+    return Buffer.from(response.body.content.replace(/\n/gu, ''), 'base64').toString('utf8');
+  };
+  let mainReviewerPem = null;
+  let mainFounderPem = null;
+  let mainHasAttestation = null;
+  let mainCheckpoint;
+  if (SHA.test(String(mainSha))) {
+    mainReviewerPem = await fileAt(PUB_PATH, mainSha);
+    mainFounderPem = await fileAt(FOUNDER_APPROVAL_KEY_PATH, mainSha);
+    const mainListing = await github(request, token, `/repos/${REPO}/contents/${CHECKPOINT_ATTESTATION_DIR}?ref=${mainSha}`);
+    if (mainListing.status === 404) mainHasAttestation = false;
+    else if (mainListing.status === 200 && Array.isArray(mainListing.body)) {
+      const texts = mainListing.body.map((row) => row?.name).filter((name) => typeof name === 'string' && /^[0-9a-f]{40}[.]txt$/u.test(name));
+      mainHasAttestation = texts.length > 0;
+      if (texts.length === 1) {
+        const mainText = await fileAt(`${CHECKPOINT_ATTESTATION_DIR}/${texts[0]}`, mainSha);
+        mainCheckpoint = typeof mainText === 'string' ? parseCheckpointAttestation(mainText).fields.checkpoint : undefined;
+      }
+    }
+  }
+  if (mainReviewerPem === null || mainFounderPem === null || mainHasAttestation === null) problems.push('main\'s current keys or checkpoint directory could not be read');
+  // M2: the range runs from the attestation's own prior, which is 2528ac5c or main's current checkpoint.
+  const claimedPrior = parseCheckpointAttestation(attestationText).fields.prior;
+  const rangeFloor = claimedPrior === mainCheckpoint && SHA.test(String(mainCheckpoint)) ? mainCheckpoint : TRUSTED_CHECKPOINT_SHA;
   const treeHashes = {};
   let existingCheckpointNames = null;
   let attestedRange = null;
@@ -416,7 +543,7 @@ export async function runBootstrap({ argv = [], env = {}, request, readFile, now
     else if (listing.status === 200 && Array.isArray(listing.body) && listing.body.every((row) => row?.type === 'file' && typeof row?.name === 'string')) {
       existingCheckpointNames = listing.body.map((row) => row.name).sort();
     }
-    attestedRange = await readAttestedRange(request, token, targetSha, TRUSTED_CHECKPOINT_SHA);
+    attestedRange = await readAttestedRange(request, token, targetSha, rangeFloor);
   }
   const rulesResponse = await github(request, token, `/repos/${REPO}/rules/branches/main`);
   const decision = evaluateGovernedBootstrap({
@@ -431,9 +558,14 @@ export async function runBootstrap({ argv = [], env = {}, request, readFile, now
     attestationFounderSignatureB64,
     publicKeyPem,
     founderPublicKeyPem,
-    founderAnchor: env.JULIUS_FOUNDER_APPROVAL_KEY_SHA256,
+    founderAnchor,
+    founderFingerprint,
+    mainReviewerPem,
+    mainFounderPem: mainFounderPem ?? '',
+    mainHasAttestation: mainHasAttestation === true,
+    mainCheckpoint,
     founderPublicKeySha256: founderPublicKeyPem === '' ? undefined : sha256Text(founderPublicKeyPem),
-    externalAnchor: env.JULIUS_REVIEWER_KEY_SHA256,
+    externalAnchor,
     treeHashes,
     existingCheckpointNames,
     attestedRange,
@@ -480,6 +612,7 @@ export async function runBootstrap({ argv = [], env = {}, request, readFile, now
     return response.body.sha;
   };
   let installerSha = '';
+  let landedNote = null;
   try {
     const txtBlob = await blobFor(attestationText);
     const sigBlob = await blobFor(`${attestationSignatureB64}\n`);
@@ -528,14 +661,33 @@ export async function runBootstrap({ argv = [], env = {}, request, readFile, now
     if (again.body?.object?.sha !== expectedMainSha) {
       return { ok: false, execute: true, problems: [`main moved before the update; it is ${again.body?.object?.sha ?? 'unreadable'}`], record: null };
     }
-    const patched = await github(request, token, `/repos/${REPO}/git/refs/heads/main`, {
-      method: 'PATCH',
-      body: JSON.stringify({ sha: installerSha, force: false }),
-    });
-    if (patched.status !== 200) return { ok: false, execute: true, problems: [`the ref update was refused; no retry and no force: ${patched.status}`], record: null };
-    const after = await github(request, token, `/repos/${REPO}/git/ref/heads/main`);
-    if (after.body?.object?.sha !== installerSha) {
-      return { ok: false, execute: true, problems: [`main is ${after.body?.object?.sha ?? 'unreadable'} after the update, not ${installerSha}`], record: null };
+    // F3, as in the governed lander: only a clean 4xx (not 408 or 429) with main still at the
+    // expected sha is a refusal. Anything else may have been applied with its answer lost, so
+    // main is re-read: the installer means landed, anything else is in doubt (exit 2).
+    let patched;
+    try {
+      patched = await github(request, token, `/repos/${REPO}/git/refs/heads/main`, {
+        method: 'PATCH',
+        body: JSON.stringify({ sha: installerSha, force: false }),
+      });
+    } catch (error) {
+      patched = { status: 0, body: null, why: error instanceof Error ? error.message : 'unknown' };
+    }
+    let tip;
+    try { tip = (await github(request, token, `/repos/${REPO}/git/ref/heads/main`)).body?.object?.sha; } catch { tip = undefined; }
+    const clean = patched.status >= 400 && patched.status < 500 && patched.status !== 408 && patched.status !== 429;
+    if (tip === installerSha) {
+      landedNote = patched.status === 200 ? null : `LANDED (the PATCH response was lost: ${patched.why ?? patched.status})`;
+    } else if (clean && tip === expectedMainSha) {
+      return { ok: false, execute: true, problems: [`the ref update was refused; no retry and no force: ${patched.status}`], record: null };
+    } else {
+      return {
+        ok: false,
+        execute: true,
+        ambiguous: true,
+        problems: [`ALERT: the update of main is in doubt (${patched.why ?? patched.status}); main is ${tip ?? 'unreadable'}, neither the installer ${installerSha} nor, for certain, ${expectedMainSha}. No retry, no force. Check main before anything else.`],
+        record: null,
+      };
     }
   } catch (error) {
     return { ok: false, execute: true, problems: [`the installer commit was not created; main was not moved: ${error instanceof Error ? error.message : 'unknown'}`], record: null };
@@ -544,6 +696,7 @@ export async function runBootstrap({ argv = [], env = {}, request, readFile, now
     ok: true,
     execute: true,
     problems: [],
+    ...(landedNote ? { summary: landedNote } : {}),
     record: bootstrapAuditRecord({
       status: 'final',
       main: installerSha,
@@ -587,5 +740,6 @@ if (entrypoint !== null && import.meta.url === entrypoint) {
   const lines = [...result.problems, result.summary ?? '', result.record ?? '', result.instructions ?? ''].filter((line) => line !== '');
   const stream = result.ok ? process.stdout : process.stderr;
   stream.write(`${lines.join('\n')}\n`);
-  process.exitCode = result.ok ? 0 : 1;
+  // 0 landed, 1 refused and main did not move, 2 the state of main is in doubt.
+  process.exitCode = result.ok ? 0 : (result.ambiguous ? 2 : 1);
 }

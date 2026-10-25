@@ -179,9 +179,12 @@ export function reviewerKeyMaterialProblems(publicKeyPem) {
   }
 }
 
-export function externalAnchorProblems(external = process.env[EXTERNAL_ANCHOR_VARIABLE]) {
-  if (typeof external === 'string' && external.length === 64 && external === PINNED_REVIEWER_SPKI_SHA256) return [];
-  if (external === undefined || external === null || external === '') return [`${EXTERNAL_ANCHOR_VARIABLE} is unset`];
+export function externalAnchorProblems(raw = process.env[EXTERNAL_ANCHOR_VARIABLE]) {
+  // Surrounding whitespace, including a trailing CR/LF, is not part of the anchor. The rest must be 64 lowercase hex.
+  const external = raw === undefined || raw === null ? '' : String(raw).trim();
+  if (external === '') return [`${EXTERNAL_ANCHOR_VARIABLE} is unset`];
+  if (!/^[0-9a-f]{64}$/u.test(external)) return [`reviewer_anchor_not_sha256: anchor is not a sha256 hex (${EXTERNAL_ANCHOR_VARIABLE})`];
+  if (external === PINNED_REVIEWER_SPKI_SHA256) return [];
   return [`${EXTERNAL_ANCHOR_VARIABLE} does not match the pinned reviewer key ${PINNED_REVIEWER_SPKI_SHA256}`];
 }
 
@@ -302,7 +305,7 @@ export function parseRequiredChecks(lines) {
 
 /** `required` entries are names or `{ name, appId }`. With an appId the single run of that name must also carry `app.id` equal to it (the check-run API always sends `app`; absent = refused),
  * so a look-alike check posted by another app under the same name cannot stand in for the real one. 'neutral' is NOT green: only 'success' is. */
-export function checkCi({ checkRuns, statuses, self, required = [] }) {
+export function checkCi({ checkRuns, statuses, self, required = [], requiredStatusesOnly = false }) {
   const problems = [];
   const runs = checkRuns.filter((r) => r.name !== self);
   const wanted = required.map((r) => (typeof r === 'string' ? { name: r, appId: undefined } : r));
@@ -322,7 +325,12 @@ export function checkCi({ checkRuns, statuses, self, required = [] }) {
     if (r.status !== 'completed') problems.push(`check "${r.name}" is ${r.status}`);
     else if (r.conclusion !== 'success') problems.push(`check "${r.name}" concluded ${r.conclusion}`);
   }
-  for (const s of statuses) if (s.state !== 'success') problems.push(`status "${s.context}" is ${s.state}`);
+  // The governed lander gates on required-checks.txt only: a commit status whose context is not a required name (a Vercel
+  // deployment, say) does not decide a landing. The historical lander keeps refusing any status that is not success.
+  for (const s of statuses) {
+    if (requiredStatusesOnly && !requiredNames.includes(s.context)) continue;
+    if (s.state !== 'success') problems.push(`status "${s.context}" is ${s.state}`);
+  }
   return problems;
 }
 

@@ -9,8 +9,6 @@ on:
   pull_request:
     branches:
       - main
-      - gatekeeper/prov1-review-fixes-20261024
-      - gatekeeper/governed-lander-20261024
   workflow_dispatch:
 
 permissions:

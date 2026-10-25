@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
+import { spawnSync } from 'node:child_process';
 
 import { PINNED_REVIEWER_RAW_KEY, PINNED_REVIEWER_SPKI_SHA256, TRUSTED_CHECKPOINT_SHA, TRUSTED_COMPUTING_BASE } from './julius-main-provenance-trust.mjs';
 
@@ -25,7 +26,9 @@ const BOT = '347502603';
 const NOW = Date.parse('2026-10-23T18:30:00Z');
 const ISSUED = '2026-10-23T18:00:00Z';
 /** Six months: the bootstrap installs the long-window attestation directly (B4). */
-const EXPIRES = '2027-04-23T18:00:00Z';
+/** 89 days: within the 90-day ceiling (M3). */
+const EXPIRES = '2027-01-20T18:00:00Z';
+const PREV = '6'.repeat(40);
 const STALE = '10aedd11643a1d717311b5824d54e863aa94d763';
 
 const pair = generateKeyPairSync('ed25519');
@@ -41,8 +44,11 @@ const founder = generateKeyPairSync('ed25519');
 const founderPem = founder.publicKey.export({ type: 'spki', format: 'pem' }).toString();
 const founderDer = Buffer.from(founder.publicKey.export({ type: 'spki', format: 'der' }));
 const founderSpki = createHash('sha256').update(founderDer).digest('hex');
-const founderRaw = founderDer.subarray(founderDer.length - 32).toString('hex');
 const founderSign = (text: string) => sign(null, Buffer.from(text, 'utf8'), founder.privateKey).toString('base64');
+/** A different founder key, standing for main's current pin when a target tries to swap it in (BLOCKER-1). */
+const oldFounder = generateKeyPairSync('ed25519');
+const oldFounderPem = oldFounder.publicKey.export({ type: 'spki', format: 'pem' }).toString();
+const oldFounderSpki = createHash('sha256').update(Buffer.from(oldFounder.publicKey.export({ type: 'spki', format: 'der' }))).digest('hex');
 
 const work = mkdtempSync(join(tmpdir(), 'julius-governed-bootstrap-'));
 const fixtureRoot = join(work, 'repo');
@@ -68,12 +74,6 @@ rewritePins('scripts/julius-main-provenance-trust.mjs');
 rewritePins('.github/julius-landing/land-lib.mjs');
 writeFileSync(join(fixtureRoot, '.github/julius-landing/reviewer-ed25519.pub'), publicPem);
 writeFileSync(join(fixtureRoot, '.github/julius-landing/founder-approval-ed25519.pub'), founderPem);
-{
-  const trustPath = join(fixtureRoot, 'scripts/julius-main-provenance-trust.mjs');
-  writeFileSync(trustPath, readFileSync(trustPath, 'utf8')
-    .replace('export const PINNED_FOUNDER_APPROVAL_SPKI_SHA256 = null;', `export const PINNED_FOUNDER_APPROVAL_SPKI_SHA256 = '${founderSpki}';`)
-    .replace('export const PINNED_FOUNDER_APPROVAL_RAW_KEY = null;', `export const PINNED_FOUNDER_APPROVAL_RAW_KEY = '${founderRaw}';`));
-}
 
 function fileBytes(rel: string) {
   const local = join(fixtureRoot, rel);
@@ -92,6 +92,9 @@ const tcb = TRUSTED_COMPUTING_BASE.map((path) => ({
 const treeHashes = Object.fromEntries(tcb.map((row) => [row.path, row.sha256]));
 
 type Boot = {
+  FOUNDER_MINT_JS: string[];
+  founderCommandBlock: (input: Record<string, string>) => string;
+  WORKFLOWS_PERMISSION_MESSAGE: string;
   BOOTSTRAP_MAX_WINDOW_MS: number;
   ATTESTATION_MAX_WINDOW_MS: number;
   BOOTSTRAP_MIN_REMAINING_MS: number;
@@ -112,13 +115,14 @@ const trust = (await import(pathToFileURL(join(fixtureRoot, 'scripts/julius-main
   TRUSTED_COMPUTING_BASE: readonly string[];
 };
 
-function attest(over: { checkpoint?: string; tree?: string; issued?: string; expires?: string; nonce?: string } = {}) {
+function attest(over: { checkpoint?: string; tree?: string; issued?: string; expires?: string; nonce?: string; prior?: string } = {}) {
   const checkpoint = over.checkpoint ?? TARGET;
   const tree = over.tree ?? TREE;
   const text = trust.canonicalCheckpointAttestation({
     checkpoint,
     commits: [{ sha: checkpoint, tree, basis: 'governed bootstrap test' }],
     tcb,
+    ...(over.prior ? { prior: over.prior } : {}),
     issued: over.issued ?? ISSUED,
     expires: over.expires ?? EXPIRES,
     ...(over.nonce ? { nonce: over.nonce } : {}),
@@ -145,6 +149,10 @@ function good(over: Record<string, unknown> = {}) {
     attestationFounderSignatureB64: signed.founderSignature,
     founderPublicKeyPem: founderPem,
     founderAnchor: founderSpki,
+    founderFingerprint: founderSpki,
+    mainReviewerPem: publicPem,
+    mainFounderPem: '',
+    mainHasAttestation: false,
     treeHashes,
     snapshot,
     snapshotSha256: treeHashes['.github/julius-landing/main-ruleset.json'],
@@ -160,10 +168,10 @@ function good(over: Record<string, unknown> = {}) {
 const problems = (over: Record<string, unknown> = {}) => boot.evaluateGovernedBootstrap(good(over)).problems.join('\n');
 
 describe('the bootstrap decision fails closed', () => {
-  it('accepts a descendant target bound by a six-month signed attestation', () => {
+  it('accepts a descendant target bound by an 89-day signed attestation', () => {
     const decision = boot.evaluateGovernedBootstrap(good());
     expect(decision.ok, decision.problems.join('\n')).toBe(true);
-    expect(boot.ATTESTATION_MAX_WINDOW_MS).toBe(184 * 24 * 60 * 60 * 1000);
+    expect(boot.ATTESTATION_MAX_WINDOW_MS).toBe(90 * 24 * 60 * 60 * 1000);
     expect(boot.BOOTSTRAP_MAX_WINDOW_MS).toBe(boot.ATTESTATION_MAX_WINDOW_MS);
     expect(boot.BOOTSTRAP_MIN_REMAINING_MS).toBe(7 * 24 * 60 * 60 * 1000);
   });
@@ -199,9 +207,11 @@ describe('the bootstrap decision fails closed', () => {
     expect((decision as { recovery?: boolean }).recovery).toBe(true);
   });
 
-  it('B4: refuses a window past six months and one that expires within seven days of install', () => {
+  it('M3: refuses a window past 90 days and one that expires within seven days of install', () => {
+    const ninetyOne = attest({ issued: '2026-10-23T18:00:00Z', expires: '2027-01-22T18:00:00Z' });
+    expect(problems({ attestationText: ninetyOne.text, attestationSignatureB64: ninetyOne.signature, attestationFounderSignatureB64: ninetyOne.founderSignature })).toMatch(/longer than the 90-day ceiling/u);
     const long = attest({ issued: '2026-10-23T18:00:00Z', expires: '2027-04-26T18:00:00Z' });
-    expect(problems({ attestationText: long.text, attestationSignatureB64: long.signature })).toMatch(/longer than the six-month ceiling/u);
+    expect(problems({ attestationText: long.text, attestationSignatureB64: long.signature })).toMatch(/longer than the 90-day ceiling/u);
     const soon = attest({ issued: '2026-10-23T18:00:00Z', expires: '2026-10-29T18:00:00Z' });
     expect(problems({ attestationText: soon.text, attestationSignatureB64: soon.signature })).toMatch(/expires within seven days/u);
   });
@@ -325,9 +335,11 @@ describe('runBootstrap talks to GitHub only with a token and never prints it', (
     '--attestation', attestationPath,
     '--signature', signaturePath,
     '--founder-signature', founderSignaturePath,
+    '--founder-fingerprint', founderSpki,
   ];
 
-  type Mode = 'ok' | 'identity' | 'moved' | 'tree' | 'readback-tree' | 'readback-parents' | 'readback-message' | 'readback-extra' | 'stale' | 'env-missing' | 'env-open' | 'env-extra';
+  type Mode = 'ok' | 'identity' | 'moved' | 'tree' | 'readback-tree' | 'readback-parents' | 'readback-message' | 'readback-extra' | 'stale' | 'env-missing' | 'env-open' | 'env-extra'
+    | 'main-pinned' | 'main-pinned-swap' | 'var-mismatch' | 'var-missing' | 'patch-timeout-moved' | 'patch-timeout-unmoved' | 'patch-422' | 'var-crlf' | 'var-base64';
   function client(mode: Mode = 'ok') {
     const calls: { path: string; method: string; body?: string; token: string }[] = [];
     const request = async (path: string, init: { method: string; body?: string; token: string }) => {
@@ -335,6 +347,7 @@ describe('runBootstrap talks to GitHub only with a token and never prints it', (
       if (path.endsWith('/git/ref/heads/main') && init.method === 'GET') {
         const seen = calls.filter((call) => call.path === path && call.method === 'GET').length;
         if (mode === 'moved' && seen === 2) return { status: 200, body: { object: { sha: OTHER } } };
+        if (mode === 'patch-timeout-unmoved' || mode === 'patch-422') return { status: 200, body: { object: { sha: MAIN } } };
         if (seen >= 3) return { status: 200, body: { object: { sha: INSTALLER } } };
         return { status: 200, body: { object: { sha: MAIN } } };
       }
@@ -375,6 +388,19 @@ describe('runBootstrap talks to GitHub only with a token and never prints it', (
           },
         };
       }
+      if (path === `/repos/${REPO}/actions/variables/JULIUS_REVIEWER_KEY_SHA256`) return mode === 'var-missing' ? { status: 404, body: null } : { status: 200, body: { value: mode === 'var-crlf' ? `${spki}\r\n` : spki } };
+      if (path === `/repos/${REPO}/actions/variables/JULIUS_FOUNDER_APPROVAL_KEY_SHA256`) return { status: 200, body: { value: mode === 'var-mismatch' ? '0'.repeat(64) : mode === 'var-crlf' ? `${founderSpki}\r\n` : mode === 'var-base64' ? Buffer.from(founderPem).toString('base64') : founderSpki } };
+      const encodedFile = (text: string) => ({ status: 200, body: { encoding: 'base64', content: Buffer.from(text).toString('base64') } });
+      if (path === `/repos/${REPO}/contents/.github/julius-landing/founder-approval-ed25519.pub?ref=${MAIN}`) {
+        if (mode === 'main-pinned') return encodedFile(founderPem);
+        if (mode === 'main-pinned-swap') return encodedFile(oldFounderPem);
+        return { status: 404, body: null };
+      }
+      if (path === `/repos/${REPO}/contents/.github/julius-landing/reviewer-ed25519.pub?ref=${MAIN}`) return encodedFile(publicPem);
+      if (path === `/repos/${REPO}/contents/.github/julius-landing/checkpoints?ref=${MAIN}`) {
+        return mode === 'main-pinned' || mode === 'main-pinned-swap' ? { status: 200, body: [{ type: 'file', name: `${PREV}.txt` }] } : { status: 404, body: null };
+      }
+      if (path === `/repos/${REPO}/contents/.github/julius-landing/checkpoints/${PREV}.txt?ref=${MAIN}`) return encodedFile(attest({ checkpoint: PREV }).text);
       if (path.includes('/contents/')) {
         const encoded = path.slice(path.indexOf('/contents/') + '/contents/'.length, path.indexOf('?ref='));
         const rel = encoded.split('/').map((part) => decodeURIComponent(part)).join('/');
@@ -388,7 +414,11 @@ describe('runBootstrap talks to GitHub only with a token and never prints it', (
         const id = mode === 'identity' ? 1 : Number(BOT);
         return { status: 200, body: { committer: { id }, commit: { verification: { verified: true, reason: 'valid' } } } };
       }
-      if (path.endsWith('/git/refs/heads/main') && init.method === 'PATCH') return { status: 200, body: {} };
+      if (path.endsWith('/git/refs/heads/main') && init.method === 'PATCH') {
+        if (mode === 'patch-timeout-moved' || mode === 'patch-timeout-unmoved') return { status: 504, body: null };
+        if (mode === 'patch-422') return { status: 422, body: null };
+        return { status: 200, body: {} };
+      }
       return { status: 500, body: null };
     };
     return { calls, request };
@@ -416,10 +446,13 @@ describe('runBootstrap talks to GitHub only with a token and never prints it', (
       at('command -v node'),
       at('test "$(git rev-parse HEAD)" = "$TARGET"'),
       at('actions/variables/JULIUS_REVIEWER_KEY_SHA256'),
+      at('check-runs?per_page=100'),
       at('/access_tokens'),
       at('node scripts/julius-governed-bootstrap.mjs "${ARGS[@]}"\n'),
+      at('read -r -p "Type EXECUTE ${TARGET:0:12} to move main: " CONFIRM </dev/tty'),
       at('node scripts/julius-governed-bootstrap.mjs "${ARGS[@]}" --execute'),
-      at('test "$(git rev-parse origin/main^)" = "$TARGET"'),
+      at('test "$(git rev-list --parents -n 1 origin/main)" = "$(git rev-parse origin/main) $TARGET"'),
+      at('rules/branches/main'),
       at('--require-trusted-verifier'),
     ];
     expect([...order].sort((a, b) => a - b)).toEqual(order);
@@ -428,10 +461,24 @@ describe('runBootstrap talks to GitHub only with a token and never prints it', (
     expect(block).toContain(`TARGET_TREE='${TREE}'`);
     expect(block).toContain('JULIUS_GOVERNED_LANDER_APP_ID=5457712 JULIUS_GOVERNED_LANDER_BOT_ID=347502603');
     expect(block).toContain('repositories: ["sunday-relay"]');
-    expect(block).toContain('X DELETE');
+    expect(block).toContain('method: "DELETE"');
+    // F2: the founder's own lines are never filled from arguments.
+    expect(block).toContain("FOUNDER_SIGNATURE='<path to the .founder.sig you wrote on the offline device>'");
+    expect(block).toContain("FOUNDER_FINGERPRINT='<the SPKI-DER sha256 of your founder-approval key, from your offline record>'");
+    // F5b: the PEM path reaches the mint process only; the token never sits in an argv; a failed revoke is loud.
+    expect(block).not.toMatch(/export[^\n]*JULIUS_APP_PEM_FILE/u);
+    expect(block).toContain('JULIUS_GOVERNED_LANDER_TOKEN="$(JULIUS_APP_PEM_FILE="$APP_PEM_FILE" node --input-type=module -e');
+    expect(block).not.toMatch(/curl[^\n]*TOKEN/u);
+    expect(block).not.toContain('|| true\' EXIT');
+    expect(block).toContain('WARNING: THE INSTALLATION TOKEN WAS NOT REVOKED');
+    // F5c: untracked files make the checkout dirty.
+    expect(block).toContain('test -z "$(git status --porcelain)"');
+    // F5d: the escaped checkpoints pattern and the tree comparison.
+    expect(block).toContain("grep -v '^[.]github/julius-landing/checkpoints/'");
+    expect(block).toContain('diff <(git ls-tree -r "$TARGET"');
     // The token goes only into a variable; nothing echoes it or the PEM.
-    expect(block).not.toMatch(/echo[^\n]*(TOKEN|PEM)/u);
-    expect(block).not.toMatch(/(cat|printf)[^\n]*(TOKEN|PEM)/u);
+    expect(block).not.toMatch(/echo[^\n]*\$[A-Z_]*(TOKEN|PEM)/u);
+    expect(block).not.toMatch(/\b(cat|printf)\b[^\n]*(TOKEN|PEM)/u);
     expect(block).not.toContain('set -x');
     expect(block).not.toContain(TOKEN);
   });
@@ -525,6 +572,75 @@ describe('runBootstrap talks to GitHub only with a token and never prints it', (
     }
   });
 
+  it('BLOCKER-1: the anchors come from the repository variables API, never from the environment', async () => {
+    const wrongEnv = { ...env, JULIUS_REVIEWER_KEY_SHA256: '0'.repeat(64), JULIUS_FOUNDER_APPROVAL_KEY_SHA256: '0'.repeat(64) };
+    const ok = await boot.runBootstrap({ argv, env: wrongEnv, request: client().request, now: NOW });
+    expect(ok.ok, ok.problems.join('\n')).toBe(true);
+    const missing = await boot.runBootstrap({ argv, env, request: client('var-missing').request, now: NOW });
+    expect(missing.problems.join('\n')).toMatch(/JULIUS_REVIEWER_KEY_SHA256 could not be read/u);
+    const mismatch = await boot.runBootstrap({ argv, env, request: client('var-mismatch').request, now: NOW });
+    expect(mismatch.problems.join('\n')).toMatch(/founder_anchor_mismatch: the repository variable JULIUS_FOUNDER_APPROVAL_KEY_SHA256 is not the key in --founder-fingerprint/u);
+  });
+
+  it('the anchors from the API are trimmed (the live value ends in CRLF); a base64 key is founder_anchor_not_sha256', async () => {
+    const crlf = await boot.runBootstrap({ argv, env, request: client('var-crlf').request, now: NOW });
+    expect(crlf.ok, crlf.problems.join('\n')).toBe(true);
+    const b64 = await boot.runBootstrap({ argv, env, request: client('var-base64').request, now: NOW });
+    expect(b64.ok).toBe(false);
+    expect(b64.problems.join('\n')).toMatch(/founder_anchor_not_sha256: anchor is not a sha256 hex/u);
+  });
+
+  it('BLOCKER-1: once main carries a founder pin, a target that swaps in another founder key is refused', async () => {
+    const same = client('main-pinned');
+    const kept = await boot.runBootstrap({ argv, env, request: same.request, now: NOW });
+    expect(kept.ok, kept.problems.join('\n')).toBe(true);
+    const swap = client('main-pinned-swap');
+    const swapped = await boot.runBootstrap({ argv: [...argv, '--execute'], env, request: swap.request, now: NOW });
+    expect(swapped.ok).toBe(false);
+    expect(swapped.problems.join('\n')).toMatch(/not founder-approved under main's current founder-approval key/u);
+    expect(swap.calls.some((call) => call.method !== 'GET')).toBe(false);
+    void oldFounderSpki;
+  });
+
+  it('BLOCKER-1: the attestation must verify under main\'s current reviewer key when main is pinned', () => {
+    const other = generateKeyPairSync('ed25519');
+    const otherMain = other.publicKey.export({ type: 'spki', format: 'pem' }).toString();
+    expect(problems({ mainHasAttestation: true, mainFounderPem: founderPem, mainReviewerPem: otherMain })).toMatch(/main's reviewer key is not the key in JULIUS_REVIEWER_KEY_SHA256/u);
+    expect(problems({ mainHasAttestation: true, mainFounderPem: '' })).toMatch(/founder_key_unpinned: main carries a checkpoint attestation but no founder-approval pin/u);
+    expect(problems({ mainHasAttestation: true, mainFounderPem: founderPem, attestationSignatureB64: signWith('other bytes') })).toMatch(/not signed by main's current reviewer key/u);
+    expect(problems({ mainHasAttestation: true, mainFounderPem: founderPem })).toBe('');
+  });
+
+  it('HIGH-2: the founder-typed fingerprint is required and must equal the target key file and the variable', () => {
+    expect(problems({ founderFingerprint: undefined })).toMatch(/--founder-fingerprint is required/u);
+    expect(problems({ founderFingerprint: 'abc' })).toMatch(/--founder-fingerprint is required/u);
+    expect(problems({ founderFingerprint: oldFounderSpki })).toMatch(/key file in the target is not the key in --founder-fingerprint/u);
+    expect(problems({ founderFingerprint: oldFounderSpki, founderAnchor: oldFounderSpki })).toMatch(/key file in the target is not the key in --founder-fingerprint/u);
+    expect(problems({ founderAnchor: oldFounderSpki })).toMatch(/JULIUS_FOUNDER_APPROVAL_KEY_SHA256 is not the key in --founder-fingerprint/u);
+  });
+
+  it('M2: a recovery may name main\'s current checkpoint as its prior; any other prior is refused', () => {
+    const refreshed = attest({ prior: PREV });
+    const base = { attestationText: refreshed.text, attestationSignatureB64: refreshed.signature, attestationFounderSignatureB64: refreshed.founderSignature };
+    expect(problems({ ...base, mainHasAttestation: true, mainFounderPem: founderPem, mainCheckpoint: PREV })).toBe('');
+    expect(problems({ ...base })).toMatch(/prior is not the trusted checkpoint/u);
+  });
+
+  it('F3: an unanswered PATCH is landed when main is the installer, in doubt otherwise; only a clean 4xx is a refusal', async () => {
+    const moved = await boot.runBootstrap({ argv: [...argv, '--execute'], env, request: client('patch-timeout-moved').request, now: NOW }) as { ok: boolean; summary?: string; problems: string[] };
+    expect(moved.ok, moved.problems.join('\n')).toBe(true);
+    expect(moved.summary).toMatch(/LANDED \(the PATCH response was lost/u);
+    const doubt = await boot.runBootstrap({ argv: [...argv, '--execute'], env, request: client('patch-timeout-unmoved').request, now: NOW }) as { ok: boolean; ambiguous?: boolean; problems: string[] };
+    expect(doubt.ok).toBe(false);
+    expect(doubt.ambiguous).toBe(true);
+    expect(doubt.problems.join('\n')).toMatch(/ALERT: the update of main is in doubt/u);
+    expect(doubt.problems.join('\n')).not.toMatch(/main was not moved/u);
+    const refused = await boot.runBootstrap({ argv: [...argv, '--execute'], env, request: client('patch-422').request, now: NOW }) as { ok: boolean; ambiguous?: boolean; problems: string[] };
+    expect(refused.ok).toBe(false);
+    expect(refused.ambiguous).toBeUndefined();
+    expect(refused.problems.join('\n')).toMatch(/the ref update was refused; no retry and no force: 422/u);
+  });
+
   it('B1: refuses before any request when --target-tree is omitted, so base_tree is never undefined', async () => {
     const { calls, request } = client();
     const withoutTree = argv.filter((value, index) => value !== '--target-tree' && argv[index - 1] !== '--target-tree');
@@ -576,5 +692,97 @@ describe('runBootstrap talks to GitHub only with a token and never prints it', (
     expect(withoutRemoval.ok).toBe(false);
     expect(withoutRemoval.problems.join('\n')).toMatch(/not exactly .*removed:/u);
     expect(unexpected.calls.some((call) => call.method === 'PATCH')).toBe(false);
+  });
+});
+
+describe('HIGH-1: the founder token mint asks for workflows:write and says so plainly when the App lacks it', () => {
+  const rsa = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
+  const pemPath = join(work, 'throwaway-app.pem');
+  writeFileSync(pemPath, rsa);
+  const mintPath = join(work, 'mint.mjs');
+  writeFileSync(mintPath, boot.FOUNDER_MINT_JS.join('\n'));
+  // A stubbed GitHub: the installation lookup, then the token mint. No network is reached.
+  const stub = (permissions: Record<string, string>, mintStatus: number) => {
+    const preload = join(work, `stub-${mintStatus}-${Object.keys(permissions).length}.mjs`);
+    writeFileSync(preload, [
+      'const requests = [];',
+      'globalThis.fetch = async (url, init = {}) => {',
+      '  requests.push(init.body ? JSON.parse(init.body) : null);',
+      '  process.env.STUB_LAST_BODY = init.body ?? "";',
+      `  if (String(url).endsWith('/installation')) return new Response(JSON.stringify({ id: 1, permissions: ${JSON.stringify(permissions)} }), { status: 200 });`,
+      `  return new Response(JSON.stringify({ message: 'secret-body-marker', token: 'ghs_never_print_me' }), { status: ${mintStatus} });`,
+      '};',
+    ].join('\n'));
+    return spawnSync(process.execPath, ['--import', pathToFileURL(preload).href, mintPath], {
+      env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, JULIUS_APP_PEM_FILE: pemPath, JULIUS_GOVERNED_LANDER_APP_ID: APP },
+      encoding: 'utf8',
+    });
+  };
+  const full = { contents: 'write', metadata: 'read', actions: 'read', workflows: 'write', actions_variables: 'read' };
+
+  it('a 422 from the mint prints the plain Workflows message and nothing else', () => {
+    const result = stub(full, 422);
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain(boot.WORKFLOWS_PERMISSION_MESSAGE);
+    for (const secret of ['secret-body-marker', 'ghs_never_print_me', 'PRIVATE KEY', rsa.split('\n')[1]]) expect(result.stderr).not.toContain(secret);
+  });
+
+  it('an installation without Workflows: write is refused before the mint is requested', () => {
+    const withoutWorkflows = { ...full, workflows: 'read' };
+    const result = stub(withoutWorkflows, 201);
+    expect(result.status).toBe(1);
+    expect(result.stderr.trim()).toBe(boot.WORKFLOWS_PERMISSION_MESSAGE);
+    expect(result.stdout).toBe('');
+  });
+
+  it('a granted App gets a token for this repository with workflows:write, and only the token reaches stdout', () => {
+    const recorded = join(work, 'mint-request.json');
+    const preload = join(work, 'stub-granted.mjs');
+    writeFileSync(preload, [
+      'import { writeFileSync } from "node:fs";',
+      'globalThis.fetch = async (url, init = {}) => {',
+      '  if (String(url).endsWith("/installation")) return new Response(JSON.stringify({ id: 1, permissions: ' + JSON.stringify(full) + ' }), { status: 200 });',
+      '  writeFileSync(' + JSON.stringify(recorded) + ', init.body);',
+      '  return new Response(JSON.stringify({ token: "ghs_fixture_token" }), { status: 201 });',
+      '};',
+    ].join('\n'));
+    const result = spawnSync(process.execPath, ['--import', pathToFileURL(preload).href, mintPath], {
+      env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, JULIUS_APP_PEM_FILE: pemPath, JULIUS_GOVERNED_LANDER_APP_ID: APP },
+      encoding: 'utf8',
+    });
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toBe('ghs_fixture_token');
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(readFileSync(recorded, 'utf8'))).toEqual({ repositories: ['sunday-relay'], permissions: full });
+  });
+});
+
+describe('F4: the founder block gates --execute on green required checks on the target', () => {
+  const ciGate = (runs: unknown) => {
+    const lines = (boot as unknown as { FOUNDER_CI_GATE_JS: string[] }).FOUNDER_CI_GATE_JS;
+    const source = lines.join('\n');
+    // The block runs this same script.
+    expect(boot.founderCommandBlock({ target: TARGET })).toContain(lines[0]!);
+    const script = join(work, 'ci-gate.cjs');
+    writeFileSync(script, source);
+    const preload = join(work, 'ci-gate-stub.cjs');
+    writeFileSync(preload, `require('node:child_process').execFileSync = () => ${JSON.stringify(JSON.stringify(runs))};`);
+    return spawnSync(process.execPath, ['--require', preload, script, TARGET], { cwd: ROOT, encoding: 'utf8' });
+  };
+  const run = (name: string, conclusion: string, app = 15368) => ({ name, status: 'completed', conclusion, app: { id: app } });
+  const required = readFileSync(join(ROOT, '.github/julius-landing/required-checks.txt'), 'utf8').split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'))
+    .map((l) => /^(.*\S)\s+@([0-9]+)$/u.exec(l)).map((m, i, all) => (m ? { name: m[1], app: Number(m[2]) } : { name: String(all[i]), app: 15368 }));
+
+  it('passes only when every required check is one green run from its App', () => {
+    const green = required.map((r) => run(r.name!, 'success', r.app));
+    expect(ciGate({ total_count: green.length, check_runs: green }).status).toBe(0);
+    const red = [...green.slice(1), run(required[0]!.name!, 'failure', required[0]!.app)];
+    const failed = ciGate({ total_count: red.length, check_runs: red });
+    expect(failed.status).toBe(1);
+    expect(failed.stderr).toContain(required[0]!.name);
+    const wrongApp = [...green.slice(1), run(required[0]!.name!, 'success', 1)];
+    expect(ciGate({ total_count: wrongApp.length, check_runs: wrongApp }).status).toBe(1);
+    expect(ciGate({ total_count: green.length + 5, check_runs: green }).status).toBe(1);
   });
 });

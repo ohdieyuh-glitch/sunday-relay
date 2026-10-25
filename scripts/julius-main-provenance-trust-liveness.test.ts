@@ -45,7 +45,6 @@ const founder = generateKeyPairSync('ed25519');
 const founderPem = founder.publicKey.export({ type: 'spki', format: 'pem' }).toString();
 const founderDer = Buffer.from(founder.publicKey.export({ type: 'spki', format: 'der' }));
 const founderSpki = createHash('sha256').update(founderDer).digest('hex');
-const founderRaw = founderDer.subarray(founderDer.length - 32).toString('hex');
 const founderEnv = { JULIUS_FOUNDER_APPROVAL_KEY_SHA256: founderSpki };
 const founderSign = (text: string) => sign(null, Buffer.from(text, 'utf8'), founder.privateKey).toString('base64');
 const attackerPem = attacker.publicKey.export({ type: 'spki', format: 'pem' }).toString();
@@ -111,9 +110,7 @@ async function buildFixture() {
   const repo = mkdtempSync(join(tmpdir(), 'julius-liveness-'));
   const rewritten = readFileSync(join(ROOT, 'scripts/julius-main-provenance-trust.mjs'), 'utf8')
     .replaceAll(PINNED_REVIEWER_SPKI_SHA256, spki)
-    .replaceAll(PINNED_REVIEWER_RAW_KEY, raw)
-    .replace('export const PINNED_FOUNDER_APPROVAL_SPKI_SHA256 = null;', `export const PINNED_FOUNDER_APPROVAL_SPKI_SHA256 = '${founderSpki}';`)
-    .replace('export const PINNED_FOUNDER_APPROVAL_RAW_KEY = null;', `export const PINNED_FOUNDER_APPROVAL_RAW_KEY = '${founderRaw}';`);
+    .replaceAll(PINNED_REVIEWER_RAW_KEY, raw);
   for (const rel of TRUSTED_COMPUTING_BASE) {
     mkdirSync(join(repo, dirname(rel)), { recursive: true });
     // The founder-approval key is absent from this tree (H1); the fixture writes its own below.
@@ -442,7 +439,8 @@ describe('signed checkpoint liveness', () => {
     for (const anchor of [spki.slice(0, 8), `${spki.slice(0, 8)}${'0'.repeat(56)}`, spki.toUpperCase()]) {
       const result = await gate(base, { [mod.EXTERNAL_ANCHOR_VARIABLE]: anchor });
       expect(result.ok, anchor).toBe(false);
-      expect(result.reason, anchor).toContain('does not match');
+      // A short or uppercase value is not a sha256 hex; a padded prefix is a sha256 hex that does not match.
+      expect(result.reason, anchor).toMatch(/does not match|reviewer_anchor_not_sha256/u);
     }
     const repo = copyFixture();
     const dir = join(repo, mod.CHECKPOINT_ATTESTATION_DIR);
@@ -1038,6 +1036,32 @@ describe('signed checkpoint liveness', () => {
     expect(result.ok, result.reason).toBe(false);
     expect(result.reason).toMatch(/stopped after 30 commits/u);
     expect(result.reason).not.toContain('chain verified');
+    rmSync(repo, { recursive: true, force: true });
+  });
+
+  it('M2: the verifier accepts a refreshed prior only when it is an ancestor of the checkpoint and a descendant of 2528ac5c', async () => {
+    const repo = copyFixture();
+    const dir = join(repo, mod.CHECKPOINT_ATTESTATION_DIR);
+    const [txt] = readdirSync(dir).filter((name) => name.endsWith('.txt'));
+    const checkpoint = txt!.replace(/[.]txt$/u, '');
+    const tree = git(repo, ['rev-parse', `${checkpoint}^{tree}`]).trim();
+    const tcb = mod.TRUSTED_COMPUTING_BASE.map((path) => ({ path, sha256: createHash('sha256').update(readFileSync(join(repo, path))).digest('hex') }));
+    const text = mod.canonicalCheckpointAttestation({
+      prior: '7'.repeat(40),
+      checkpoint,
+      commits: [{ sha: checkpoint, tree, basis: 'unrelated prior' }],
+      tcb,
+      issued: mod.ATTESTATION_ISSUED,
+      expires: mod.ATTESTATION_EXPIRES,
+    });
+    writeFileSync(join(dir, `${checkpoint}.txt`), text);
+    writeFileSync(join(dir, `${checkpoint}.sig`), `${signText(text)}\n`);
+    writeFileSync(join(dir, `${checkpoint}.founder.sig`), `${founderSign(text)}\n`);
+    git(repo, ['add', '-A']);
+    git(repo, ['commit', '-q', '--amend', '--no-edit']);
+    const result = await gate(repo);
+    expect(result.ok).toBe(false);
+    expect(result.reason).toMatch(/prior is not the trusted checkpoint/u);
     rmSync(repo, { recursive: true, force: true });
   });
 
