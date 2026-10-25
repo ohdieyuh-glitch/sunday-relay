@@ -17,7 +17,8 @@ export interface JuliusInworldVerdictRecord {
   readonly taskId?: string | null;
   readonly taskType?: string | null;
   readonly trimmedSha256?: string | null;
-  readonly rawSha256?: string | null;
+  readonly contextId?: string | null;
+  readonly recordedSha256?: string | null;
   readonly checkerSha256?: string | null;
   readonly combinedPin?: string | null;
   readonly graderSha256?: string | null;
@@ -29,6 +30,9 @@ export declare function parsePsqlTsv(text: string): Record<string, string>[] | n
 export declare function selectGradedAttempt(tasks: readonly Record<string, string>[], runs: readonly Record<string, string>[] | null):
   | { readonly ok: true; readonly taskId: string; readonly taskType: string; readonly runId: string }
   | { readonly ok: false; readonly reason: string; readonly taskIds?: readonly string[] };
+export declare function selectKeptMessage(diagnostics: readonly Record<string, string>[], attempt: { readonly runId: string; readonly taskId: string }):
+  | { readonly ok: true; readonly sha256: string; readonly contextId: string }
+  | { readonly ok: false; readonly reason: string };
 export declare function judgeCheckerRun(
   run: { readonly status: number | null; readonly signal: string | null; readonly stdout?: string; readonly error?: unknown },
   expected: { readonly checkerFileSha256: string; readonly trimmedSha256: string },

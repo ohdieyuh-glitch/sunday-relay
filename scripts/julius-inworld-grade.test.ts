@@ -29,7 +29,15 @@ const sha256 = (bytes: string | Uint8Array): string => createHash('sha256').upda
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 
-function rig(opts: { readonly artifact: string | null; readonly tasks?: string; readonly runs?: string; readonly manifest?: (m: Record<string, unknown>) => Record<string, unknown> }) {
+const CONTEXT = 'context:9';
+const STEM = 'task_build-1.context_9';
+const DIAG_HEADER = 'run_id\tsequence\ttask_id\trole\tstage\tfinal_message_sha256\tfinal_message_context_id\tfinal_message_write';
+const diagRow = (sha: string, context = CONTEXT, task = 'task:build-1') => `wlj_x\t7\t${task}\tCODING_AGENT\tbuild\t${sha}\t${context}\t`;
+
+function rig(opts: {
+  readonly artifact: string | null; readonly tasks?: string; readonly runs?: string; readonly diagnostics?: (sha: string) => readonly string[];
+  readonly manifest?: (m: Record<string, unknown>) => Record<string, unknown>;
+}) {
   const root = mkdtempSync(join(tmpdir(), 'julius-grade-'));
   roots.push(root);
   const staging = join(root, 'staging');
@@ -54,11 +62,13 @@ function rig(opts: { readonly artifact: string | null; readonly tasks?: string; 
     '(2 rows)',
     '',
   ].join('\n'));
+  const trimmed = (opts.artifact ?? '').trim();
+  const rows = opts.diagnostics ? opts.diagnostics(sha256(trimmed)) : [diagRow(sha256(trimmed))];
+  writeFileSync(join(evidence, 'worker-diagnostics.tsv'), [DIAG_HEADER, ...rows, `(${String(rows.length)} rows)`, ''].join('\n'));
   if (opts.artifact !== null) {
-    const trimmed = opts.artifact.trim();
-    writeFileSync(join(finalMessage, 'task_build-1.raw.txt'), trimmed);
-    const manifest = { schema: 'julius-final-message.v1', taskId: 'task:build-1', runId: 'wlj_x', rawSha256: sha256(opts.artifact), trimmedSha256: sha256(trimmed), trimmedUtf8Bytes: Buffer.byteLength(trimmed) };
-    writeFileSync(join(finalMessage, 'task_build-1.manifest.json'), JSON.stringify(opts.manifest ? opts.manifest(manifest) : manifest));
+    writeFileSync(join(finalMessage, `${STEM}.raw.txt`), trimmed);
+    const manifest = { schema: 'julius-final-message.v2', taskId: 'task:build-1', contextId: CONTEXT, runId: 'wlj_x', trimmedSha256: sha256(trimmed), trimmedUtf8Bytes: Buffer.byteLength(trimmed) };
+    writeFileSync(join(finalMessage, `${STEM}.manifest.json`), JSON.stringify(opts.manifest ? opts.manifest(manifest) : manifest));
   }
   return { staging, finalMessage, evidence };
 }
@@ -90,7 +100,7 @@ describe('grading a paid J1 run with the real pinned checker', () => {
     const result = gradeInworld(paths);
     expect(result.exit).toBe(0);
     expect(result.verdict).toMatchObject({ verdict: 'PASS', taskId: 'task:build-1', trimmedSha256: sha256(passing()), checkerSha256: J1_PINNED_CHECKER_FILE_SHA256 });
-    expect(existsSync(join(paths.finalMessage, 'task_build-1.raw.txt'))).toBe(false);
+    expect(existsSync(join(paths.finalMessage, `${STEM}.raw.txt`))).toBe(false);
     const text = verdictText(result.verdict);
     expect(text).toContain('verdict=PASS\n');
     expect(text).toContain(`game_digest=${sha256(passing()).slice(0, 12)}\n`);
@@ -109,7 +119,7 @@ describe('grading a paid J1 run with the real pinned checker', () => {
     writeFileSync(join(paths.staging, 'checker', 'oracle.mjs'), `${readFileSync(join(paths.staging, 'checker', 'oracle.mjs'), 'utf8')}\n// changed\n`);
     const result = gradeInworld(paths);
     expect(result).toMatchObject({ exit: 2, verdict: { verdict: 'NOT_RUN', reason: 'pin_mismatch' } });
-    expect(existsSync(join(paths.finalMessage, 'task_build-1.raw.txt'))).toBe(true);
+    expect(existsSync(join(paths.finalMessage, `${STEM}.raw.txt`))).toBe(true);
   });
 
   it('a final message that does not match its manifest is never graded', () => {
@@ -193,5 +203,57 @@ describe('the verdict file is a closed record', () => {
   it('an unknown verdict is written NOT_RUN, never PASS, and every reason is in the closed list', () => {
     expect(verdictText({ verdict: 'MAYBE' })).toContain('verdict=NOT_RUN\n');
     expect(NOT_RUN_REASONS).toEqual(['pin_mismatch', 'no_completed_build', 'ambiguous_attempt', 'final_message_missing', 'integrity_mismatch', 'checker_crashed', 'evidence_unreadable', 'run_not_completed']);
+  });
+});
+
+describe('the grade binds to the run\'s durable record of the kept message', () => {
+  it('a kept message whose bytes are not the ones the durable record names is never graded', () => {
+    // Manifest and file agree with each other; the run's own record names other bytes.
+    const result = gradeInworld(rig({ artifact: passing(), diagnostics: () => [diagRow('1'.repeat(64))] }));
+    expect(result).toMatchObject({ exit: 2, verdict: { verdict: 'NOT_RUN', reason: 'integrity_mismatch', recordedSha256: '1'.repeat(64) } });
+  });
+
+  it('a manifest naming another dispatch context is never graded', () => {
+    expect(gradeInworld(rig({ artifact: passing(), manifest: (m) => ({ ...m, contextId: 'context:1' }) })))
+      .toMatchObject({ exit: 2, verdict: { verdict: 'NOT_RUN', reason: 'integrity_mismatch' } });
+  });
+
+  it('two dispatches of the graded task naming a kept message are ambiguous; none is a missing message', () => {
+    expect(gradeInworld(rig({ artifact: passing(), diagnostics: (sha) => [diagRow(sha, 'context:1'), diagRow(sha, CONTEXT)] })))
+      .toMatchObject({ exit: 0, verdict: { verdict: 'NOT_RUN', reason: 'ambiguous_attempt' } });
+    expect(gradeInworld(rig({ artifact: passing(), diagnostics: () => [] })))
+      .toMatchObject({ exit: 3, verdict: { verdict: 'NOT_RUN', reason: 'final_message_missing' } });
+    // A record for another task does not stand in for this one.
+    expect(gradeInworld(rig({ artifact: passing(), diagnostics: (sha) => [diagRow(sha, CONTEXT, 'task:build-9')] })))
+      .toMatchObject({ exit: 3, verdict: { reason: 'final_message_missing' } });
+  });
+
+  it('the verdict names the dispatch context it graded', () => {
+    const result = gradeInworld(rig({ artifact: passing() }));
+    expect(result.verdict).toMatchObject({ verdict: 'PASS', contextId: CONTEXT });
+    expect(verdictText(result.verdict)).toContain(`context_id=${CONTEXT}\n`);
+  });
+});
+
+describe('every pinned file is a pin on its own', () => {
+  for (const name of ['contract.json', 'seed/data/legacy_ledger.csv', 'seed/data/posts.json', 'checker/check.mjs']) {
+    it(`a change to ${name} alone is a pin mismatch that runs nothing`, () => {
+      const paths = rig({ artifact: passing() });
+      writeFileSync(join(paths.staging, name), `${readFileSync(join(paths.staging, name), 'utf8')}\n`);
+      expect(gradeInworld(paths)).toMatchObject({ exit: 2, verdict: { verdict: 'NOT_RUN', reason: 'pin_mismatch' } });
+      expect(existsSync(join(paths.finalMessage, `${STEM}.raw.txt`))).toBe(true);
+    });
+  }
+});
+
+describe('the graded chain starts at the run\'s first build', () => {
+  const t = (task_id: string, task_type: string, state: string, ordinal: string, parent_task_id = '') => ({ task_id, task_type, state, parent_task_id, role: 'CODING_AGENT', run_id: 'wlj_x', ordinal });
+  it('a later build that succeeded after the first build failed is not graded', () => {
+    expect(selectGradedAttempt([t('b1', 'build', 'FAILED', '2'), t('b2', 'build', 'SUCCEEDED', '3')], [{ run_id: 'wlj_x', state: 'COMPLETED' }]))
+      .toMatchObject({ ok: false, reason: 'ambiguous_attempt' });
+  });
+  it('the first build, or its repair chain, is graded', () => {
+    expect(selectGradedAttempt([t('b1', 'build', 'SUCCEEDED', '2'), t('repair:b1:1:task', 'repair:build', 'SUCCEEDED', '3', 'b1')], [{ run_id: 'wlj_x', state: 'COMPLETED' }]))
+      .toMatchObject({ ok: true, taskId: 'repair:b1:1:task' });
   });
 });

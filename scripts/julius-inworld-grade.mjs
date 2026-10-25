@@ -104,7 +104,33 @@ export function selectGradedAttempt(tasks, runs) {
     cursor = parent;
   }
   if (cursor.task_type !== 'build' || cursor.parent_task_id !== '') return { ok: false, reason: 'ambiguous_attempt' };
+  // The chain must reach the run's FIRST build: the earliest parentless build by ordinal. A later
+  // build that succeeded after the first one failed is not this run's graded work.
+  const roots = builds.filter((t) => t.task_type === 'build' && t.parent_task_id === '');
+  const first = roots.reduce((a, b) => (Number(b.ordinal) < Number(a.ordinal) ? b : a), roots[0]);
+  if (first === undefined || first.task_id !== cursor.task_id || roots.filter((t) => t.ordinal === first.ordinal).length !== 1) {
+    return { ok: false, reason: 'ambiguous_attempt' };
+  }
   return { ok: true, taskId: leaves[0].task_id, taskType: leaves[0].task_type, runId };
+}
+
+const RECORD_SHA = /^[0-9a-f]{64}$/u;
+const RECORD_CONTEXT = /^[A-Za-z0-9:_-]{1,128}$/u;
+
+/**
+ * The run's durable record of the kept message for the graded task: its dispatch diagnostics
+ * (`diag_finalMessageSha256`, `diag_finalMessageContextId`). Exactly one row may name one, or
+ * the record cannot say which dispatch was graded and nothing is.
+ */
+export function selectKeptMessage(diagnostics, attempt) {
+  const rows = diagnostics.filter((row) => row.run_id === attempt.runId && row.task_id === attempt.taskId);
+  const named = rows.filter((row) => (row.final_message_sha256 ?? '') !== '');
+  if (named.length > 1) return { ok: false, reason: 'ambiguous_attempt' };
+  if (named.length === 0) return { ok: false, reason: 'final_message_missing' };
+  const sha = named[0].final_message_sha256;
+  const contextId = named[0].final_message_context_id ?? '';
+  if (!RECORD_SHA.test(sha) || !RECORD_CONTEXT.test(contextId)) return { ok: false, reason: 'evidence_unreadable' };
+  return { ok: true, sha256: sha, contextId };
 }
 
 /** The checker's own protocol (check.mjs): checker_sha256=, judged_trimmed_sha256=, then PASS or FAIL. */
@@ -132,7 +158,7 @@ export function verdictText(v) {
     `task_id=${v.taskId ?? 'none'}`,
     `task_type=${v.taskType ?? 'none'}`,
     `judged_trimmed_sha256=${v.trimmedSha256 ?? 'none'}`,
-    `raw_sha256=${v.rawSha256 ?? 'none'}`,
+    `context_id=${v.contextId ?? 'none'}`,
     `game_digest=${v.trimmedSha256 ? v.trimmedSha256.slice(0, 12) : 'none'}`,
     `checker_sha256=${v.checkerSha256 ?? 'none'}`,
     `combined_pin=${v.combinedPin ?? 'none'}`,
@@ -170,24 +196,31 @@ export function gradeInworld(opts) {
   const attempt = selectGradedAttempt(tasks, runs);
   if (!attempt.ok) return { exit: 0, verdict: { ...pinRecord, verdict: 'NOT_RUN', reason: attempt.reason } };
   if (!TASK_ID.test(attempt.taskId)) return { exit: 0, verdict: { ...pinRecord, verdict: 'NOT_RUN', reason: 'evidence_unreadable' } };
-  const stem = attempt.taskId.replace(/:/gu, '_');
+  const withTask = { ...pinRecord, taskId: attempt.taskId, taskType: attempt.taskType, runId: attempt.runId };
+  // 3. The run's own durable record of the kept message: the graded task's dispatch diagnostics.
+  let diagnostics = null;
+  try { diagnostics = parsePsqlTsv(readFileSync(join(opts.evidence, 'worker-diagnostics.tsv'), 'utf8')); } catch { diagnostics = null; }
+  if (diagnostics === null) return { exit: 0, verdict: { ...withTask, verdict: 'NOT_RUN', reason: 'evidence_unreadable' } };
+  const record = selectKeptMessage(diagnostics, attempt);
+  if (!record.ok) return { exit: record.reason === 'final_message_missing' ? 3 : 0, verdict: { ...withTask, verdict: 'NOT_RUN', reason: record.reason } };
+  const stem = `${attempt.taskId.replace(/:/gu, '_')}.${record.contextId.replace(/:/gu, '_')}`;
   const rawPath = join(opts.finalMessage, `${stem}.raw.txt`);
   const manifestPath = join(opts.finalMessage, `${stem}.manifest.json`);
-  const withTask = { ...pinRecord, taskId: attempt.taskId, taskType: attempt.taskType, runId: attempt.runId };
-  // 3. The final message, checked against its manifest. Missing is a failed step.
-  if (!existsSync(rawPath) || !existsSync(manifestPath)) return { exit: 3, verdict: { ...withTask, verdict: 'NOT_RUN', reason: 'final_message_missing' } };
+  const withRecord = { ...withTask, contextId: record.contextId, recordedSha256: record.sha256 };
+  // 4. The kept message, checked against the durable record and its manifest. Missing is a failed step.
+  if (!existsSync(rawPath) || !existsSync(manifestPath)) return { exit: 3, verdict: { ...withRecord, verdict: 'NOT_RUN', reason: 'final_message_missing' } };
   let raw;
   let manifest;
   try {
     raw = readFileSync(rawPath);
     manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
   } catch {
-    return { exit: 3, verdict: { ...withTask, verdict: 'NOT_RUN', reason: 'final_message_missing' } };
+    return { exit: 3, verdict: { ...withRecord, verdict: 'NOT_RUN', reason: 'final_message_missing' } };
   }
   const trimmedSha256 = sha256(raw);
-  const rawSha256 = typeof manifest?.rawSha256 === 'string' && SHA.test(manifest.rawSha256) ? manifest.rawSha256 : null;
-  const withHashes = { ...withTask, trimmedSha256, rawSha256 };
-  if (manifest?.schema !== 'julius-final-message.v1' || manifest.taskId !== attempt.taskId || manifest.runId !== attempt.runId || manifest.trimmedSha256 !== trimmedSha256 || rawSha256 === null) {
+  const withHashes = { ...withRecord, trimmedSha256 };
+  if (trimmedSha256 !== record.sha256 || manifest?.schema !== 'julius-final-message.v2' || manifest.taskId !== attempt.taskId
+    || manifest.contextId !== record.contextId || manifest.runId !== attempt.runId || manifest.trimmedSha256 !== trimmedSha256) {
     return { exit: 2, verdict: { ...withHashes, verdict: 'NOT_RUN', reason: 'integrity_mismatch' } };
   }
   // 4. The checker, as its own process, with only PATH and the temp dir in its env, in the staging dir.
