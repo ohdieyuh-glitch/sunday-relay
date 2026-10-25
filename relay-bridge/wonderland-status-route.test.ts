@@ -112,6 +112,7 @@ describe('wonderland status', () => {
       exactStatus: true,
       exactMissionResult: false,
       exactMissionProgress: false,
+      exactCompanion: false,
     });
     for (const raw of [
       `${WONDERLAND_STATUS_PATH}/?projectId=${PROJECT}`,

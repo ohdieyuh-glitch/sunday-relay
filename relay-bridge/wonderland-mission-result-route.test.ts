@@ -226,6 +226,7 @@ describe('wonderland mission result and progress', () => {
         exactStatus: false,
         exactMissionResult: kind === 'result',
         exactMissionProgress: kind === 'progress',
+        exactCompanion: false,
       });
       for (const raw of [
         `${pathname}/?projectId=${PROJECT}`,
