@@ -820,6 +820,13 @@ namespace WonderlandCompanionLogic
 
 	/* ---------------------------------------------------------------- key field and handoff */
 
+	bool MayCarrySession(std::string_view Url, std::string_view RelayOrigin)
+	{
+		if (RelayOrigin.empty() || !IsLoopbackRelayOrigin(RelayOrigin)) { return false; }
+		if (Url.size() <= RelayOrigin.size() || Url.compare(0, RelayOrigin.size(), RelayOrigin) != 0) { return false; }
+		return Url[RelayOrigin.size()] == '/';
+	}
+
 	bool IsLoopbackRelayOrigin(std::string_view Origin)
 	{
 		std::string_view Rest;

@@ -139,7 +139,7 @@ void UWonderlandCompanionClient::Resend(const FString& AgentId)
 void UWonderlandCompanionClient::StartChatRequest(const FString& AgentId, const FRelayRequest& In)
 {
 	const std::string Id = ToUtf8(AgentId);
-	if (SessionToken.IsEmpty()) { return; }
+	if (SessionToken.IsEmpty() || !MayCarrySession(In.Url, Session->RelayOrigin())) { return; }
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
 	Request->SetVerb(TEXT("POST"));
 	Request->SetURL(FromUtf8(In.Url));
@@ -195,7 +195,7 @@ const FTurnHistory* UWonderlandCompanionClient::GetHistory(const FString& AgentI
 
 void UWonderlandCompanionClient::Issue(const FRelayRequest& In, TFunction<void(int32, const FString&, const TArray<uint8>&)> OnDone)
 {
-	if (In.Method.empty() || SessionToken.IsEmpty()) { return; }
+	if (In.Method.empty() || SessionToken.IsEmpty() || !MayCarrySession(In.Url, Session->RelayOrigin())) { return; }
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
 	Request->SetVerb(FromUtf8(In.Method));
 	Request->SetURL(FromUtf8(In.Url));

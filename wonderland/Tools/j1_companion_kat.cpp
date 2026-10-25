@@ -525,6 +525,15 @@ namespace
 		EXPECT(Key, !IsLoopbackRelayOrigin("http://127.0.0.1:08080") && !IsLoopbackRelayOrigin("http://127.0.0.1"));
 		EXPECT(Key, !IsLoopbackRelayOrigin("http://localhost:8080") && !IsLoopbackRelayOrigin("https://127.0.0.1:8080"));
 		EXPECT(Key, !IsLoopbackRelayOrigin("http://127.0.0.1:8080/") && !IsLoopbackRelayOrigin("http://127.0.0.1.evil.com:80"));
+		// REVIEW #467: the paired session rides only to the exact loopback relay origin it was paired with.
+		EXPECT(Key, MayCarrySession("http://127.0.0.1:8790/relay-api/wonderland/companions/agents?projectId=p", "http://127.0.0.1:8790"));
+		EXPECT(Key, MayCarrySession("http://[::1]:8790/relay-api/x", "http://[::1]:8790"));
+		EXPECT(Key, !MayCarrySession("http://127.0.0.1:87901/relay-api/x", "http://127.0.0.1:8790"));
+		EXPECT(Key, !MayCarrySession("http://127.0.0.1:8790.evil.com/relay-api/x", "http://127.0.0.1:8790"));
+		EXPECT(Key, !MayCarrySession("http://127.0.0.1:8790", "http://127.0.0.1:8790") && !MayCarrySession("http://127.0.0.1:8790?x=1", "http://127.0.0.1:8790"));
+		EXPECT(Key, !MayCarrySession("https://api.example.com/v1/chat", "http://127.0.0.1:8790"));
+		EXPECT(Key, !MayCarrySession("http://127.0.0.1:8791/relay-api/x", "http://127.0.0.1:8790"));
+		EXPECT(Key, !MayCarrySession("http://localhost:8790/relay-api/x", "http://localhost:8790") && !MayCarrySession("http://127.0.0.1:8790/x", ""));
 		EXPECT(Key, !IsLoopbackRelayOrigin("http://127.0.0.2:8080") && !IsLoopbackRelayOrigin("http://user@127.0.0.1:8080"));
 		EXPECT(Key, !IsLoopbackRelayOrigin("https://api.openai.com:443"));
 		{
