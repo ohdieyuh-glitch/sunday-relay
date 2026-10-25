@@ -26,6 +26,7 @@
 import type { ClaudeAuthMode } from '../hosted-coding-agent/hosted-auth';
 import { createHash } from 'node:crypto';
 import type { JuliusContractReviewCharge } from '../../src/relay/mission/julius/julius-task-contract';
+import type { JuliusFileCreationGrant } from '../../src/relay/mission/julius/julius-file-authority';
 import {
   JuliusDispatchError,
   juliusStoreErrorClass,
@@ -2065,6 +2066,8 @@ export function createLiveHostedCodingAdapter(input: {
   readonly effort?: HostedEffort;
   /** The mission's declared self-test cap; absent offers the coder no test tool. Diagnostic telemetry only. */
   readonly selfTestCalls?: number;
+  /** The verified contract's file-creation grant (`juliusFileCreationGrant`); absent grants no creation. */
+  readonly fileCreation?: JuliusFileCreationGrant | null;
   /** Test seam for the SDK's tool helpers; production omits it. */
   readonly sdkHelpersLoader?: () => Promise<HostedSdkHelpers>;
 }): JuliusProviderAdapter {
@@ -2089,6 +2092,7 @@ export function createLiveHostedCodingAdapter(input: {
       apiKey: input.apiKey, requestedModel: input.requestedModel,
       ...(input.authMode === undefined ? {} : { authMode: input.authMode }),
       ...(input.effort === undefined ? {} : { effort: input.effort }),
+      ...(input.fileCreation == null ? {} : { fileCreation: input.fileCreation }),
       ...(input.sdkHelpersLoader === undefined ? {} : { sdkHelpersLoader: input.sdkHelpersLoader }),
       ...(input.run === undefined ? {} : { run: input.run }),
       ...(input.queryLoader === undefined ? {} : { queryLoader: input.queryLoader }),

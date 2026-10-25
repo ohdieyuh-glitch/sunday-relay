@@ -11,6 +11,7 @@ import {
 import { classifyHostedFailure, type HostedFailureReason } from './hosted-failure-reason';
 import { HOSTED_ADAPTER_ID, HOSTED_SDK_PACKAGE } from './hosted-readiness';
 import { juliusHostedToolAuthority } from './hosted-tool-authority';
+import type { JuliusFileCreationGrant } from '../../src/relay/mission/julius/julius-file-authority';
 
 /**
  * ONE HOSTED CODING AGENT EXECUTION.
@@ -190,6 +191,13 @@ export interface HostedRunInput {
   readonly apiKey: string;
   readonly requestedModel: string | null;
   readonly limits?: HostedLimits;
+  /**
+   * THE MISSION'S FILE-CREATION GRANT, looked up by the composition root from the
+   * VERIFIED contract's `markerNamespace` (`juliusFileCreationGrant`). It reaches
+   * the envelope (Write allowed) and the authority (Write confined to the prefix)
+   * from this one field. Absent: no creation, exactly as before.
+   */
+  readonly fileCreation?: JuliusFileCreationGrant | null;
   readonly now: () => string;
   /** Lets a browser Stop abort a hosted run. */
   readonly onCancel?: (cancel: () => void) => void;
@@ -214,6 +222,7 @@ export async function runHostedCodingAgent(input: HostedRunInput): Promise<Hoste
     // The SAME limits the abort timer and the budget stop below use. Passing
     // them is what makes `maxTurns` an operative limit rather than a field.
     limits,
+    ...(input.fileCreation == null ? {} : { fileCreation: input.fileCreation }),
   });
   const startedAt = input.now();
 
@@ -231,7 +240,10 @@ export async function runHostedCodingAgent(input: HostedRunInput): Promise<Hoste
    * It confines every file tool to this workspace by real path and refuses edits
    * in control, credential and workflow locations (`hosted-tool-authority.ts`).
    */
-  const authority = juliusHostedToolAuthority({ workspacePath: input.workspacePath, signal: controller.signal });
+  const authority = juliusHostedToolAuthority({
+    workspacePath: input.workspacePath, signal: controller.signal,
+    ...(input.fileCreation == null ? {} : { fileCreation: input.fileCreation }),
+  });
 
   const selfTestServer = input.selfTestTool === undefined
     ? null

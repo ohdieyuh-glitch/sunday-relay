@@ -35,6 +35,7 @@ import { coderMaxRuntimeMs, coderMaxTurns } from './coder-envelope';
  * whole point.
  */
 
+import type { JuliusFileCreationGrant } from '../../src/relay/mission/julius/julius-file-authority';
 import { CLAUDE_SUBSCRIPTION_TOKEN_ENV, type ClaudeAuthMode } from './hosted-auth';
 
 /** Tools the hosted agent may use for the safe-edit fixture. */
@@ -51,6 +52,9 @@ export const HOSTED_DISALLOWED_TOOLS: readonly string[] = Object.freeze([
   'Bash', 'BashOutput', 'KillShell', 'Write', 'NotebookEdit',
   'WebFetch', 'WebSearch', 'Task', 'SlashCommand', 'TodoWrite',
 ]);
+
+/** The one disallowed tool a mission's file-creation grant may move to the allowed list. */
+export const HOSTED_CREATION_TOOL = 'Write';
 
 /** Bounds for one hosted execution. */
 export interface HostedLimits {
@@ -247,15 +251,26 @@ export function compileHostedEnvelope(input: {
    * could raise `maxTurns` to forty and still stop at twelve. It binds now.
    */
   limits?: HostedLimits;
+  /**
+   * THE MISSION'S FILE-CREATION GRANT (`juliusFileCreationGrant`), looked up by
+   * the composition root from the VERIFIED contract's `markerNamespace`. Present,
+   * `Write` moves from the disallowed list to the allowed one -- and ONLY
+   * `Write`: Bash, BashOutput, KillShell, NotebookEdit and the network and agent
+   * tools stay disallowed. Where it may write is the authority's to decide
+   * (`hosted-tool-authority.ts`): strictly under the grant's prefix, by real
+   * path. Absent, the envelope is exactly what it always was.
+   */
+  fileCreation?: JuliusFileCreationGrant | null;
 }): HostedEnvelope {
   const requested = typeof input.requestedModel === 'string' && input.requestedModel.trim() !== ''
     ? input.requestedModel.trim()
     : null;
+  const creates = input.fileCreation !== undefined && input.fileCreation !== null;
   return {
     cwd: input.workspacePath,
     model: requested,
-    allowedTools: [...HOSTED_ALLOWED_TOOLS, ...(input.extraAllowedTools ?? [])],
-    disallowedTools: [...HOSTED_DISALLOWED_TOOLS],
+    allowedTools: [...HOSTED_ALLOWED_TOOLS, ...(creates ? [HOSTED_CREATION_TOOL] : []), ...(input.extraAllowedTools ?? [])],
+    disallowedTools: creates ? HOSTED_DISALLOWED_TOOLS.filter((tool) => tool !== HOSTED_CREATION_TOOL) : [...HOSTED_DISALLOWED_TOOLS],
     // Edits are applied without a prompt because a hosted run has no operator
     // to prompt. Containment is the tool restriction, the pinned cwd, the
     // empty settings sources, Julius's `PreToolUse` authority on every file
