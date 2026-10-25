@@ -78,6 +78,11 @@ import type { MissionOwnershipScope } from './mission';
 import { WonderlandBackend } from '../src/relay/mission/wonderland/wonderland-backend';
 import { classifyWonderlandDispatchPath, handleWonderlandRoute } from './wonderland-routes';
 import { createWonderlandAdmissionBridge, createWonderlandAdmissionService, createWonderlandStatusBridge, isWonderlandAdmissionRoute, isWonderlandStatusRoute, type WonderlandAdmissionRoutePorts } from './wonderland-admission-route';
+import { createWonderlandMissionReadBridge, isWonderlandMissionReadRoute } from './wonderland-mission-result-route';
+import { createWonderlandMissionEventsBridge, isWonderlandMissionEventsRoute } from './wonderland-mission-events-route';
+import { wonderlandLiveReadsFrom } from './wonderland-live-wiring';
+import { createCompanionResultStore, createWonderlandCompanionBridge, isWonderlandCompanionAgentRoute, isWonderlandCompanionRoute } from './wonderland-companion-route';
+import { createCompanionAdapterRegistry, type CompanionAdapterRegistry } from './wonderland-companion-registry';
 import { handleProjectBrainRoute, isProjectBrainRoute, type ProjectBrainRoutePorts } from './project-brain-routes';
 import { composeProjectBrainPorts, nativeSessionVerifier } from './project-brain/compose';
 import { handleNativePairingRoute, isNativePairingRoute } from './wonderland-native-pairing-routes';
@@ -271,6 +276,17 @@ export function createBridgeServer(
     verifyNativeSession: nativeSessionVerifier(browserSessions),
     operatorToken: process.env.RELAY_BRIDGE_API_TOKEN,
   });
+  /**
+   * Companion results are a separate local file,
+   * JULIUS_WONDERLAND_COMPANION_STORE. Unset, the read is an empty memory
+   * store. There is no ingest and no outbound call.
+   */
+  const companionResults = createCompanionResultStore(process.env.JULIUS_WONDERLAND_COMPANION_STORE, process.env.JULIUS_WONDERLAND_ADMISSION_STORE);
+  /**
+   * Companion adapters are optional. The registry starts empty and stores
+   * slots in the same local companion file. No provider is built in.
+   */
+  const companionAgents = createCompanionAdapterRegistry(companionResults);
   const wonderland = wonderlandBackend ?? WonderlandBackend.empty();
   /**
    * WONDERLAND SOCIAL (R16): the desktop client's own sign-in (GitHub's device flow) and the social routes. OFF unless the
@@ -446,7 +462,33 @@ const juliusStatePorts = (): ReturnType<typeof createJuliusStatePorts> => {
  * same variable the live composition reads.
  */
 let juliusMissionCache: JuliusMissionRoutePorts | null = null;
-const juliusMissionPorts = (wonderlandAdmission: WonderlandAdmissionRoutePorts): JuliusMissionRoutePorts => {
+/**
+ * THE LIVE VIEW'S STATE OUTLIVES A REQUEST. The GitHub reads, the evidence
+ * reader's cache and the events route's per-run cache (its epoch and seq) are
+ * built once per admission port set, so a poll is served from the cache and
+ * a reconnect's cursor stays valid. Nothing here can dispatch.
+ */
+let wonderlandLiveCache: {
+  readonly ports: WonderlandAdmissionRoutePorts;
+  readonly reads: ReturnType<typeof wonderlandLiveReadsFrom>;
+  readonly events: ReturnType<typeof createWonderlandMissionEventsBridge>;
+} | null = null;
+const wonderlandLive = (wonderlandAdmission: WonderlandAdmissionRoutePorts) => {
+  if (wonderlandLiveCache === null || wonderlandLiveCache.ports !== wonderlandAdmission) {
+    const reads = wonderlandLiveReadsFrom(process.env);
+    wonderlandLiveCache = {
+      ports: wonderlandAdmission,
+      reads,
+      events: createWonderlandMissionEventsBridge(wonderlandAdmission, reads?.runReader),
+    };
+  }
+  return wonderlandLiveCache;
+};
+const juliusMissionPorts = (
+  wonderlandAdmission: WonderlandAdmissionRoutePorts,
+  companionResults: ReturnType<typeof createCompanionResultStore>,
+  companionAgents: CompanionAdapterRegistry,
+): JuliusMissionRoutePorts => {
   if (juliusMissionCache === null) {
     const pool = juliusPool();
     const reviewer = process.env.RELAY_HERMES_PROVIDER?.trim();
@@ -461,6 +503,13 @@ const juliusMissionPorts = (wonderlandAdmission: WonderlandAdmissionRoutePorts):
     ...juliusMissionCache,
     wonderlandAdmissionBridge: createWonderlandAdmissionBridge(wonderlandAdmission),
     wonderlandStatusBridge: createWonderlandStatusBridge(wonderlandAdmission),
+    // YUJI's JuliusMissionEvidenceReader reads GitHub through the founder's own
+    // `gh` when JULIUS_WONDERLAND_GITHUB_REPO is set; unset, result and
+    // progress stay on the status ceiling and never report completed.
+    wonderlandMissionReadBridge: createWonderlandMissionReadBridge(wonderlandAdmission, wonderlandLive(wonderlandAdmission).reads?.evidenceReader),
+    // The live view of a dispatched run: GitHub reads only, no dispatch path.
+    wonderlandMissionEventsBridge: wonderlandLive(wonderlandAdmission).events,
+    wonderlandCompanionBridge: createWonderlandCompanionBridge({ ...wonderlandAdmission, companionResults, companionAgents }),
   };
 };
 
@@ -1050,15 +1099,23 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
          * can watch it. Nothing here dispatches; driving stays the job's. See
          * `julius-mission-routes.ts`.
          *
-         * The same call also admits POST /wonderland/julius/dispatch. The
-         * Wonderland catch-all leaves that path out, because a native session
+         * The same call also admits POST /wonderland/julius/dispatch, reads
+         * GET /wonderland/julius/status, and reads
+         * GET /wonderland/julius/missions/{wljRunId}/companion, and the
+         * companion agent routes under /wonderland/companions/agents. The
+         * Wonderland catch-all leaves those paths out, because a native session
          * is refused there before the path is read. Admission does not
-         * bootstrap a run and does not start the paid workflow.
+         * bootstrap a run and does not start the paid workflow. The companion
+         * routes do not call out.
          */
         const missionPath = path.replace('/relay-api', '');
         if (isJuliusMissionRoute(missionPath)
           || (wonderlandDispatch.exactAdmission && isWonderlandAdmissionRoute(missionPath))
-          || (wonderlandDispatch.exactStatus && isWonderlandStatusRoute(missionPath))) {
+          || (wonderlandDispatch.exactStatus && isWonderlandStatusRoute(missionPath))
+          || ((wonderlandDispatch.exactMissionResult || wonderlandDispatch.exactMissionProgress)
+            && isWonderlandMissionReadRoute(missionPath))
+          || (wonderlandDispatch.exactMissionEvents && isWonderlandMissionEventsRoute(missionPath))
+          || (wonderlandDispatch.exactCompanion && (isWonderlandCompanionRoute(missionPath) || isWonderlandCompanionAgentRoute(missionPath)))) {
           const missionAuthz = typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
           const missionResult = await handleJuliusMissionRoute({
             method,
@@ -1081,7 +1138,7 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
             nowMs: Date.now(),
             // Not trimmed: a padded id is malformed, and the value is never logged.
             runId: typeof req.headers['x-relay-julius-run-id'] === 'string' ? req.headers['x-relay-julius-run-id'] : undefined,
-          }, juliusMissionPorts(wonderlandAdmission));
+          }, juliusMissionPorts(wonderlandAdmission, companionResults, companionAgents));
           if (missionResult !== null) {
             send(res, missionResult.status, missionResult.body, cors);
             return;

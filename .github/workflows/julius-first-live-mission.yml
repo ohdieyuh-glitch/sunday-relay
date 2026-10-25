@@ -477,6 +477,16 @@ jobs:
     # this number by tests and move with it in the same landing.
     timeout-minutes: 300
     environment: julius-live-validation
+    # A job-level block REPLACES the workflow's, so the read set is restated in
+    # full. The one write is `statuses`, for the live-progress publisher's
+    # `julius-live-progress` commit status; no gate trusts a status (the lander
+    # gates on required check runs), and `checks: write` is never granted here.
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      issues: read
+      statuses: write
     defaults:
       run:
         shell: bash
@@ -1304,6 +1314,12 @@ jobs:
 
       - name: 'Preflight: all three roles resolve to the expected models, nothing dispatched'
         env:
+          # The entrypoint admits the run before it resolves any role: without the
+          # run id spend-tag locked it refuses admission_run_id_required (run
+          # 40230911550), and this step then never reaches exit 5. The same two
+          # values the LIVE step passes.
+          JULIUS_RUN_ID: ${{ needs.spend-tag.outputs.run_id }}
+          JULIUS_SERVER_RUN_ID: ${{ needs.spend-tag.outputs.run_id }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           # The Coding Agent uses ANTHROPIC_API_KEY alone. The consumer login
           # token is not passed into this step, and the preflight requires it
@@ -1435,6 +1451,25 @@ jobs:
           chmod 700 "$dir"
           echo "dir=$dir" >> "$GITHUB_OUTPUT"
 
+      # LIVE PROGRESS FOR WONDERLAND, BEST-EFFORT. A background publisher reads one
+      # allowlisted projection of this job's Julius store every >=10 s and posts it
+      # as the `julius-live-progress` commit status (.github/julius-live-progress.mjs).
+      # It can neither fail nor slow the mission, and it is not a verdict.
+      - name: 'Live progress: start the phase publisher (best-effort)'
+        if: inputs.confirm_live == 'RUN LIVE MISSION'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          WLJ: ${{ needs.spend-tag.outputs.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+          PGPASSWORD: ${{ steps.identity.outputs.database_password }}
+        run: |
+          nohup node .github/julius-live-progress.mjs > "${RUNNER_TEMP}/julius-live-progress.log" 2>&1 &
+          echo $! > "${RUNNER_TEMP}/julius-live-progress.pid"
+          echo "live_progress started"
+
       - name: 'LIVE: run the first real Julius mission'
         id: live_mission
         if: success() && inputs.confirm_live == 'RUN LIVE MISSION' && steps.coder_auth.outcome == 'success' && steps.provider_readiness.outcome == 'success'
@@ -1480,6 +1515,18 @@ jobs:
       # artifact of their own that lives one day and that the grade job deletes.
       # They never enter julius-live-evidence/. A paid J1 run that wrote no final
       # message uploads nothing, and the grade job reports it as missing.
+
+      - name: 'Live progress: stop the phase publisher'
+        if: always() && inputs.confirm_live == 'RUN LIVE MISSION'
+        continue-on-error: true
+        run: |
+          pid_file="${RUNNER_TEMP}/julius-live-progress.pid"
+          if [ -s "$pid_file" ]; then
+            kill -TERM "$(cat "$pid_file")" 2>/dev/null || true
+            for _ in 1 2 3 4 5 6 7 8 9 10; do kill -0 "$(cat "$pid_file")" 2>/dev/null || break; sleep 1; done
+          fi
+          grep -E '^live_progress (posted s[0-9]+|skipped reason=[a-z_]+|started)$' "${RUNNER_TEMP}/julius-live-progress.log" 2>/dev/null | tail -n 5 || true
+
       - name: 'J1: hand the final message to the grade job'
         if: always() && inputs.mission == 'julius-inworld-data-1' && inputs.confirm_live == 'RUN LIVE MISSION'
         env:

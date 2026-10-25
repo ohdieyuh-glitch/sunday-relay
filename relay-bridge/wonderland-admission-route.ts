@@ -250,7 +250,7 @@ const STATUS_NOT_FOUND = {
  * The guards shared with admission. A status read uses this function and then
  * only reads the admission file. It does not admit, claim, or start a process.
  */
-function juliusLoopbackGuard(
+export function juliusLoopbackGuard(
   request: WonderlandAdmissionRouteRequest,
   ports: WonderlandAdmissionRoutePorts,
 ): { readonly native: WonderlandNativeSession } | { readonly status: number; readonly body: unknown } {
@@ -292,7 +292,7 @@ function juliusLoopbackGuard(
   return { native };
 }
 
-function guardPassed(
+export function guardPassed(
   result: { readonly native: WonderlandNativeSession } | { readonly status: number; readonly body: unknown },
 ): result is { readonly native: WonderlandNativeSession } {
   return 'native' in result;
@@ -379,15 +379,31 @@ export function handleWonderlandStatusRoute(
   const guarded = juliusLoopbackGuard(request, ports);
   if (!guardPassed(guarded)) return Promise.resolve(guarded);
   if (request.method !== 'GET') return Promise.resolve(err(405, 'method_not_allowed', 'Status is a GET.'));
-  const storePath = (ports.env.JULIUS_WONDERLAND_ADMISSION_STORE ?? '').trim();
-  if (storePath === '' || !isLocalStorePath(storePath)) {
-    return Promise.resolve(err(503, 'julius_dispatch_unavailable', 'Wonderland admission store is not available. Nothing was reserved.'));
-  }
   let runId = '';
   try {
     runId = new URL(request.url, 'http://relay.invalid').searchParams.get('runId') ?? '';
   } catch {
     runId = '';
+  }
+  return readAdmittedWonderlandStatus(request, ports, runId, guarded.native.playerId);
+}
+
+/**
+ * The admission file's status for one already-guarded read.
+ *
+ * A missing row is the uniform 404. This reads the local admission file only.
+ * It does not match a spend tag to a GitHub Actions run, and a recorded
+ * dispatch is not a completion.
+ */
+export function readAdmittedWonderlandStatus(
+  request: WonderlandAdmissionRouteRequest,
+  ports: WonderlandAdmissionRoutePorts,
+  runId: string,
+  playerId: string,
+): Promise<{ status: number; body: unknown }> {
+  const storePath = (ports.env.JULIUS_WONDERLAND_ADMISSION_STORE ?? '').trim();
+  if (storePath === '' || !isLocalStorePath(storePath)) {
+    return Promise.resolve(err(503, 'julius_dispatch_unavailable', 'Wonderland admission store is not available. Nothing was reserved.'));
   }
   const parsedRun = parseJuliusAdmissionRunId(runId);
   if (!parsedRun.ok) return Promise.resolve(STATUS_NOT_FOUND);
@@ -409,7 +425,7 @@ export function handleWonderlandStatusRoute(
   const identity = admission === null ? null : identifyAdmissionRun(admission.runId, admission.serverRunId);
   if (admission === null || identity === null || !identity.ok) return Promise.resolve(STATUS_NOT_FOUND);
   const owner = admission.ownerPlayerId ?? (ports.env.JULIUS_J1_FOUNDER_PLAYER_ID ?? '').trim();
-  if (owner === '' || owner !== guarded.native.playerId) return Promise.resolve(STATUS_NOT_FOUND);
+  if (owner === '' || owner !== playerId) return Promise.resolve(STATUS_NOT_FOUND);
   try {
     return Promise.resolve({ status: 200, body: statusView(storePath, admission, document, identity.serverRunId, request.nowMs) });
   } catch (error) {
