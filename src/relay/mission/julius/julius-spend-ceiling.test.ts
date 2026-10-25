@@ -5,6 +5,7 @@ import {
   JULIUS_DEFAULT_NAMESPACE_CEILING,
   JULIUS_NAMESPACE_CEILINGS,
   JULIUS_QUALIFYING_PAIR_CAP_USD_MICROS,
+  JULIUS_QUALIFYING_PAIR_NAMESPACES,
   authorizeJuliusLiveSpend,
   interpretJuliusSpentTags,
   juliusSpentTagMessage,
@@ -160,6 +161,65 @@ describe('a durable prior-spend record can be compared with the $60 figure', () 
     expect(billed.knownUsdMicros).toBe(1_390_954);
     expect(billed.spendVerified).toBe(false);
     expect(billed.unknownCostComponents).toBe(1);
+  });
+});
+
+describe('J1 (julius-inworld-data-1) is $30 and 3 repairs per run, and $60 across the run and its repeat', () => {
+  const J1 = 'julius-inworld-data-1';
+
+  it('is a qualifying-pair namespace with a $30 / 3-cycle grant', () => {
+    expect(JULIUS_QUALIFYING_PAIR_NAMESPACES).toContain(J1);
+    expect(JULIUS_NAMESPACE_CEILINGS[J1]).toEqual({ spendUsd: 30, repairCycles: 3 });
+  });
+
+  it('authorizes $30 and 3 repair cycles on a durable empty record', () => {
+    const result = authorizeJuliusLiveSpend({ namespace: J1, spendUsd: 30, repairCycles: 3, ledger: durableEmpty });
+    expect(result).toEqual({ authorized: true, spendCeilingUsdMicros: 30_000_000, maxRepairRounds: 3 });
+  });
+
+  it('refuses $30.01, and refuses a fourth repair cycle', () => {
+    const over = authorizeJuliusLiveSpend({ namespace: J1, spendUsd: 30.01, repairCycles: 3, ledger: durableEmpty });
+    expect(over).toMatchObject({ authorized: false, reasonCode: 'namespace_spend_ceiling_exceeded' });
+    const cycles = authorizeJuliusLiveSpend({ namespace: J1, spendUsd: 30, repairCycles: 4, ledger: durableEmpty });
+    expect(cycles).toMatchObject({ authorized: false, reasonCode: 'namespace_repair_ceiling_exceeded' });
+  });
+
+  it('never grants $60 to one run', () => {
+    const result = authorizeJuliusLiveSpend({ namespace: J1, spendUsd: 60, repairCycles: 3, ledger: durableEmpty });
+    expect(result).toMatchObject({ authorized: false, reasonCode: 'namespace_spend_ceiling_exceeded' });
+  });
+
+  it('refuses J1 when the prior-spend record is absent or unreadable, and does not treat either as zero', () => {
+    expect(authorizeJuliusLiveSpend({ namespace: J1, spendUsd: 30, repairCycles: 3, ledger: emptyLedger }))
+      .toMatchObject({ authorized: false, reasonCode: 'qualifying_pair_spend_absent' });
+    expect(authorizeJuliusLiveSpend({ namespace: J1, spendUsd: 30, repairCycles: 3, ledger: unreadable }))
+      .toMatchObject({ authorized: false, reasonCode: 'spend_ledger_unreadable' });
+  });
+
+  it('allows a repeat that lands exactly on $60, and refuses one micro over', () => {
+    const exact = authorizeJuliusLiveSpend({
+      namespace: J1, spendUsd: 30, repairCycles: 3,
+      ledger: { readable: true, durableRecord: 'PRESENT', priorRuns: [verified('run-1', 30_000_000)] },
+    });
+    expect(exact).toMatchObject({ authorized: true, spendCeilingUsdMicros: 30_000_000 });
+    const over = authorizeJuliusLiveSpend({
+      namespace: J1, spendUsd: 30, repairCycles: 3,
+      ledger: { readable: true, durableRecord: 'PRESENT', priorRuns: [verified('run-1', 30_000_001)] },
+    });
+    expect(over).toMatchObject({ authorized: false, reasonCode: 'qualifying_pair_spend_exceeded' });
+  });
+
+  it('refuses a third J1 run, and a repeat whose first run has no verified bill', () => {
+    const third = authorizeJuliusLiveSpend({
+      namespace: J1, spendUsd: 1, repairCycles: 0,
+      ledger: { readable: true, durableRecord: 'PRESENT', priorRuns: [verified('run-1', 1), verified('run-2', 1)] },
+    });
+    expect(third).toMatchObject({ authorized: false, reasonCode: 'qualifying_pair_third_run_refused' });
+    const unknownBill = authorizeJuliusLiveSpend({
+      namespace: J1, spendUsd: 30, repairCycles: 3,
+      ledger: { readable: true, durableRecord: 'PRESENT', priorRuns: [{ ...verified('run-1', 0), spendVerified: false }] },
+    });
+    expect(unknownBill).toMatchObject({ authorized: false, reasonCode: 'qualifying_pair_spend_unverified' });
   });
 });
 
