@@ -50,7 +50,6 @@ import type {
 import {
   awaitingOperatorExpiryNote,
   isStoredWorkflowRunId,
-  noteAwaitingOperatorExpiry,
   openAdmissionFile,
   readAdmissionDocument,
 } from './admission-file';
@@ -398,7 +397,7 @@ function claimInside(
   if (sealedExpiry(storePath, document, admission.serverRunId) !== null) return expiredRefusal(admission);
   const heldPhase = projectUnclaimedHeldPhase(admission.receivedAt, Date.parse(nowIso));
   if (heldPhase.kind === 'operator_expired') {
-    noteAwaitingOperatorExpiry(storePath, admission.serverRunId, heldPhase.updatedAt);
+    io.noteExpiry(admission.serverRunId, heldPhase.updatedAt);
     return expiredRefusal(admission);
   }
   if (heldPhase.kind !== 'awaiting_operator') {
@@ -634,7 +633,7 @@ function statusInside(
   if (!ISO.test(nowIso)) return { ok: false, kind: 'clock_invalid', message: 'The operator clock is not an ISO timestamp.' };
   const heldPhase = projectUnclaimedHeldPhase(admission.receivedAt, Date.parse(nowIso));
   if (heldPhase.kind === 'operator_expired') {
-    noteAwaitingOperatorExpiry(storePath, serverRunId, heldPhase.updatedAt);
+    io.noteExpiry(serverRunId, heldPhase.updatedAt);
     return {
       ok: true,
       record: toView(admission, null),

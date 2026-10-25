@@ -6,10 +6,14 @@
  * `wlj_` id. Schema version 2 is the legacy `run:` document. It is read and
  * is not rewritten. Version 1 is refused: it has no place to put the required
  * `state` row. A write is a temp file in the same directory, an fsync of that
- * file, a rename onto the store path, and an fsync of the directory. One lock
- * file sits beside the store. A held lock fails closed, including when the
- * recorded pid is another process or a dead pid. This process never deletes a
- * lock it did not create. Corrupt bytes fail closed. A different numeric
+ * file, a rename onto the store path, and an fsync of the directory. The
+ * write lock `<store>.lock` is short-lived: each writer (the bridge and the
+ * operator claim tool) takes it, reads, writes, fsyncs, and releases it. A
+ * writer that finds it held waits a bounded time (`ADMISSION_LOCK_WAIT_MS`)
+ * and then fails closed with `lock_held`, including when the recorded pid is
+ * another process or a dead pid. This process never deletes a lock it did not
+ * create. The bridge also holds `<store>.bridge.lock` for its lifetime, so two
+ * bridges never serve one store; the claim tool does not take that lock. Corrupt bytes fail closed. A different numeric
  * schema version fails closed with `ledger_schema_unsupported`. Neither is
  * rewritten.
  *
@@ -113,7 +117,35 @@ export interface FileAdmissionLedgerOptions {
   readonly persist?: (filePath: string, contents: string) => void;
 }
 
-let temporaryFiles = 0;
+/**
+ * How long a writer waits for the short-lived write lock before it fails
+ * closed with `lock_held`. Every holder keeps it for one read-write-fsync, so
+ * a longer wait means the holder is stuck or gone, and a stuck or dead
+ * holder's lock is never stolen.
+ */
+export const ADMISSION_LOCK_WAIT_MS = 2_000;
+const LOCK_POLL_MS = 25;
+
+/** The short-lived write lock beside a store. */
+export function admissionWriteLockPath(storePath: string): string {
+  return `${storePath}.lock`;
+}
+
+/** The bridge's lifetime lock beside a store. The claim tool never takes it. */
+export function admissionBridgeLockPath(storePath: string): string {
+  return `${storePath}.bridge.lock`;
+}
+
+/** Take the write lock, run `job`, release. A throw still releases. */
+export function withAdmissionWriteLock<T>(storePath: string, job: () => T): T {
+  const lockPath = admissionWriteLockPath(storePath);
+  acquireLock(lockPath, ADMISSION_LOCK_WAIT_MS);
+  try {
+    return job();
+  } finally {
+    releaseLock(lockPath);
+  }
+}
 
 export function createFileAdmissionLedger(
   filePath: string,
@@ -122,13 +154,13 @@ export function createFileAdmissionLedger(
   const located = resolveAdmissionStorePath(filePath);
   if (!located.ok) throw new AdmissionFileClosedError('unwritable');
   const resolved = located.path;
-  const lockPath = `${resolved}.lock`;
-  acquireLock(lockPath);
+  const bridgeLockPath = admissionBridgeLockPath(resolved);
+  acquireLock(bridgeLockPath, 0);
   let loaded: LoadedAdmission;
   try {
-    loaded = readAdmission(resolved);
+    loaded = withAdmissionWriteLock(resolved, () => readAdmission(resolved));
   } catch (error) {
-    releaseLock(lockPath);
+    releaseLock(bridgeLockPath);
     throw error;
   }
   let rows = loaded.rows;
@@ -151,25 +183,34 @@ export function createFileAdmissionLedger(
         if (schemaVersion !== ADMISSION_FILE_SCHEMA_VERSION) {
           throw new AdmissionFileClosedError('legacy_readonly');
         }
-        // Both writes go through `persist`. The reservation hits disk before
-        // the completion write. A failure of the completion leaves this
-        // LEDGER_UNWRITTEN row for the next process.
-        const reserved = [...rows, stamped(row, 'LEDGER_UNWRITTEN')];
-        try {
-          persist(resolved, documentText(reserved));
-        } catch (error) {
-          if (isAdmissionFileClosed(error) && error.code !== 'unwritten') throw error;
-          throw new AdmissionFileClosedError('unwritten');
-        }
-        rows = reserved;
-        try {
-          const held = [...reserved.slice(0, -1), stamped(row, 'ADMISSION_HELD')];
-          persist(resolved, documentText(held));
-          rows = held;
-        } catch (error) {
-          if (isAdmissionFileClosed(error) && error.code !== 'unwritten') throw error;
-          throw new AdmissionFileClosedError('unwritten');
-        }
+        withAdmissionWriteLock(resolved, () => {
+          // Only this bridge writes rows (it holds the bridge lock). Rows on
+          // disk that differ from the copy in memory mean the store moved
+          // under it: fail closed, write nothing.
+          const onDisk = readAdmission(resolved);
+          if (onDisk.schemaVersion !== schemaVersion || rowsFingerprint(onDisk.rows) !== rowsFingerprint(rows)) {
+            throw new AdmissionFileClosedError('corrupt');
+          }
+          // Both writes go through `persist`. The reservation hits disk before
+          // the completion write. A failure of the completion leaves this
+          // LEDGER_UNWRITTEN row for the next process.
+          const reserved = [...rows, stamped(row, 'LEDGER_UNWRITTEN')];
+          try {
+            persist(resolved, documentText(reserved));
+          } catch (error) {
+            if (isAdmissionFileClosed(error) && error.code !== 'unwritten') throw error;
+            throw new AdmissionFileClosedError('unwritten');
+          }
+          rows = reserved;
+          try {
+            const held = [...reserved.slice(0, -1), stamped(row, 'ADMISSION_HELD')];
+            persist(resolved, documentText(held));
+            rows = held;
+          } catch (error) {
+            if (isAdmissionFileClosed(error) && error.code !== 'unwritten') throw error;
+            throw new AdmissionFileClosedError('unwritten');
+          }
+        });
       });
       pending = write.then(() => undefined, () => undefined);
       return write;
@@ -177,7 +218,7 @@ export function createFileAdmissionLedger(
     close() {
       if (closed) return;
       closed = true;
-      releaseLock(lockPath);
+      releaseLock(bridgeLockPath);
     },
   };
 }
@@ -186,13 +227,26 @@ function stamped(row: AdmissionLedgerRow, state: 'ADMISSION_HELD' | 'LEDGER_UNWR
   return { ...row, state };
 }
 
+/** Identity and state of each row, in order. Key order in the JSON does not matter. */
+function rowsFingerprint(rows: readonly AdmissionLedgerRow[]): string {
+  return JSON.stringify(rows.map((row) => [row.runId, row.serverRunId, row.keyHash, row.dispatchId, row.receivedAt, row.state]));
+}
+
 function documentText(rows: readonly AdmissionLedgerRow[]): string {
   return `${JSON.stringify({ schemaVersion: ADMISSION_FILE_SCHEMA_VERSION, rows })}\n`;
 }
 
+/**
+ * A temp-file name nobody can predict or collide with: 96 random bits from
+ * the platform CSPRNG, not the pid and a counter.
+ */
+function randomSuffix(): string {
+  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(12));
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
 function writeAdmissionFileAtomic(filePath: string, data: string): void {
-  temporaryFiles += 1;
-  const tmpPath = `${filePath}.${process.pid}.${temporaryFiles}.tmp`;
+  const tmpPath = `${filePath}.${randomSuffix()}.tmp`;
   const fd = openSync(tmpPath, 'wx', 0o600);
   try {
     writeSync(fd, data, null, 'utf8');
@@ -227,14 +281,30 @@ function fsyncDirectory(dirPath: string, platform: NodeJS.Platform = process.pla
   }
 }
 
-function acquireLock(lockPath: string): void {
+const sleeper = new Int32Array(new SharedArrayBuffer(4));
+
+function sleepSync(ms: number): void {
+  Atomics.wait(sleeper, 0, 0, ms);
+}
+
+/**
+ * Create the lock file exclusively. A held lock is retried until `waitMs`
+ * has passed and then fails closed with `lock_held`. It is never removed here.
+ */
+function acquireLock(lockPath: string, waitMs: number): void {
+  const deadline = Date.now() + waitMs;
   let fd: number;
-  try {
-    fd = openSync(lockPath, 'wx', 0o600);
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === 'EEXIST') throw new AdmissionFileClosedError('lock_held');
-    throw new AdmissionFileClosedError('unwritable');
+  for (;;) {
+    try {
+      fd = openSync(lockPath, 'wx', 0o600);
+      break;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== 'EEXIST') throw new AdmissionFileClosedError('unwritable');
+      const left = deadline - Date.now();
+      if (left <= 0) throw new AdmissionFileClosedError('lock_held');
+      sleepSync(Math.min(LOCK_POLL_MS, left));
+    }
   }
   try {
     writeSync(fd, JSON.stringify({ pid: process.pid, purpose: 'wonderland-admission' }), null, 'utf8');
@@ -472,6 +542,8 @@ export interface OperatorDocument {
 export interface AdmissionFileIo {
   read(): OperatorDocument;
   write(document: OperatorDocument): void;
+  /** `noteAwaitingOperatorExpiry` for a caller that already holds the write lock. */
+  noteExpiry(serverRunId: string, updatedAt: string): void;
 }
 
 export interface AdmissionFile {
@@ -521,15 +593,19 @@ export function openAdmissionFile(storePath: string): AdmissionFile {
   const located = resolveAdmissionStorePath(storePath);
   if (!located.ok) throw new AdmissionFileClosedError('unwritable');
   const path = located.path;
-  const lockPath = `${path}.lock`;
+  const lockPath = admissionWriteLockPath(path);
   const exclusive = <T>(job: (io: AdmissionFileIo) => Promise<T>): Promise<T> => enqueue(path, async () => {
-    acquireLock(lockPath);
+    acquireLock(lockPath, ADMISSION_LOCK_WAIT_MS);
     try {
       let document = composeDocument(path);
       return await job({
         read: () => document,
         write: (next) => {
           writeJournal(path, next);
+          document = composeDocument(path);
+        },
+        noteExpiry: (serverRunId, updatedAt) => {
+          noteExpiryHoldingLock(path, serverRunId, updatedAt);
           document = composeDocument(path);
         },
       });
@@ -540,7 +616,7 @@ export function openAdmissionFile(storePath: string): AdmissionFile {
   const ledger: AdmissionLedger = {
     async rows() {
       return enqueue(path, async () => {
-        acquireLock(lockPath);
+        acquireLock(lockPath, ADMISSION_LOCK_WAIT_MS);
         try {
           return readRows(path).map((row) => ({ ...row }));
         } finally {
@@ -553,7 +629,7 @@ export function openAdmissionFile(storePath: string): AdmissionFile {
     },
     async append(row) {
       await enqueue(path, async () => {
-        acquireLock(lockPath);
+        acquireLock(lockPath, ADMISSION_LOCK_WAIT_MS);
         try {
           const loaded = readAdmission(path);
           if (loaded.schemaVersion !== ADMISSION_FILE_SCHEMA_VERSION) {
@@ -610,22 +686,25 @@ function toStoredAdmission(row: AdmissionLedgerRow, ownerPlayerId: string | unde
 
 /**
  * Record the player who admitted a row. The admission document itself stays
- * `{ schemaVersion, rows }`. This does not take the lock: the bridge already
- * holds it, and a path that is not a local store is ignored.
+ * `{ schemaVersion, rows }`. The read and the write happen under the
+ * short-lived write lock, so a claim the operator tool writes in between
+ * cannot be lost. A path that is not a local store is ignored.
  */
 export function recordAdmissionOwner(storePath: string | undefined, serverRunId: string, playerId: string): void {
   const located = resolveAdmissionStorePath(storePath);
   const parsed = parseJuliusAdmissionRunId(serverRunId);
   if (!located.ok || !parsed.ok || parsed.form !== 'wlj' || !OWNER_ID.test(playerId)) return;
-  const journalPath = operatorJournalPath(located.path);
-  const current = readJournal(journalPath);
-  if (existsSync(journalPath) && current.schemaVersion !== ADMISSION_FILE_SCHEMA_VERSION) return;
-  writeJournalBytes(located.path, {
-    schemaVersion: ADMISSION_FILE_SCHEMA_VERSION,
-    revision: current.revision,
-    claims: current.claims,
-    progress: current.progress,
-    owners: { ...current.owners, [serverRunId]: playerId },
+  withAdmissionWriteLock(located.path, () => {
+    const journalPath = operatorJournalPath(located.path);
+    const current = readJournal(journalPath);
+    if (existsSync(journalPath) && current.schemaVersion !== ADMISSION_FILE_SCHEMA_VERSION) return;
+    writeJournalBytes(located.path, {
+      schemaVersion: ADMISSION_FILE_SCHEMA_VERSION,
+      revision: current.revision,
+      claims: current.claims,
+      progress: current.progress,
+      owners: { ...current.owners, [serverRunId]: playerId },
+    });
   });
 }
 
@@ -718,14 +797,20 @@ function parseProgress(value: unknown, schemaVersion: OperatorJournal['schemaVer
  * stays `{ schemaVersion, rows }` and the row stays `ADMISSION_HELD`. The
  * note is the terminal record: a later claim must not dispatch.
  *
- * This does not take the admission lock. The bridge holds that lock for the
- * process lifetime, and the status route runs in that process. A path that
- * is not a local store, a run id the shared module cannot parse, or a
+ * This takes the short-lived write lock. The claim tool, which already holds
+ * it, uses `AdmissionFileIo.noteExpiry` instead. A path that is not a local store, a run id the shared module cannot parse, or a
  * timestamp that is not ISO-8601 is ignored. A legacy `run:` id keeps the
  * journal at schema v2 and does not rewrite the admission document. A claim
  * already stored for the server run, or the same expiry note, is left as it is.
  */
 export function noteAwaitingOperatorExpiry(storePath: string, serverRunId: string, updatedAt: string): void {
+  const located = resolveAdmissionStorePath(storePath);
+  const parsed = parseJuliusAdmissionRunId(serverRunId);
+  if (!located.ok || !parsed.ok || !RECEIVED_AT.test(updatedAt)) return;
+  withAdmissionWriteLock(located.path, () => noteExpiryHoldingLock(located.path, serverRunId, updatedAt));
+}
+
+function noteExpiryHoldingLock(storePath: string, serverRunId: string, updatedAt: string): void {
   const located = resolveAdmissionStorePath(storePath);
   const parsed = parseJuliusAdmissionRunId(serverRunId);
   if (!located.ok || !parsed.ok || !RECEIVED_AT.test(updatedAt)) return;

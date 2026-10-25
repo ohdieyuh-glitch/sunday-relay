@@ -28,9 +28,13 @@ vi.mock('node:fs', async (importOriginal) => {
 
 import {
   ADMISSION_FILE_SCHEMA_VERSION,
+  ADMISSION_LOCK_WAIT_MS,
   AdmissionFileClosedError,
   createFileAdmissionLedger,
   isAdmissionFileClosed,
+  noteAwaitingOperatorExpiry,
+  operatorJournalPath,
+  recordAdmissionOwner,
   resolveAdmissionStorePath,
 } from './admission-file';
 import { createWonderlandAdmissionStore, type AdmissionRequest } from './admission-store';
@@ -205,7 +209,8 @@ describe('the admission file', () => {
         expect(isAdmissionFileClosed(error)).toBe(true);
         if (isAdmissionFileClosed(error)) expect(error.code).toBe('lock_held');
       }
-      expect(readFileSync(`${file}.lock`, 'utf8')).toContain('wonderland-admission');
+      expect(readFileSync(`${file}.bridge.lock`, 'utf8')).toContain('wonderland-admission');
+      expect(existsSync(`${file}.lock`)).toBe(false);
     } finally {
       first.close();
       rmSync(dir, { recursive: true, force: true });
@@ -475,7 +480,8 @@ describe('the admission file', () => {
     writeFileSync(file, document([heldRow()]));
     const ledger = createFileAdmissionLedger(file);
     try {
-      expect(existsSync(`${file}.lock`)).toBe(true);
+      expect(existsSync(`${file}.bridge.lock`)).toBe(true);
+      expect(existsSync(`${file}.lock`)).toBe(false);
     } finally {
       ledger.close();
       rmSync(dir, { recursive: true, force: true });
@@ -608,6 +614,91 @@ describe('the admission file', () => {
       expect(replay.run.modelPins).toEqual(pins);
     } finally {
       opened?.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('a held write lock stops every bridge writer: bounded wait, lock_held, nothing written, lock kept', async () => {
+    const dir = directory();
+    const file = join(dir, 'admission.json');
+    const lock = `${file}.lock`;
+    const ledger = createFileAdmissionLedger(file);
+    const foreign = JSON.stringify({ pid: 999_999, purpose: 'wonderland-admission' });
+    try {
+      writeFileSync(lock, foreign, { flag: 'wx', mode: 0o600 });
+      const started = Date.now();
+      let ownerError: unknown = null;
+      try {
+        recordAdmissionOwner(file, RUN, 'founder');
+      } catch (error) {
+        ownerError = error;
+      }
+      expect(Date.now() - started).toBeGreaterThanOrEqual(ADMISSION_LOCK_WAIT_MS - 50);
+      expect(isAdmissionFileClosed(ownerError) && ownerError.code).toBe('lock_held');
+      let expiryError: unknown = null;
+      try {
+        noteAwaitingOperatorExpiry(file, RUN, WHEN);
+      } catch (error) {
+        expiryError = error;
+      }
+      expect(isAdmissionFileClosed(expiryError) && expiryError.code).toBe('lock_held');
+      await expect(ledger.append(heldRow() as never)).rejects.toMatchObject({ code: 'lock_held' });
+      expect(existsSync(file)).toBe(false);
+      expect(existsSync(operatorJournalPath(file))).toBe(false);
+      expect(readFileSync(lock, 'utf8')).toBe(foreign);
+      expect(readdirSync(dir).some((name) => name.endsWith('.tmp'))).toBe(false);
+    } finally {
+      ledger.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it('a write lock released inside the bounded wait is taken, and the write lands once', async () => {
+    const dir = directory();
+    const file = join(dir, 'admission.json');
+    const lock = `${file}.lock`;
+    const child = spawn(process.execPath, ['-e', [
+      "const fs = require('node:fs');",
+      "fs.writeFileSync(process.env.LOCK_PATH, JSON.stringify({ pid: process.pid, purpose: 'wonderland-admission' }), { flag: 'wx', mode: 0o600 });",
+      'setTimeout(() => { fs.unlinkSync(process.env.LOCK_PATH); process.exit(0); }, 300);',
+    ].join('')], {
+      env: { ...process.env, LOCK_PATH: lock },
+      stdio: ['ignore', 'ignore', 'pipe'],
+    });
+    try {
+      const started = Date.now();
+      while (!existsSync(lock)) {
+        if (Date.now() - started > 5_000) throw new Error('child did not take the lock');
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      recordAdmissionOwner(file, RUN, 'founder');
+      const journal = JSON.parse(readFileSync(operatorJournalPath(file), 'utf8')) as { owners: Record<string, string> };
+      expect(journal.owners).toEqual({ [RUN]: 'founder' });
+      expect(existsSync(lock)).toBe(false);
+    } finally {
+      child.kill('SIGKILL');
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it('temp files carry a random suffix, not the pid and a counter', async () => {
+    const dir = directory();
+    const file = join(dir, 'admission.json');
+    const ledger = createFileAdmissionLedger(file);
+    try {
+      fsLog.ops.length = 0;
+      await createWonderlandAdmissionStore({ ledger, dailyCap: 2, missionCap: 2 }).admit(request());
+      const temps = fsLog.ops
+        .filter((op) => op.startsWith('rename ') && op.endsWith(` -> ${file}`))
+        .map((op) => op.slice('rename '.length, op.indexOf(' -> ')));
+      expect(temps.length).toBe(2);
+      for (const temp of temps) {
+        expect(temp.slice(file.length)).toMatch(/^\.[0-9a-f]{24}\.tmp$/);
+        expect(temp).not.toContain(`.${process.pid}.`);
+      }
+      expect(new Set(temps).size).toBe(2);
+    } finally {
+      ledger.close();
       rmSync(dir, { recursive: true, force: true });
     }
   });

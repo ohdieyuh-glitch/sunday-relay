@@ -1,10 +1,10 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { AWAITING_OPERATOR_WINDOW_MS, PAID_WORKFLOW_FILE } from './admission-contract';
-import { openAdmissionFile, readAdmissionDocument, noteAwaitingOperatorExpiry, AdmissionFileClosedError, isAdmissionFileClosed } from './admission-file';
+import { createFileAdmissionLedger, openAdmissionFile, readAdmissionDocument, noteAwaitingOperatorExpiry, recordAdmissionOwner, AdmissionFileClosedError, isAdmissionFileClosed } from './admission-file';
 import { createWonderlandAdmissionStore, type AdmissionRequest } from './admission-store';
 import { runOperatorClaimCli } from './operator-claim-cli';
 import {
@@ -702,6 +702,38 @@ describe('operator claim', () => {
       if (!replay.ok) return;
       expect(replay.run.serverRunId).toBe(SERVER);
       expect(reloaded.admissionCount()).toBe(1);
+    });
+  });
+
+  it('claims and dispatches while the bridge holds the store open, and the bridge keeps writing after', async () => {
+    await withStore(async (path) => {
+      const bridge = createFileAdmissionLedger(path);
+      try {
+        const store = createWonderlandAdmissionStore({ ledger: bridge, dailyCap: 2, missionCap: 2 });
+        const admitted = await store.admit(request());
+        expect(admitted.ok && admitted.run.state).toBe('ADMISSION_HELD');
+        recordAdmissionOwner(path, SERVER, 'founder');
+        const fake = scripted(ABSENT, WORKFLOW_OK);
+        const result = await claimTool(path, fake.spawn).claim(claimInput({
+          dispatch: true,
+          confirmation: OPERATOR_DISPATCH_CONFIRMATION,
+        }));
+        expect(result.ok && result.dispatchedWorkflow).toBe(true);
+        expect(fake.calls.map((args) => args[0])).toEqual(['api', 'workflow']);
+        const status = await claimTool(path, fake.spawn).status(RUN, SERVER);
+        expect(status.ok && status.record.state).toBe('dispatched');
+        const second = await store.admit(request({ runId: OTHER, keyHash: 'b'.repeat(64), dispatchId: 'adm_other' }));
+        expect(second.ok && second.run.state).toBe('ADMISSION_HELD');
+        recordAdmissionOwner(path, OTHER_SERVER, 'founder');
+        const saved = readAdmissionDocument(path);
+        expect(saved.admissions.map((row) => row.runId)).toEqual([RUN, OTHER]);
+        expect(saved.claims.at(-1)?.state).toBe('dispatched');
+        expect(saved.admissions.map((row) => row.ownerPlayerId)).toEqual(['founder', 'founder']);
+        expect(existsSync(`${path}.lock`)).toBe(false);
+        expect(existsSync(`${path}.bridge.lock`)).toBe(true);
+      } finally {
+        bridge.close();
+      }
     });
   });
 });
