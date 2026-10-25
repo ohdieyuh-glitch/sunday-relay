@@ -141,6 +141,7 @@ private:
 	uint64 NextLiveReadAtUtcMs = 0;
 	uint64 LastLiveOkUtcMs = 0;
 	int32 LiveReadFailures = 0;
+	FString LiveRefusedSavedFor;
 	uint32 AdoptedTokenCrc = 0;
 	bool bAdoptedToken = false;
 	FString AdoptedProjectId;

@@ -642,6 +642,17 @@ void UWonderlandJuliusMissionSubsystem::CompleteLiveRead(
 		++LiveReadFailures;
 		UE_LOG(LogJuliusJ1, Display, TEXT("{\"event\":\"live_read_refused\",\"wlj_run_id\":\"%s\",\"status\":%d,\"bytes\":%d}"),
 			*ForRunId, Status, Content.Num());
+#if !UE_BUILD_SHIPPING
+		// Developer sessions only: keep the FIRST refused 200 body of this run for diagnosis. The bridge's /events body is
+		// an allowlist (workflow job/step names, task-table words); it carries no token, no output, no model text.
+		if (Status == 200 && WonderlandBeta::IsDeveloperSession() && LiveRefusedSavedFor != ForRunId && Content.Num() <= MissionReadMaxBytes)
+		{
+			LiveRefusedSavedFor = ForRunId;
+			const FString Path = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("JuliusJ1"), TEXT("live_refused_") + ForRunId + TEXT(".json"));
+			FFileHelper::SaveArrayToFile(Content, *Path);
+			UE_LOG(LogJuliusJ1, Display, TEXT("{\"event\":\"live_read_refused_saved\",\"path\":\"%s\"}"), *Path);
+		}
+#endif
 		return;
 	}
 	const std::size_t Before = Host->LiveFeed.Events().size();

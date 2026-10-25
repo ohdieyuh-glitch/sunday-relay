@@ -1315,7 +1315,11 @@ namespace WonderlandJuliusMissionFlow
 			return true;
 		}
 
-		bool LiveStatusWord(const std::string& S) { return S == "queued" || S == "in_progress" || S == "completed"; }
+		/** GitHub's own run/job/step status words, passed through by the bridge (rehearsal b, run 40227111617). */
+		bool LiveStatusWord(const std::string& S)
+		{
+			return S == "queued" || S == "in_progress" || S == "completed" || S == "waiting" || S == "pending" || S == "requested";
+		}
 		bool LiveRole(const std::string& S) { return S == "architect" || S == "coder" || S == "reviewer"; }
 		bool LiveTaskType(const std::string& S)
 		{
@@ -1366,6 +1370,7 @@ namespace WonderlandJuliusMissionFlow
 			if (Status->Text == "queued") { Read.Run = ELiveRunStatus::Queued; }
 			else if (Status->Text == "in_progress") { Read.Run = ELiveRunStatus::InProgress; }
 			else if (Status->Text == "completed") { Read.Run = ELiveRunStatus::Completed; }
+			else if (Status->Text == "waiting" || Status->Text == "pending" || Status->Text == "requested") { Read.Run = ELiveRunStatus::Queued; }
 			else { return Out; }
 		}
 		else if (Status == nullptr || Status->Kind != EJsonKind::Null) { return Out; }

@@ -562,6 +562,17 @@ const ABSENT_PHASE = {
 		Expect(!ParseLiveEvents(LiveWlj, 200, LiveBody(LiveTop, Swap(Idle, "\"sampled\":true", "\"sampled\":false"))).bParsed, "marker must be sampled");
 		Expect(ParseLiveEvents(LiveWlj, 200, LiveBody(LiveTop, Swap(LivePhase, ",\"sampled\"", ",\"marker\":null,\"sampled\""))).bParsed, "null marker is a task sample");
 		++LiveCases;
+		// GitHub's waiting/pending/requested pass through (rehearsal b refused every live page before this).
+		for (const char* Word : {"waiting", "pending", "requested"})
+		{
+			const std::string Top = Swap(LiveTop, "\"runStatus\":\"in_progress\"", std::string("\"runStatus\":\"") + Word + "\"");
+			const std::string Step = Swap(LiveStep, "\"status\":\"in_progress\"", std::string("\"status\":\"") + Word + "\"");
+			FLiveFeed Waiting;
+			Waiting.Apply(ParseLiveEvents(LiveWlj, 200, LiveBody(Top, Step)));
+			Expect(Waiting.IsLive() && PanelHas(LivePanelFor(Waiting, 0), (std::string(": ") + Word).c_str()), Word);
+		}
+		Expect(!ParseLiveEvents(LiveWlj, 200, Swap(Good, "\"runStatus\":\"in_progress\"", "\"runStatus\":\"running\"")).bParsed, "unknown run status");
+		++LiveCases;
 		// The real folded step name from the workflow.
 		Expect(ParseLiveEvents(LiveWlj, 200, Swap(Good, "LIVE: run the first real Julius mission", "Preflight complete - stopping here (no confirm_live given)")).bParsed, "real folded step name");
 		++LiveCases;
