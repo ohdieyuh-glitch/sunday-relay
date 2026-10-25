@@ -19,6 +19,7 @@ import {
   createWonderlandAdmissionService,
   handleWonderlandAdmissionRoute,
   handleWonderlandStatusRoute,
+  readRecordedDispatchClock,
   WONDERLAND_ADMISSION_PATH,
   WONDERLAND_STATUS_PATH,
   type WonderlandAdmissionRouteRequest,
@@ -428,8 +429,17 @@ describe('wonderland status', () => {
       const spawned: string[] = [];
       const tool = createOperatorClaimTool(openAdmissionFile(storePath), {
         run(args) {
+          const path = args.find((arg) => arg.includes('/contents/'));
+          if (path !== undefined) {
+            // main: the workflow, the J1 contract, and a lane grant that leaves J1 on the lab default.
+            spawned.push('main');
+            const text = path.includes('/.github/workflows/') ? workflowSource
+              : path.includes('/contract.json') ? '{"markerNamespace":"julius-inworld-data-1"}'
+                : "const DEFAULT_LANES = Object.freeze(['lab']);\nconst MISSION_LANES = Object.freeze({\n  'julius-first-live': Object.freeze(['regression']),\n});\n";
+            return { code: 0, stdout: text, stderr: '' };
+          }
           spawned.push(args[0] ?? '');
-          if (args[0] === 'api') return { code: 1, stdout: 'HTTP/2.0 404 Not Found\n', stderr: '' };
+          if (args[0] === 'api') return { code: 1, stdout: 'HTTP/2.0 404 Not Found\nDate: Fri, 23 Oct 2026 17:18:05 GMT\n', stderr: '' };
           throw new Error('operator_process_killed');
         },
       }, { nowIso: () => WHEN });
@@ -437,12 +447,19 @@ describe('wonderland status', () => {
       expect(dry.ok && dry.claimed).toBe(false);
       const afterDry = await handleWonderlandStatusRoute(statusRequest(SERVER), ports);
       expect(afterDry?.body).toMatchObject({ state: 'awaiting_operator', dispatchedAt: null });
+      expect(readRecordedDispatchClock(storePath, SERVER, RUN)).toBeNull();
       expect(readAdmissionDocument(storePath).claims).toEqual([]);
       await expect(tool.claim({ ...input, dispatch: true, confirmation: 'RUN LIVE MISSION' })).rejects.toThrow('operator_process_killed');
-      expect(spawned).toEqual(['api', 'workflow']);
+      expect(spawned).toEqual(['main', 'main', 'main', 'api', 'workflow']);
       const unfinished = await handleWonderlandStatusRoute(statusRequest(SERVER), ports);
       expect(unfinished?.status).toBe(200);
       expect(unfinished?.body).toMatchObject({ state: 'dispatching', dispatchedAt: null, workflowRunId: null });
+      // GitHub's clock from the tag read is on the reservation, for the result route only: /status does not carry it.
+      expect(readRecordedDispatchClock(storePath, SERVER, RUN)).toBe('2026-10-23T17:18:05Z');
+      expect(unfinished?.body).not.toHaveProperty('githubDate');
+      expect(readRecordedDispatchClock(storePath, SERVER, 'wlj_aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee')).toBeNull();
+      expect(readRecordedDispatchClock('https://example.test/store', SERVER, RUN)).toBeNull();
+      expect(readRecordedDispatchClock(join(dir, 'absent.json'), SERVER, RUN)).toBeNull();
     } finally {
       ports.close();
       rmSync(dir, { recursive: true, force: true });
@@ -541,10 +558,13 @@ describe('wonderland status', () => {
       dispatch_failed: 'dispatch_failed',
       already_spent: 'already_spent',
     };
-    const writerCauses: Record<WorkflowHalt | DispatchError, WonderlandStatusCause> = {
+    // Every writer token is listed. Null: shown as its state with no cause (reconcile's
+    // `workflow_run_unspent` is not in the client's closed cause list).
+    const writerCauses: Record<WorkflowHalt | DispatchError, WonderlandStatusCause | null> = {
       RUN_ID_ALREADY_SPENT: 'RUN_ID_ALREADY_SPENT',
       SPENT_TAG_UNVERIFIED: 'SPENT_TAG_UNVERIFIED',
       gh_workflow_run_failed: 'gh_workflow_run_failed',
+      workflow_run_unspent: null,
     };
     const clockCauses: readonly WonderlandStatusCause[] = ['AWAITING_OPERATOR_EXPIRED'];
     for (const [stored, state] of Object.entries(admissionStatus) as Array<[AdmissionState, WonderlandStatusState]>) {
@@ -556,7 +576,8 @@ describe('wonderland status', () => {
       'awaiting_operator',
     ]);
     expect([...WONDERLAND_STATUS_STATES].filter((state) => state !== 'unknown').sort()).toEqual([...writerStates].sort());
-    expect([...Object.values(writerCauses), ...clockCauses].sort()).toEqual([...WONDERLAND_STATUS_CAUSES].sort());
+    const shownCauses = Object.values(writerCauses).filter((cause): cause is WonderlandStatusCause => cause !== null);
+    expect([...shownCauses, ...clockCauses].sort()).toEqual([...WONDERLAND_STATUS_CAUSES].sort());
     expect(new Set(WONDERLAND_STATUS_STATES.filter(isWonderlandStatusTerminal))).toEqual(new Set(WONDERLAND_STATUS_TERMINAL_STATES));
     expect(WONDERLAND_STATUS_TERMINAL_STATES).not.toContain('unknown');
 

@@ -6,8 +6,10 @@
  *
  * Dry-run is the default: it prints the exact `gh` command, writes no claim
  * record, and spawns nothing. `--dispatch` also requires `--confirm 'RUN LIVE MISSION'`.
- * Only that path spawns `gh` (a read of the spent tag, then the workflow
- * run). This process never reads a credential. The admission file is local.
+ * Only that path and `reconcile` spawn `gh`: the dispatch reads the workflow,
+ * the mission contract and the lane grant at main, then the spent tag, then
+ * runs the workflow; `reconcile` only reads. This process never reads a
+ * credential. The admission file is local.
  *
  * Loopback only. There is no listen socket and no remote store.
  */
@@ -25,6 +27,7 @@ import {
   type GhResult,
   type GhSpawner,
   type OperatorView,
+  type ReconcileResult,
   type StatusResult,
 } from './operator-claim';
 
@@ -36,8 +39,14 @@ const USAGE = [
   '         Dry-run: print the exact gh command. Writes no claim record and spawns nothing.',
   '  claim  ... --dispatch --confirm \'RUN LIVE MISSION\'',
   '         gh reads the spent tag. If it is absent, the claim is reserved and gh runs the workflow once.',
+  '         The workflow, the mission contract and the lane grant are read at main first: an',
+  '         undeclared input or a lane the mission is not granted dispatches nothing.',
   '  status --store <file> --wonderland-run <wlj_> --server-run <run:>',
   '         Print the claimed record, its run: id, and the spent-tag state. Spawns nothing.',
+  '  reconcile --store <file> --wonderland-run <wlj_> --server-run <run:> --repo <owner/name>',
+  '         Move a stuck dispatching record from GitHub evidence only: the spent tag\'s',
+  '         workflow_run_id and the paid run named key=<dispatch key>. Without agreeing',
+  '         evidence the record stays dispatching. Nothing is deleted.',
   '',
   'A second claim prints the existing state and does not dispatch again.',
   'dispatch_failed and already_spent stay terminal.',
@@ -71,7 +80,7 @@ export async function runOperatorClaimCli(
     io.out(USAGE);
     return 0;
   }
-  if (parsed.command !== 'claim' && parsed.command !== 'status') {
+  if (parsed.command !== 'claim' && parsed.command !== 'status' && parsed.command !== 'reconcile') {
     io.err(USAGE);
     return 2;
   }
@@ -105,18 +114,32 @@ export async function runOperatorClaimCli(
     }
   }
   const repo = flag(parsed, 'repo');
+  if (parsed.command === 'reconcile') {
+    if (repo === null || parsed.dispatch || parsed.flags.has('confirm') || parsed.flags.has('lane') || parsed.flags.has('workflow')) {
+      io.err(USAGE);
+      return 2;
+    }
+    try {
+      return emitReconcile(io, await tool.reconcile({ wonderlandRunId, serverRunId, repo }));
+    } catch (error) {
+      return failClosed(io, error);
+    }
+  }
   const lane = flag(parsed, 'lane');
   if (repo === null || lane === null) {
     io.err(USAGE);
     return 2;
   }
-  const workflowPath = flag(parsed, 'workflow') ?? join(process.cwd(), '.github', 'workflows', PAID_WORKFLOW_FILE);
-  let workflowSource: string;
-  try {
-    workflowSource = deps.readWorkflow(workflowPath);
-  } catch {
-    io.err('workflow_unreadable');
-    return 1;
+  // A dispatch reads the workflow at main. Only a dry run reads the checked-out file.
+  let workflowSource = '';
+  if (!parsed.dispatch) {
+    const workflowPath = flag(parsed, 'workflow') ?? join(process.cwd(), '.github', 'workflows', PAID_WORKFLOW_FILE);
+    try {
+      workflowSource = deps.readWorkflow(workflowPath);
+    } catch {
+      io.err('workflow_unreadable');
+      return 1;
+    }
   }
   try {
     const result = await tool.claim({
@@ -186,6 +209,15 @@ function emitStatus(io: OperatorClaimCliIo, result: StatusResult): number {
   ) body.retry = false;
   io.out(JSON.stringify(body));
   return 0;
+}
+
+function emitReconcile(io: OperatorClaimCliIo, result: ReconcileResult): number {
+  const body: Record<string, unknown> = result.ok
+    ? { ok: true, reconciled: result.reconciled, ...publicRecord(result.record) }
+    : { ok: false, kind: result.kind, message: result.message, ...(result.record === null ? {} : publicRecord(result.record)) };
+  if (result.evidence !== null) body.evidence = result.evidence;
+  io.out(JSON.stringify(body));
+  return result.ok ? 0 : 1;
 }
 
 function publicRecord(record: OperatorView): Record<string, unknown> {

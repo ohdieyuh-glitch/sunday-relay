@@ -476,7 +476,12 @@ function parsePins(value: unknown): ReviewedModelPins {
 const CLAIM_STATES = ['dispatching', 'dispatched', 'dispatch_failed', 'already_spent'] as const;
 const SPENT_TAG_STATES = ['unknown', 'present', 'absent'] as const;
 const WORKFLOW_HALTS = ['RUN_ID_ALREADY_SPENT', 'SPENT_TAG_UNVERIFIED'] as const;
-const DISPATCH_ERRORS = ['gh_workflow_run_failed', 'SPENT_TAG_UNVERIFIED'] as const;
+/**
+ * `workflow_run_unspent` is written only by `reconcile`: GitHub shows the
+ * dispatched run completed without success and no spent tag exists, so the
+ * workflow ended before it spent the id.
+ */
+const DISPATCH_ERRORS = ['gh_workflow_run_failed', 'SPENT_TAG_UNVERIFIED', 'workflow_run_unspent'] as const;
 const JOURNAL_KEYS = ['schemaVersion', 'revision', 'claims', 'progress', 'owners'] as const;
 const OWNER_ID = /^[A-Za-z0-9_-]{1,128}$/;
 /**
@@ -488,8 +493,12 @@ const PROGRESS_STATE = /^[a-z][a-z0-9_]{0,63}$/;
 const PROGRESS_CAUSE = /^[\x20-\x7e]{1,200}$/;
 const CLAIM_KEYS = [
   'wonderlandRunId', 'serverRunId', 'state', 'spentTag', 'spentTagState', 'at',
-  'dispatchAttempted', 'dispatchError', 'halt', 'workflowRunId',
+  'dispatchAttempted', 'dispatchError', 'halt', 'workflowRunId', 'githubDate',
 ] as const;
+/** Keys a claim written before they existed may lack. Absent reads as null. */
+const OPTIONAL_CLAIM_KEYS: readonly string[] = ['workflowRunId', 'githubDate'];
+/** GitHub's `Date:` header as ISO UTC, second precision. */
+const GITHUB_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 /** A GitHub Actions workflow run id. Null until dispatch learns one. */
 const WORKFLOW_RUN_ID = /^[1-9][0-9]{0,18}$/;
 
@@ -521,6 +530,14 @@ export interface ClaimEvent {
    * caller-supplied journal field does not set it on a new claim.
    */
   readonly workflowRunId: string | null;
+  /**
+   * GitHub's clock at the spent-tag read made right before the reservation:
+   * the response's `Date:` header as ISO UTC. The bridge orders the matched
+   * run's `created_at` against this, never against this machine's clock.
+   * Null on a claim written before the field existed; such a claim binds no
+   * evidence.
+   */
+  readonly githubDate: string | null;
 }
 
 /** True for a decimal GitHub workflow run id that fits in a signed 64-bit integer. */
@@ -919,6 +936,7 @@ function claimStamp(claim: ClaimEvent): string {
     claim.dispatchError ?? '',
     claim.halt ?? '',
     claim.workflowRunId ?? '',
+    claim.githubDate ?? '',
   ].join('\0');
 }
 
@@ -938,12 +956,13 @@ function parseClaim(value: unknown, schemaVersion: OperatorJournal['schemaVersio
   if (keys.some((key) => !(CLAIM_KEYS as readonly string[]).includes(key))) {
     throw new AdmissionFileClosedError('corrupt');
   }
-  if (CLAIM_KEYS.some((key) => key !== 'workflowRunId' && !Object.hasOwn(claim, key))) {
+  if (CLAIM_KEYS.some((key) => !OPTIONAL_CLAIM_KEYS.includes(key) && !Object.hasOwn(claim, key))) {
     throw new AdmissionFileClosedError('corrupt');
   }
   const workflowRunId = Object.hasOwn(claim, 'workflowRunId')
     ? storedWorkflowRunId(claim.workflowRunId)
     : null;
+  const githubDate = Object.hasOwn(claim, 'githubDate') ? storedGithubDate(claim.githubDate) : null;
   const identity = identifyAdmissionRun(claim.wonderlandRunId, claim.serverRunId);
   const form = schemaVersion === LEGACY_ADMISSION_SCHEMA_VERSION ? 'legacy' : 'wlj';
   if (!identity.ok || identity.form !== form) throw new AdmissionFileClosedError('corrupt');
@@ -967,7 +986,7 @@ function parseClaim(value: unknown, schemaVersion: OperatorJournal['schemaVersio
     if (claim.dispatchAttempted !== true) throw new AdmissionFileClosedError('corrupt');
     if (recordedHalt === 'SPENT_TAG_UNVERIFIED') {
       if (error !== 'SPENT_TAG_UNVERIFIED') throw new AdmissionFileClosedError('corrupt');
-    } else if (recordedHalt !== null || error !== 'gh_workflow_run_failed') {
+    } else if (recordedHalt !== null || (error !== 'gh_workflow_run_failed' && error !== 'workflow_run_unspent')) {
       throw new AdmissionFileClosedError('corrupt');
     }
   } else if (error !== null) {
@@ -991,7 +1010,9 @@ function parseClaim(value: unknown, schemaVersion: OperatorJournal['schemaVersio
     }
   }
   const dispatchError: DispatchError | null = state === 'dispatch_failed'
-    ? (recordedHalt === 'SPENT_TAG_UNVERIFIED' ? 'SPENT_TAG_UNVERIFIED' : 'gh_workflow_run_failed')
+    ? (recordedHalt === 'SPENT_TAG_UNVERIFIED'
+      ? 'SPENT_TAG_UNVERIFIED'
+      : error === 'workflow_run_unspent' ? 'workflow_run_unspent' : 'gh_workflow_run_failed')
     : null;
   return {
     wonderlandRunId: identity.wljRunId,
@@ -1004,7 +1025,14 @@ function parseClaim(value: unknown, schemaVersion: OperatorJournal['schemaVersio
     dispatchError,
     halt: state === 'dispatched' || state === 'dispatching' ? null : recordedHalt,
     workflowRunId,
+    githubDate,
   };
+}
+
+function storedGithubDate(value: unknown): string | null {
+  if (value === null) return null;
+  if (typeof value === 'string' && GITHUB_DATE.test(value) && Number.isFinite(Date.parse(value))) return value;
+  throw new AdmissionFileClosedError('corrupt');
 }
 
 function storedWorkflowRunId(value: unknown): string | null {

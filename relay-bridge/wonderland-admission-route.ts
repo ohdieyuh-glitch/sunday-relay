@@ -530,6 +530,28 @@ function recordedDispatchAt(document: OperatorDocument, serverRunId: string, won
   return null;
 }
 
+/**
+ * GitHub's clock on the spent-tag read made right before this pair's
+ * reservation (the claim's `githubDate`), read from the journal at
+ * `storePath`. The result route orders the matched run's `created_at` against
+ * it. Null when no dispatch is recorded, the claim predates the field, or the
+ * store cannot be read: unknown is not a time. Not part of `/status`.
+ */
+export function readRecordedDispatchClock(storePath: string, serverRunId: string, wonderlandRunId: string): string | null {
+  if (!isLocalStorePath(storePath)) return null;
+  let document: OperatorDocument;
+  try {
+    document = readAdmissionDocument(storePath);
+  } catch {
+    return null;
+  }
+  for (const event of document.claims) {
+    if (event.serverRunId !== serverRunId || event.wonderlandRunId !== wonderlandRunId) continue;
+    if (event.state === 'dispatched' || event.state === 'dispatching' || event.dispatchAttempted) return event.githubDate;
+  }
+  return null;
+}
+
 /** The latest workflow run id dispatch stored for this pair. Null until one is known. */
 function recordedWorkflowRunId(document: OperatorDocument, serverRunId: string, wonderlandRunId: string): string | null {
   let found: string | null = null;
@@ -542,6 +564,9 @@ function recordedWorkflowRunId(document: OperatorDocument, serverRunId: string, 
 
 function claimCause(claim: ClaimEvent): string | null {
   if (claim.halt !== null) return claim.halt;
+  // `workflow_run_unspent` (written by reconcile) is not in the client's closed cause list:
+  // the client sees `dispatch_failed` with no cause, and the journal keeps why.
+  if (claim.dispatchError === 'workflow_run_unspent') return null;
   return claim.dispatchError;
 }
 

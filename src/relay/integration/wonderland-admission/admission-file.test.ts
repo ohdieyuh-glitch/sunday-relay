@@ -34,6 +34,7 @@ import {
   isAdmissionFileClosed,
   noteAwaitingOperatorExpiry,
   operatorJournalPath,
+  readAdmissionDocument,
   recordAdmissionOwner,
   resolveAdmissionStorePath,
 } from './admission-file';
@@ -710,5 +711,114 @@ describe('the admission file', () => {
     expect(source).toContain('openSync(dirPath');
     expect(source).not.toContain('process.env');
     expect(source).not.toContain('node:crypto');
+  });
+});
+
+describe('the operator journal parse pins each claim state', () => {
+  const GITHUB_DATE = '2026-10-23T16:15:05Z';
+
+  function claim(over: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      wonderlandRunId: RUN,
+      serverRunId: RUN,
+      state: 'dispatching',
+      spentTag: 'julius-run-spent-0b7a1c2e4f3d4a6b8c2d3e4f5a6b7c8d',
+      spentTagState: 'absent',
+      at: WHEN,
+      dispatchAttempted: false,
+      dispatchError: null,
+      halt: null,
+      workflowRunId: null,
+      githubDate: GITHUB_DATE,
+      ...over,
+    };
+  }
+
+  function withJournal(claims: readonly Record<string, unknown>[], check: (file: string, journal: string) => void): void {
+    const dir = directory();
+    const file = join(dir, 'admission.json');
+    try {
+      writeFileSync(file, document([heldRow()]));
+      const journal = `${JSON.stringify({ schemaVersion: 3, revision: claims.length, claims, progress: [], owners: {} })}\n`;
+      writeFileSync(operatorJournalPath(file), journal);
+      check(file, journal);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  function expectCorrupt(claims: readonly Record<string, unknown>[], label: string): void {
+    withJournal(claims, (file, journal) => {
+      let failure: unknown = null;
+      try {
+        readAdmissionDocument(file);
+      } catch (error) {
+        failure = error;
+      }
+      expect(isAdmissionFileClosed(failure) && failure.code, label).toBe('corrupt');
+      expect(readFileSync(operatorJournalPath(file), 'utf8'), label).toBe(journal);
+    });
+  }
+
+  it('a dispatching reservation is unattempted, tag-absent, halt-free, error-free and run-id-free', () => {
+    withJournal([claim()], (file) => {
+      expect(readAdmissionDocument(file).claims[0]).toMatchObject({ state: 'dispatching', githubDate: GITHUB_DATE });
+    });
+    expectCorrupt([claim({ dispatchAttempted: true })], 'attempted');
+    expectCorrupt([claim({ spentTagState: 'present' })], 'tag present');
+    expectCorrupt([claim({ spentTagState: 'unknown' })], 'tag unknown');
+    expectCorrupt([claim({ halt: 'SPENT_TAG_UNVERIFIED' })], 'halt');
+    expectCorrupt([claim({ dispatchError: 'gh_workflow_run_failed' })], 'error');
+    expectCorrupt([claim({ workflowRunId: '36568129865' })], 'run id');
+  });
+
+  it('githubDate is optional for an older claim, and otherwise GitHub\'s second-precision UTC or null', () => {
+    const older = claim();
+    delete older.githubDate;
+    withJournal([older], (file) => {
+      expect(readAdmissionDocument(file).claims[0]?.githubDate).toBeNull();
+    });
+    withJournal([claim({ githubDate: null })], (file) => {
+      expect(readAdmissionDocument(file).claims[0]?.githubDate).toBeNull();
+    });
+    for (const bad of ['2026-10-23T16:15:05.000Z', '2026-10-23 16:15:05Z', 'Fri, 23 Oct 2026 16:15:05 GMT', '2026-13-40T16:15:05Z', 1, '']) {
+      expectCorrupt([claim({ githubDate: bad })], String(bad));
+    }
+  });
+
+  it('reconcile\'s workflow_run_unspent is a dispatch_failed with no halt, after an attempt', () => {
+    const failed = claim({ state: 'dispatch_failed', dispatchAttempted: true, dispatchError: 'workflow_run_unspent', workflowRunId: '36568129865' });
+    withJournal([claim(), failed], (file) => {
+      expect(readAdmissionDocument(file).claims[1]).toMatchObject({ state: 'dispatch_failed', dispatchError: 'workflow_run_unspent', halt: null });
+    });
+    expectCorrupt([claim(), { ...failed, halt: 'SPENT_TAG_UNVERIFIED' }], 'with a halt');
+    expectCorrupt([claim(), { ...failed, dispatchAttempted: false }], 'unattempted');
+    expectCorrupt([claim(), { ...failed, dispatchError: 'workflow_run_lost' }], 'unknown error');
+  });
+});
+
+describe('the bridge refuses rows that moved under it', () => {
+  it('rows on disk that differ from the bridge\'s copy fail the next append closed and write nothing', async () => {
+    const dir = directory();
+    const file = join(dir, 'admission.json');
+    const ledger = createFileAdmissionLedger(file);
+    try {
+      await ledger.append(heldRow() as never);
+      // Another writer, which the bridge lock should have excluded, rewrote the rows.
+      const moved = document([heldRow(), heldRow({
+        runId: RUN_2, serverRunId: RUN_2, keyHash: KEY_2, dispatchId: 'adm_2', requestId: 'trigger_02',
+        ledgerRef: 'julius-wonderland-admission:adm_2',
+      })]);
+      writeFileSync(file, moved);
+      await expect(ledger.append(heldRow({
+        runId: RUN_2, serverRunId: RUN_2, keyHash: KEY_2, dispatchId: 'adm_3', requestId: 'trigger_03',
+        ledgerRef: 'julius-wonderland-admission:adm_3',
+      }) as never)).rejects.toMatchObject({ code: 'corrupt' });
+      expect(readFileSync(file, 'utf8')).toBe(moved);
+      expect(readdirSync(dir).some((name) => name.endsWith('.tmp'))).toBe(false);
+    } finally {
+      ledger.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
