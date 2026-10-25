@@ -798,3 +798,56 @@ describe('F4: the founder block gates --execute on green required checks on the 
     expect(ciGate({ total_count: green.length + 5, check_runs: green }).status).toBe(1);
   });
 });
+
+describe('a Windows checkout cannot hand the founder CRLF copies of the trusted files', () => {
+
+  it('(a) .gitattributes turns line-ending conversion off for every TCB path and every checkpoint record', async () => {
+    const trust = (await import(pathToFileURL(join(ROOT, 'scripts/julius-main-provenance-trust.mjs')).href)) as { TRUSTED_COMPUTING_BASE: readonly string[] };
+    const attributes = readFileSync(join(ROOT, '.gitattributes'), 'utf8').split('\n').map((line) => line.trim());
+    for (const path of trust.TRUSTED_COMPUTING_BASE) expect(attributes, path).toContain(`${path} -text`);
+    expect(attributes).toContain('.github/julius-landing/checkpoints/** -text');
+    // Git itself reads them that way.
+    const checked = spawnSync('git', ['check-attr', 'text', '--', ...trust.TRUSTED_COMPUTING_BASE, '.github/julius-landing/checkpoints/x.founder.sig'], { cwd: ROOT, encoding: 'utf8' });
+    expect(checked.status).toBe(0);
+    for (const line of checked.stdout.trim().split('\n')) expect(line, line).toMatch(/: text: unset$/u);
+  });
+
+  it('(b) the founder block refuses a trusted file that is not the target\'s exact bytes, and says how to check out', () => {
+    const block = boot.founderCommandBlock({ target: TARGET });
+    expect(block).toContain('git -c core.autocrlf=false checkout --detach "$TARGET"');
+    const loop = block.split('\n').find((line) => line.startsWith('for p in ') && line.includes('tcb_checkout_differs')) ?? '';
+    expect(loop).not.toBe('');
+    // A throwaway repository holding one trusted file with LF line endings, as the API blob is.
+    const repo = mkdtempSync(join(tmpdir(), 'julius-tcb-checkout-'));
+    const git = (...args: string[]) => spawnSync('git', ['-c', 'core.autocrlf=false', '-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd: repo, encoding: 'utf8' });
+    try {
+      git('init', '-q');
+      mkdirSync(join(repo, 'scripts'), { recursive: true });
+      const lf = 'line one\nline two\n';
+      writeFileSync(join(repo, 'scripts/julius-governed-bootstrap.mjs'), lf);
+      git('add', '.');
+      git('commit', '-q', '-m', 'target');
+      const target = git('rev-parse', 'HEAD').stdout.trim();
+      const run = () => spawnSync('bash', ['-c', `set -euo pipefail; TARGET=${target}; ${loop}`], { cwd: repo, encoding: 'utf8' });
+      expect(run().status, 'exact bytes pass').toBe(0);
+      writeFileSync(join(repo, 'scripts/julius-governed-bootstrap.mjs'), lf.replaceAll('\n', '\r\n'));
+      const crlf = run();
+      expect(crlf.status, 'a CRLF copy is refused').not.toBe(0);
+      expect(crlf.stderr).toContain('tcb_checkout_differs: scripts/julius-governed-bootstrap.mjs');
+      writeFileSync(join(repo, 'scripts/julius-governed-bootstrap.mjs'), lf);
+      mkdirSync(join(repo, '.github/julius-landing'), { recursive: true });
+      writeFileSync(join(repo, '.github/julius-landing/land-lib.mjs'), 'not on the target\n');
+      const extra = run();
+      expect(extra.status, 'a trusted file the target does not have is refused').not.toBe(0);
+      expect(extra.stderr).toContain('tcb_checkout_unexpected: .github/julius-landing/land-lib.mjs');
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  it('LOW: both repo variables are compared after trimming CR and whitespace, as parseAnchor does', () => {
+    const block = boot.founderCommandBlock({ target: TARGET });
+    expect(block).toContain("JULIUS_REVIEWER_KEY_SHA256 --jq .value | tr -d '[:space:]')\" = \"$REVIEWER_PIN\"");
+    expect(block).toContain("JULIUS_FOUNDER_APPROVAL_KEY_SHA256 --jq .value | tr -d '[:space:]')\" = \"$(printf '%s' \"$FOUNDER_FINGERPRINT\" | tr -d '[:space:]')\"");
+  });
+});
