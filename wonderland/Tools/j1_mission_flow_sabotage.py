@@ -465,9 +465,8 @@ MUTATIONS = [
     ),
     (
         "live_reset_appends",
-        "EventList.clear();
-			LastSeq = -1;",
-        "LastSeq = -1;",
+        "EventList.clear();",
+        "// reset keeps the old events",
     ),
 ]
 
