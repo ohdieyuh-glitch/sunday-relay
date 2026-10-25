@@ -267,7 +267,21 @@ export interface JuliusMissionDispatchRecord {
   readonly dispatchedAt: string | null;
   /** The Actions run id `gh workflow run` printed for the dispatched child, or null. */
   readonly workflowRunId: string | null;
+  /**
+   * GitHub's clock on the spent-tag read made right before the reservation
+   * (the claim's `githubDate`), or null. The ordering is checked against this,
+   * never against the operator machine's clock.
+   */
+  readonly githubDispatchDate: string | null;
 }
+
+/**
+ * How far GitHub's `created_at` may read before GitHub's own `Date:` on the
+ * spent-tag read and still be this dispatch's run. Both are GitHub clocks at
+ * whole seconds; two seconds absorbs the rounding of each and GitHub's own
+ * spread between hosts. The operator machine's clock is not involved.
+ */
+export const JULIUS_DISPATCH_CLOCK_TOLERANCE_MS = 2_000;
 
 /**
  * Bind accepted evidence to the operator's own dispatch record. A completion
@@ -275,9 +289,11 @@ export interface JuliusMissionDispatchRecord {
  * - a dispatch is recorded (`dispatchedAt` is an ISO time);
  * - when the record knows a workflow run id, the spend tag names that same
  *   run (a run the operator did not dispatch is not this mission's run);
- * - the dispatch came first: the matched run was created no earlier than
- *   the recorded dispatch, compared at whole seconds because GitHub's
- *   `created_at` has no sub-second part.
+ * - the dispatch came first, on GitHub's clock alone: the matched run's
+ *   `created_at` is no earlier than the `Date:` GitHub sent on the spent-tag
+ *   read right before the reservation, less
+ *   `JULIUS_DISPATCH_CLOCK_TOLERANCE_MS`. A record without that date binds
+ *   nothing: unknown is not a time.
  * Anything else is no completion, so the verdict is NOT_RUN.
  */
 export function bindJuliusEvidenceToDispatch(
@@ -290,9 +306,11 @@ export function bindJuliusEvidenceToDispatch(
   if (dispatchedAt === null) return absent;
   const tag = completion.spendTag;
   if (dispatch.workflowRunId !== null && dispatch.workflowRunId !== tag.workflowRunId) return absent;
-  const dispatchSecond = Math.floor(Date.parse(dispatchedAt) / 1000);
-  const createdSecond = Math.floor(Date.parse(tag.workflowRunCreatedAt) / 1000);
-  if (!(dispatchSecond <= createdSecond)) return absent;
+  const githubDispatchDate = isoUtc(dispatch.githubDispatchDate);
+  if (githubDispatchDate === null) return absent;
+  const dispatchMs = Date.parse(githubDispatchDate);
+  const createdMs = Date.parse(tag.workflowRunCreatedAt);
+  if (!(createdMs >= dispatchMs - JULIUS_DISPATCH_CLOCK_TOLERANCE_MS)) return absent;
   return reading;
 }
 

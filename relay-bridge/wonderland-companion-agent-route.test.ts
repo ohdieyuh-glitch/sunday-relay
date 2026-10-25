@@ -399,7 +399,7 @@ describe('the companion store is bounded, locked, and kept apart from the admiss
     const dir = mkdtempSync(join(tmpdir(), 'wlj-agents-'));
     const admission = join(dir, 'admission.json');
     try {
-      for (const companion of [admission, `${admission}.operator.json`, `${admission}.lock`, `${admission}.bridge.lock`]) {
+      for (const companion of [admission, `${admission}.operator.json`, `${admission}.lock`, `${admission}.bridge`, `${admission}.bridge.lock`]) {
         expect(companionStoreCollides(companion, admission), companion).toBe(true);
         const store = createCompanionResultStore(companion, admission);
         expect(() => store.putAgent(agent(1)), companion).toThrow(CompanionResultStoreClosedError);
@@ -410,6 +410,22 @@ describe('the companion store is bounded, locked, and kept apart from the admiss
       const separate = createCompanionResultStore(join(dir, 'companion.json'), admission);
       separate.putAgent(agent(1));
       expect(separate.readAgent(agent(1).agentId)?.agentId).toBe(agent(1).agentId);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('the server builds the companion store with the admission store beside it, so the collision check is live', () => {
+    const server = readFileSync(join(__dirname, 'server.ts'), 'utf8');
+    const calls = [...server.matchAll(/createCompanionResultStore\(([^)]*)\)/gu)].map((match) => (match[1] ?? '').replace(/\s+/gu, ' ').trim());
+    expect(calls).toEqual(['process.env.JULIUS_WONDERLAND_COMPANION_STORE, process.env.JULIUS_WONDERLAND_ADMISSION_STORE']);
+    // And that wiring closes a companion store pointed at the admission store.
+    const dir = mkdtempSync(join(tmpdir(), 'wlj-agents-'));
+    const admission = join(dir, 'admission.json');
+    try {
+      const store = createCompanionResultStore(` ${admission} `, admission);
+      expect(() => store.putAgent(agent(1))).toThrow(CompanionResultStoreClosedError);
+      expect(existsSync(admission)).toBe(false);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

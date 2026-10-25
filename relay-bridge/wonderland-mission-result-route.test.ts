@@ -10,6 +10,7 @@ import {
   acceptJuliusMissionEvidence,
   bindJuliusEvidenceToDispatch,
   createJuliusMissionEvidenceTestDouble,
+  JULIUS_DISPATCH_CLOCK_TOLERANCE_MS,
   type JuliusMissionEvidenceReader,
 } from './julius-mission-evidence';
 import {
@@ -213,6 +214,7 @@ function recordDispatch(storePath: string): void {
     dispatchError: null,
     halt: null,
     workflowRunId: null,
+    githubDate: '2026-10-23T17:18:05Z',
   }];
   writeFileSync(journalPath, `${JSON.stringify(journal)}\n`);
 }
@@ -735,13 +737,16 @@ describe('evidence is bound to the operator dispatch record', () => {
     }
   });
 
-  it('a run created before the recorded dispatch, or with no creation time, is not completion', async () => {
+  it('a run created before GitHub\'s clock on the dispatch, or with no creation time, is not completion; the local clock is not read', async () => {
     const { dir, storePath, ports } = await admitted();
     try {
-      dispatchWith(storePath, { at: '2026-10-23T17:18:30.400Z' });
-      const before = await read(storePath, ports, passing({ workflowRunCreatedAt: '2026-10-23T17:18:29Z' }));
+      // The operator machine's clock (`at`) runs 30 minutes fast; GitHub said 17:18:30 on the tag read.
+      dispatchWith(storePath, { at: '2026-10-23T17:48:30.400Z', githubDate: '2026-10-23T17:18:30Z' });
+      const before = await read(storePath, ports, passing({ workflowRunCreatedAt: '2026-10-23T17:18:27Z' }));
       expect(before?.body).toMatchObject({ state: 'dispatched', checkerVerdict: 'NOT_RUN', completion: null });
-      // GitHub's created_at has whole seconds: the same second is after the dispatch.
+      // Two seconds of GitHub's own spread is the dispatch's run; three is not.
+      const atTolerance = await read(storePath, ports, passing({ workflowRunCreatedAt: '2026-10-23T17:18:28Z' }));
+      expect(atTolerance?.body).toMatchObject({ state: 'completed', checkerVerdict: 'PASS' });
       const sameSecond = await read(storePath, ports, passing({ workflowRunCreatedAt: '2026-10-23T17:18:30Z' }));
       expect(sameSecond?.body).toMatchObject({ state: 'completed', checkerVerdict: 'PASS' });
       const after = await read(storePath, ports, passing({ workflowRunCreatedAt: '2026-10-23T17:25:00Z' }));
@@ -757,15 +762,36 @@ describe('evidence is bound to the operator dispatch record', () => {
     }
   });
 
-  it('bindJuliusEvidenceToDispatch: no recorded dispatch time is no completion; a null workflow run id on the record does not bind', () => {
+  it('a claim without GitHub\'s clock binds no completion', async () => {
+    const { dir, storePath, ports } = await admitted();
+    try {
+      dispatchWith(storePath, { githubDate: null });
+      const reading = await read(storePath, ports, passing());
+      expect(reading?.body).toMatchObject({ state: 'dispatched', checkerVerdict: 'NOT_RUN', completion: null });
+      ports.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('bindJuliusEvidenceToDispatch: no recorded dispatch or GitHub clock is no completion; a null workflow run id on the record does not bind', () => {
     const accepted = acceptJuliusMissionEvidence(RUN, passing());
     expect(accepted.completion).not.toBeNull();
-    expect(bindJuliusEvidenceToDispatch(accepted, { dispatchedAt: null, workflowRunId: null })).toEqual({ completion: null, phases: null });
-    expect(bindJuliusEvidenceToDispatch(accepted, { dispatchedAt: 'not-a-time', workflowRunId: null })).toEqual({ completion: null, phases: null });
-    expect(bindJuliusEvidenceToDispatch(accepted, { dispatchedAt: WHEN, workflowRunId: null })).toBe(accepted);
-    expect(bindJuliusEvidenceToDispatch(accepted, { dispatchedAt: WHEN, workflowRunId: '4242' })).toBe(accepted);
-    expect(bindJuliusEvidenceToDispatch(accepted, { dispatchedAt: WHEN, workflowRunId: '4243' })).toEqual({ completion: null, phases: null });
-    expect(bindJuliusEvidenceToDispatch(accepted, { dispatchedAt: '2026-10-23T17:19:01.000Z', workflowRunId: null })).toEqual({ completion: null, phases: null });
+    const clock = '2026-10-23T17:18:05Z';
+    const none = { completion: null, phases: null };
+    expect(bindJuliusEvidenceToDispatch(accepted, { dispatchedAt: null, workflowRunId: null, githubDispatchDate: clock })).toEqual(none);
+    expect(bindJuliusEvidenceToDispatch(accepted, { dispatchedAt: 'not-a-time', workflowRunId: null, githubDispatchDate: clock })).toEqual(none);
+    expect(bindJuliusEvidenceToDispatch(accepted, { dispatchedAt: WHEN, workflowRunId: null, githubDispatchDate: null })).toEqual(none);
+    expect(bindJuliusEvidenceToDispatch(accepted, { dispatchedAt: WHEN, workflowRunId: null, githubDispatchDate: 'Fri, 23 Oct 2026' })).toEqual(none);
+    expect(bindJuliusEvidenceToDispatch(accepted, { dispatchedAt: WHEN, workflowRunId: null, githubDispatchDate: clock })).toBe(accepted);
+    expect(bindJuliusEvidenceToDispatch(accepted, { dispatchedAt: WHEN, workflowRunId: '4242', githubDispatchDate: clock })).toBe(accepted);
+    expect(bindJuliusEvidenceToDispatch(accepted, { dispatchedAt: WHEN, workflowRunId: '4243', githubDispatchDate: clock })).toEqual(none);
+    // The run (created 17:19:00) against GitHub's clock: 17:19:02 is inside the tolerance, 17:19:03 is not.
+    expect(bindJuliusEvidenceToDispatch(accepted, { dispatchedAt: WHEN, workflowRunId: null, githubDispatchDate: '2026-10-23T17:19:02Z' })).toBe(accepted);
+    expect(bindJuliusEvidenceToDispatch(accepted, { dispatchedAt: WHEN, workflowRunId: null, githubDispatchDate: '2026-10-23T17:19:03Z' })).toEqual(none);
+    // The local dispatch time no longer orders anything.
+    expect(bindJuliusEvidenceToDispatch(accepted, { dispatchedAt: '2026-10-23T17:19:01.000Z', workflowRunId: null, githubDispatchDate: clock })).toBe(accepted);
+    expect(JULIUS_DISPATCH_CLOCK_TOLERANCE_MS).toBe(2_000);
   });
 
   it('a dispatching reservation is reported as dispatching, not unknown, and reads no evidence', async () => {

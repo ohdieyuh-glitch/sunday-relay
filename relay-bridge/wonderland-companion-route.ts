@@ -641,7 +641,7 @@ export function companionStoreCollides(companionPath: string, admissionStorePath
   };
   const companion = key(companionPath);
   const base = resolve(admission);
-  return [base, `${base}.operator.json`, `${base}.lock`, `${base}.bridge.lock`].some((owned) => key(owned) === companion);
+  return [base, `${base}.operator.json`, `${base}.lock`, `${base}.bridge`, `${base}.bridge.lock`].some((owned) => key(owned) === companion);
 }
 
 function closedCompanionStore(): CompanionLocalStore {

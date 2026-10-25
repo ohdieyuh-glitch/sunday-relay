@@ -78,11 +78,14 @@ on:
         default: ''
 `;
 
+/** The spent-tag read: absent, with GitHub's clock, which the claim keeps as its dispatch time. */
 const ABSENT: GhResult = {
   code: 1,
-  stdout: 'HTTP/2.0 404 Not Found\n{"message":"Not Found"}\n',
+  stdout: 'HTTP/2.0 404 Not Found\nDate: Fri, 23 Oct 2026 17:18:00 GMT\n\n{"message":"Not Found"}\n',
   stderr: '',
 };
+/** What main serves: the offline workflow, the J1 contract, and a grant that leaves J1 on lab. */
+const OFFLINE_LANE_GRANT = "const DEFAULT_LANES = Object.freeze(['lab']);\nconst MISSION_LANES = Object.freeze({\n  'julius-first-live': Object.freeze(['regression']),\n});\n";
 const WORKFLOW_OK: GhResult = { code: 0, stdout: '', stderr: '' };
 
 function env(storePath: string): Record<string, string | undefined> {
@@ -209,6 +212,13 @@ function fakeDispatcher(): { readonly spawn: GhSpawner; readonly calls: string[]
       run(args) {
         const copy = [...args];
         calls.push(copy);
+        const contents = args.find((arg) => arg.includes('/contents/'));
+        if (args[0] === 'api' && contents !== undefined) {
+          if (contents.includes('/.github/workflows/')) return { code: 0, stdout: OFFLINE_WORKFLOW_FIXTURE, stderr: '' };
+          if (contents.endsWith('/contract.json?ref=main')) return { code: 0, stdout: '{"markerNamespace":"julius-inworld-data-1"}', stderr: '' };
+          if (contents.endsWith('/scripts/julius-live-contract-check.mjs?ref=main')) return { code: 0, stdout: OFFLINE_LANE_GRANT, stderr: '' };
+          return { code: 1, stdout: '', stderr: 'gh: Not Found (HTTP 404)' };
+        }
         if (args[0] === 'api') return ABSENT;
         if (args[0] === 'workflow') return WORKFLOW_OK;
         return { code: 99, stdout: '', stderr: 'OFFLINE fixture refused an unexpected command' };
@@ -265,9 +275,9 @@ describe('OFFLINE / NOT A PAID RUN — wonderland mission result end to end', ()
       expect(claimed.record.state).toBe('dispatched');
       expect(claimed.record.dispatchAttempted).toBe(true);
       expect(claimed.record.workflowRunId).toBeNull();
-      expect(calls.map((args) => args[0])).toEqual(['api', 'workflow']);
-      expect(calls[1]).toContain(`${WORKFLOW_RUN_ID_INPUT}=${RUN}`);
-      expect(calls[1]).toContain(`dispatch_key=${createHash('sha256').update(KEY).digest('hex')}`);
+      expect(calls.map((args) => (args.some((arg) => arg.includes('/contents/')) ? 'main' : args[0]))).toEqual(['main', 'main', 'main', 'api', 'workflow']);
+      expect(calls.find((args) => args[0] === 'workflow')).toContain(`${WORKFLOW_RUN_ID_INPUT}=${RUN}`);
+      expect(calls.find((args) => args[0] === 'workflow')).toContain(`dispatch_key=${createHash('sha256').update(KEY).digest('hex')}`);
       expect(calls.flat().join('\n')).not.toMatch(/trace_id|traceId|traceparent/);
 
       const reading = service(storePath);
@@ -380,7 +390,7 @@ describe('OFFLINE / NOT A PAID RUN — wonderland mission result end to end', ()
       confirmation: OPERATOR_DISPATCH_CONFIRMATION,
     });
     if (!claimed.ok) throw new Error(`offline claim refused: ${claimed.kind}`);
-    expect(calls.map((args) => args[0])).toEqual(['api', 'workflow']);
+    expect(calls.map((args) => (args.some((arg) => arg.includes('/contents/')) ? 'main' : args[0]))).toEqual(['main', 'main', 'main', 'api', 'workflow']);
     const ports = service(storePath);
     try {
       const result = await handleWonderlandMissionReadRoute(readRequest('result', RUN), ports);

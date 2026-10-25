@@ -32,6 +32,7 @@ import {
   guardPassed,
   juliusLoopbackGuard,
   readAdmittedWonderlandStatus,
+  readRecordedDispatchClock,
   wonderlandAdmissionPathname,
   wonderlandAdmissionRequestFrom,
   type WonderlandAdmissionRoutePorts,
@@ -145,11 +146,17 @@ export function handleWonderlandMissionReadRoute(
     // `dispatched`. Every other state keeps the status ceiling and a NOT_RUN verdict.
     // EVIDENCE IS BOUND TO THE DISPATCH RECORD. The spend tag must name the
     // workflow run the claim recorded (when it recorded one), and that run
-    // must have been created no earlier than the recorded dispatch.
+    // must have been created no earlier than GitHub's clock on the claim's
+    // spent-tag read, read from the journal (it is not on /status).
     const evidence = admission.state === 'dispatched'
       ? bindJuliusEvidenceToDispatch(await readEvidence(evidenceReader, parsed.runId), {
         dispatchedAt: textOrNull(admission.dispatchedAt),
         workflowRunId: textOrNull(admission.workflowRunId),
+        githubDispatchDate: readRecordedDispatchClock(
+          (ports.env.JULIUS_WONDERLAND_ADMISSION_STORE ?? '').trim(),
+          textOrNull(admission.serverRunId) ?? '',
+          textOrNull(admission.wljRunId) ?? '',
+        ),
       })
       : { completion: null, phases: null };
     const state = evidence.completion === null ? ceilingState(admission.state) : 'completed';
