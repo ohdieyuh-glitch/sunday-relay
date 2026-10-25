@@ -2,6 +2,15 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { BrowserSessionStore } from './browser-session/grants';
 import { sessionTokenFrom } from './browser-session/routes';
 import { WonderlandBackend, type WonderlandExecutor } from '../src/relay/mission/wonderland/wonderland-backend';
+import { isWonderlandCompanionAgentRoute, isWonderlandCompanionRoute } from './wonderland-companion-route';
+import {
+  WONDERLAND_ADMISSION_PATH,
+  WONDERLAND_STATUS_PATH,
+  isWonderlandAdmissionRoute,
+  isWonderlandStatusRoute,
+  wonderlandAdmissionPathname,
+} from './wonderland-admission-route';
+import { isWonderlandMissionReadRoute, wonderlandMissionRead } from './wonderland-mission-result-route';
 
 export interface WonderlandRouteRequest {
   readonly method: string; readonly path: string; readonly url: string;
@@ -12,7 +21,79 @@ export interface WonderlandRouteRequest {
 const asRecord = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const text = (body: Record<string, unknown>, key: string): string => { const value = body[key]; if (typeof value !== 'string' || value.trim() === '') throw new Error(`invalid_${key}`); return value; };
 
-export function isWonderlandRoute(path: string): boolean { return path === '/wonderland' || path.startsWith('/wonderland/'); }
+/**
+ * Every `/wonderland/` path except the Julius admission, status, result,
+ * progress, companion, and companion-agent pathnames. A query on an exact
+ * pathname stays on that route, because the handler reads `projectId` from
+ * it. A trailing slash, a child segment, or a different case stays here. This
+ * catch-all refuses a native session before it reads the path, so those
+ * Julius reads cannot be served from inside it.
+ */
+export function isWonderlandRoute(path: string): boolean {
+  const pathname = wonderlandAdmissionPathname(path);
+  if (pathname === WONDERLAND_ADMISSION_PATH || pathname === WONDERLAND_STATUS_PATH) return false;
+  if (isWonderlandMissionReadRoute(pathname)) return false;
+  if (isWonderlandCompanionRoute(pathname)) return false;
+  if (isWonderlandCompanionAgentRoute(pathname)) return false;
+  if (pathname === '/wonderland' || pathname.startsWith('/wonderland/')) return true;
+  const folded = pathname.toLowerCase();
+  if (isWonderlandCompanionRoute(folded)) return true;
+  if (isWonderlandCompanionAgentRoute(folded)) return true;
+  return folded === WONDERLAND_ADMISSION_PATH || folded.startsWith(`${WONDERLAND_ADMISSION_PATH}/`)
+    || folded === WONDERLAND_STATUS_PATH || folded.startsWith(`${WONDERLAND_STATUS_PATH}/`)
+    || /^\/wonderland\/julius\/missions\/[^/]+\/(result|progress)(\/.*)?$/.test(folded);
+}
+
+/**
+ * Which path the catch-all should see.
+ *
+ * `bridgePath` is the bridge's normalized path: `/relay-api` removed, the
+ * query removed, trailing slashes removed. `rawPath` keeps case, the query,
+ * and trailing slashes. Admission matches the raw pathname, so a query is
+ * admission and a trailing slash is not. Comparing the normalized bridge
+ * path would turn that slash into the admission URL.
+ */
+export function classifyWonderlandDispatchPath(bridgePath: string, rawPath: string): {
+  readonly catchAllPath: string | null;
+  readonly exactAdmission: boolean;
+  readonly exactStatus: boolean;
+  readonly exactMissionResult: boolean;
+  readonly exactMissionProgress: boolean;
+  readonly exactCompanion: boolean;
+} {
+  const classified = (
+    over: {
+      readonly catchAllPath?: string | null;
+      readonly exactAdmission?: boolean;
+      readonly exactStatus?: boolean;
+      readonly exactMissionResult?: boolean;
+      readonly exactMissionProgress?: boolean;
+      readonly exactCompanion?: boolean;
+    } = {},
+  ) => ({
+    catchAllPath: over.catchAllPath ?? null,
+    exactAdmission: over.exactAdmission ?? false,
+    exactStatus: over.exactStatus ?? false,
+    exactMissionResult: over.exactMissionResult ?? false,
+    exactMissionProgress: over.exactMissionProgress ?? false,
+    exactCompanion: over.exactCompanion ?? false,
+  });
+  if (isWonderlandAdmissionRoute(rawPath)) return classified({ exactAdmission: true });
+  if (isWonderlandStatusRoute(rawPath)) return classified({ exactStatus: true });
+  const missionRead = wonderlandMissionRead(rawPath);
+  if (missionRead?.kind === 'result') return classified({ exactMissionResult: true });
+  if (missionRead?.kind === 'progress') return classified({ exactMissionProgress: true });
+  if (isWonderlandCompanionRoute(rawPath) || isWonderlandCompanionAgentRoute(rawPath)) {
+    return classified({ exactCompanion: true });
+  }
+  const candidate = bridgePath === WONDERLAND_ADMISSION_PATH || bridgePath === WONDERLAND_STATUS_PATH
+    || (!isWonderlandRoute(bridgePath) && isWonderlandRoute(rawPath))
+    ? rawPath
+    : bridgePath;
+  return isWonderlandRoute(candidate)
+    ? classified({ catchAllPath: candidate })
+    : classified();
+}
 
 export async function handleWonderlandRoute(input: WonderlandRouteRequest, deps: {
   backend: WonderlandBackend; sessions: BrowserSessionStore; response: ServerResponse; request: IncomingMessage;

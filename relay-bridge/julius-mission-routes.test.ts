@@ -116,6 +116,7 @@ describe('POST /julius/missions', () => {
     expect(isJuliusMissionRoute('/julius/missions')).toBe(true);
     expect(isJuliusMissionRoute('/julius/missions/')).toBe(false);
     expect(isJuliusMissionRoute('/julius/runs/run:1/run')).toBe(false);
+    expect(isJuliusMissionRoute('/wonderland/julius/dispatch')).toBe(false);
     const s = stage();
     expect(await handleJuliusMissionRoute(post(JSON.stringify(CONTRACT), { path: '/julius/runs/run:1/run' }), s.ports)).toBeNull();
     expect(s.runCalls).toEqual([]);

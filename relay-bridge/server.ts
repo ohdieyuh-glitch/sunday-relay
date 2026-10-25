@@ -76,7 +76,11 @@ import {
 } from './browser-session/routes';
 import type { MissionOwnershipScope } from './mission';
 import { WonderlandBackend } from '../src/relay/mission/wonderland/wonderland-backend';
-import { handleWonderlandRoute, isWonderlandRoute } from './wonderland-routes';
+import { classifyWonderlandDispatchPath, handleWonderlandRoute } from './wonderland-routes';
+import { createWonderlandAdmissionBridge, createWonderlandAdmissionService, createWonderlandStatusBridge, isWonderlandAdmissionRoute, isWonderlandStatusRoute, type WonderlandAdmissionRoutePorts } from './wonderland-admission-route';
+import { createWonderlandMissionReadBridge, isWonderlandMissionReadRoute } from './wonderland-mission-result-route';
+import { createCompanionResultStore, createWonderlandCompanionBridge, isWonderlandCompanionAgentRoute, isWonderlandCompanionRoute } from './wonderland-companion-route';
+import { createCompanionAdapterRegistry, type CompanionAdapterRegistry } from './wonderland-companion-registry';
 import { handleProjectBrainRoute, isProjectBrainRoute, type ProjectBrainRoutePorts } from './project-brain-routes';
 import { composeProjectBrainPorts, nativeSessionVerifier } from './project-brain/compose';
 import { handleNativePairingRoute, isNativePairingRoute } from './wonderland-native-pairing-routes';
@@ -259,6 +263,28 @@ export function createBridgeServer(
    * browser credential is ever written to the mounted volume.
    */
   const browserSessions = createBrowserSessionStore();
+  /**
+   * WONDERLAND ADMISSION. Off unless JULIUS_WONDERLAND_ADMISSION=1. On only
+   * when JULIUS_WONDERLAND_ADMISSION_STORE is a local absolute writable path.
+   * The ledger is that file. Closing this server releases its writer lock.
+   * The mission handler serves the route; this does not register a second mount.
+   */
+  const wonderlandAdmission = createWonderlandAdmissionService({
+    env: process.env,
+    verifyNativeSession: nativeSessionVerifier(browserSessions),
+    operatorToken: process.env.RELAY_BRIDGE_API_TOKEN,
+  });
+  /**
+   * Companion results are a separate local file,
+   * JULIUS_WONDERLAND_COMPANION_STORE. Unset, the read is an empty memory
+   * store. There is no ingest and no outbound call.
+   */
+  const companionResults = createCompanionResultStore(process.env.JULIUS_WONDERLAND_COMPANION_STORE, process.env.JULIUS_WONDERLAND_ADMISSION_STORE);
+  /**
+   * Companion adapters are optional. The registry starts empty and stores
+   * slots in the same local companion file. No provider is built in.
+   */
+  const companionAgents = createCompanionAdapterRegistry(companionResults);
   const wonderland = wonderlandBackend ?? WonderlandBackend.empty();
   /**
    * WONDERLAND SOCIAL (R16): the desktop client's own sign-in (GitHub's device flow) and the social routes. OFF unless the
@@ -434,17 +460,30 @@ const juliusStatePorts = (): ReturnType<typeof createJuliusStatePorts> => {
  * same variable the live composition reads.
  */
 let juliusMissionCache: JuliusMissionRoutePorts | null = null;
-const juliusMissionPorts = (): JuliusMissionRoutePorts => {
-  if (juliusMissionCache !== null) return juliusMissionCache;
-  const pool = juliusPool();
-  const reviewer = process.env.RELAY_HERMES_PROVIDER?.trim();
-  juliusMissionCache = {
-    bootstrap: pool === null ? null : composeJuliusMissionBootstrap(pool),
-    missingConfig: pool === null ? [...JULIUS_RUNTIME_DATABASE_ENV_NAMES] : [],
-    reviewerProvider: reviewer ? reviewer : null,
-    cardRevision: process.env.RELAY_JULIUS_CARD_REVISION?.trim() || 'card:julius-live:1',
+const juliusMissionPorts = (
+  wonderlandAdmission: WonderlandAdmissionRoutePorts,
+  companionResults: ReturnType<typeof createCompanionResultStore>,
+  companionAgents: CompanionAdapterRegistry,
+): JuliusMissionRoutePorts => {
+  if (juliusMissionCache === null) {
+    const pool = juliusPool();
+    const reviewer = process.env.RELAY_HERMES_PROVIDER?.trim();
+    juliusMissionCache = {
+      bootstrap: pool === null ? null : composeJuliusMissionBootstrap(pool),
+      missingConfig: pool === null ? [...JULIUS_RUNTIME_DATABASE_ENV_NAMES] : [],
+      reviewerProvider: reviewer ? reviewer : null,
+      cardRevision: process.env.RELAY_JULIUS_CARD_REVISION?.trim() || 'card:julius-live:1',
+    };
+  }
+  return {
+    ...juliusMissionCache,
+    wonderlandAdmissionBridge: createWonderlandAdmissionBridge(wonderlandAdmission),
+    wonderlandStatusBridge: createWonderlandStatusBridge(wonderlandAdmission),
+    // YUJI owns JuliusMissionEvidenceReader. It is not wired here, so result
+    // and progress stay on the status ceiling and never report completed.
+    wonderlandMissionReadBridge: createWonderlandMissionReadBridge(wonderlandAdmission),
+    wonderlandCompanionBridge: createWonderlandCompanionBridge({ ...wonderlandAdmission, companionResults, companionAgents }),
   };
-  return juliusMissionCache;
 };
 
 const headerValue = (value: string | string[] | undefined): string | undefined =>
@@ -455,7 +494,7 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
   const health = healthBody(process.env);
   // typed (CORE, 10-07): inferred, the union `{ 'cache-control'?: undefined }` arm is not a Record<string, string> for send() (TS2345)
   const healthHeaders: Record<string, string> = healthIdentityEnabled(process.env) ? { 'cache-control': 'no-store' } : {};
-  return createServer((req, res) => {
+  const server = createServer((req, res) => {
     const origin = typeof req.headers.origin === 'string' ? req.headers.origin : undefined;
     const cors = corsHeaders(config, origin);
     const method = req.method ?? 'GET';
@@ -828,10 +867,13 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
           return;
         }
 
-        if (isWonderlandRoute(path.replace('/relay-api', ''))) {
+        const wonderlandBridgePath = path.replace('/relay-api', '');
+        const wonderlandRawPath = (req.url ?? '/').replace('/relay-api', '');
+        const wonderlandDispatch = classifyWonderlandDispatchPath(wonderlandBridgePath, wonderlandRawPath);
+        if (wonderlandDispatch.catchAllPath !== null) {
           const wonderlandResult = await handleWonderlandRoute({
             method,
-            path: path.replace('/relay-api', ''),
+            path: wonderlandDispatch.catchAllPath,
             url: (req.url ?? '/').replace('/relay-api', ''),
             authorization: typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined,
             origin,
@@ -1029,17 +1071,44 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
          * store, so the run lands durable in READY and the state routes below
          * can watch it. Nothing here dispatches; driving stays the job's. See
          * `julius-mission-routes.ts`.
+         *
+         * The same call also admits POST /wonderland/julius/dispatch, reads
+         * GET /wonderland/julius/status, and reads
+         * GET /wonderland/julius/missions/{wljRunId}/companion, and the
+         * companion agent routes under /wonderland/companions/agents. The
+         * Wonderland catch-all leaves those paths out, because a native session
+         * is refused there before the path is read. Admission does not
+         * bootstrap a run and does not start the paid workflow. The companion
+         * routes do not call out.
          */
-        if (isJuliusMissionRoute(path.replace('/relay-api', ''))) {
+        const missionPath = path.replace('/relay-api', '');
+        if (isJuliusMissionRoute(missionPath)
+          || (wonderlandDispatch.exactAdmission && isWonderlandAdmissionRoute(missionPath))
+          || (wonderlandDispatch.exactStatus && isWonderlandStatusRoute(missionPath))
+          || ((wonderlandDispatch.exactMissionResult || wonderlandDispatch.exactMissionProgress)
+            && isWonderlandMissionReadRoute(missionPath))
+          || (wonderlandDispatch.exactCompanion && (isWonderlandCompanionRoute(missionPath) || isWonderlandCompanionAgentRoute(missionPath)))) {
           const missionAuthz = typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
           const missionResult = await handleJuliusMissionRoute({
             method,
-            path: path.replace('/relay-api', ''),
+            path: missionPath,
             operator: bearerMatches(missionAuthz, process.env.RELAY_BRIDGE_API_TOKEN),
             body: method === 'POST' ? await readRawBody(req) : undefined,
             rerun: headerValue(req.headers['x-relay-julius-rerun']),
             rerunKey: headerValue(req.headers['x-relay-julius-rerun-key']),
-          }, juliusMissionPorts());
+            authorization: missionAuthz,
+            origin,
+            idempotencyKey: headerValue(req.headers['x-relay-idempotency-key']),
+            remoteAddress: req.socket.remoteAddress,
+            host: headerValue(req.headers.host),
+            forwarded: headerValue(req.headers['x-forwarded-for']) !== undefined
+              || headerValue(req.headers['x-forwarded-host']) !== undefined
+              || headerValue(req.headers.forwarded) !== undefined
+              || headerValue(req.headers['x-real-ip']) !== undefined,
+            url: (req.url ?? '/').replace('/relay-api', ''),
+            nowIso: new Date().toISOString(),
+            nowMs: Date.now(),
+          }, juliusMissionPorts(wonderlandAdmission, companionResults, companionAgents));
           if (missionResult !== null) {
             send(res, missionResult.status, missionResult.body, cors);
             return;
@@ -1498,6 +1567,10 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
       }
     })();
   });
+  server.on('close', () => {
+    wonderlandAdmission.close();
+  });
+  return server;
 }
 
 /** Entry point — `node dist-relay-bridge/server.cjs`. */
