@@ -365,8 +365,23 @@ MUTATIONS = [
     ),
     (
         "completed_without_pass",
-        "Out.Line = Read.Checker == ECheckerVerdict::Pass ? CopyStateCompletedChecked : CopyStateCompleted; // FLOW_COMPLETED_ONLY_ON_PASS",
+        "Out.Line = Read.Checker == ECheckerVerdict::Pass && !Read.bCheckerUnbound ? CopyStateCompletedChecked : CopyStateCompleted; // FLOW_COMPLETED_ONLY_ON_PASS",
         "Out.Line = CopyStateCompletedChecked; // FLOW_COMPLETED_ONLY_ON_PASS",
+    ),
+    (
+        "pass_unbound_accepted",
+        "Out.bCheckerUnbound = true; // FLOW_PASS_MUST_NAME_JUDGED_SHA",
+        "Out.bCheckerUnbound = false; // FLOW_PASS_MUST_NAME_JUDGED_SHA",
+    ),
+    (
+        "digest_prefix_unchecked",
+        "Out.bCheckerUnbound = true; // FLOW_PASS_DIGEST_MATCHES_JUDGED",
+        "Out.bCheckerUnbound = Out.bCheckerUnbound; // FLOW_PASS_DIGEST_MATCHES_JUDGED",
+    ),
+    (
+        "checker_hex_unchecked",
+        "if (!((Ch >= '0' && Ch <= '9') || (Ch >= 'a' && Ch <= 'f'))) { return Out; } // FLOW_CHECKER_HEX_ONLY",
+        "// FLOW_CHECKER_HEX_ONLY",
     ),
     (
         "start_again_from_any_step",

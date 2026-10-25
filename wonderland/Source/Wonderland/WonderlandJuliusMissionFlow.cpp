@@ -336,6 +336,22 @@ namespace WonderlandJuliusMissionFlow
 			return Parser.Parse(Out);
 		}
 
+		/** A lowercase-hex value of exactly Width characters, or Unknown (known=false) when present but malformed. */
+		FReportedString LowerHexOrUnknown(const FReportedString& In, std::size_t Width)
+		{
+			FReportedString Out;
+			Out.bNull = In.bNull;
+			Out.bPresent = In.bKnown || In.bNull;
+			if (!In.bKnown || In.Text.size() != Width) { return Out; }
+			for (const char Ch : In.Text)
+			{
+				if (!((Ch >= '0' && Ch <= '9') || (Ch >= 'a' && Ch <= 'f'))) { return Out; } // FLOW_CHECKER_HEX_ONLY
+			}
+			Out.bKnown = true;
+			Out.Text = In.Text;
+			return Out;
+		}
+
 		FReportedString ReadString(const FJson* Object, const char* Name)
 		{
 			FReportedString Out;
@@ -775,8 +791,17 @@ namespace WonderlandJuliusMissionFlow
 		}
 		if (Read.bCheckerReported)
 		{
-			Out.Lines.push_back(Read.Checker == ECheckerVerdict::Pass ? "checkerVerdict: PASS"
+			Out.Lines.push_back(Read.Checker == ECheckerVerdict::Pass
+				? (Read.bCheckerUnbound ? "checkerVerdict: PASS (names no judged sha256; not verified)" : "checkerVerdict: PASS")
 				: Read.Checker == ECheckerVerdict::Fail ? "checkerVerdict: FAIL" : "checkerVerdict: NOT_RUN");
+		}
+		if (Read.Checker != ECheckerVerdict::NotRun)
+		{
+			// Only what the bridge returned: a missing field adds no line, a malformed one reads Unknown.
+			if (Read.CheckerGameDigest.bKnown) { Out.Lines.push_back(std::string("checker.gameDigest: ") + Read.CheckerGameDigest.Text); }
+			else if (Read.CheckerGameDigest.bPresent) { Out.Lines.push_back("checker.gameDigest: Unknown"); }
+			if (Read.CheckerJudgedSha256.bKnown) { Out.Lines.push_back(std::string("checker.judgedTrimmedSha256: ") + Read.CheckerJudgedSha256.Text); }
+			else if (Read.CheckerJudgedSha256.bPresent) { Out.Lines.push_back("checker.judgedTrimmedSha256: Unknown"); }
 		}
 		if (Read.Checker == ECheckerVerdict::Fail)
 		{
@@ -822,7 +847,7 @@ namespace WonderlandJuliusMissionFlow
 			Out.Line = CopyNoResultYet;
 			return Out;
 		}
-		Out.Line = Read.Checker == ECheckerVerdict::Pass ? CopyStateCompletedChecked : CopyStateCompleted; // FLOW_COMPLETED_ONLY_ON_PASS
+		Out.Line = Read.Checker == ECheckerVerdict::Pass && !Read.bCheckerUnbound ? CopyStateCompletedChecked : CopyStateCompleted; // FLOW_COMPLETED_ONLY_ON_PASS
 		if (Read.CompletionTraceId.bKnown)
 		{
 			Out.Lines.push_back(std::string("completion.traceId: ") + Read.CompletionTraceId.Text);
@@ -899,6 +924,20 @@ namespace WonderlandJuliusMissionFlow
 		}
 		const FReportedString State = ReadString(&Root, "state");
 		if (State.bKnown) { Out.State = State.Text; }
+		// Filled below with the completion object; a PASS must name what it judged (Julius #448 contract).
+		const auto BindChecker = [&Out]()
+		{
+			if (Out.Checker == ECheckerVerdict::Pass && !Out.CheckerJudgedSha256.bKnown)
+			{
+				Out.bCheckerUnbound = true; // FLOW_PASS_MUST_NAME_JUDGED_SHA
+			}
+			// The in-game digest is the judged sha256's first 12 hex (bridge-enforced; checked again here, REVIEW #462 LOW).
+			if (Out.Checker == ECheckerVerdict::Pass && Out.CheckerJudgedSha256.bKnown && Out.CheckerGameDigest.bKnown
+				&& Out.CheckerGameDigest.Text != Out.CheckerJudgedSha256.Text.substr(0, 12))
+			{
+				Out.bCheckerUnbound = true; // FLOW_PASS_DIGEST_MATCHES_JUDGED
+			}
+		};
 		Out.Cause = ReadString(&Root, "cause");
 		Out.Phases = ReadPhases(&Root, Out.PhaseSlots);
 		Out.ProjectBrainRevision = ReadRevision(&Root, Out.bRevisionMalformed);
@@ -909,6 +948,12 @@ namespace WonderlandJuliusMissionFlow
 			ReadArtifact(Completion, Out);
 			ReadCosts(Completion, Out);
 			Out.CompletionTraceId = ReadString(Completion, "traceId");
+			const FJson* Checker = Field(*Completion, "checker");
+			if (Checker != nullptr && Checker->Kind == EJsonKind::Object)
+			{
+				Out.CheckerGameDigest = LowerHexOrUnknown(ReadString(Checker, "gameDigest"), 12);
+				Out.CheckerJudgedSha256 = LowerHexOrUnknown(ReadString(Checker, "judgedTrimmedSha256"), 64);
+			}
 			Out.CompletionTraceparent = ReadString(Completion, "traceparent");
 			std::vector<FPhaseSlot> CompletionSlots;
 			const EPhaseList CompletionPhases = ReadPhases(Completion, CompletionSlots);
@@ -924,6 +969,7 @@ namespace WonderlandJuliusMissionFlow
 				Out.bRevisionSplit = true; // FLOW_COMPLETION_REVISION_AGREES
 			}
 		}
+		BindChecker();
 		constexpr bool bAcceptNullAccountingAsSettled = false; // FLOW_NULL_SPEND_ACCOUNTING_NOT_COMPLETION
 
 		bool bVerified = EvidenceVerifies(Root, bCompletionObject ? Completion : nullptr, WljRunId);
