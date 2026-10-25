@@ -1,7 +1,9 @@
 # Land a cleared pull request, including one that touches founder-governed paths,
 # as the dedicated governed-landing App. The workflow token only checks the tree
 # out. A read-only App token is minted after the trusted verifier passes. The
-# lander mints its own write token, and requests workflows:write only when the
+# lander mints its own write token for this repository only, and requests
+# workflows:write only when both the reviewer and the founder-approval
+# signatures verified and the
 # clearance names a .github/workflows path. This job refuses unless the run is
 # main and this file is the copy on that same commit. The private key is held
 # by the governed-landing environment, which must allow deployment from main

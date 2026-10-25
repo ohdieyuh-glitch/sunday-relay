@@ -773,6 +773,38 @@ describe('squash and fast-forward pass only when every binding holds', () => {
   });
 });
 
+describe('the clearance tree and base bindings each hold on their own (review test gap)', () => {
+  const judge = async (tree: string, base: string) => {
+    const text = clearance(['landing-method: squash']).replace(`tree: ${T}`, `tree: ${tree}`).replace(`base: ${B}`, `base: ${base}`);
+    const built = (await import(pathToFileURL(fixtureLib).href) as {
+      buildLandingCommitMessage: (input: { clearanceText: string; signatureB64: string }) => string;
+    }).buildLandingCommitMessage({ clearanceText: text, signatureB64: signWith(text) });
+    return fixtureTrust.judgeCommitLanding(
+      { message: built, committerTime: NOW, tree: T, parent: B, parentCount: 1, paths: ['src/relay/ordinary.ts'] },
+      { pem: publicPem, anchor: spki, now: NOW + 1000, seenNonces: new Set<string>() },
+    );
+  };
+
+  it('accepts the exact tree and base', async () => {
+    const ok = await judge(T, B);
+    expect(ok.ok, ok.reason).toBe(true);
+  });
+
+  it('refuses a signed tree that is not the commit tree, with the base correct', async () => {
+    const result = await judge(OTHER, B);
+    expect(result.ok).toBe(false);
+    expect(result.reason).toMatch(new RegExp(`the reviewer signed tree ${OTHER}`, 'u'));
+    expect(result.reason).not.toMatch(/signed base/u);
+  });
+
+  it('refuses a signed base that is not the commit parent, with the tree correct', async () => {
+    const result = await judge(T, OTHER);
+    expect(result.ok).toBe(false);
+    expect(result.reason).toMatch(new RegExp(`the reviewer signed base ${OTHER}`, 'u'));
+    expect(result.reason).not.toMatch(/signed tree/u);
+  });
+});
+
 describe('H1: a reviewer signature alone does not land a governed path', () => {
   const CI = '.github/workflows/not-in-tcb.yml';
   const governed = [`protected-paths: ${CI}`, 'landing-method: squash'];

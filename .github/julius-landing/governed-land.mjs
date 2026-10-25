@@ -875,7 +875,8 @@ async function landQueue({ env, fetchImpl, readLocal, now, stdout, stderr, state
     const minted = await fetchImpl(`https://api.github.com/app/installations/${installed.id}/access_tokens`, {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ permissions }),
+      // One repository only: the installation could be widened later; the token must not follow it.
+      body: JSON.stringify({ repositories: [REPO.split('/')[1]], permissions }),
       signal: AbortSignal.timeout(30_000),
     });
     if (!minted.ok) throw new Error(`POST /app/installations/access_tokens -> ${minted.status}`);

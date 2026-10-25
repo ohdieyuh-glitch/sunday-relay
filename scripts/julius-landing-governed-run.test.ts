@@ -346,6 +346,8 @@ describe('H1: the governed lander needs the founder-approval signature for a gov
     const tokens = minted(result.calls);
     expect(tokens).toHaveLength(1);
     expect((tokens[0]?.body as { permissions?: Record<string, string> })?.permissions?.workflows).toBe('write');
+    // MEDIUM: the write token is scoped to this one repository.
+    expect((tokens[0]?.body as { repositories?: string[] })?.repositories).toEqual(['sunday-relay']);
     const created = result.calls.find((call) => call.method === 'POST' && call.path.endsWith('/git/commits'));
     expect(String((created?.body as { message?: string })?.message)).toContain(`founder-signature-b64: ${founderSign(text)}`);
   });
