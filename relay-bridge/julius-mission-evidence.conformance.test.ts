@@ -184,6 +184,21 @@ describe('acceptJuliusMissionEvidence accepts the #446 object', () => {
     expect(accepted.completion?.providerReceipt?.responseId).toBe(REQUEST_ID);
   });
 
+  it('a spend tag that names another run is not completion, for any other id', () => {
+    const fixture = readerOutput();
+    expect(acceptJuliusMissionEvidence(WLJ, fixture).completion).not.toBeNull();
+    const OTHER = 'wlj_aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+    for (const run of [OTHER, 'run:0123456789abcdef01234567', WLJ.toUpperCase(), `${WLJ} `, '', null, undefined]) {
+      const tag = { ...(fixture.spendTag as Record<string, unknown>), run };
+      const reading = acceptJuliusMissionEvidence(WLJ, { ...fixture, spendTag: tag });
+      expect(reading, String(run)).toEqual({ completion: null, phases: null });
+    }
+    // The other run's own read is completion for that run only.
+    const theirs = { ...fixture, spendTag: { ...(fixture.spendTag as Record<string, unknown>), run: OTHER } };
+    expect(acceptJuliusMissionEvidence(OTHER, theirs).completion?.spendTag.run).toBe(OTHER);
+    expect(acceptJuliusMissionEvidence(WLJ, theirs).completion).toBeNull();
+  });
+
   it('a null read is not completion, and null sections stay null', () => {
     expect(acceptJuliusMissionEvidence(WLJ, null)).toEqual({ completion: null, phases: null });
     // 041d2599 relay-bridge/julius-mission-evidence-reader.test.ts:211-222.
