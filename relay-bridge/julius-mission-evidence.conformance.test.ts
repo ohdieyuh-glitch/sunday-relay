@@ -122,6 +122,8 @@ describe('acceptJuliusMissionEvidence accepts the #446 object', () => {
       ...fixture,
       traceId: DERIVED_TRACE,
       traceparent: null,
+      checkerVerdict: 'NOT_RUN',
+      checker: null,
     });
     const receipt = accepted.completion?.providerReceipt;
     expect(receipt?.providerRequestId).toBe(REQUEST_ID);
@@ -221,6 +223,8 @@ describe('acceptJuliusMissionEvidence accepts the #446 object', () => {
         phases: null,
         traceId: DERIVED_TRACE,
         traceparent: null,
+        checkerVerdict: 'NOT_RUN',
+        checker: null,
       },
       phases: null,
     });
@@ -385,5 +389,25 @@ describe('acceptJuliusMissionEvidence accepts the #454 projection', () => {
       phases: PRESENT_PHASES,
     });
     expect(accepted).toEqual({ completion: null, phases: null });
+  });
+});
+
+describe('the hidden checker verdict is a closed field', () => {
+  const judged = 'b'.repeat(64);
+  const checker = { reason: 'none', taskId: 'task:build-1', judgedTrimmedSha256: judged, gameDigest: judged.slice(0, 12), checkerSha256: 'c'.repeat(64) };
+  const withVerdict = (checkerVerdict: unknown, evidence: unknown = checker) => acceptJuliusMissionEvidence(WLJ, { ...(readerOutput() as Record<string, unknown>), checkerVerdict, checker: evidence });
+
+  it('keeps PASS and FAIL with what was judged', () => {
+    expect(withVerdict('PASS').completion).toMatchObject({ checkerVerdict: 'PASS', checker });
+    expect(withVerdict('FAIL').completion).toMatchObject({ checkerVerdict: 'FAIL' });
+  });
+
+  it('reads anything else, or a verdict that names no judged bytes, as NOT_RUN', () => {
+    for (const token of [undefined, null, 'pass', 'COMPLETED', 1, true]) {
+      expect(withVerdict(token).completion?.checkerVerdict, String(token)).toBe('NOT_RUN');
+    }
+    expect(withVerdict('PASS', null).completion?.checkerVerdict).toBe('NOT_RUN');
+    expect(withVerdict('PASS', { ...checker, gameDigest: '000000000000' }).completion?.checkerVerdict).toBe('NOT_RUN');
+    expect(withVerdict('PASS', { ...checker, judgedTrimmedSha256: 'not-a-sha' }).completion?.checkerVerdict).toBe('NOT_RUN');
   });
 });

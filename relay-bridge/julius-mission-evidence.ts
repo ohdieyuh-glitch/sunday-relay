@@ -151,6 +151,23 @@ export interface JuliusMissionCompletionEvidence {
    * `traceparent` is null as well: the reader does not attach a span.
    */
   readonly traceparent: null;
+  /**
+   * The pinned hidden checker's verdict from the paid workflow's grade job.
+   * Only PASS is a verified completion. Absent or any other token is NOT_RUN.
+   */
+  readonly checkerVerdict: JuliusCheckerVerdict;
+  readonly checker: JuliusCheckerEvidence | null;
+}
+
+export const JULIUS_CHECKER_VERDICTS = ['PASS', 'FAIL', 'NOT_RUN'] as const;
+export type JuliusCheckerVerdict = (typeof JULIUS_CHECKER_VERDICTS)[number];
+
+export interface JuliusCheckerEvidence {
+  readonly reason: string | null;
+  readonly taskId: string | null;
+  readonly judgedTrimmedSha256: string | null;
+  readonly gameDigest: string | null;
+  readonly checkerSha256: string | null;
 }
 
 /**
@@ -424,9 +441,35 @@ export function acceptJuliusMissionEvidence(wljRunId: string, value: unknown): J
       phases: phaseRows,
       traceId: juliusMissionTraceId(wljRunId),
       traceparent: null,
+      ...checkerVerdict(body.checkerVerdict, body.checker),
     },
     phases: phaseRows,
   };
+}
+
+const TASK_ID = /^[A-Za-z0-9:_-]{1,128}$/;
+const DIGEST12 = /^[0-9a-f]{12}$/;
+
+/** A verdict outside the closed set is NOT_RUN. A PASS or FAIL must name the judged bytes. */
+function checkerVerdict(verdictValue: unknown, checkerValue: unknown): { readonly checkerVerdict: JuliusCheckerVerdict; readonly checker: JuliusCheckerEvidence | null } {
+  const body = record(checkerValue);
+  const shaped = (value: unknown, shape: RegExp): string | null => (typeof value === 'string' && shape.test(value) ? value : null);
+  const checker: JuliusCheckerEvidence | null = body === null ? null : {
+    reason: shaped(body.reason, REASON),
+    taskId: shaped(body.taskId, TASK_ID),
+    judgedTrimmedSha256: shaped(body.judgedTrimmedSha256, SHA256),
+    gameDigest: shaped(body.gameDigest, DIGEST12),
+    checkerSha256: shaped(body.checkerSha256, SHA256),
+  };
+  const verdict = oneOf(verdictValue, JULIUS_CHECKER_VERDICTS);
+  if (verdict === 'PASS' || verdict === 'FAIL') {
+    if (checker === null || checker.judgedTrimmedSha256 === null || checker.checkerSha256 === null
+      || checker.gameDigest !== checker.judgedTrimmedSha256.slice(0, 12)) {
+      return { checkerVerdict: 'NOT_RUN', checker };
+    }
+    return { checkerVerdict: verdict, checker };
+  }
+  return { checkerVerdict: 'NOT_RUN', checker };
 }
 
 /**

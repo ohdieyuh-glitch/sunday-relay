@@ -166,6 +166,8 @@ export function handleWonderlandMissionReadRoute(
         ...shared,
         dispatchedAt: textOrNull(admission.dispatchedAt),
         ...(state === 'completed' || cause === null ? {} : { cause }),
+        // Top level, for the client: only PASS is a verified completion.
+        checkerVerdict: evidence.completion === null ? 'NOT_RUN' : evidence.completion.checkerVerdict,
         completion: evidence.completion,
       },
     };

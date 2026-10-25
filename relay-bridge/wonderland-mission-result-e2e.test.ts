@@ -297,6 +297,19 @@ describe('OFFLINE / NOT A PAID RUN — wonderland mission result end to end', ()
           state: 'dispatched', traceId: TRACE_ID, phases: null, projectBrainRevision: null,
         });
 
+        expect(nullResult?.body).toMatchObject({ checkerVerdict: 'NOT_RUN' });
+
+        // A completed run with no grade is completed-and-unverified, not a verified completion.
+        const ungraded = await handleWonderlandMissionReadRoute(readRequest('result', RUN), reading, createJuliusMissionEvidenceTestDouble({ [RUN]: readerCompletion() }));
+        expect(ungraded?.body).toMatchObject({ state: 'completed', checkerVerdict: 'NOT_RUN' });
+        const judged = 'b'.repeat(64);
+        const checker = { reason: 'none', taskId: 'task:build-1', judgedTrimmedSha256: judged, gameDigest: judged.slice(0, 12), checkerSha256: 'c'.repeat(64) };
+        for (const verdict of ['PASS', 'FAIL'] as const) {
+          const graded = createJuliusMissionEvidenceTestDouble({ [RUN]: { ...(readerCompletion() as Record<string, unknown>), checkerVerdict: verdict, checker } });
+          const gradedResult = await handleWonderlandMissionReadRoute(readRequest('result', RUN), reading, graded);
+          expect(gradedResult?.body, verdict).toMatchObject({ state: 'completed', checkerVerdict: verdict, completion: { checkerVerdict: verdict, checker } });
+        }
+
         const reader = createJuliusMissionEvidenceTestDouble({ [RUN]: readerCompletion() });
         const doneResult = await handleWonderlandMissionReadRoute(readRequest('result', RUN), reading, reader);
         const doneProgress = await handleWonderlandMissionReadRoute(readRequest('progress', RUN), reading, reader);
