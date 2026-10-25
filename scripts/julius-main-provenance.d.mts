@@ -12,6 +12,13 @@ export declare const NON_ATTESTING_IDENTITIES: readonly string[];
 export declare const REVIEW_AUTHORITY_LOGINS: readonly string[];
 /** Who may have authored a landed candidate: the same set that may never attest. */
 export declare const WORKER_AUTHOR_LOGINS: readonly string[];
+/** GitHub App id of the coding worker. Not a bot user id and not an email. */
+export declare const WORKER_APP_ID: 4838349;
+/**
+ * Authenticated sources that may establish the cleared head's author.
+ * Git author name, email, and the email-derived `commit.author.login` are not in this list.
+ */
+export declare const AUTHENTICATED_COMMIT_SOURCES: readonly ['pull-opener', 'app-installation', 'verified-signature'];
 export declare const PROVENANCE_VERDICTS: readonly ['provenant', 'unprovenanced', 'indeterminate'];
 
 export interface MainProvenanceResult {
@@ -77,7 +84,11 @@ export declare function evaluateMainProvenance(input: {
   readonly changedPaths?: unknown;
   /** Strictly true when changedPaths is complete. */
   readonly changedPathsComplete?: unknown;
-  /** `{ sha, authorLogin, treeSha }` of the commit the signed clearance names as head. */
+  /**
+   * The commit the signed clearance names as head.
+   * `authenticatedAuthor` (`{ login, source, accountType, appId?, signatureVerified? }`) is the only author identity.
+   * `emailDerivedLogin`, `gitAuthorName`, `gitAuthorEmail` and a legacy `authorLogin` are untrusted and cannot authorize.
+   */
   readonly headCommit?: unknown;
   /**
    * External fingerprint of the pinned reviewer key (`JULIUS_REVIEWER_KEY_SHA256`).

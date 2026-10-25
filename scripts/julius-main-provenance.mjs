@@ -17,7 +17,12 @@
  *
  * WHAT IT REFUSES TO USE. No timestamps, no branch-name conventions, no "the
  * most recent approval", no ancestry in place of identity. Every input is an
- * immutable git object id or an authenticated GitHub record.
+ * immutable git object id or an authenticated GitHub record. A git author name,
+ * a git author email, and the GitHub login derived from that email
+ * (`commit.author.login`) are not authenticated records: GitHub fills that
+ * login by matching the email, and anyone can set both. They never authorize.
+ * A missing authenticated identity, or a disagreement with those untrusted
+ * fields, fails closed.
  *
  * WHAT IT DOES NOT PROVE. This is a statement about ONE commit, not about the
  * branch's history. A branch reset to an earlier commit that was itself
@@ -77,6 +82,28 @@ export { NON_ATTESTING_IDENTITIES, REVIEW_AUTHORITY_LOGINS };
  * approve is self-certification with extra steps.
  */
 export const WORKER_AUTHOR_LOGINS = NON_ATTESTING_IDENTITIES;
+
+/**
+ * THE CODING WORKER'S GITHUB APP.
+ *
+ * `julius-worker[bot]` is the account GitHub records when App 4838349
+ * authenticates. The id is the App id, not the bot user id, and not something
+ * derived from an email.
+ */
+export const WORKER_APP_ID = 4838349;
+
+/**
+ * SOURCES THAT ARE AUTHENTICATED COMMIT IDENTITY.
+ *
+ * `pull-opener` is `pull.user` on the pull request the clearance names: the
+ * account that opened it. `app-installation` is that same App, and it has to
+ * carry `appId === WORKER_APP_ID`. `verified-signature` is a signature GitHub
+ * has already verified, with the signer login taken from that verification,
+ * never from the author email. `review-author` is an authenticated review
+ * actor and is intentionally absent here: a review author is not the author
+ * of the commit.
+ */
+export const AUTHENTICATED_COMMIT_SOURCES = Object.freeze(['pull-opener', 'app-installation', 'verified-signature']);
 
 /** The only verdicts. Anything not `provenant` blocks. */
 export const PROVENANCE_VERDICTS = Object.freeze(['provenant', 'unprovenanced', 'indeterminate']);
@@ -284,6 +311,68 @@ export const SIGNED_LANDING_GOVERNED = Object.freeze({ HARD_FORBIDDEN: SIGNED_LA
 const signedVerdict = (name, reason, extra = {}) => ({ state: 'decided', result: verdict(name, reason, { via: 'signed-landing', ...extra }) });
 
 /**
+ * WHO AUTHORED THE CLEARED HEAD, FROM AN AUTHENTICATED RECORD ONLY.
+ *
+ * Returns a refusal reason, or `null` when the head was authenticated as the
+ * coding worker. Git author name, git author email, and the login GitHub
+ * derived from that email cannot satisfy this. When those untrusted fields are
+ * present they must agree with the authenticated login; a disagreement or a
+ * missing authenticated record refuses.
+ *
+ * @param {unknown} head
+ * @returns {string | null}
+ */
+function clearedHeadIdentityProblem(head) {
+  const auth = head?.authenticatedAuthor;
+  if (auth === null || typeof auth !== 'object' || Array.isArray(auth)) {
+    return 'the cleared head has no authenticated GitHub identity; git author name, email, and the email-derived login are not identity and are not the coding worker';
+  }
+  const login = auth.login;
+  const source = auth.source;
+  if (typeof login !== 'string' || login === '' || typeof source !== 'string' || !AUTHENTICATED_COMMIT_SOURCES.includes(source)) {
+    return 'the cleared head authenticated identity is missing or is not from an authenticated GitHub source, so it is not the coding worker';
+  }
+  if (auth.accountType !== 'Bot') {
+    return `the authenticated account type is ${typeof auth.accountType === 'string' && auth.accountType !== '' ? auth.accountType : 'missing'}, not a GitHub App, so it is not the coding worker`;
+  }
+  if (auth.appId !== undefined && auth.appId !== WORKER_APP_ID) {
+    return `the App installation id is ${String(auth.appId)}, not ${WORKER_APP_ID}, so it is not the coding worker`;
+  }
+  if (source === 'app-installation' && auth.appId !== WORKER_APP_ID) {
+    return `the App installation id is missing, not ${WORKER_APP_ID}, so it is not the coding worker`;
+  }
+  if (source === 'verified-signature' && auth.signatureVerified !== true) {
+    return 'the cleared head has no verified signature, so its signer is not the coding worker';
+  }
+  if (!WORKER_AUTHOR_LOGINS.includes(login)) {
+    return `the cleared head was authenticated as ${login} via ${source}, not the coding worker`;
+  }
+  const verification = head.verification;
+  if (verification != null && typeof verification === 'object' && !Array.isArray(verification)) {
+    const reason = verification.reason;
+    if (reason !== undefined && reason !== 'unsigned' && verification.verified !== true) {
+      return `the cleared head signature does not verify (${typeof reason === 'string' && reason !== '' ? reason : 'unreadable'}), so it is not the coding worker`;
+    }
+    if (verification.verified === true) {
+      const signer = verification.signerLogin;
+      if (typeof signer !== 'string' || signer === '' || signer !== login) {
+        return `the verified signature signer is ${typeof signer === 'string' && signer !== '' ? signer : 'missing'}, not the authenticated identity ${login}, so it is not the coding worker`;
+      }
+    }
+  }
+  if (typeof head.emailDerivedLogin === 'string' && head.emailDerivedLogin !== login) {
+    return `the email-derived commit author ${head.emailDerivedLogin} does not match the authenticated identity ${login}; that login is not identity and the mismatch is not the coding worker`;
+  }
+  if (typeof head.gitAuthorName === 'string' && head.gitAuthorName !== '' && head.gitAuthorName !== login) {
+    return `the git author name does not match the authenticated identity ${login}; a free-text name is not identity and the mismatch is not the coding worker`;
+  }
+  if (typeof head.authorLogin === 'string' && head.authorLogin !== login) {
+    return `a supplied author login ${head.authorLogin} does not match the authenticated identity ${login}, so it is not the coding worker`;
+  }
+  return null;
+}
+
+/**
  * @returns {{state:'absent'} | {state:'decided', result: object}}
  * @param {object} input
  * @param {unknown} input.mainCommitMessage
@@ -292,7 +381,10 @@ const signedVerdict = (name, reason, extra = {}) => ({ state: 'decided', result:
  * @param {unknown} input.tipReviewerKeyPem  The same file read AT THE TIP: must be byte-identical to the parent's.
  * @param {unknown} input.changedPaths       Every path (and previous path) the tip changes against its parent.
  * @param {unknown} input.changedPathsComplete Strictly true: the list was read completely (fewer than 300 files, exactly one commit ahead).
- * @param {unknown} input.headCommit         `{ sha, authorLogin, treeSha }` of the commit the clearance names as `head`.
+ * @param {unknown} input.headCommit         The commit the clearance names as `head`: `{ sha, treeSha, authenticatedAuthor, emailDerivedLogin?, gitAuthorName?, gitAuthorEmail?, verification? }`.
+ *                                            `authenticatedAuthor` is `{ login, source, accountType, appId?, signatureVerified? }` from a GitHub-authenticated
+ *                                            record. `emailDerivedLogin` (`commit.author.login`), `gitAuthorName` and `gitAuthorEmail` are untrusted and are
+ *                                            read only to refuse a mismatch. A legacy `authorLogin` string is the same untrusted login and is not sufficient.
  */
 export function evaluateSignedLanding(input, tip) {
   const block = extractLandingBlock(input?.mainCommitMessage);
@@ -358,11 +450,13 @@ export function evaluateSignedLanding(input, tip) {
     return signedVerdict('unprovenanced', `the cleared head ${head.sha} carries tree ${head.treeSha}, not the signed tree ${clearance.tree}`, base);
   }
   // A governed landing names its method inside the signed clearance. Historical
-  // clearances do not, and those heads are still the coding worker's.
+  // clearances do not, and those heads are still the coding worker's, which
+  // only an authenticated GitHub record can establish (#397). A governed
+  // landing's identity is the governed App committer, checked below.
   const governedMethod = clearance['landing-method'] === 'squash' || clearance['landing-method'] === 'fast-forward';
-  if (!governedMethod && !WORKER_AUTHOR_LOGINS.includes(head?.authorLogin)) {
-    return signedVerdict('unprovenanced',
-      `the cleared head was authored by ${typeof head?.authorLogin === 'string' ? head.authorLogin : 'an unreadable identity'}, not the coding worker`, base);
+  if (!governedMethod) {
+    const identityProblem = clearedHeadIdentityProblem(head);
+    if (identityProblem !== null) return signedVerdict('unprovenanced', identityProblem, base);
   }
   // WHAT THE TIP CHANGES AGAINST ITS PARENT (d4b): read completely, or the answer is indeterminate.
   const changed = input?.changedPaths;
@@ -524,7 +618,7 @@ export function readFirstParentChain(gh, repo, tipSha, floorSha = TRUSTED_CHECKP
  * @param {unknown} [input.tipReviewerKeyPem] The key file read at the tip itself (must equal the parent's).
  * @param {unknown} [input.changedPaths] Paths the tip changes against its parent (signed landings are refused on governed paths).
  * @param {unknown} [input.changedPathsComplete] Strictly true when that list is complete.
- * @param {unknown} [input.headCommit] `{ sha, authorLogin, treeSha }` of the commit the clearance names.
+ * @param {unknown} [input.headCommit] The cleared head, including `authenticatedAuthor` (see `evaluateSignedLanding`). Git author name, email and `commit.author.login` are not this.
  */
 export function evaluateMainProvenance(input) {
   const branch = typeof input?.branch === 'string' && input.branch !== '' ? input.branch : 'main';
@@ -837,16 +931,44 @@ async function main(argv) {
         changedPaths = comparison.files.flatMap((file) => [file?.filename, file?.previous_filename].filter((path) => typeof path === 'string'));
         changedPathsComplete = true;
       }
-      const signedHead = parseSignedClearance(Buffer.from(landingBlock.clearanceB64, 'base64').toString('utf8'), repo).fields.head;
+      const signedFields = parseSignedClearance(Buffer.from(landingBlock.clearanceB64, 'base64').toString('utf8'), repo).fields;
+      const signedHead = signedFields.head;
       if (isSha(signedHead)) {
+        // `commit.author.login` is the account GitHub associated by email. It is recorded only so a
+        // disagreement with the authenticated opener can refuse. It is never copied into `authenticatedAuthor`.
         const commit = gh(`repos/${repo}/commits/${signedHead}`);
-        headCommit = { sha: commit?.sha, authorLogin: commit?.author?.login, treeSha: commit?.commit?.tree?.sha };
+        const signedPr = signedFields.pr;
+        const pull = /^[1-9][0-9]{0,6}$/u.test(signedPr ?? '') ? gh(`repos/${repo}/pulls/${signedPr}`) : undefined;
+        const opener = pull?.user;
+        const headIsThisPull = pull?.head?.sha === signedHead && typeof opener?.login === 'string' && opener.login !== '';
+        const verification = commit?.commit?.verification;
+        const appId = Number.isInteger(opener?.appId) ? opener.appId : (Number.isInteger(pull?.appId) ? pull.appId : undefined);
+        headCommit = {
+          sha: commit?.sha,
+          treeSha: commit?.commit?.tree?.sha,
+          authenticatedAuthor: headIsThisPull ? {
+            login: opener.login,
+            source: 'pull-opener',
+            accountType: opener.type,
+            ...(appId !== undefined ? { appId } : {}),
+          } : undefined,
+          emailDerivedLogin: typeof commit?.author?.login === 'string' ? commit.author.login : null,
+          gitAuthorName: typeof commit?.commit?.author?.name === 'string' ? commit.commit.author.name : null,
+          gitAuthorEmail: typeof commit?.commit?.author?.email === 'string' ? commit.commit.author.email : null,
+          verification: verification != null && typeof verification === 'object' ? {
+            verified: verification.verified === true,
+            reason: verification.reason,
+            signerLogin: typeof verification.signerLogin === 'string' ? verification.signerLogin
+              : (typeof verification.signer?.login === 'string' ? verification.signer.login : undefined),
+          } : undefined,
+        };
       }
     }
     const pullRequests = ghAll(`repos/${repo}/commits/${mainSha}/pulls`).map((pull) => ({
       number: pull?.number,
       merged: typeof pull?.merged_at === 'string',
       mergeCommitSha: pull?.merge_commit_sha,
+      // Authenticated opener (`pull.user.login`). Not `commit.author.login`, which GitHub derives from the author email.
       authorLogin: pull?.user?.login,
       headSha: pull?.head?.sha,
       headRef: pull?.head?.ref,
