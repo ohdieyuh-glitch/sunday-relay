@@ -1,5 +1,9 @@
 #include "WonderlandJuliusStream.h"
 #include "WonderlandCard.h"
+#include "Julius/WonderlandJuliusMissionSubsystem.h"
+#include "WonderlandJuliusMissionClient.h"
+
+#include <string>
 
 #include "CoreGlobals.h"
 #include "Dom/JsonObject.h"
@@ -452,6 +456,21 @@ UWonderlandJuliusSubsystem* UWonderlandJuliusStreamSubsystem::World() const
 {
 	const UGameInstance* Instance = GetGameInstance();
 	return Instance != nullptr ? Instance->GetSubsystem<UWonderlandJuliusSubsystem>() : nullptr;
+}
+
+bool UWonderlandJuliusStreamSubsystem::HandNativeSessionToMission(UWonderlandJuliusMissionSubsystem& Mission) const
+{
+	if (!IsPaired())
+	{
+		return false;
+	}
+	const FString Base = BridgeUrl();
+	if (Base.IsEmpty() || !WonderlandJuliusMissionClient::IsLoopbackBaseUrl(std::string(TCHAR_TO_UTF8(*Base))))
+	{
+		return false;
+	}
+	Mission.AdoptPairedSession(TokenSource->CurrentToken(), PairedProjectId);
+	return true;
 }
 
 FString UWonderlandJuliusStreamSubsystem::BridgeUrl() const

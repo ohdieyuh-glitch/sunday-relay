@@ -437,6 +437,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
 	void ToggleMenu();
 
+	/** K: the J1 paid-mission terminal. Opening it is using the terminal (NotifyTerminalUsed). Nothing is sent until Confirm. */
+	void ToggleJuliusMissionTerminal();
+	bool IsJuliusMissionTerminalOpen() const;
+	/** The open J1 panel, for wl.Julius.J1.Panel.* QA commands only; null when it was never opened. */
+	TSharedPtr<class SWonderlandJuliusMissionFlow> GetJuliusMissionPanel() const;
+
 	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
 	bool IsMissionsOpen() const;
 
@@ -864,7 +870,7 @@ public:
 	int32 GetJuliusRoleTypedCharacters(int32 Role) const;
 
 private:
-	enum class EOverlay : uint8 { None, Terminal, Map, Brain, Missions, Commands, Menu, Wallet, WonderWeb, Welcome, Profile, Social };
+	enum class EOverlay : uint8 { None, Terminal, Map, Brain, Missions, Commands, Menu, Wallet, WonderWeb, Welcome, Profile, Social, JuliusMission };
 
 	/** Wonderland Social: a profile panel's action, asked of the social service, its answer shown on the panel. */
 	void HandleSocialAction(const FString& OperationId, const FString& SubjectId);
@@ -1092,6 +1098,7 @@ private:
 	TSharedPtr<SWonderlandWorldMap> WorldMap;
 	TSharedPtr<SWonderlandProjectBrainPanel> BrainPanel;
 	TSharedPtr<SWonderlandCommandStation> CommandStation;
+	TSharedPtr<class SWonderlandJuliusMissionFlow> JuliusMissionPanel;
 	TSharedPtr<SWonderlandMissionsPanel> MissionsPanel;
 	TSharedPtr<SWonderlandMenuPanel> MenuPanel;
 	TSharedPtr<class SWonderlandWelcomePanel> WelcomePanel;

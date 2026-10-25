@@ -82,8 +82,11 @@ namespace WonderlandJuliusMissionClient
 	inline constexpr const char* DispatchRelativePath = "/relay-api/wonderland/julius/dispatch";
 	/** GET status. The body is the top-level status route, not a data wrapper. */
 	inline constexpr const char* StatusRelativePath = "/relay-api/wonderland/julius/status";
+	/** GET {prefix}{wljRunId}/result and {prefix}{wljRunId}/progress (BRIDGE #448). Bodies go to the flow panel unread here. */
+	inline constexpr const char* MissionReadRelativePrefix = "/relay-api/wonderland/julius/missions/";
 	inline constexpr std::uint64_t HeartbeatPeriodMs = 5000;
 	inline constexpr std::uint64_t StatusPollPeriodMs = 5000;
+	inline constexpr std::uint64_t MissionReadPeriodMs = 5000;
 	inline constexpr const char* UnmintedTraceName = "_unminted";
 
 	inline constexpr const char* LabelIdle = "no mission yet";
@@ -237,6 +240,11 @@ namespace WonderlandJuliusMissionClient
 		/** Resends the open pair only. Never mints. A closed, refused, or StillWaiting pair sends nothing. */
 		FCommandOutcome Resend();
 		FTickOutcome Tick();
+		/**
+		 * GET of the mission's /result (bProgress false) or /progress route under the current wlj_ run id.
+		 * Sends nothing with no run id, no native session, or a non-loopback base. Mints nothing, writes no trace.
+		 */
+		FCommandOutcome MissionReadRequest(bool bProgress) const;
 
 		void OnDispatchHttp(const FHttpResult& Http);
 		void OnStatusHttp(const FHttpResult& Http);

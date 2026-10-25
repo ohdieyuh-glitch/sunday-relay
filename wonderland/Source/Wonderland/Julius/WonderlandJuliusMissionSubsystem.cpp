@@ -1,7 +1,11 @@
 #include "WonderlandJuliusMissionSubsystem.h"
 
 #include "Wonderland/WonderlandJuliusMissionClient.h"
+#include "Wonderland/WonderlandJuliusStream.h"
 #include "WonderlandJuliusRandomBytes.h"
+
+#include "Engine/GameInstance.h"
+#include "Misc/Crc.h"
 
 #include "HttpModule.h"
 #include "Interfaces/IHttpRequest.h"
@@ -356,9 +360,134 @@ bool UWonderlandJuliusMissionSubsystem::HandleTick(float DeltaSeconds)
 	(void)DeltaSeconds;
 	if (Host == nullptr) { return true; }
 	ApplyConfiguredEndpoint();
+	SyncFromPairing();
 	const WonderlandJuliusMissionClient::FTickOutcome Outcome = Host->Session.Tick();
 	if (Outcome.bSend) { (void)FJuliusJ1Transport::Send(*this, Outcome.Request); }
+	PollMissionReads();
 	return true;
+}
+
+void UWonderlandJuliusMissionSubsystem::AdoptPairedSession(const FString& Token, const FString& InProjectId)
+{
+	if (Host == nullptr) { return; }
+	const uint32 Crc = FCrc::StrCrc32(*Token);
+	if (!bAdoptedToken || Crc != AdoptedTokenCrc)
+	{
+		bAdoptedToken = true;
+		AdoptedTokenCrc = Crc;
+		SetNativeSession(Token);
+	}
+	if (InProjectId != AdoptedProjectId)
+	{
+		AdoptedProjectId = InProjectId;
+		SetProjectId(InProjectId);
+		UE_LOG(LogJuliusJ1, Display, TEXT("project id adopted from pairing"));
+	}
+}
+
+void UWonderlandJuliusMissionSubsystem::SyncFromPairing()
+{
+	if (Host == nullptr) { return; }
+	const uint64 NowMs = Host->Clock.NowUtcMs();
+	if (NowMs < NextPairingSyncAtUtcMs) { return; }
+	NextPairingSyncAtUtcMs = NowMs + 1000;
+	UGameInstance* Instance = GetGameInstance();
+	const UWonderlandJuliusStreamSubsystem* Stream = Instance != nullptr ? Instance->GetSubsystem<UWonderlandJuliusStreamSubsystem>() : nullptr;
+	if (Stream != nullptr) { (void)Stream->HandNativeSessionToMission(*this); }
+}
+
+FString UWonderlandJuliusMissionSubsystem::ClientRunId() const
+{
+	if (Host == nullptr) { return FString(); }
+	return ToF(Host->Session.RunId());
+}
+
+bool UWonderlandJuliusMissionSubsystem::LatestMissionReads(
+	int32& OutResultStatus,
+	FString& OutResultJson,
+	int32& OutProgressStatus,
+	FString& OutProgressJson) const
+{
+	OutResultStatus = 0;
+	OutProgressStatus = 0;
+	OutResultJson.Reset();
+	OutProgressJson.Reset();
+	if (MissionReadRunId.IsEmpty() || MissionReadRunId != ClientRunId()) { return false; }
+	OutResultStatus = ResultRead.Status;
+	OutResultJson = ResultRead.Body;
+	OutProgressStatus = ProgressRead.Status;
+	OutProgressJson = ProgressRead.Body;
+	return true;
+}
+
+void UWonderlandJuliusMissionSubsystem::PollMissionReads()
+{
+	if (Host == nullptr) { return; }
+	const FString RunId = ClientRunId();
+	if (RunId.IsEmpty()) { return; }
+	if (RunId != MissionReadRunId)
+	{
+		// A new attempt: nothing read for the previous run carries over.
+		MissionReadRunId = RunId;
+		ResultRead = FMissionReadSlot();
+		ProgressRead = FMissionReadSlot();
+		NextMissionReadAtUtcMs = 0;
+	}
+	const uint64 NowMs = Host->Clock.NowUtcMs();
+	if (NowMs < NextMissionReadAtUtcMs) { return; }
+	NextMissionReadAtUtcMs = NowMs + WonderlandJuliusMissionClient::MissionReadPeriodMs;
+	SendMissionRead(false);
+	SendMissionRead(true);
+}
+
+void UWonderlandJuliusMissionSubsystem::SendMissionRead(bool bProgress)
+{
+	FMissionReadSlot& Slot = bProgress ? ProgressRead : ResultRead;
+	if (Slot.bInFlight) { return; }
+	const WonderlandJuliusMissionClient::FCommandOutcome Outcome = Host->Session.MissionReadRequest(bProgress);
+	if (!Outcome.bSent) { return; }
+	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Http = FHttpModule::Get().CreateRequest();
+	Http->SetVerb(ToF(Outcome.Request.Method));
+	Http->SetURL(ToF(Outcome.Request.Url));
+	for (const std::pair<std::string, std::string>& Header : Outcome.Request.Headers)
+	{
+		Http->SetHeader(ToF(Header.first), ToF(Header.second));
+	}
+	Http->SetDelegateThreadPolicy(EHttpRequestDelegateThreadPolicy::CompleteOnGameThread);
+	const FString ForRunId = MissionReadRunId;
+	TWeakObjectPtr<UWonderlandJuliusMissionSubsystem> Weak(this);
+	Http->OnProcessRequestComplete().BindLambda(
+		[Weak, bProgress, ForRunId](FHttpRequestPtr /*Request*/, FHttpResponsePtr Response, bool bConnected)
+		{
+			if (!Weak.IsValid()) { return; }
+			Weak->CompleteMissionRead(bProgress, ForRunId, bConnected, Response);
+		});
+	Slot.bInFlight = Http->ProcessRequest();
+}
+
+void UWonderlandJuliusMissionSubsystem::CompleteMissionRead(
+	bool bProgress,
+	const FString& ForRunId,
+	bool bConnected,
+	const TSharedPtr<IHttpResponse, ESPMode::ThreadSafe>& Response)
+{
+	if (ForRunId != MissionReadRunId) { return; }
+	FMissionReadSlot& Slot = bProgress ? ProgressRead : ResultRead;
+	Slot.bInFlight = false;
+	if (!bConnected || !Response.IsValid())
+	{
+		// A transport miss keeps the last answer; it is not a new state.
+		return;
+	}
+	const int32 Status = Response->GetResponseCode();
+	const FString Body = Response->GetContentAsString();
+	if (Status != Slot.Status || Body != Slot.Body)
+	{
+		UE_LOG(LogJuliusJ1, Display, TEXT("{\"event\":\"mission_read\",\"route\":\"%s\",\"wlj_run_id\":\"%s\",\"status\":%d,\"bytes\":%d}"),
+			bProgress ? TEXT("progress") : TEXT("result"), *ForRunId, Status, Body.Len());
+	}
+	Slot.Status = Status;
+	Slot.Body = Body;
 }
 
 void UWonderlandJuliusMissionSubsystem::CompleteHttp(

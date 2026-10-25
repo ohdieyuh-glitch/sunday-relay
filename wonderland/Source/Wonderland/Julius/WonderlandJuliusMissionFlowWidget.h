@@ -4,11 +4,9 @@
 // calls UWonderlandJuliusMissionSubsystem::DispatchMission, the same door as wl.Julius.J1.Dispatch.
 // It does not mint a run id, classify a status body, or invent a result.
 //
-// NOT VERIFIED IN UNREAL. This file was written where UE 5.8 is not installed. Still to compile there:
-//   - UMG bindings, if a Blueprint wraps this Slate (there is no UCLASS here)
-//   - the in-world terminal's input, which must call NotifyTerminalUsed
-//   - adding the widget to the viewport from the existing UI owner
-//   - focus and the close chord beside the companion terminal and the live terminal
+// Owned by UWonderlandUiSubsystem as EOverlay::JuliusMission (key K, or wl.Julius.J1.Panel.Open). Opening the
+// overlay is using the terminal: the owner calls NotifyTerminalUsed. Escape and Close ask the owner to remove it.
+// Compiled in UE 5.8.2 Win64 (wonderland/j1-inworld-e2e-20261025).
 #pragma once
 
 #include "CoreMinimal.h"
@@ -22,10 +20,23 @@ class WONDERLAND_API SWonderlandJuliusMissionFlow : public SCompoundWidget
 public:
 	SLATE_BEGIN_ARGS(SWonderlandJuliusMissionFlow) {}
 		SLATE_ARGUMENT(TWeakObjectPtr<UWonderlandJuliusMissionSubsystem>, Session)
+		/** Close button and Escape. The UI owner removes the panel; closing never cancels a dispatched run. */
+		SLATE_EVENT(FSimpleDelegate, OnRequestClose)
 	SLATE_END_ARGS()
 
 	void Construct(const FArguments& InArgs);
 	virtual void Tick(const FGeometry& AllottedGeometry, double InCurrentTime, float InDeltaTime) override;
+	virtual bool SupportsKeyboardFocus() const override { return true; }
+	virtual FReply OnKeyDown(const FGeometry& MyGeometry, const FKeyEvent& InKeyEvent) override;
+
+	/**
+	 * QA door (wl.Julius.J1.Panel.*): the same handlers the buttons call, so a headless run drives the
+	 * exact path a player clicks. Each returns false when that button is not on screen.
+	 */
+	bool QaPick(const FString& MissionId);
+	bool QaConfirm();
+	/** One line: step, progress line, result line. For the QA log, never the token. */
+	FString QaDescribe() const;
 
 	/** The in-world terminal calls this when the player uses it. */
 	void NotifyTerminalUsed();
@@ -39,6 +50,8 @@ public:
 	void SetMissionResponses(int32 ResultStatus, const FString& ResultJson, int32 ProgressStatus, const FString& ProgressJson);
 
 private:
+	/** Takes the subsystem's latest /result and /progress answers when they changed. */
+	void PullMissionReads();
 	void PullWrapper();
 	void Rebuild();
 	FReply UseTerminal();
@@ -47,9 +60,11 @@ private:
 	FReply ReturnToChoice();
 
 	TWeakObjectPtr<UWonderlandJuliusMissionSubsystem> Session;
+	FSimpleDelegate OnRequestClose;
 	WonderlandJuliusMissionFlow::FMissionFlow Flow;
 	TSharedPtr<class SVerticalBox> Body;
 	FString ShownKey;
 	bool bHaveMissionRead = false;
 	WonderlandJuliusMissionFlow::FBridgeMissionResultClient MissionRead;
+	FString PulledReadKey;
 };

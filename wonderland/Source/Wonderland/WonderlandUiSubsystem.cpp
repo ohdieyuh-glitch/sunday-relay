@@ -39,6 +39,8 @@
 #include "WonderlandEntitlements.h"
 #include "WonderlandSidekicks.h"
 #include "WonderlandJuliusConnectPanel.h"
+#include "Julius/WonderlandJuliusMissionFlowWidget.h"
+#include "Julius/WonderlandJuliusMissionSubsystem.h"
 #include "WonderlandWonderWebBrowse.h"
 #include "WonderlandWonderWebBrowserPanel.h"
 #include "WonderlandWonderWebLive.h"
@@ -256,6 +258,8 @@ void UWonderlandUiSubsystem::Attach(APlayerController* Controller)
 	// THE BOTTOM STRIP'S KEYS, the letters its tiles show. INVENTORY's old I is deliberately not bound to anything.
 	UiInput->BindKey(EKeys::J, IE_Pressed, this, &UWonderlandUiSubsystem::ToggleMissions);
 	UiInput->BindKey(EKeys::C, IE_Pressed, this, &UWonderlandUiSubsystem::ToggleCommandStation);
+	// K: the J1 paid-mission terminal (no other binding uses K).
+	UiInput->BindKey(EKeys::K, IE_Pressed, this, &UWonderlandUiSubsystem::ToggleJuliusMissionTerminal);
 	UiInput->BindKey(EKeys::Tab, IE_Pressed, this, &UWonderlandUiSubsystem::ToggleMenu);
 	UiInput->BindKey(EKeys::LeftAlt, IE_Pressed, this, &UWonderlandUiSubsystem::BeginPointing);
 	UiInput->BindKey(EKeys::LeftAlt, IE_Released, this, &UWonderlandUiSubsystem::EndPointing);
@@ -805,6 +809,24 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 		RefreshBrain();
 		Panel = BrainPanel;
 		Focus = BrainPanel;
+		ZOrder = 58;
+	}
+	else if (Which == EOverlay::JuliusMission)
+	{
+		if (!JuliusMissionPanel.IsValid())
+		{
+			UGameInstance* Instance = Controller->GetGameInstance();
+			SAssignNew(JuliusMissionPanel, SWonderlandJuliusMissionFlow)
+				.Session(TWeakObjectPtr<UWonderlandJuliusMissionSubsystem>(Instance != nullptr ? Instance->GetSubsystem<UWonderlandJuliusMissionSubsystem>() : nullptr))
+				.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } });
+			// The one J1 mission BRIDGE admits (contract.json has no title; the id is shown as itself).
+			JuliusMissionPanel->SetOffers({ TPair<FString, FString>(TEXT("julius-inworld-data-1"), TEXT("julius-inworld-data-1")) });
+		}
+		// Opening the terminal is using it. A second open after a dispatch keeps the run on screen.
+		JuliusMissionPanel->NotifyTerminalUsed();
+		UE_LOG(LogWonderlandUi, Display, TEXT("WLUI julius mission terminal opened"));
+		Panel = JuliusMissionPanel;
+		Focus = JuliusMissionPanel;
 		ZOrder = 58;
 	}
 	else if (Which == EOverlay::Commands)
@@ -5697,6 +5719,7 @@ const TCHAR* UWonderlandUiSubsystem::OverlayName(EOverlay Which)
 	case EOverlay::Brain:    return TEXT("project brain");
 	case EOverlay::Missions: return TEXT("missions");
 	case EOverlay::Commands: return TEXT("command station");
+	case EOverlay::JuliusMission: return TEXT("julius mission terminal");
 	case EOverlay::Menu:     return TEXT("menu");
 	case EOverlay::Wallet:   return TEXT("wallet");
 	case EOverlay::WonderWeb: return TEXT("wonder web");
@@ -5717,6 +5740,7 @@ TSharedPtr<SWidget> UWonderlandUiSubsystem::OverlayWidget(EOverlay Which) const
 	case EOverlay::Brain:    return BrainPanel;
 	case EOverlay::Missions: return MissionsPanel;
 	case EOverlay::Commands: return CommandStation;
+	case EOverlay::JuliusMission: return JuliusMissionPanel;
 	case EOverlay::Menu:     return MenuPanel;
 	case EOverlay::Wallet:   return WalletPanel;
 	case EOverlay::WonderWeb: return WonderWebLayer;
@@ -5781,6 +5805,110 @@ void UWonderlandUiSubsystem::ToggleOverlay(EOverlay Which)
 
 void UWonderlandUiSubsystem::ToggleMissions() { ToggleOverlay(EOverlay::Missions); }
 void UWonderlandUiSubsystem::ToggleCommandStation() { ToggleOverlay(EOverlay::Commands); }
+void UWonderlandUiSubsystem::ToggleJuliusMissionTerminal() { ToggleOverlay(EOverlay::JuliusMission); }
+bool UWonderlandUiSubsystem::IsJuliusMissionTerminalOpen() const { return Open == EOverlay::JuliusMission; }
+TSharedPtr<SWonderlandJuliusMissionFlow> UWonderlandUiSubsystem::GetJuliusMissionPanel() const { return JuliusMissionPanel; }
+
+namespace WonderlandJuliusMissionQa
+{
+	UWonderlandUiSubsystem* Ui(UWorld* World)
+	{
+		APlayerController* Pc = World != nullptr ? World->GetFirstPlayerController() : nullptr;
+		ULocalPlayer* Player = Pc != nullptr ? Pc->GetLocalPlayer() : nullptr;
+		return Player != nullptr ? Player->GetSubsystem<UWonderlandUiSubsystem>() : nullptr;
+	}
+
+	void Open(const TArray<FString>& Args, UWorld* World, FOutputDevice& Ar)
+	{
+		UWonderlandUiSubsystem* Self = Ui(World);
+		if (Self == nullptr) { Ar.Log(TEXT("wl.Julius.J1.Panel.Open: no UI")); return; }
+		if (!Self->IsJuliusMissionTerminalOpen()) { Self->ToggleJuliusMissionTerminal(); }
+		Ar.Log(Self->IsJuliusMissionTerminalOpen() ? TEXT("julius mission terminal open") : TEXT("julius mission terminal not open"));
+	}
+
+	void Pick(const TArray<FString>& Args, UWorld* World, FOutputDevice& Ar)
+	{
+		UWonderlandUiSubsystem* Self = Ui(World);
+		const TSharedPtr<SWonderlandJuliusMissionFlow> Panel = Self != nullptr ? Self->GetJuliusMissionPanel() : nullptr;
+		if (!Panel.IsValid() || Args.Num() != 1) { Ar.Log(TEXT("usage: wl.Julius.J1.Panel.Pick <missionId> (open the terminal first)")); return; }
+		Ar.Log(Panel->QaPick(Args[0]) ? TEXT("picked; confirm screen shown") : TEXT("pick refused"));
+	}
+
+	void Confirm(const TArray<FString>& Args, UWorld* World, FOutputDevice& Ar)
+	{
+		UWonderlandUiSubsystem* Self = Ui(World);
+		const TSharedPtr<SWonderlandJuliusMissionFlow> Panel = Self != nullptr ? Self->GetJuliusMissionPanel() : nullptr;
+		if (!Panel.IsValid()) { Ar.Log(TEXT("wl.Julius.J1.Panel.Confirm: open the terminal first")); return; }
+		Ar.Log(Panel->QaConfirm() ? TEXT("confirm pressed") : TEXT("confirm not on screen"));
+	}
+
+	void Describe(const TArray<FString>& Args, UWorld* World, FOutputDevice& Ar)
+	{
+		UWonderlandUiSubsystem* Self = Ui(World);
+		const TSharedPtr<SWonderlandJuliusMissionFlow> Panel = Self != nullptr ? Self->GetJuliusMissionPanel() : nullptr;
+		const FString Line = Panel.IsValid() ? Panel->QaDescribe() : FString(TEXT("panel never opened"));
+		UE_LOG(LogWonderlandUi, Display, TEXT("WLJ1PANEL %s"), *Line);
+		Ar.Log(Line);
+	}
+
+	/** After N seconds: log a WLJ1PANEL line and save an in-engine screenshot WITH the UI to Saved/Screenshots/WLJ1/<name>.png. */
+	void ShotIn(const TArray<FString>& Args, UWorld* World, FOutputDevice& Ar)
+	{
+		if (Args.Num() != 2 || !Args[1].IsNumeric()) { Ar.Log(TEXT("usage: wl.Julius.J1.Panel.ShotIn <name> <seconds>")); return; }
+		const FString Name = FPaths::MakeValidFileName(Args[0]);
+		const float Delay = FMath::Max(0.0f, FCString::Atof(*Args[1]));
+		const TWeakObjectPtr<UWorld> WeakWorld(World);
+		FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([WeakWorld, Name](float) -> bool
+		{
+			UWorld* Live = WeakWorld.Get();
+			UWonderlandUiSubsystem* Self = Ui(Live);
+			const TSharedPtr<SWonderlandJuliusMissionFlow> Panel = Self != nullptr ? Self->GetJuliusMissionPanel() : nullptr;
+			const FString Path = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots") / TEXT("WLJ1") / (Name + TEXT(".png")));
+			UE_LOG(LogWonderlandUi, Display, TEXT("WLJ1PANEL shot=%s %s"), *Name, Panel.IsValid() ? *Panel->QaDescribe() : TEXT("panel never opened"));
+			if (!Panel.IsValid()) { return false; }
+			// OFFSCREEN, the map capture's way: the live panel widget drawn twice into a render target and read back, so
+			// the evidence does not depend on the game window being focused or even visible.
+			const int32 Width = 900;
+			const int32 Height = 760;
+			UTextureRenderTarget2D* Target = FWidgetRenderer::CreateTargetFor(FVector2D(Width, Height), TF_Bilinear, true);
+			FTextureRenderTargetResource* Resource = Target != nullptr ? Target->GameThread_GetRenderTargetResource() : nullptr;
+			if (Resource == nullptr) { UE_LOG(LogWonderlandUi, Warning, TEXT("WLJ1PANEL shot_error=no_render_target")); return false; }
+			FWidgetRenderer Renderer(true, true);
+			Renderer.DrawWidget(Target, Panel.ToSharedRef(), 1.0f, FVector2D(Width, Height), 0.0f);
+			Renderer.DrawWidget(Target, Panel.ToSharedRef(), 1.0f, FVector2D(Width, Height), 0.016f);
+			TArray<FColor> Pixels;
+			FReadSurfaceDataFlags ReadFlags(RCM_UNorm, CubeFace_MAX);
+			ReadFlags.SetLinearToGamma(false);
+			if (!Resource->ReadPixels(Pixels, ReadFlags) || Pixels.Num() != Width * Height)
+			{
+				UE_LOG(LogWonderlandUi, Warning, TEXT("WLJ1PANEL shot_error=read_back"));
+				return false;
+			}
+			for (FColor& Pixel : Pixels) { Pixel.A = 255; }
+			IFileManager::Get().MakeDirectory(*FPaths::GetPath(Path), true);
+			const bool bSaved = FImageUtils::SaveImageByExtension(*Path, FImageView(Pixels.GetData(), Width, Height));
+			UE_LOG(LogWonderlandUi, Display, TEXT("WLJ1PANEL shot_path=%s saved=%d"), *Path, bSaved ? 1 : 0);
+			return false;
+		}), Delay);
+		Ar.Log(FString::Printf(TEXT("shot %s in %.1fs"), *Name, Delay));
+	}
+
+	FAutoConsoleCommandWithWorldArgsAndOutputDevice GShotIn(TEXT("wl.Julius.J1.Panel.ShotIn"),
+		TEXT("Usage: wl.Julius.J1.Panel.ShotIn <name> <seconds>. Logs the panel line and saves a UI screenshot under Saved/Screenshots/WLJ1."),
+		FConsoleCommandWithWorldArgsAndOutputDeviceDelegate::CreateStatic(&ShotIn));
+	FAutoConsoleCommandWithWorldArgsAndOutputDevice GOpen(TEXT("wl.Julius.J1.Panel.Open"),
+		TEXT("Open the J1 paid-mission terminal (same as K). Sends nothing."),
+		FConsoleCommandWithWorldArgsAndOutputDeviceDelegate::CreateStatic(&Open));
+	FAutoConsoleCommandWithWorldArgsAndOutputDevice GPick(TEXT("wl.Julius.J1.Panel.Pick"),
+		TEXT("Press the mission button on the J1 terminal. Usage: wl.Julius.J1.Panel.Pick <missionId>. Sends nothing."),
+		FConsoleCommandWithWorldArgsAndOutputDeviceDelegate::CreateStatic(&Pick));
+	FAutoConsoleCommandWithWorldArgsAndOutputDevice GConfirm(TEXT("wl.Julius.J1.Panel.Confirm"),
+		TEXT("Press Confirm on the J1 paid-mission screen: the same dispatch as the button (admission only; BRIDGE holds it)."),
+		FConsoleCommandWithWorldArgsAndOutputDeviceDelegate::CreateStatic(&Confirm));
+	FAutoConsoleCommandWithWorldArgsAndOutputDevice GDescribe(TEXT("wl.Julius.J1.Panel.Describe"),
+		TEXT("Log one WLJ1PANEL line: step, progress and result as the panel shows them."),
+		FConsoleCommandWithWorldArgsAndOutputDeviceDelegate::CreateStatic(&Describe));
+}
 void UWonderlandUiSubsystem::ToggleMenu() { ToggleOverlay(EOverlay::Menu); }
 bool UWonderlandUiSubsystem::IsMissionsOpen() const { return Open == EOverlay::Missions; }
 bool UWonderlandUiSubsystem::IsCommandStationOpen() const { return Open == EOverlay::Commands; }
