@@ -6546,6 +6546,7 @@ void UWonderlandUiSubsystem::MountHudFurniture()
 					]
 				]
 			]
+		]
 			// THE JULIUS LIVE CARD (founder P0 2026-10-25): after the founder starts the paid mission in the terminal, the
 			// terminal steps aside and the run is watched HERE, in the world: the exact wlj_, the server's LIVE flag, what runs
 			// now and how far it is. Same wording as the terminal (the flow core); never shown for an unstarted run.
