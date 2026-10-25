@@ -124,7 +124,7 @@ export interface JuliusMissionArchiveEvidence {
 
 /**
  * One C.A.R.D. peer. Repair is a `stage` on that peer, not a fourth role.
- * This reader does not supply `spanId` or `traceparent`. The bridge derives both.
+ * This reader does not supply `spanId` or `traceparent`: both are null, and the bridge does not fill them.
  */
 export interface JuliusMissionPhaseEvidence {
   readonly role: JuliusMissionPhaseRole;
