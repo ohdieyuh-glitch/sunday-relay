@@ -54,6 +54,16 @@ void UWonderlandCompanionClient::Start(const FString& J1RelayBaseUrl, const FStr
 	Changed();
 }
 
+void UWonderlandCompanionClient::AdoptSession(const FString& Token)
+{
+	SessionToken = Token;
+}
+
+void UWonderlandCompanionClient::DropSession()
+{
+	SessionToken.Reset();
+}
+
 void UWonderlandCompanionClient::RefreshMissionAgents(const FString& WljRunId, const FString& ProjectId)
 {
 	const std::string Wlj = ToUtf8(WljRunId);
@@ -123,9 +133,11 @@ void UWonderlandCompanionClient::Resend(const FString& AgentId)
 void UWonderlandCompanionClient::StartChatRequest(const FString& AgentId, const FRelayRequest& In)
 {
 	const std::string Id = ToUtf8(AgentId);
+	if (SessionToken.IsEmpty()) { return; }
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
 	Request->SetVerb(TEXT("POST"));
 	Request->SetURL(FromUtf8(In.Url));
+	Request->SetHeader(TEXT("Authorization"), FString::Printf(TEXT("Relay-Session %s"), *SessionToken));
 	Request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
 	Request->SetHeader(TEXT("Accept"), TEXT("text/event-stream"));
 	Request->SetHeader(TEXT("x-relay-idempotency-key"), FromUtf8(In.IdempotencyKey));
@@ -177,10 +189,11 @@ const FTurnHistory* UWonderlandCompanionClient::GetHistory(const FString& AgentI
 
 void UWonderlandCompanionClient::Issue(const FRelayRequest& In, TFunction<void(int32, const FString&, const TArray<uint8>&)> OnDone)
 {
-	if (In.Method.empty()) { return; }
+	if (In.Method.empty() || SessionToken.IsEmpty()) { return; }
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
 	Request->SetVerb(FromUtf8(In.Method));
 	Request->SetURL(FromUtf8(In.Url));
+	Request->SetHeader(TEXT("Authorization"), FString::Printf(TEXT("Relay-Session %s"), *SessionToken));
 	if (!In.IdempotencyKey.empty()) { Request->SetHeader(TEXT("x-relay-idempotency-key"), FromUtf8(In.IdempotencyKey)); }
 	if (!In.Body.empty())
 	{

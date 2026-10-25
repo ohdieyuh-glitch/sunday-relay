@@ -45,6 +45,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
 	void Start(const FString& J1RelayBaseUrl, const FString& ProjectId);
 
+	/**
+	 * O6 (BRIDGE juliusLoopbackGuard on every companion route): the SAME paired native session the J1 subsystem adopted,
+	 * handed over by UWonderlandJuliusMissionSubsystem only -- memory only, never logged, never returned. Every request then
+	 * carries "authorization: Relay-Session <token>"; with no session nothing is sent (a request would only be refused).
+	 */
+	void AdoptSession(const FString& Token);
+	void DropSession();
+	bool HasSession() const { return !SessionToken.IsEmpty(); }
+
 	/** v0.2: GET the mission companion route and upsert its agents[] slots (per slot, fail closed per slot). */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
 	void RefreshMissionAgents(const FString& WljRunId, const FString& ProjectId);
@@ -94,6 +103,8 @@ private:
 	WonderlandCompanionLogic::FIdempotencyKeyMinter KeyMinter;
 	/** One chat stream per agent, keyed by agentId. */
 	TMap<FString, TSharedPtr<IHttpRequest, ESPMode::ThreadSafe>> ChatRequests;
+	/** O6: the paired native session (memory only). */
+	FString SessionToken;
 	/** Last companion read's run and its parsed traceId (ParseCompanionMission). */
 	FString MissionTraceWljRunId;
 	FString MissionTraceId;

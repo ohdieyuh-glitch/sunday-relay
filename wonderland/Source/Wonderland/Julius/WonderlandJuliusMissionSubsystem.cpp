@@ -2,6 +2,7 @@
 
 #include "Wonderland/WonderlandJuliusMissionClient.h"
 #include "Wonderland/WonderlandJuliusStream.h"
+#include "Wonderland/WonderlandCompanionClient.h"
 #include "WonderlandJuliusRandomBytes.h"
 
 #include "Engine/GameInstance.h"
@@ -380,17 +381,21 @@ void UWonderlandJuliusMissionSubsystem::AdoptPairedSession(const FString& Token,
 {
 	if (Host == nullptr) { return; }
 	const uint32 Crc = FCrc::StrCrc32(*Token);
+	UWonderlandCompanionClient* Companion = GetGameInstance() != nullptr ? GetGameInstance()->GetSubsystem<UWonderlandCompanionClient>() : nullptr;
 	if (!bAdoptedToken || Crc != AdoptedTokenCrc)
 	{
 		bAdoptedToken = true;
 		AdoptedTokenCrc = Crc;
 		SetNativeSession(Token);
+		// The companions ride the same session to the same exact bridge (#436 demo; companion O6).
+		if (Companion != nullptr) { Companion->AdoptSession(Token); }
 	}
 	if (InProjectId != AdoptedProjectId)
 	{
 		AdoptedProjectId = InProjectId;
 		SetProjectId(InProjectId);
 		UE_LOG(LogJuliusJ1, Display, TEXT("project id adopted from pairing"));
+		if (Companion != nullptr) { Companion->Start(EndpointBase(), InProjectId); }
 	}
 }
 
@@ -413,6 +418,10 @@ void UWonderlandJuliusMissionSubsystem::DropAdoptedSession(const TCHAR* Why)
 	bAdoptedToken = false;
 	AdoptedTokenCrc = 0;
 	Host->Session.SetNativeSessionToken(std::string());
+	if (UWonderlandCompanionClient* Companion = GetGameInstance() != nullptr ? GetGameInstance()->GetSubsystem<UWonderlandCompanionClient>() : nullptr)
+	{
+		Companion->DropSession();
+	}
 	UE_LOG(LogJuliusJ1, Display, TEXT("native session dropped: %s"), Why);
 }
 
@@ -481,6 +490,11 @@ void UWonderlandJuliusMissionSubsystem::PollMissionReads()
 	bFinalMissionReadSent = bTerminal;
 	SendMissionRead(false);
 	SendMissionRead(true);
+	// The agents on THIS mission (#447 companion route), on the same cadence and only with a session.
+	if (UWonderlandCompanionClient* Companion = GetGameInstance() != nullptr ? GetGameInstance()->GetSubsystem<UWonderlandCompanionClient>() : nullptr)
+	{
+		if (Companion->HasSession() && !AdoptedProjectId.IsEmpty()) { Companion->RefreshMissionAgents(RunId, AdoptedProjectId); }
+	}
 }
 
 bool UWonderlandJuliusMissionSubsystem::CanStartNewMission() const
