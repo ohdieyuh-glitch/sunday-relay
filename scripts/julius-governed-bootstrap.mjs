@@ -31,6 +31,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { branchRulesProblems, governedCommitBody } from '../.github/julius-landing/governed-land.mjs';
 import {
   CHECKPOINT_ATTESTATION_DIR,
+  FOUNDER_APPROVAL_KEY_PATH,
   TRUSTED_CHECKPOINT_SHA,
   TRUSTED_COMPUTING_BASE,
   attestationShapeProblem,
@@ -52,7 +53,7 @@ export const ATTESTED_RANGE_CAP = 250;
 export const INSTALLER_COMMIT_MESSAGE = [
   'Add the signed checkpoint attestation.',
   '',
-  'Parent is the attested checkpoint. This commit replaces the checkpoint directory with only that attestation and its signature.',
+  'Parent is the attested checkpoint. This commit replaces the checkpoint directory with only that attestation, its reviewer signature and its founder-approval signature.',
   '',
 ].join('\n');
 
@@ -66,6 +67,7 @@ export function attestationRelPaths(targetSha) {
   return {
     txt: `${CHECKPOINT_ATTESTATION_DIR}/${targetSha}.txt`,
     sig: `${CHECKPOINT_ATTESTATION_DIR}/${targetSha}.sig`,
+    founder: `${CHECKPOINT_ATTESTATION_DIR}/${targetSha}.founder.sig`,
   };
 }
 
@@ -141,7 +143,7 @@ export function evaluateGovernedBootstrap(input) {
   const parsed = typeof text === 'string' && text !== '' ? parseCheckpointAttestation(text) : null;
   const existing = Array.isArray(input?.existingCheckpointNames) ? input.existingCheckpointNames : null;
   if (existing === null) problems.push('the checkpoint directory at the target could not be read');
-  else if (existing.some((name) => !/^[0-9a-f]{40}\.(txt|sig)$/u.test(name))) {
+  else if (existing.some((name) => !/^[0-9a-f]{40}\.(txt|sig|founder\.sig)$/u.test(name))) {
     problems.push(`the checkpoint directory at the target holds files that are not attestations: ${existing.join(', ')}`);
   }
   if (!parsed || parsed.problems.length > 0) problems.push('the checkpoint attestation was not verified');
@@ -152,8 +154,12 @@ export function evaluateGovernedBootstrap(input) {
       pem: input?.publicKeyPem,
       treeHashes: input?.treeHashes,
       now: input?.now,
+      founderSignatureB64: input?.attestationFounderSignatureB64,
+      founderPem: input?.founderPublicKeyPem,
+      founderAnchor: input?.founderAnchor,
     });
-    if (verified.length > 0) problems.push('the checkpoint attestation was not verified');
+    // H1: the attestation needs the reviewer and the founder-approval signature over the same bytes.
+    if (verified.length > 0) problems.push('the checkpoint attestation was not verified', ...verified.slice(1));
     if (typeof target === 'string' && SHA.test(target)) {
       const plan = installerDiffPlan(target, existing ?? []);
       const after = plan.added.map((path) => path.slice(CHECKPOINT_ATTESTATION_DIR.length + 1));
@@ -186,6 +192,9 @@ export function evaluateGovernedBootstrap(input) {
   }
   if (input?.publicKeySha256 && input?.treeHashes?.[PUB_PATH] !== input.publicKeySha256) {
     problems.push('the reviewer key is not the blob on the target');
+  }
+  if (input?.founderPublicKeySha256 && input?.treeHashes?.[FOUNDER_APPROVAL_KEY_PATH] !== input.founderPublicKeySha256) {
+    problems.push('the founder-approval key is not the blob on the target');
   }
   problems.push(...branchRulesProblems(input?.liveRules, input?.snapshot, input?.appId));
   const botId = typeof input?.botId === 'string' ? input.botId.trim() : '';
@@ -253,13 +262,17 @@ export async function runBootstrap({ argv = [], env = {}, request, readFile, now
   if (typeof targetTreeArg !== 'string' || !SHA.test(targetTreeArg)) problems.push('--target-tree is required and must be the full 40-hex tree of the target');
   const attestationPath = argValue(argv, '--attestation');
   const signaturePath = argValue(argv, '--signature');
+  const founderSignaturePath = argValue(argv, '--founder-signature');
   let attestationText = '';
   let attestationSignatureB64 = '';
-  if (typeof attestationPath !== 'string' || typeof signaturePath !== 'string') problems.push('the attestation and signature paths are required');
-  else {
+  let attestationFounderSignatureB64 = '';
+  if (typeof attestationPath !== 'string' || typeof signaturePath !== 'string' || typeof founderSignaturePath !== 'string') {
+    problems.push('the attestation, signature and founder-signature paths are required');
+  } else {
     try {
       attestationText = read(attestationPath);
       attestationSignatureB64 = read(signaturePath).trim();
+      attestationFounderSignatureB64 = read(founderSignaturePath).trim();
     } catch {
       problems.push('the attestation files could not be read');
     }
@@ -268,6 +281,8 @@ export async function runBootstrap({ argv = [], env = {}, request, readFile, now
   let snapshotText = '';
   let snapshot = null;
   try { publicKeyPem = read(join(ROOT, '..', PUB_PATH)); } catch { problems.push('the reviewer key could not be read'); }
+  let founderPublicKeyPem = '';
+  try { founderPublicKeyPem = read(join(ROOT, '..', FOUNDER_APPROVAL_KEY_PATH)); } catch { founderPublicKeyPem = ''; }
   try {
     snapshotText = read(join(ROOT, '..', SNAPSHOT_PATH));
     snapshot = JSON.parse(snapshotText);
@@ -313,7 +328,11 @@ export async function runBootstrap({ argv = [], env = {}, request, readFile, now
     compare: compareResponse.status === 200 ? compareResponse.body : null,
     attestationText,
     attestationSignatureB64,
+    attestationFounderSignatureB64,
     publicKeyPem,
+    founderPublicKeyPem,
+    founderAnchor: env.JULIUS_FOUNDER_APPROVAL_KEY_SHA256,
+    founderPublicKeySha256: founderPublicKeyPem === '' ? undefined : sha256Text(founderPublicKeyPem),
     externalAnchor: env.JULIUS_REVIEWER_KEY_SHA256,
     treeHashes,
     existingCheckpointNames,
@@ -351,6 +370,7 @@ export async function runBootstrap({ argv = [], env = {}, request, readFile, now
   try {
     const txtBlob = await blobFor(attestationText);
     const sigBlob = await blobFor(`${attestationSignatureB64}\n`);
+    const founderBlob = await blobFor(`${attestationFounderSignatureB64}\n`);
     const treeResponse = await github(request, token, `/repos/${REPO}/git/trees`, {
       method: 'POST',
       body: JSON.stringify({
@@ -359,6 +379,7 @@ export async function runBootstrap({ argv = [], env = {}, request, readFile, now
           ...plan.removed.map((path) => ({ path, mode: '100644', type: 'blob', sha: null })),
           { path: paths.txt, mode: '100644', type: 'blob', sha: txtBlob },
           { path: paths.sig, mode: '100644', type: 'blob', sha: sigBlob },
+          { path: paths.founder, mode: '100644', type: 'blob', sha: founderBlob },
         ],
       }),
     });

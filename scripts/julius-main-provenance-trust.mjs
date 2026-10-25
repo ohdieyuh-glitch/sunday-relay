@@ -104,6 +104,7 @@ export const GOVERNED_LANDER_BOT_VARIABLE = 'JULIUS_GOVERNED_LANDER_BOT_ID';
  */
 export const TRUSTED_COMPUTING_BASE = Object.freeze([
   '.github/julius-landing/reviewer-ed25519.pub',
+  '.github/julius-landing/founder-approval-ed25519.pub',
   '.github/julius-landing/land-lib.mjs',
   '.github/julius-landing/land.mjs',
   '.github/julius-landing/governed-land.mjs',
@@ -155,9 +156,9 @@ export const HISTORICAL_TCB = Object.freeze([
   Object.freeze({ path: 'scripts/julius-review-currency.mjs', sha256: '786aa3ff76f325ae3c41f488c1451ed5a2088119daf61d2689497e928081d267' }),
 ]);
 
-const ATTESTATION_FILE = /^\.github\/julius-landing\/checkpoints\/[0-9a-f]{40}\.(txt|sig)$/iu;
+const ATTESTATION_FILE = /^\.github\/julius-landing\/checkpoints\/[0-9a-f]{40}\.(txt|sig|founder\.sig)$/iu;
 /** The files one attestation occupies in the checkpoint directory. Nothing else may sit there. */
-export const CHECKPOINT_DIRECTORY_SUFFIXES = Object.freeze(['.txt', '.sig']);
+export const CHECKPOINT_DIRECTORY_SUFFIXES = Object.freeze(['.txt', '.sig', '.founder.sig']);
 
 /**
  * Exact companion files of the founder installer, besides the trusted
@@ -229,6 +230,67 @@ export function reviewerKeyPinRefusal(pem, externalAnchor) {
         ? `${EXTERNAL_ANCHOR_VARIABLE} is unset`
         : `${EXTERNAL_ANCHOR_VARIABLE} does not match the pinned reviewer key ${PINNED_REVIEWER_SPKI_SHA256}`,
     };
+  }
+  return null;
+}
+
+/**
+ * THE SECOND SAFEGUARD (H1). A reviewer signature alone does not land a
+ * founder-governed path, a trusted file, a workflow, or a checkpoint
+ * attestation. Those also need an ed25519 signature over the exact same bytes
+ * from a founder-approval key that is held off the development machine.
+ *
+ * The key is pinned three ways, all of which must agree: the public key file
+ * FOUNDER_APPROVAL_KEY_PATH (in the trusted computing base), the constants
+ * below, and the repository variable JULIUS_FOUNDER_APPROVAL_KEY_SHA256. It
+ * must not be the reviewer key. No founder-approval key exists yet, so the
+ * constants are null and every check that needs the founder refuses with
+ * "no founder-approval key is pinned". Installing the key is a tree change
+ * signed into the checkpoint attestation the bootstrap installs.
+ */
+export const FOUNDER_APPROVAL_KEY_PATH = '.github/julius-landing/founder-approval-ed25519.pub';
+/** Full SPKI SHA-256 of the founder-approval key, or null while no key is pinned. */
+export const PINNED_FOUNDER_APPROVAL_SPKI_SHA256 = null;
+/** The 32 raw ed25519 founder-approval key bytes, hex, or null while no key is pinned. */
+export const PINNED_FOUNDER_APPROVAL_RAW_KEY = null;
+export const FOUNDER_ANCHOR_VARIABLE = 'JULIUS_FOUNDER_APPROVAL_KEY_SHA256';
+export const FOUNDER_KEY_NOT_PINNED = 'founder approval: no founder-approval key is pinned, so a governed path, trusted file, workflow, or attestation cannot land';
+
+/** Null when the founder-approval key file is the pinned key and its external anchor matches. Otherwise the refusal. */
+export function founderKeyPinRefusal(pem, externalAnchor) {
+  const pinnedSpki = PINNED_FOUNDER_APPROVAL_SPKI_SHA256;
+  const pinnedRaw = PINNED_FOUNDER_APPROVAL_RAW_KEY;
+  if (typeof pinnedSpki !== 'string' || pinnedSpki.length !== 64 || typeof pinnedRaw !== 'string' || pinnedRaw.length !== 64) return FOUNDER_KEY_NOT_PINNED;
+  if (exactFingerprintMatch(pinnedSpki, PINNED_REVIEWER_SPKI_SHA256)) return 'founder approval: the founder-approval key is the reviewer key; it must be an independent key';
+  const material = reviewerKeyMaterial(pem);
+  if (material.problem) return 'founder approval: the founder-approval key could not be read';
+  if (!exactFingerprintMatch(material.spkiSha256, pinnedSpki) || material.rawHex !== pinnedRaw) {
+    return `founder approval: the founder-approval key is not the pinned founder-approval key ${pinnedSpki}`;
+  }
+  if (!exactFingerprintMatch(externalAnchor, pinnedSpki)) {
+    return externalAnchor === undefined || externalAnchor === null || externalAnchor === ''
+      ? `founder approval: ${FOUNDER_ANCHOR_VARIABLE} is unset`
+      : `founder approval: ${FOUNDER_ANCHOR_VARIABLE} does not match the pinned founder-approval key ${pinnedSpki}`;
+  }
+  return null;
+}
+
+/**
+ * Null when `signatureB64` is the pinned founder-approval key's signature over
+ * exactly `text`. `pem` is the founder-approval key file; it is pin-checked.
+ * Pass `pinned: false` only to check a signature against a key whose bytes are
+ * already bound by a signed attestation (a rotation's post-landing key).
+ */
+export function founderApprovalProblem({ text, signatureB64, pem, anchor, pinned = true } = {}) {
+  if (pinned) {
+    const refusal = founderKeyPinRefusal(pem, anchor);
+    if (refusal) return refusal;
+  }
+  if (typeof signatureB64 !== 'string' || signatureB64 === '') return 'founder approval: no founder-approval signature was supplied';
+  const material = reviewerKeyMaterial(pem);
+  if (!material.key) return 'founder approval: the founder-approval key could not be read';
+  if (typeof text !== 'string' || !signatureVerifies(text, signatureB64, material)) {
+    return 'founder approval: the founder-approval signature does not verify over these exact bytes';
   }
   return null;
 }
@@ -417,7 +479,7 @@ export function attestationCoversCommits(parsed, commits, prior) {
  * is not that proof. Any failure is a refusal; the caller says the attestation
  * was not verified.
  */
-export function checkpointAttestationProblems({ text, signatureB64, pem, treeHashes, now } = {}) {
+export function checkpointAttestationProblems({ text, signatureB64, pem, treeHashes, now, founderSignatureB64, founderPem, founderAnchor, founderPinned = true } = {}) {
   if (typeof text !== 'string' || text === '' || typeof signatureB64 !== 'string' || signatureB64 === '') {
     return ['the checkpoint attestation was not verified'];
   }
@@ -434,6 +496,8 @@ export function checkpointAttestationProblems({ text, signatureB64, pem, treeHas
     if (treeHashes[row.path] !== row.sha256) return ['the checkpoint attestation was not verified'];
   }
   if (judgeAttestationWindow(parsed.fields, now)) return ['the checkpoint attestation was not verified'];
+  const founder = founderApprovalProblem({ text, signatureB64: founderSignatureB64, pem: founderPem, anchor: founderAnchor, pinned: founderPinned });
+  if (founder) return ['the checkpoint attestation was not verified', founder];
   return [];
 }
 
@@ -699,6 +763,7 @@ export function attestationShapeProblem({ names, text } = {}) {
   const stray = list.filter((name) => !allowed.has(name)).sort();
   if (stray.length > 0) return `the checkpoint directory holds files that are not this attestation (${stray.join(', ')}). ${INSTALLER_RECOVERY}`;
   if (!list.includes(`${stem}.sig`)) return `the checkpoint attestation is unsigned. ${INSTALLER_RECOVERY}`;
+  if (!list.includes(`${stem}.founder.sig`)) return `the checkpoint attestation has no founder-approval signature (${stem}.founder.sig). ${INSTALLER_RECOVERY}`;
   if (typeof text !== 'string' || text === '') return `the checkpoint attestation is unsigned. ${INSTALLER_RECOVERY}`;
   const parsed = parseCheckpointAttestation(text);
   if (parsed.problems.length > 0) return parsed.problems[0];
@@ -723,7 +788,10 @@ export function readCheckpointAttestation(root = process.cwd()) {
   let signatureB64 = null;
   try { signatureB64 = readFileSync(signaturePath, 'utf8').trim(); } catch { signatureB64 = null; }
   if (signatureB64 === '') signatureB64 = null;
-  return { text, signatureB64, fileName: texts[0], path: `${CHECKPOINT_ATTESTATION_DIR}/${texts[0]}` };
+  let founderSignatureB64 = null;
+  try { founderSignatureB64 = readFileSync(join(dir, texts[0].replace(/.txt$/u, '.founder.sig')), 'utf8').trim(); } catch { founderSignatureB64 = null; }
+  if (founderSignatureB64 === '') founderSignatureB64 = null;
+  return { text, signatureB64, founderSignatureB64, fileName: texts[0], path: `${CHECKPOINT_ATTESTATION_DIR}/${texts[0]}` };
 }
 
 /**
@@ -743,6 +811,9 @@ export function attestedCheckpointFloor(root = process.cwd(), env = process.env,
   const material = reviewerKeyMaterial(pem);
   if (!material.key || !signatureVerifies(found.text, found.signatureB64, material)) return null;
   if (parsed.fields.prior !== TRUSTED_CHECKPOINT_SHA) return null;
+  let founderPem;
+  try { founderPem = readFileSync(join(root, FOUNDER_APPROVAL_KEY_PATH), 'utf8'); } catch { return null; }
+  if (founderApprovalProblem({ text: found.text, signatureB64: found.founderSignatureB64 ?? '', pem: founderPem, anchor: env[FOUNDER_ANCHOR_VARIABLE] })) return null;
   return parsed.fields.checkpoint ?? null;
 }
 
@@ -869,6 +940,15 @@ export async function judgeCommitLanding(commit, options = {}) {
       botId,
     });
     if (identity) return { ok: false, absent: false, nonce, reason: identity };
+    // H1: the governed App committer is not enough. The founder-approval key
+    // must have signed these exact clearance bytes, carried in the landing block.
+    const founder = founderApprovalProblem({
+      text: parsed.fields.clearanceText,
+      signatureB64: parsed.fields.founderSignatureB64 ?? '',
+      pem: options.founderPem,
+      anchor: options.founderAnchor ?? options.env?.[FOUNDER_ANCHOR_VARIABLE] ?? process.env[FOUNDER_ANCHOR_VARIABLE],
+    });
+    if (founder) return { ok: false, absent: false, nonce, reason: founder };
   }
   return {
     ok: true,
@@ -1051,12 +1131,12 @@ async function attachLanderIdentity(commit, env, identities) {
   return { ...commit, ...identity };
 }
 
-async function classifyWalkedCommit(commit, pem, anchor, now, seen, env) {
+async function classifyWalkedCommit(commit, pem, anchor, now, seen, env, founder = {}) {
   if (commit.installerLineage === true) {
-    await judgeCommitLanding(commit, { pem, anchor, now, seenNonces: seen, env });
+    await judgeCommitLanding(commit, { pem, anchor, now, seenNonces: seen, env, ...founder });
     return { ...commit, classification: 'installer', reason: 'installer commit in the signed checkpoint lineage' };
   }
-  const judged = await judgeCommitLanding(commit, { pem, anchor, now, seenNonces: seen, env });
+  const judged = await judgeCommitLanding(commit, { pem, anchor, now, seenNonces: seen, env, ...founder });
   if (judged.ok) return { ...commit, classification: 'signed-landing', reason: judged.reason, nonce: judged.nonce };
   if (!judged.absent) return { ...commit, classification: 'unprovenanced', reason: judged.reason };
   const recorded = classifyCommit(commit);
@@ -1096,6 +1176,10 @@ export async function requireTrustedVerifier(env = process.env, options = {}) {
   if (!material.key || !signatureVerifies(found.text, found.signatureB64, material)) {
     return { ok: false, reason: 'the checkpoint attestation signature does not verify against the pinned reviewer key' };
   }
+  let founderPem = '';
+  try { founderPem = readFileSync(join(root, FOUNDER_APPROVAL_KEY_PATH), 'utf8'); } catch { founderPem = ''; }
+  const founder = founderApprovalProblem({ text: found.text, signatureB64: found.founderSignatureB64 ?? '', pem: founderPem, anchor: env[FOUNDER_ANCHOR_VARIABLE] });
+  if (founder) return { ok: false, reason: `the checkpoint attestation is not founder-approved: ${founder}` };
   const listed = parsed.fields.tcb ?? [];
   if (listed.length !== TRUSTED_COMPUTING_BASE.length || listed.some((row, index) => row.path !== TRUSTED_COMPUTING_BASE[index])) {
     return { ok: false, reason: 'the attestation does not cover the trusted computing base' };
@@ -1163,7 +1247,7 @@ export async function requireTrustedVerifier(env = process.env, options = {}) {
     for (const commit of markInstallerLineage(walked.slice().reverse(), true)) {
       const bound = await attachHeadBinding(commit, root);
       const identified = await attachLanderIdentity(bound, env, options.identities);
-      classified.push(await classifyWalkedCommit(identified, pem, env[EXTERNAL_ANCHOR_VARIABLE], now, seen, env));
+      classified.push(await classifyWalkedCommit(identified, pem, env[EXTERNAL_ANCHOR_VARIABLE], now, seen, env, { founderPem, founderAnchor: env[FOUNDER_ANCHOR_VARIABLE] }));
     }
     const unjustified = classified.filter((row) => row.classification !== 'installer' && row.classification !== 'signed-landing' && row.classification !== 'signed-g6');
     if (unjustified.length > 0) {

@@ -1,0 +1,8 @@
+# No founder-approval key is pinned.
+#
+# This file holds the founder-approval ed25519 PUBLIC key (SPKI PEM) once the
+# founder generates it on a machine where no Claude, Cursor or Grok session
+# runs. Until then it is not a key, PINNED_FOUNDER_APPROVAL_* in
+# scripts/julius-main-provenance-trust.mjs are null, and every landing that
+# needs founder approval (a founder-governed path, a trusted file, a workflow,
+# or a checkpoint attestation) is refused. Never commit a private key here.

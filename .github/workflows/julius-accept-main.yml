@@ -151,6 +151,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           JULIUS_REVIEWER_KEY_SHA256: ${{ vars.JULIUS_REVIEWER_KEY_SHA256 }}
+          JULIUS_FOUNDER_APPROVAL_KEY_SHA256: ${{ vars.JULIUS_FOUNDER_APPROVAL_KEY_SHA256 }}
           JULIUS_GOVERNED_LANDER_BOT_ID: ${{ vars.JULIUS_GOVERNED_LANDER_BOT_ID }}
         run: |
           set -euo pipefail
@@ -172,6 +173,7 @@ jobs:
             fi
           done <<'EOF'
           .github/julius-landing/reviewer-ed25519.pub
+          .github/julius-landing/founder-approval-ed25519.pub
           .github/julius-landing/land-lib.mjs
           .github/julius-landing/land.mjs
           .github/julius-landing/governed-land.mjs
@@ -209,6 +211,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           JULIUS_REVIEWER_KEY_SHA256: ${{ vars.JULIUS_REVIEWER_KEY_SHA256 }}
+          JULIUS_FOUNDER_APPROVAL_KEY_SHA256: ${{ vars.JULIUS_FOUNDER_APPROVAL_KEY_SHA256 }}
           JULIUS_GOVERNED_LANDER_BOT_ID: ${{ vars.JULIUS_GOVERNED_LANDER_BOT_ID }}
         run: |
           set -euo pipefail

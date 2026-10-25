@@ -84,7 +84,27 @@ export declare function checkpointAttestationProblems(input?: {
   readonly pem?: unknown;
   readonly treeHashes?: unknown;
   readonly now?: unknown;
+  readonly founderSignatureB64?: unknown;
+  readonly founderPem?: unknown;
+  readonly founderAnchor?: unknown;
+  readonly founderPinned?: boolean;
 }): string[];
+/** H1: the founder-approval key. The constants are null while no key is pinned, and every founder check then refuses. */
+export declare const FOUNDER_APPROVAL_KEY_PATH: '.github/julius-landing/founder-approval-ed25519.pub';
+export declare const PINNED_FOUNDER_APPROVAL_SPKI_SHA256: string | null;
+export declare const PINNED_FOUNDER_APPROVAL_RAW_KEY: string | null;
+export declare const FOUNDER_ANCHOR_VARIABLE: 'JULIUS_FOUNDER_APPROVAL_KEY_SHA256';
+export declare const FOUNDER_KEY_NOT_PINNED: string;
+export declare function founderKeyPinRefusal(pem: unknown, externalAnchor: unknown): string | null;
+export declare function founderApprovalProblem(input?: {
+  readonly text?: unknown;
+  readonly signatureB64?: unknown;
+  readonly pem?: unknown;
+  readonly anchor?: unknown;
+  readonly pinned?: boolean;
+}): string | null;
+export declare const CHECKPOINT_DIRECTORY_SUFFIXES: readonly string[];
+export declare function attestationShapeProblem(input?: { readonly names?: unknown; readonly text?: unknown }): string | null;
 export declare function judgeClearanceWindow(fields: { readonly issued?: string; readonly expires?: string } | undefined, now: number): string | null;
 
 export interface LandingJudgement {
@@ -178,7 +198,7 @@ export declare function evaluateTrustChain(input: {
 }): TrustChainResult;
 
 export declare function applyTrustChain<T extends { readonly verdict?: string; readonly reason?: string }>(single: T, chain: TrustChainResult): T;
-export declare function readCheckpointAttestation(root?: string): { readonly text: string; readonly signatureB64: string | null; readonly fileName: string; readonly path: string } | null;
+export declare function readCheckpointAttestation(root?: string): { readonly text: string; readonly signatureB64: string | null; readonly founderSignatureB64: string | null; readonly fileName: string; readonly path: string } | null;
 export declare function attestedCheckpointFloor(root?: string, env?: NodeJS.ProcessEnv, now?: number): string | null;
 export declare function attestationWorktreeMatchesHead(root?: string): Promise<{ readonly ok: boolean; readonly reason: string }>;
 export declare function requireTrustedVerifier(env?: NodeJS.ProcessEnv, options?: {

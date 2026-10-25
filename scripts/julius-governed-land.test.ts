@@ -35,6 +35,13 @@ const der = Buffer.from(createPublicKey(publicPem).export({ type: 'spki', format
 const spki = createHash('sha256').update(der).digest('hex');
 const raw = der.subarray(der.length - 32).toString('hex');
 const signWith = (text: string, key = pair.privateKey) => sign(null, Buffer.from(text, 'utf8'), key).toString('base64');
+/** H1: a throwaway founder-approval key, pinned only in the fixture copy. */
+const founder = generateKeyPairSync('ed25519');
+const founderPem = String(founder.publicKey.export({ type: 'spki', format: 'pem' }));
+const founderDer = Buffer.from(founder.publicKey.export({ type: 'spki', format: 'der' }));
+const founderSpki = createHash('sha256').update(founderDer).digest('hex');
+const founderRaw = founderDer.subarray(founderDer.length - 32).toString('hex');
+const founderSign = (text: string) => signWith(text, founder.privateKey);
 
 const realLand = (await import(pathToFileURL(join(LANDING, 'land-lib.mjs')).href)) as {
   parseClearance: (text: string) => { problems: string[]; fields: Record<string, string> };
@@ -91,6 +98,8 @@ writeFileSync(fixtureLib, readFileSync(fixtureLib, 'utf8')
 cpSync(join(ROOT, 'scripts/julius-main-provenance-trust.mjs'), join(fixtureRoot, 'scripts/julius-main-provenance-trust.mjs'));
 const fixtureTrustPath = join(fixtureRoot, 'scripts/julius-main-provenance-trust.mjs');
 writeFileSync(fixtureTrustPath, readFileSync(fixtureTrustPath, 'utf8')
+  .replace('export const PINNED_FOUNDER_APPROVAL_SPKI_SHA256 = null;', `export const PINNED_FOUNDER_APPROVAL_SPKI_SHA256 = '${founderSpki}';`)
+  .replace('export const PINNED_FOUNDER_APPROVAL_RAW_KEY = null;', `export const PINNED_FOUNDER_APPROVAL_RAW_KEY = '${founderRaw}';`)
   .replace(/export const PINNED_REVIEWER_SPKI_SHA256 = '[0-9a-f]+';/u, `export const PINNED_REVIEWER_SPKI_SHA256 = '${spki}';`)
   .replace(/export const PINNED_REVIEWER_RAW_KEY = '[0-9a-f]+';/u, `export const PINNED_REVIEWER_RAW_KEY = '${raw}';`));
 const fixture = (await import(pathToFileURL(join(fixtureLanding, 'governed-land.mjs')).href)) as {
@@ -131,8 +140,9 @@ function attestationMaterial(signature: (text: string) => string = signWith) {
   return {
     attestationText: text,
     attestationSignatureB64: signature(text),
+    attestationFounderSignatureB64: founderSign(text),
     treeHashes: Object.fromEntries(tcb.map((row) => [row.path, row.sha256])),
-    checkpointNames: [`${checkpoint}.sig`, `${checkpoint}.txt`],
+    checkpointNames: [`${checkpoint}.founder.sig`, `${checkpoint}.sig`, `${checkpoint}.txt`],
   };
 }
 
@@ -198,6 +208,10 @@ const landingInput = (over: Record<string, unknown> = {}, optional = ['landing-m
     required: [{ name: 'Verify Relay', appId: 15368 }],
     landedOnMain: [] as number[],
     fastForward: false,
+    ...rest,
+    founderPublicKeyPem: founderPem,
+    founderAnchor: founderSpki,
+    founderSignatures: [founderSign(text)],
     ...rest,
     clearanceText: text,
     signatureB64,
@@ -402,7 +416,9 @@ describe('queue, record, and workflow', () => {
     expect(realGoverned.GOVERNED_READ_PERMISSIONS).not.toHaveProperty('workflows');
     expect(realGoverned.governedWritePermissions(['src/relay/ordinary.ts'])).not.toHaveProperty('workflows');
     expect(realGoverned.governedWritePermissions(['src/relay/ordinary.ts']).statuses).toBe('read');
-    expect(realGoverned.governedWritePermissions([WORKFLOW]).workflows).toBe('write');
+    // H1: a workflow path alone never mints workflows:write; both signatures must have verified.
+    expect(realGoverned.governedWritePermissions([WORKFLOW])).not.toHaveProperty('workflows');
+    expect((realGoverned.governedWritePermissions as (paths: string[], options?: { founderApproved?: boolean }) => Record<string, string>)([WORKFLOW], { founderApproved: true }).workflows).toBe('write');
     const sha = 'a'.repeat(40);
     expect(realGoverned.checkWorkflowOrigin({
       ref: 'refs/heads/main', sha, workflowRef: realGoverned.GOVERNED_WORKFLOW_REF, workflowSha: sha,
@@ -689,10 +705,10 @@ describe('squash and fast-forward pass only when every binding holds', () => {
       checkpointNames,
     }, [`protected-paths: ${files.join(',')}`, 'landing-method: fast-forward']));
     const stale = '10aedd11643a1d717311b5824d54e863aa94d763';
-    const two = landWith([`${'e'.repeat(40)}.sig`, `${'e'.repeat(40)}.txt`, `${stale}.txt`]);
+    const two = landWith([`${'e'.repeat(40)}.founder.sig`, `${'e'.repeat(40)}.sig`, `${'e'.repeat(40)}.txt`, `${stale}.txt`]);
     expect(two.ok).toBe(false);
     expect(two.problems.join('\n')).toMatch(/would be refused: more than one checkpoint attestation is on main/u);
-    const stray = landWith([`${'e'.repeat(40)}.sig`, `${'e'.repeat(40)}.txt`, 'notes.md']);
+    const stray = landWith([`${'e'.repeat(40)}.founder.sig`, `${'e'.repeat(40)}.sig`, `${'e'.repeat(40)}.txt`, 'notes.md']);
     expect(stray.problems.join('\n')).toMatch(/would be refused: the checkpoint directory holds files that are not this attestation/u);
     expect(landWith(null).ok).toBe(false);
   });
@@ -757,6 +773,117 @@ describe('squash and fast-forward pass only when every binding holds', () => {
   });
 });
 
+describe('H1: a reviewer signature alone does not land a governed path', () => {
+  const CI = '.github/workflows/not-in-tcb.yml';
+  const governed = [`protected-paths: ${CI}`, 'landing-method: squash'];
+  const text = clearance(withRule(governed));
+  const decide = (over: Record<string, unknown> = {}) => fixture.evaluateGovernedLanding(landingInput({ files: [CI], clearanceText: text, ...over })) as {
+    ok: boolean; problems: string[]; message?: string | null; founderApproved?: boolean;
+  };
+
+  it('reviewer-only on a governed path is refused with a distinct reason, and no workflows token follows', () => {
+    const refused = decide({ founderSignatures: [] });
+    expect(refused.ok).toBe(false);
+    expect(refused.problems.join('\n')).toMatch(/founder approval required for \.github\/workflows\/not-in-tcb\.yml: founder approval: no founder-approval signature was supplied/u);
+    expect(refused.founderApproved).toBeUndefined();
+  });
+
+  it('founder-only is refused: the reviewer signature is still required', () => {
+    const founderOnly = decide({ signatureB64: founderSign(text), founderSignatures: [founderSign(text)] });
+    expect(founderOnly.ok).toBe(false);
+    expect(founderOnly.problems.join('\n')).toMatch(/does not verify|not the pinned reviewer key/u);
+  });
+
+  it('both signatures over different bytes are refused', () => {
+    const other = text.replace(`nonce: ${NONCE}`, `nonce: ${'cd'.repeat(16)}`);
+    const mismatched = decide({ founderSignatures: [founderSign(other)] });
+    expect(mismatched.ok).toBe(false);
+    expect(mismatched.problems.join('\n')).toMatch(/founder-approval signature does not verify over these exact bytes/u);
+    const reviewerAsFounder = decide({ founderSignatures: [signWith(text)] });
+    expect(reviewerAsFounder.ok).toBe(false);
+  });
+
+  it('both signatures over the same bytes land, and the landing block carries the founder signature', () => {
+    const both = decide();
+    expect(both.ok, both.problems.join('\n')).toBe(true);
+    expect(both.founderApproved).toBe(true);
+    expect(both.message).toContain(`founder-signature-b64: ${founderSign(text)}`);
+    const parsed = realLand.parseLandingCommitMessage(both.message ?? '') as unknown as { problems: string[]; fields: { founderSignatureB64?: string } };
+    expect(parsed.problems).toEqual([]);
+    expect(parsed.fields.founderSignatureB64).toBe(founderSign(text));
+  });
+
+  it('an ordinary path lands on the reviewer signature alone, as before', () => {
+    const ordinary = fixture.evaluateGovernedLanding(landingInput({ founderSignatures: [] })) as { ok: boolean; problems: string[]; founderApproved?: boolean; message?: string | null };
+    expect(ordinary.ok, ordinary.problems.join('\n')).toBe(true);
+    expect(ordinary.founderApproved).toBe(false);
+    expect(ordinary.message).not.toContain('founder-signature-b64');
+  });
+
+  it('fails closed on an unset or different anchor, a wrong key file, and in the real tree, where no founder key is pinned', () => {
+    expect(decide({ founderAnchor: '' }).problems.join('\n')).toMatch(/JULIUS_FOUNDER_APPROVAL_KEY_SHA256 is unset/u);
+    expect(decide({ founderAnchor: spki }).problems.join('\n')).toMatch(/does not match the pinned founder-approval key/u);
+    expect(decide({ founderPublicKeyPem: otherPem }).problems.join('\n')).toMatch(/not the pinned founder-approval key/u);
+    const real = realGoverned.evaluateGovernedLanding(landingInput({ files: [CI], clearanceText: text }));
+    expect(real.ok).toBe(false);
+    for (const path of ['.github/julius-landing/land-lib.mjs', 'scripts/julius-governed-bootstrap.mjs', 'package.json', `.github/julius-landing/checkpoints/${'e'.repeat(40)}.txt`]) {
+      expect((realGoverned as unknown as { founderApprovalRequiredPaths: (files: string[], fields: Record<string, string>) => string[] })
+        .founderApprovalRequiredPaths([path], {}), path).toEqual([path]);
+    }
+    expect((realGoverned as unknown as { founderApprovalRequiredPaths: (files: string[], fields: Record<string, string>) => string[] })
+      .founderApprovalRequiredPaths(['src/relay/ordinary.ts', 'relay-bridge/x.ts'], {})).toEqual([]);
+  });
+
+  it('rotating the founder key needs both old signatures on the clearance; the attestation is checked against the new key', () => {
+    const FOUNDER_PATH = '.github/julius-landing/founder-approval-ed25519.pub';
+    const next = generateKeyPairSync('ed25519');
+    const nextPem = String(next.publicKey.export({ type: 'spki', format: 'pem' }));
+    const checkpoint = 'e'.repeat(40);
+    const att = `.github/julius-landing/checkpoints/${checkpoint}`;
+    const files = [FOUNDER_PATH, `${att}.founder.sig`, `${att}.sig`, `${att}.txt`].sort();
+    const tcb = fixtureTrust.TRUSTED_COMPUTING_BASE.map((path) => ({
+      path,
+      sha256: path === FOUNDER_PATH ? createHash('sha256').update(nextPem, 'utf8').digest('hex') : createHash('sha256').update(path).digest('hex'),
+    }));
+    const attestation = fixtureTrust.canonicalCheckpointAttestation({
+      checkpoint,
+      commits: [{ sha: checkpoint, tree: T, basis: 'founder key rotation' }],
+      tcb,
+      issued: '2026-10-23T18:00:00Z',
+      expires: '2027-04-23T18:30:00Z',
+    });
+    const rotation = clearance(withRule([`protected-paths: ${files.join(',')}`, 'landing-method: fast-forward']));
+    const land = (over: Record<string, unknown>) => fixture.evaluateGovernedLanding(landingInput({
+      fastForward: true,
+      files,
+      pr: openPr({ changed_files: files.length }),
+      clearanceText: rotation,
+      attestationText: attestation,
+      attestationSignatureB64: signWith(attestation),
+      attestationFounderSignatureB64: signWith(attestation, next.privateKey),
+      treeHashes: Object.fromEntries(tcb.map((row) => [row.path, row.sha256])),
+      checkpointNames: [`${checkpoint}.founder.sig`, `${checkpoint}.sig`, `${checkpoint}.txt`],
+      headFounderPublicKeyPem: nextPem,
+      ...over,
+    }));
+    const accepted = land({ founderSignatures: [founderSign(rotation)] });
+    expect(accepted.ok, accepted.problems.join('\n')).toBe(true);
+    const newKeyOnly = land({ founderSignatures: [signWith(rotation, next.privateKey)] });
+    expect(newKeyOnly.ok).toBe(false);
+    expect(newKeyOnly.problems.join('\n')).toMatch(/founder approval required/u);
+    const oldKeyAttestation = land({ founderSignatures: [founderSign(rotation)], attestationFounderSignatureB64: founderSign(attestation) });
+    expect(oldKeyAttestation.ok).toBe(false);
+    expect(oldKeyAttestation.problems.join('\n')).toMatch(/the checkpoint attestation was not verified/u);
+    const unbound = land({ founderSignatures: [founderSign(rotation)], headFounderPublicKeyPem: otherPem });
+    expect(unbound.problems.join('\n')).toMatch(/rotated founder-approval key is not the blob the attestation hashes/u);
+    // After the move the verifier pins the new key only through code constants and
+    // JULIUS_FOUNDER_APPROVAL_KEY_SHA256: the old anchor refuses the new file.
+    const pin = (fixtureTrust as unknown as { founderKeyPinRefusal: (pem: string, anchor: string) => string | null }).founderKeyPinRefusal;
+    expect(pin(nextPem, founderSpki)).toMatch(/not the pinned founder-approval key/u);
+    expect(pin(founderPem, founderSpki)).toBeNull();
+  });
+});
+
 describe('the main-provenance verifier accepts this landing and refuses a direct push', () => {
   const tip = { mainSha: OTHER, mainTreeSha: T, parentSha: B };
   const signedInput = (text: string, over: Record<string, unknown> = {}) => ({
@@ -789,8 +916,8 @@ describe('the main-provenance verifier accepts this landing and refuses a direct
     expect(acceptedShape.state).toBe('decided');
     if (acceptedShape.state !== 'decided') return;
     expect(acceptedShape.result.verdict).toBe('unprovenanced');
-    expect(acceptedShape.result.reason).toMatch(/not the pinned reviewer key/u);
-    expect(acceptedShape.result.prNumber).toBe(7);
+    // H1: with the App committer verified, the real tree still refuses: no founder-approval key is pinned.
+    expect(acceptedShape.result.reason).toMatch(/founder approval: no founder-approval key is pinned/u);
     expect(acceptedShape.result.reason).not.toMatch(/coding worker/u);
     expect(acceptedShape.result.reason).not.toMatch(/founder-governed paths/u);
 
@@ -829,8 +956,8 @@ describe('the main-provenance verifier accepts this landing and refuses a direct
   it('judgeCommitLanding accepts the squash when the protected path is enumerated', async () => {
     const text = clearance([`protected-paths: ${WORKFLOW}`, 'landing-method: squash']);
     const built = (await import(pathToFileURL(fixtureLib).href) as {
-      buildLandingCommitMessage: (input: { clearanceText: string; signatureB64: string }) => string;
-    }).buildLandingCommitMessage({ clearanceText: text, signatureB64: signWith(text) });
+      buildLandingCommitMessage: (input: { clearanceText: string; signatureB64: string; founderSignatureB64?: string }) => string;
+    }).buildLandingCommitMessage({ clearanceText: text, signatureB64: signWith(text), founderSignatureB64: founderSign(text) });
     const commit = {
       message: built,
       committerTime: NOW,
@@ -846,6 +973,7 @@ describe('the main-provenance verifier accepts this landing and refuses a direct
     };
     const seen = new Set<string>();
     const bot = { governedLanderBotId: '424242' };
+    Object.assign(bot, { founderPem, founderAnchor: founderSpki });
     const ok = await fixtureTrust.judgeCommitLanding(commit, { pem: publicPem, anchor: spki, now: NOW + 1000, seenNonces: seen, ...bot });
     expect(ok.ok, ok.reason).toBe(true);
     expect(seen.has(NONCE)).toBe(true);

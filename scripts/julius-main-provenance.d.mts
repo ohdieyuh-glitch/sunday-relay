@@ -90,6 +90,9 @@ export declare function evaluateMainProvenance(input: {
    * `emailDerivedLogin`, `gitAuthorName`, `gitAuthorEmail` and a legacy `authorLogin` are untrusted and cannot authorize.
    */
   readonly headCommit?: unknown;
+  /** H1: the founder-approval key file read at the parent, and its anchor (else JULIUS_FOUNDER_APPROVAL_KEY_SHA256). */
+  readonly founderKeyPem?: unknown;
+  readonly externalFounderKeySha256?: unknown;
   /**
    * External fingerprint of the pinned reviewer key (`JULIUS_REVIEWER_KEY_SHA256`).
    * Present-and-wrong fails closed. Omitted reads the process environment.

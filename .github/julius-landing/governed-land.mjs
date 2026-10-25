@@ -7,6 +7,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   COMMENTS_DIGEST_RULE,
+  HARD_FORBIDDEN_PATH,
   REPO,
   botCommentsDigest,
   buildLandingCommitMessage,
@@ -25,7 +26,9 @@ import {
 } from './land-lib.mjs';
 import {
   CHECKPOINT_ATTESTATION_DIR,
+  FOUNDER_APPROVAL_KEY_PATH,
   TRUSTED_COMPUTING_BASE,
+  founderApprovalProblem,
   attestationShapeProblem,
   checkpointAttestationProblems,
   checkpointPairingRequired,
@@ -39,6 +42,8 @@ export const GOVERNED_SELF_CHECK = 'Land a governed pull request';
 const BEGIN = '-----BEGIN JULIUS CLEARANCE-----\n';
 const BETWEEN = '-----END JULIUS CLEARANCE-----\n-----BEGIN JULIUS CLEARANCE SIGNATURE-----\n';
 const SIGNATURE_END = '\n-----END JULIUS CLEARANCE SIGNATURE-----';
+const FOUNDER_BEGIN = '\n-----BEGIN JULIUS FOUNDER APPROVAL SIGNATURE-----\n';
+const FOUNDER_END = '\n-----END JULIUS FOUNDER APPROVAL SIGNATURE-----';
 
 /** Clearance blocks in one body, with the [start, end) offsets each block occupies. */
 function deliverySpans(body) {
@@ -55,8 +60,19 @@ function deliverySpans(body) {
     const close = text.indexOf(SIGNATURE_END, signatureStart);
     if (close < 0) break;
     const signatureB64 = text.slice(signatureStart, close);
-    const end = close + SIGNATURE_END.length;
-    if (!signatureB64.includes('\n') && signatureB64 !== '') spans.push({ clearanceText, signatureB64, start, end });
+    let end = close + SIGNATURE_END.length;
+    // H1: an optional founder-approval signature over the same bytes, immediately after the reviewer's.
+    let founderSignatureB64;
+    if (text.startsWith(FOUNDER_BEGIN, end)) {
+      const founderStart = end + FOUNDER_BEGIN.length;
+      const founderClose = text.indexOf(FOUNDER_END, founderStart);
+      const candidate = founderClose < 0 ? '' : text.slice(founderStart, founderClose);
+      if (founderClose >= 0 && candidate !== '' && !candidate.includes('\n')) {
+        founderSignatureB64 = candidate;
+        end = founderClose + FOUNDER_END.length;
+      }
+    }
+    if (!signatureB64.includes('\n') && signatureB64 !== '') spans.push({ clearanceText, signatureB64, founderSignatureB64, start, end });
     cursor = end;
   }
   return spans;
@@ -66,7 +82,9 @@ function deliverySpans(body) {
 export function extractClearanceDeliveries(bodies) {
   const deliveries = [];
   for (const body of Array.isArray(bodies) ? bodies : []) {
-    for (const { clearanceText, signatureB64 } of deliverySpans(body)) deliveries.push({ clearanceText, signatureB64 });
+    for (const { clearanceText, signatureB64, founderSignatureB64 } of deliverySpans(body)) {
+      deliveries.push(founderSignatureB64 === undefined ? { clearanceText, signatureB64 } : { clearanceText, signatureB64, founderSignatureB64 });
+    }
   }
   return deliveries;
 }
@@ -89,6 +107,7 @@ export function isClearanceDeliveryComment(body, clearanceText) {
   let cursor = 0;
   for (const span of spans) {
     if (span.clearanceText !== clearanceText || !CANONICAL_SIGNATURE(span.signatureB64)) return false;
+    if (span.founderSignatureB64 !== undefined && !CANONICAL_SIGNATURE(span.founderSignatureB64)) return false;
     outside += text.slice(cursor, span.start);
     cursor = span.end;
   }
@@ -149,7 +168,11 @@ export function chooseClearanceDelivery(comments, publicKeyPem, expected = {}) {
   const issued = String(newest.fields.issued);
   const texts = new Set(verified.filter((row) => String(row.fields.issued) === issued).map((row) => row.clearanceText));
   if (texts.size !== 1) return { problem: 'signed clearances for this pull request do not agree' };
-  return { delivery: newest };
+  // Every founder-approval signature delivered with these exact bytes. The decision verifies them; none is trusted here.
+  const founderSignatures = [...new Set(verified
+    .filter((row) => row.clearanceText === newest.clearanceText && typeof row.founderSignatureB64 === 'string')
+    .map((row) => row.founderSignatureB64))];
+  return { delivery: { ...newest, founderSignatures } };
 }
 
 export function parseGovernedQueue(text) {
@@ -281,7 +304,7 @@ export const GOVERNED_READ_PERMISSIONS = Object.freeze({
 });
 
 /** workflows:write only when a changed path is under .github/workflows. statuses:read is always requested. */
-export function governedWritePermissions(paths) {
+export function governedWritePermissions(paths, { founderApproved = false } = {}) {
   const permissions = {
     contents: 'write',
     pull_requests: 'write',
@@ -290,7 +313,8 @@ export function governedWritePermissions(paths) {
     metadata: 'read',
     statuses: 'read',
   };
-  if ((Array.isArray(paths) ? paths : []).some((path) => /^\.github\/workflows\//iu.test(path))) permissions.workflows = 'write';
+  // H1: workflows:write only after both the reviewer and the founder-approval signatures verified.
+  if (founderApproved === true && (Array.isArray(paths) ? paths : []).some((path) => /^\.github\/workflows\//iu.test(path))) permissions.workflows = 'write';
   return permissions;
 }
 
@@ -456,6 +480,25 @@ export function githubAppJwt(appId, privateKeyPem, now = Date.now()) {
   return `${header}.${payload}.${signer.sign(privateKeyPem).toString('base64url')}`;
 }
 
+/**
+ * H1. Paths a reviewer signature alone may not land: any founder-governed
+ * path, any trusted file, any workflow, any checkpoint attestation file, and
+ * anything the clearance lists in protected-paths. Those need the
+ * founder-approval signature too. Ordinary paths are unchanged.
+ */
+export function founderApprovalRequiredPaths(files, fields) {
+  const listed = splitClearanceList(fields?.['protected-paths']);
+  const list = Array.isArray(files) ? files.filter((path) => typeof path === 'string') : [];
+  const governed = list.filter((path) => HARD_FORBIDDEN_PATH.test(path)
+    || TRUSTED_COMPUTING_BASE.includes(path)
+    || path.toLowerCase().startsWith('.github/workflows/')
+    || checkpointPairingRequired([path])
+    || listed.includes(path));
+  return [...new Set([...governed, ...listed])];
+}
+
+const sha256Hex = (text) => createHash('sha256').update(String(text ?? ''), 'utf8').digest('hex');
+
 /** One pull request against one signed clearance. Nothing here touches the network. */
 export function evaluateGovernedLanding(input) {
   const parsed = parseClearance(input?.clearanceText);
@@ -513,6 +556,22 @@ export function evaluateGovernedLanding(input) {
   if (unused.length > 0) problems.push(`the signed clearance lists protected paths the PR does not change: ${unused.join(', ')}`);
   const unusedExceptions = splitClearanceList(fields['governed-exceptions']).filter((path) => !files.includes(path));
   if (unusedExceptions.length > 0) problems.push(`the signed clearance lists exceptions the PR does not change: ${unusedExceptions.join(', ')}`);
+  // H1: the founder-approval signature over these exact clearance bytes, against the key pinned on main.
+  const founderPaths = founderApprovalRequiredPaths(files, fields);
+  let founderSignatureB64 = null;
+  if (founderPaths.length > 0) {
+    const candidates = Array.isArray(input?.founderSignatures) ? input.founderSignatures.filter((value) => typeof value === 'string') : [];
+    let why = founderApprovalProblem({ text: input.clearanceText, signatureB64: '', pem: input?.founderPublicKeyPem, anchor: input?.founderAnchor });
+    for (const candidate of candidates) {
+      const problem = founderApprovalProblem({ text: input.clearanceText, signatureB64: candidate, pem: input?.founderPublicKeyPem, anchor: input?.founderAnchor });
+      if (problem === null) {
+        founderSignatureB64 = candidate;
+        break;
+      }
+      why = problem;
+    }
+    if (founderSignatureB64 === null) problems.push(`founder approval required for ${founderPaths.slice(0, 5).join(', ')}: ${why}`);
+  }
   const depends = splitClearanceList(fields.depends).map(Number);
   const landed = input?.landedOnMain instanceof Set ? input.landedOnMain : new Set(input?.landedOnMain ?? []);
   const missing = depends.filter((id) => !landed.has(id));
@@ -535,12 +594,30 @@ export function evaluateGovernedLanding(input) {
     // The checkpoint directory at the head is what main will carry: the same shape every gate requires afterwards.
     const shape = attestationShapeProblem({ names: input?.checkpointNames, text: input?.attestationText });
     if (shape) problems.push(`the checkpoint directory at the head would be refused: ${shape}`);
+    // A key rotation: the clearance above was signed by both keys pinned on main
+    // (the old keys). The attestation is what the verifier checks after the move,
+    // against the keys in the post-landing tree, so it is checked against those.
+    // Their bytes are bound by the attestation's own trusted-file hashes.
+    const headReviewerPem = typeof input?.headPublicKeyPem === 'string' ? input.headPublicKeyPem : input?.publicKeyPem;
+    const headFounderPem = typeof input?.headFounderPublicKeyPem === 'string' ? input.headFounderPublicKeyPem : input?.founderPublicKeyPem;
+    const reviewerRotates = headReviewerPem !== input?.publicKeyPem;
+    const founderRotates = headFounderPem !== input?.founderPublicKeyPem;
+    if (reviewerRotates && input?.treeHashes?.['.github/julius-landing/reviewer-ed25519.pub'] !== sha256Hex(headReviewerPem)) {
+      problems.push('the rotated reviewer key is not the blob the attestation hashes');
+    }
+    if (founderRotates && input?.treeHashes?.[FOUNDER_APPROVAL_KEY_PATH] !== sha256Hex(headFounderPem)) {
+      problems.push('the rotated founder-approval key is not the blob the attestation hashes');
+    }
     const attestationProblems = checkpointAttestationProblems({
       text: input?.attestationText,
       signatureB64: input?.attestationSignatureB64,
-      pem: input?.publicKeyPem,
+      pem: headReviewerPem,
       treeHashes: input?.treeHashes,
       now: input?.now,
+      founderSignatureB64: input?.attestationFounderSignatureB64,
+      founderPem: headFounderPem,
+      founderAnchor: input?.founderAnchor,
+      founderPinned: !founderRotates,
     });
     if (attestationProblems.length > 0) problems.push('the checkpoint attestation was not verified', ...attestationProblems);
   }
@@ -568,6 +645,7 @@ export function evaluateGovernedLanding(input) {
       clearanceText: input.clearanceText,
       signatureB64: String(input.signatureB64).trim(),
       freeText: `${squashTitle(fields.pr, fields.head)}\n\nLanded by the Julius governed landing workflow.\n\n${pending}`,
+      ...(founderSignatureB64 === null ? {} : { founderSignatureB64 }),
     });
   }
   return {
@@ -578,6 +656,7 @@ export function evaluateGovernedLanding(input) {
     message,
     refUpdate: { sha: target, force: false },
     record,
+    founderApproved: founderSignatureB64 !== null,
   };
 }
 
@@ -712,6 +791,10 @@ async function landQueue({ env, fetchImpl, readLocal, now, stdout, stderr, state
     return;
   }
   const publicKeyPem = readLocal('reviewer-ed25519.pub');
+  // H1. A missing founder-approval file is not an error here: a landing that needs it refuses with the reason.
+  let founderPublicKeyPem = '';
+  try { founderPublicKeyPem = readLocal('founder-approval-ed25519.pub'); } catch { founderPublicKeyPem = ''; }
+  const founderAnchor = env.JULIUS_FOUNDER_APPROVAL_KEY_SHA256;
   let snapshot;
   try {
     snapshot = JSON.parse(readLocal('main-ruleset.json'));
@@ -893,6 +976,9 @@ async function landQueue({ env, fetchImpl, readLocal, now, stdout, stderr, state
           : [];
         let attestationText = '';
         let attestationSignatureB64 = '';
+        let attestationFounderSignatureB64 = '';
+        let headPublicKeyPem;
+        let headFounderPublicKeyPem;
         const treeHashes = {};
         let checkpointNames = null;
         if (treeDiffComplete && checkpointPairingRequired(changedPaths)) {
@@ -910,8 +996,15 @@ async function landQueue({ env, fetchImpl, readLocal, now, stdout, stderr, state
           if (txtPath !== null && sigPath !== null) {
             attestationText = (await blobBytes(txtPath, head)).toString('utf8');
             attestationSignatureB64 = (await blobBytes(sigPath, head)).toString('utf8').trim();
+            const founderSigName = sigName.replace(/[.]sig$/u, '.founder.sig');
+            if ((checkpointNames ?? []).includes(founderSigName)) {
+              attestationFounderSignatureB64 = (await blobBytes(`${CHECKPOINT_ATTESTATION_DIR}/${founderSigName}`, head)).toString('utf8').trim();
+            }
             for (const path of TRUSTED_COMPUTING_BASE) {
-              treeHashes[path] = createHash('sha256').update(await blobBytes(path, head)).digest('hex');
+              const bytes = await blobBytes(path, head);
+              treeHashes[path] = createHash('sha256').update(bytes).digest('hex');
+              if (path === '.github/julius-landing/reviewer-ed25519.pub') headPublicKeyPem = bytes.toString('utf8');
+              if (path === FOUNDER_APPROVAL_KEY_PATH) headFounderPublicKeyPem = bytes.toString('utf8');
             }
           }
         }
@@ -919,7 +1012,13 @@ async function landQueue({ env, fetchImpl, readLocal, now, stdout, stderr, state
         decision = evaluateGovernedLanding({
           clearanceText: chosen.delivery.clearanceText,
           signatureB64: chosen.delivery.signatureB64,
+          founderSignatures: chosen.delivery.founderSignatures ?? [],
           publicKeyPem,
+          founderPublicKeyPem,
+          founderAnchor,
+          headPublicKeyPem,
+          headFounderPublicKeyPem,
+          attestationFounderSignatureB64,
           now: now(),
           pr: pull,
           commit,
@@ -951,7 +1050,7 @@ async function landQueue({ env, fetchImpl, readLocal, now, stdout, stderr, state
           phase = 'write';
           const base = decision.fields.base;
           const tree = decision.fields.tree;
-          const writeToken = await mintWriteToken(governedWritePermissions(decision.changedPaths));
+          const writeToken = await mintWriteToken(governedWritePermissions(decision.changedPaths, { founderApproved: decision.founderApproved === true }));
           const apiWrite = apiWith(writeToken);
           const identityProblemOf = (readBack) => landingIdentityProblem({
             committerId: readBack?.committer?.id,

@@ -21,7 +21,7 @@ const SHA = /^[0-9a-f]{40}$/u;
 // pin the lander). The mission directories (.github/julius-missions/**), relay-bridge/**, src/** and JULIUS_HARNESS_MANIFEST.md stay allowed.
 // Case-insensitive: a checkout on a case-insensitive filesystem (Windows, macOS) folds `.GITHUB/Julius-Landing/...` onto the governed file.
 // `.github/julius-landing/checkpoints/` is inside the second alternative. A pull request cannot add or replace a checkpoint attestation.
-export const HARD_FORBIDDEN_PATH = /^(\.github\/workflows\/|\.github\/julius-landing\/|\.github\/julius-mission-pins\.txt$|\.github\/julius-approvers\.json$|\.github\/CODEOWNERS$|CODEOWNERS$|docs\/CODEOWNERS$|CLAUDE\.md$|package\.json$|package-lock\.json$|scripts\/julius-approval-gates\.mjs$|scripts\/julius-live-evidence\.mjs$|scripts\/julius-main-provenance|scripts\/julius-review-currency|scripts\/julius-main-monotonicity|scripts\/julius-paid-slot|scripts\/julius-subscription-check|scripts\/julius-live-preflight-gates|scripts\/julius-accept|scripts\/relay-repository-boundary|scripts\/export-julius-harness|scripts\/relay-parity-gate|scripts\/wonderland-beta-gate|scripts\/julius-live-preflight-identity|scripts\/julius-derive-scoped-credentials|scripts\/julius-ci-callers|scripts\/ci-test-accounting|scripts\/julius-paid-dispatch|scripts\/julius-paid-run-archive|\.github\/julius-mission-pins\.sh$|\.github\/julius-executor-entrypoint\.sh$|scripts\/julius-docker-executor\.sh$|scripts\/julius-executor-ready\.mjs$|scripts\/julius-reviewer-isolation|scripts\/julius-reviewer-deadline\.mjs$|scripts\/julius-live-preflight\.ts$|scripts\/julius-usage-limit\.mjs$|\.github\/julius-learning-store\.sh$|\.github\/julius-phase\.sh$|\.github\/wait-for-executor\.sh$|\.github\/julius-live-|\.github\/actions\/|\.github\/julius-mission-slice\/|\.github\/julius-learning-registrations\/|scripts\/julius-landing|\.github\/julius-live-evidence-dump\.sh$|.*\bmigrations?\/)/iu;
+export const HARD_FORBIDDEN_PATH = /^(\.github\/workflows\/|\.github\/julius-landing\/|\.github\/julius-mission-pins\.txt$|\.github\/julius-approvers\.json$|\.github\/CODEOWNERS$|CODEOWNERS$|docs\/CODEOWNERS$|CLAUDE\.md$|package\.json$|package-lock\.json$|scripts\/julius-approval-gates\.mjs$|scripts\/julius-live-evidence\.mjs$|scripts\/julius-main-provenance|scripts\/julius-review-currency|scripts\/julius-main-monotonicity|scripts\/julius-paid-slot|scripts\/julius-subscription-check|scripts\/julius-live-preflight-gates|scripts\/julius-accept|scripts\/relay-repository-boundary|scripts\/export-julius-harness|scripts\/relay-parity-gate|scripts\/wonderland-beta-gate|scripts\/julius-live-preflight-identity|scripts\/julius-derive-scoped-credentials|scripts\/julius-ci-callers|scripts\/ci-test-accounting|scripts\/julius-paid-dispatch|scripts\/julius-paid-run-archive|\.github\/julius-mission-pins\.sh$|\.github\/julius-executor-entrypoint\.sh$|scripts\/julius-docker-executor\.sh$|scripts\/julius-executor-ready\.mjs$|scripts\/julius-reviewer-isolation|scripts\/julius-reviewer-deadline\.mjs$|scripts\/julius-live-preflight\.ts$|scripts\/julius-usage-limit\.mjs$|\.github\/julius-learning-store\.sh$|\.github\/julius-phase\.sh$|\.github\/wait-for-executor\.sh$|\.github\/julius-live-|\.github\/actions\/|\.github\/julius-mission-slice\/|\.github\/julius-learning-registrations\/|scripts\/julius-landing|scripts\/julius-governed-bootstrap|\.github\/julius-live-evidence-dump\.sh$|.*\bmigrations?\/)/iu;
 // SIGNED-EXCEPTION: the spend ceilings and the effort tripwire live here. A PR may change them only if the reviewer's signed clearance lists the EXACT file in `governed-exceptions`.
 export const EXCEPTION_ELIGIBLE = ['relay-bridge/julius/role-effort.test.ts', 'scripts/julius-live-contract-check.mjs'];
 // Matched case-insensitively for the same reason as above; a case variant is never in the signed list (that list holds exact names only), so it is always refused.
@@ -390,7 +390,7 @@ const signatureIsCanonical = (b64) => canonicalB64(b64) && Buffer.from(b64, 'bas
 /** Build the landing commit message. `freeText` defaults to the title built from the clearance (PR number and head only); a caller-supplied text is allowed but THROWS when any line
  * mentions the uppercase phrase JULIUS LANDING at all (a PR title, say, must never be able to forge or truncate the block) or carries a CR. THROWS when the clearance does not parse or the signature is not canonical
  * base64 of 64 bytes (the signature is verified against the key by the caller, not here). */
-export function buildLandingCommitMessage({ clearanceText, signatureB64, freeText }) {
+export function buildLandingCommitMessage({ clearanceText, signatureB64, freeText, founderSignatureB64 }) {
   const parsed = parseClearance(clearanceText);
   if (parsed.problems.length) throw new Error(`cannot build a landing message from a malformed clearance: ${parsed.problems.join('; ')}`);
   const signature = String(signatureB64).trim();
@@ -401,7 +401,11 @@ export function buildLandingCommitMessage({ clearanceText, signatureB64, freeTex
   if (body === '') throw new Error('the free text of the landing message must not be empty');
   if (body.includes('\r')) throw new Error('the free text of the landing message must not contain CR');
   if (markerMentions(body) > 0) throw new Error(`the free text of the landing message must not contain "${MARKER_PHRASE}" (uppercase) anywhere`);
-  return [body, '', LANDING_BEGIN, 'v: 1', `clearance-nonce: ${f.nonce}`, `clearance-b64: ${Buffer.from(clearanceText, 'utf8').toString('base64')}`, `signature-b64: ${signature}`, LANDING_END, ''].join('\n');
+  const founder = founderSignatureB64 === undefined ? null : String(founderSignatureB64).trim();
+  if (founder !== null && !signatureIsCanonical(founder)) throw new Error('the founder-approval signature must be canonical base64 of 64 bytes');
+  // The founder-approval line is optional and last. A governed landing of a founder-governed path carries it (H1).
+  const founderLine = founder === null ? [] : [`founder-signature-b64: ${founder}`];
+  return [body, '', LANDING_BEGIN, 'v: 1', `clearance-nonce: ${f.nonce}`, `clearance-b64: ${Buffer.from(clearanceText, 'utf8').toString('base64')}`, `signature-b64: ${signature}`, ...founderLine, LANDING_END, ''].join('\n');
 }
 
 /** Parse a landing commit message strictly. Returns { problems, fields }; fields = { freeText, nonce, clearanceText, signatureB64, clearance } where `clearance` is the parsed signed
@@ -425,7 +429,7 @@ export function parseLandingCommitMessage(message, { expected, publicKeyPem } = 
   if (lines[e] !== LANDING_END) problems.push('the END marker must be exactly its line');
   if (e !== lines.length - 1) problems.push('nothing may follow the END marker');
   if (b === 0) problems.push('free text must come before the block');
-  if (e - b !== 5) problems.push('the block must hold exactly four key lines');
+  if (e - b !== 5 && e - b !== 6) problems.push('the block must hold four key lines, or five with founder-signature-b64 last');
   if (problems.length) return { problems, fields };
   const block = lines.slice(b + 1, e);
   const raw = {};
@@ -437,6 +441,12 @@ export function parseLandingCommitMessage(message, { expected, publicKeyPem } = 
   if (raw['clearance-nonce'] !== undefined && !/^[0-9a-f]{32}$/u.test(raw['clearance-nonce'])) problems.push('clearance-nonce must be 32 hex characters');
   if (raw['clearance-b64'] !== undefined && (raw['clearance-b64'] === '' || !canonicalB64(raw['clearance-b64']))) problems.push('clearance-b64 must be canonical base64 on one line');
   if (raw['signature-b64'] !== undefined && !signatureIsCanonical(raw['signature-b64'])) problems.push('signature-b64 must be canonical base64 of 64 bytes');
+  if (block.length === 5) {
+    const prefix = 'founder-signature-b64: ';
+    if (!block[4].startsWith(prefix)) problems.push(`block line 5 must start with "${prefix}"`);
+    else if (!signatureIsCanonical(block[4].slice(prefix.length))) problems.push('founder-signature-b64 must be canonical base64 of 64 bytes');
+    else raw['founder-signature-b64'] = block[4].slice(prefix.length);
+  }
   if (problems.length) return { problems, fields };
   const clearanceText = Buffer.from(raw['clearance-b64'], 'base64').toString('utf8');
   const parsed = parseClearance(clearanceText);
@@ -448,7 +458,7 @@ export function parseLandingCommitMessage(message, { expected, publicKeyPem } = 
     fields.clearance = c;
   }
   if (publicKeyPem !== undefined) problems.push(...verifyClearanceSignature(clearanceText, raw['signature-b64'], publicKeyPem));
-  Object.assign(fields, { freeText: lines.slice(0, b).join('\n'), nonce: raw['clearance-nonce'], clearanceText, signatureB64: raw['signature-b64'] });
+  Object.assign(fields, { freeText: lines.slice(0, b).join('\n'), nonce: raw['clearance-nonce'], clearanceText, signatureB64: raw['signature-b64'], founderSignatureB64: raw['founder-signature-b64'] });
   return { problems, fields };
 }
 

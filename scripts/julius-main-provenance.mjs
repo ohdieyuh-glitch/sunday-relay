@@ -49,6 +49,9 @@ import {
 import {
   EXTERNAL_ANCHOR_VARIABLE,
   FIRST_PARENT_WALK_CAP,
+  FOUNDER_ANCHOR_VARIABLE,
+  FOUNDER_APPROVAL_KEY_PATH,
+  founderApprovalProblem,
   GOVERNED_LANDER_BOT_VARIABLE,
   TRUSTED_CHECKPOINT_SHA,
   TRUSTED_COMPUTING_BASE,
@@ -170,7 +173,7 @@ export function extractLandingBlock(message) {
   const begin = lines.indexOf(LANDING_BEGIN);
   const end = lines.indexOf(LANDING_END);
   if (begin < 0 || end < 0) return bad('a landing marker is not alone on its line');
-  if (end !== begin + 5) return bad('the landing block must hold exactly four lines between its markers');
+  if (end !== begin + 5 && end !== begin + 6) return bad('the landing block must hold four lines between its markers, or five with founder-signature-b64 last');
   const after = lines.slice(end + 1);
   if (!(after.length === 0 || (after.length === 1 && after[0] === ''))) return bad('text follows the landing block');
   const expect = [['v', /^1$/u], ['clearance-nonce', /^[0-9a-f]{32}$/u], ['clearance-b64', CANONICAL_BASE64], ['signature-b64', CANONICAL_BASE64]];
@@ -185,7 +188,15 @@ export function extractLandingBlock(message) {
     values[key] = value;
   }
   if (!isCanonicalBase64(values['clearance-b64']) || !isCanonicalBase64(values['signature-b64'])) return bad('a base64 payload is not canonical');
-  return { state: 'ok', nonce: values['clearance-nonce'], clearanceB64: values['clearance-b64'], signatureB64: values['signature-b64'] };
+  let founderSignatureB64;
+  if (end === begin + 6) {
+    const line = lines[begin + 5];
+    const prefix = 'founder-signature-b64: ';
+    if (!line.startsWith(prefix)) return bad(`line 5 of the landing block must start with "${prefix}"`);
+    founderSignatureB64 = line.slice(prefix.length);
+    if (!isCanonicalBase64(founderSignatureB64) || Buffer.from(founderSignatureB64, 'base64').length !== 64) return bad('the founder-signature-b64 value is malformed');
+  }
+  return { state: 'ok', nonce: values['clearance-nonce'], clearanceB64: values['clearance-b64'], signatureB64: values['signature-b64'], founderSignatureB64 };
 }
 
 /** The clearance text rules, restated here on purpose: this file imports nothing from the lander it is a check on. */
@@ -304,7 +315,7 @@ export function readReviewerKey(pem) {
  * protected-paths line lists nothing, so those paths stay refused. The two exception-eligible files may change only
  * when the SIGNED clearance names them in governed-exceptions.
  */
-const SIGNED_LANDING_HARD_FORBIDDEN = /^(\.github\/workflows\/|\.github\/julius-landing\/|\.github\/julius-mission-pins\.txt$|\.github\/julius-approvers\.json$|\.github\/CODEOWNERS$|CODEOWNERS$|docs\/CODEOWNERS$|CLAUDE\.md$|package\.json$|package-lock\.json$|scripts\/julius-approval-gates\.mjs$|scripts\/julius-live-evidence\.mjs$|scripts\/julius-main-provenance|scripts\/julius-review-currency|scripts\/julius-main-monotonicity|scripts\/julius-paid-slot|scripts\/julius-subscription-check|scripts\/julius-live-preflight-gates|scripts\/julius-accept|scripts\/relay-repository-boundary|scripts\/export-julius-harness|scripts\/relay-parity-gate|scripts\/wonderland-beta-gate|scripts\/julius-live-preflight-identity|scripts\/julius-derive-scoped-credentials|scripts\/julius-ci-callers|scripts\/ci-test-accounting|scripts\/julius-paid-dispatch|scripts\/julius-paid-run-archive|\.github\/julius-mission-pins\.sh$|\.github\/julius-executor-entrypoint\.sh$|scripts\/julius-docker-executor\.sh$|scripts\/julius-executor-ready\.mjs$|scripts\/julius-reviewer-isolation|scripts\/julius-reviewer-deadline\.mjs$|scripts\/julius-live-preflight\.ts$|scripts\/julius-usage-limit\.mjs$|\.github\/julius-learning-store\.sh$|\.github\/julius-phase\.sh$|\.github\/wait-for-executor\.sh$|\.github\/julius-live-|\.github\/actions\/|\.github\/julius-mission-slice\/|\.github\/julius-learning-registrations\/|scripts\/julius-landing|\.github\/julius-live-evidence-dump\.sh$|.*\bmigrations?\/)/iu;
+const SIGNED_LANDING_HARD_FORBIDDEN = /^(\.github\/workflows\/|\.github\/julius-landing\/|\.github\/julius-mission-pins\.txt$|\.github\/julius-approvers\.json$|\.github\/CODEOWNERS$|CODEOWNERS$|docs\/CODEOWNERS$|CLAUDE\.md$|package\.json$|package-lock\.json$|scripts\/julius-approval-gates\.mjs$|scripts\/julius-live-evidence\.mjs$|scripts\/julius-main-provenance|scripts\/julius-review-currency|scripts\/julius-main-monotonicity|scripts\/julius-paid-slot|scripts\/julius-subscription-check|scripts\/julius-live-preflight-gates|scripts\/julius-accept|scripts\/relay-repository-boundary|scripts\/export-julius-harness|scripts\/relay-parity-gate|scripts\/wonderland-beta-gate|scripts\/julius-live-preflight-identity|scripts\/julius-derive-scoped-credentials|scripts\/julius-ci-callers|scripts\/ci-test-accounting|scripts\/julius-paid-dispatch|scripts\/julius-paid-run-archive|\.github\/julius-mission-pins\.sh$|\.github\/julius-executor-entrypoint\.sh$|scripts\/julius-docker-executor\.sh$|scripts\/julius-executor-ready\.mjs$|scripts\/julius-reviewer-isolation|scripts\/julius-reviewer-deadline\.mjs$|scripts\/julius-live-preflight\.ts$|scripts\/julius-usage-limit\.mjs$|\.github\/julius-learning-store\.sh$|\.github\/julius-phase\.sh$|\.github\/wait-for-executor\.sh$|\.github\/julius-live-|\.github\/actions\/|\.github\/julius-mission-slice\/|\.github\/julius-learning-registrations\/|scripts\/julius-landing|scripts\/julius-governed-bootstrap|\.github\/julius-live-evidence-dump\.sh$|.*\bmigrations?\/)/iu;
 const SIGNED_LANDING_EXCEPTION_ELIGIBLE = ['relay-bridge/julius/role-effort.test.ts', 'scripts/julius-live-contract-check.mjs'];
 export const SIGNED_LANDING_GOVERNED = Object.freeze({ HARD_FORBIDDEN: SIGNED_LANDING_HARD_FORBIDDEN, EXCEPTION_ELIGIBLE: SIGNED_LANDING_EXCEPTION_ELIGIBLE });
 
@@ -484,6 +495,16 @@ export function evaluateSignedLanding(input, tip) {
       botId: input?.governedLanderBotId ?? process.env[GOVERNED_LANDER_BOT_VARIABLE],
     });
     if (identity) return signedVerdict('unprovenanced', identity, base);
+    // H1: the governed App and the reviewer signature are not enough for these
+    // paths. The founder-approval key, read at the parent, must have signed the
+    // same clearance bytes; the signature travels in the landing block.
+    const founder = founderApprovalProblem({
+      text: clearanceText,
+      signatureB64: block.founderSignatureB64 ?? '',
+      pem: input?.founderKeyPem,
+      anchor: input && Object.prototype.hasOwnProperty.call(input, 'externalFounderKeySha256') ? input.externalFounderKeySha256 : process.env[FOUNDER_ANCHOR_VARIABLE],
+    });
+    if (founder) return signedVerdict('unprovenanced', founder, base);
   }
   const success = { ...base, prNumber: Number(clearance.pr), reviewedHeadSha: clearance.head, approvedBy: [clearance.by] };
   const pin = reviewerKeyPinRefusal(input?.reviewerKeyPem, externalAnchorOf(input));
@@ -507,6 +528,8 @@ async function withTrustChain(single, source) {
     commits = await annotateChainLandings(commits, {
       pem: source?.reviewerKeyPem,
       anchor,
+      founderPem: source?.founderKeyPem,
+      founderAnchor: process.env[FOUNDER_ANCHOR_VARIABLE],
       now: typeof source?.now === 'number' ? source.now : Date.now(),
     });
     const last = commits.length - 1;
@@ -910,6 +933,18 @@ async function main(argv) {
     let reviewerKeyPem;
     let reviewerKeyAtSha;
     let tipReviewerKeyPem;
+    let founderKeyPem;
+    /** A governed file at a ref, or undefined. A missing founder key fails closed inside founderApprovalProblem. */
+    const pemAt = (path, ref) => {
+      try {
+        const file = gh(`repos/${repo}/contents/${path}?ref=${ref}`);
+        return file?.type === 'file' && file?.encoding === 'base64' && typeof file?.content === 'string'
+          ? Buffer.from(file.content, 'base64').toString('utf8')
+          : undefined;
+      } catch {
+        return undefined;
+      }
+    };
     let changedPaths;
     let changedPathsComplete;
     let headCommit;
@@ -921,6 +956,7 @@ async function main(argv) {
         reviewerKeyPem = Buffer.from(keyFile.content, 'base64').toString('utf8');
         reviewerKeyAtSha = parentOfTip;
       }
+      founderKeyPem = pemAt(FOUNDER_APPROVAL_KEY_PATH, parentOfTip);
       const tipKeyFile = gh(`repos/${repo}/contents/.github/julius-landing/reviewer-ed25519.pub?ref=${mainSha}`);
       if (tipKeyFile?.type === 'file' && tipKeyFile?.encoding === 'base64' && typeof tipKeyFile?.content === 'string') {
         tipReviewerKeyPem = Buffer.from(tipKeyFile.content, 'base64').toString('utf8');
@@ -1029,6 +1065,7 @@ async function main(argv) {
       changedPaths,
       changedPathsComplete,
       headCommit,
+      founderKeyPem,
       landingCommitterId: mainCommit?.committer?.id,
       landingVerificationVerified: mainCommit?.commit?.verification?.verified === true,
       landingVerificationReason: mainCommit?.commit?.verification?.reason,
@@ -1062,6 +1099,7 @@ async function main(argv) {
       result = await withTrustChain(result, {
         chainCommits,
         reviewerKeyPem: chainKeyPem,
+        founderKeyPem: pemAt(FOUNDER_APPROVAL_KEY_PATH, floor),
         attestationText: disk?.text,
         attestationSignatureB64: disk?.signatureB64 ?? undefined,
         now: attested ? Date.now() : undefined,

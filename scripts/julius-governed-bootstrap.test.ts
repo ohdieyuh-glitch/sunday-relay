@@ -36,6 +36,13 @@ const der = Buffer.from(pair.publicKey.export({ type: 'spki', format: 'der' }));
 const spki = createHash('sha256').update(der).digest('hex');
 const raw = der.subarray(der.length - 32).toString('hex');
 const signWith = (text: string) => sign(null, Buffer.from(text, 'utf8'), pair.privateKey).toString('base64');
+/** H1: a throwaway founder-approval key, pinned only in the fixture copy. */
+const founder = generateKeyPairSync('ed25519');
+const founderPem = founder.publicKey.export({ type: 'spki', format: 'pem' }).toString();
+const founderDer = Buffer.from(founder.publicKey.export({ type: 'spki', format: 'der' }));
+const founderSpki = createHash('sha256').update(founderDer).digest('hex');
+const founderRaw = founderDer.subarray(founderDer.length - 32).toString('hex');
+const founderSign = (text: string) => sign(null, Buffer.from(text, 'utf8'), founder.privateKey).toString('base64');
 
 const work = mkdtempSync(join(tmpdir(), 'julius-governed-bootstrap-'));
 const fixtureRoot = join(work, 'repo');
@@ -60,6 +67,13 @@ const rewritePins = (rel: string) => {
 rewritePins('scripts/julius-main-provenance-trust.mjs');
 rewritePins('.github/julius-landing/land-lib.mjs');
 writeFileSync(join(fixtureRoot, '.github/julius-landing/reviewer-ed25519.pub'), publicPem);
+writeFileSync(join(fixtureRoot, '.github/julius-landing/founder-approval-ed25519.pub'), founderPem);
+{
+  const trustPath = join(fixtureRoot, 'scripts/julius-main-provenance-trust.mjs');
+  writeFileSync(trustPath, readFileSync(trustPath, 'utf8')
+    .replace('export const PINNED_FOUNDER_APPROVAL_SPKI_SHA256 = null;', `export const PINNED_FOUNDER_APPROVAL_SPKI_SHA256 = '${founderSpki}';`)
+    .replace('export const PINNED_FOUNDER_APPROVAL_RAW_KEY = null;', `export const PINNED_FOUNDER_APPROVAL_RAW_KEY = '${founderRaw}';`));
+}
 
 function fileBytes(rel: string) {
   const local = join(fixtureRoot, rel);
@@ -109,7 +123,7 @@ function attest(over: { checkpoint?: string; tree?: string; issued?: string; exp
     expires: over.expires ?? EXPIRES,
     ...(over.nonce ? { nonce: over.nonce } : {}),
   });
-  return { text, signature: signWith(text) };
+  return { text, signature: signWith(text), founderSignature: founderSign(text) };
 }
 
 const signed = attest();
@@ -128,6 +142,9 @@ function good(over: Record<string, unknown> = {}) {
     externalAnchor: spki,
     attestationText: signed.text,
     attestationSignatureB64: signed.signature,
+    attestationFounderSignatureB64: signed.founderSignature,
+    founderPublicKeyPem: founderPem,
+    founderAnchor: founderSpki,
     treeHashes,
     snapshot,
     snapshotSha256: treeHashes['.github/julius-landing/main-ruleset.json'],
@@ -176,6 +193,7 @@ describe('the bootstrap decision fails closed', () => {
       existingCheckpointNames: [`${STALE}.sig`, `${STALE}.txt`],
       attestationText: same.text,
       attestationSignatureB64: same.signature,
+      attestationFounderSignatureB64: same.founderSignature,
     }));
     expect(decision.ok, decision.problems.join('\n')).toBe(true);
     expect((decision as { recovery?: boolean }).recovery).toBe(true);
@@ -192,10 +210,29 @@ describe('the bootstrap decision fails closed', () => {
     const plan = (boot as unknown as { installerDiffPlan: (target: string, names: string[]) => { added: string[]; removed: string[] } })
       .installerDiffPlan(TARGET, [`${STALE}.txt`]);
     expect(plan.removed).toEqual([`.github/julius-landing/checkpoints/${STALE}.txt`]);
-    expect(plan.added).toEqual([`.github/julius-landing/checkpoints/${TARGET}.sig`, `.github/julius-landing/checkpoints/${TARGET}.txt`]);
+    expect(plan.added).toEqual([`.github/julius-landing/checkpoints/${TARGET}.founder.sig`, `.github/julius-landing/checkpoints/${TARGET}.sig`, `.github/julius-landing/checkpoints/${TARGET}.txt`]);
     expect(problems({ existingCheckpointNames: [`${STALE}.txt`] })).toBe('');
     expect(problems({ existingCheckpointNames: ['README.md'] })).toMatch(/holds files that are not attestations/u);
     expect(problems({ existingCheckpointNames: null })).toMatch(/checkpoint directory at the target could not be read/u);
+  });
+
+  it('H1: the attestation needs the founder-approval signature as well as the reviewer signature', () => {
+    expect(problems({ attestationFounderSignatureB64: '' })).toMatch(/founder approval: no founder-approval signature was supplied/u);
+    expect(problems({ attestationFounderSignatureB64: signed.signature })).toMatch(/founder approval: the founder-approval signature does not verify/u);
+    const other = attest({ tree: OTHER });
+    expect(problems({ attestationFounderSignatureB64: other.founderSignature })).toMatch(/founder-approval signature does not verify over these exact bytes/u);
+    expect(problems({ founderAnchor: '' })).toMatch(/JULIUS_FOUNDER_APPROVAL_KEY_SHA256 is unset/u);
+    expect(problems({ founderPublicKeyPem: otherPem })).toMatch(/not the pinned founder-approval key/u);
+  });
+
+  it('H1: the real tree pins no founder-approval key, so the real bootstrap refuses', async () => {
+    const real = (await import(pathToFileURL(join(ROOT, 'scripts/julius-main-provenance-trust.mjs')).href)) as {
+      PINNED_FOUNDER_APPROVAL_SPKI_SHA256: string | null;
+      founderApprovalProblem: (input: Record<string, unknown>) => string | null;
+    };
+    expect(real.PINNED_FOUNDER_APPROVAL_SPKI_SHA256).toBeNull();
+    expect(real.founderApprovalProblem({ text: signed.text, signatureB64: signed.founderSignature, pem: founderPem, anchor: founderSpki }))
+      .toMatch(/no founder-approval key is pinned/u);
   });
 
   it('refuses an attestation whose commit list is not the first-parent chain from the prior', () => {
@@ -267,6 +304,8 @@ describe('runBootstrap talks to GitHub only with a token and never prints it', (
   const signaturePath = join(work, 'attestation.sig');
   writeFileSync(attestationPath, signed.text);
   writeFileSync(signaturePath, `${signed.signature}\n`);
+  const founderSignaturePath = join(work, 'attestation.founder.sig');
+  writeFileSync(founderSignaturePath, `${signed.founderSignature}\n`);
 
   const argv = [
     '--main-sha', MAIN,
@@ -274,6 +313,7 @@ describe('runBootstrap talks to GitHub only with a token and never prints it', (
     '--target-tree', TREE,
     '--attestation', attestationPath,
     '--signature', signaturePath,
+    '--founder-signature', founderSignaturePath,
   ];
 
   type Mode = 'ok' | 'identity' | 'moved' | 'tree' | 'readback-tree' | 'readback-parents' | 'readback-message' | 'readback-extra' | 'stale';
@@ -291,6 +331,7 @@ describe('runBootstrap talks to GitHub only with a token and never prints it', (
         const files = [
           { status: 'added', filename: `.github/julius-landing/checkpoints/${TARGET}.txt` },
           { status: 'added', filename: `.github/julius-landing/checkpoints/${TARGET}.sig` },
+          { status: 'added', filename: `.github/julius-landing/checkpoints/${TARGET}.founder.sig` },
           ...(mode === 'stale' ? [{ status: 'removed', filename: `.github/julius-landing/checkpoints/${STALE}.txt` }] : []),
           ...(mode === 'readback-extra' ? [{ status: 'removed', filename: 'src/main.tsx' }] : []),
         ];
@@ -337,6 +378,7 @@ describe('runBootstrap talks to GitHub only with a token and never prints it', (
     JULIUS_REVIEWER_KEY_SHA256: spki,
     JULIUS_GOVERNED_LANDER_APP_ID: APP,
     JULIUS_GOVERNED_LANDER_BOT_ID: BOT,
+    JULIUS_FOUNDER_APPROVAL_KEY_SHA256: founderSpki,
   };
 
   it('returns before any request when the token is unset', async () => {
@@ -438,6 +480,7 @@ describe('runBootstrap talks to GitHub only with a token and never prints it', (
     expect(tree.base_tree).toBe(TREE);
     expect(tree.tree).toContainEqual({ path: `.github/julius-landing/checkpoints/${STALE}.txt`, mode: '100644', type: 'blob', sha: null });
     expect(tree.tree.filter((row) => row.sha !== null).map((row) => row.path).sort()).toEqual([
+      `.github/julius-landing/checkpoints/${TARGET}.founder.sig`,
       `.github/julius-landing/checkpoints/${TARGET}.sig`,
       `.github/julius-landing/checkpoints/${TARGET}.txt`,
     ]);

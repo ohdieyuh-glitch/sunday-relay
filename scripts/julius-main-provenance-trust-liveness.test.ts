@@ -40,6 +40,14 @@ const der = Buffer.from(pair.publicKey.export({ type: 'spki', format: 'der' }));
 const spki = createHash('sha256').update(der).digest('hex');
 const raw = der.subarray(der.length - 32).toString('hex');
 const attacker = generateKeyPairSync('ed25519');
+/** H1: the founder-approval fixture key. A throwaway, like the reviewer fixture key. */
+const founder = generateKeyPairSync('ed25519');
+const founderPem = founder.publicKey.export({ type: 'spki', format: 'pem' }).toString();
+const founderDer = Buffer.from(founder.publicKey.export({ type: 'spki', format: 'der' }));
+const founderSpki = createHash('sha256').update(founderDer).digest('hex');
+const founderRaw = founderDer.subarray(founderDer.length - 32).toString('hex');
+const founderEnv = { JULIUS_FOUNDER_APPROVAL_KEY_SHA256: founderSpki };
+const founderSign = (text: string) => sign(null, Buffer.from(text, 'utf8'), founder.privateKey).toString('base64');
 const attackerPem = attacker.publicKey.export({ type: 'spki', format: 'pem' }).toString();
 
 type TrustModule = {
@@ -94,7 +102,7 @@ function signText(text: string, key = pair.privateKey) {
 async function landingBuilder() {
   // land-lib.mjs has no declaration file. Import it by URL, as the other provenance tests do.
   const loaded = (await import(new URL('../.github/julius-landing/land-lib.mjs', import.meta.url).href)) as {
-    buildLandingCommitMessage: (input: { clearanceText: string; signatureB64: string }) => string;
+    buildLandingCommitMessage: (input: { clearanceText: string; signatureB64: string; founderSignatureB64?: string }) => string;
   };
   return loaded.buildLandingCommitMessage;
 }
@@ -103,13 +111,16 @@ async function buildFixture() {
   const repo = mkdtempSync(join(tmpdir(), 'julius-liveness-'));
   const rewritten = readFileSync(join(ROOT, 'scripts/julius-main-provenance-trust.mjs'), 'utf8')
     .replaceAll(PINNED_REVIEWER_SPKI_SHA256, spki)
-    .replaceAll(PINNED_REVIEWER_RAW_KEY, raw);
+    .replaceAll(PINNED_REVIEWER_RAW_KEY, raw)
+    .replace('export const PINNED_FOUNDER_APPROVAL_SPKI_SHA256 = null;', `export const PINNED_FOUNDER_APPROVAL_SPKI_SHA256 = '${founderSpki}';`)
+    .replace('export const PINNED_FOUNDER_APPROVAL_RAW_KEY = null;', `export const PINNED_FOUNDER_APPROVAL_RAW_KEY = '${founderRaw}';`);
   for (const rel of TRUSTED_COMPUTING_BASE) {
     mkdirSync(join(repo, dirname(rel)), { recursive: true });
     cpSync(join(ROOT, rel), join(repo, rel));
   }
   writeFileSync(join(repo, 'scripts/julius-main-provenance-trust.mjs'), rewritten);
   writeFileSync(join(repo, '.github/julius-landing/reviewer-ed25519.pub'), publicPem);
+  writeFileSync(join(repo, '.github/julius-landing/founder-approval-ed25519.pub'), founderPem);
   git(repo, ['init', '-b', 'main']);
   git(repo, ['add', '-A']);
   git(repo, ['commit', '-m', 'checkpoint']);
@@ -132,6 +143,7 @@ async function buildFixture() {
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, `${sha}.txt`), text);
   writeFileSync(join(dir, `${sha}.sig`), `${signature}\n`);
+  writeFileSync(join(dir, `${sha}.founder.sig`), `${founderSign(text)}\n`);
   git(repo, ['add', '-A']);
   git(repo, ['commit', '-m', 'installer-1 attestation']);
   mkdirSync(join(repo, 'src'), { recursive: true });
@@ -162,7 +174,7 @@ async function buildFixture() {
   const messagePath = join(repo, '.git/liveness-message.txt');
   writeFileSync(messagePath, message);
   git(repo, ['commit', '-F', messagePath]);
-  return { repo, mod: loaded, env: { [loaded.EXTERNAL_ANCHOR_VARIABLE]: spki } };
+  return { repo, mod: loaded, env: { [loaded.EXTERNAL_ANCHOR_VARIABLE]: spki, ...founderEnv } };
 }
 
 function copyFixture() {
@@ -183,7 +195,7 @@ afterAll(() => {
 });
 
 describe('signed checkpoint liveness', () => {
-  const gate = (repo: string, env: NodeJS.ProcessEnv = { [mod.EXTERNAL_ANCHOR_VARIABLE]: spki }, now = NOW) =>
+  const gate = (repo: string, env: NodeJS.ProcessEnv = { [mod.EXTERNAL_ANCHOR_VARIABLE]: spki, ...founderEnv }, now = NOW) =>
     mod.requireTrustedVerifier(env, { root: repo, now });
 
   it('the land gate and the accept-main gate pass for a subsequent signed landing', async () => {
@@ -221,8 +233,19 @@ describe('signed checkpoint liveness', () => {
       '',
     ].join('\n');
     const buildLandingCommitMessage = await landingBuilder();
-    const message = buildLandingCommitMessage({ clearanceText: clearance, signatureB64: signText(clearance) });
     const messagePath = join(repo, '.git/protected-message.txt');
+    // H1: the App committer and the reviewer signature, without the founder-approval signature, are refused.
+    writeFileSync(messagePath, buildLandingCommitMessage({ clearanceText: clearance, signatureB64: signText(clearance) }));
+    git(repo, ['commit', '-F', messagePath]);
+    const reviewerOnlySha = git(repo, ['rev-parse', 'HEAD']).trim();
+    const reviewerOnly = await mod.requireTrustedVerifier(
+      { [mod.EXTERNAL_ANCHOR_VARIABLE]: spki, ...founderEnv, JULIUS_GOVERNED_LANDER_BOT_ID: '347502603' },
+      { root: repo, now: NOW, identities: { [reviewerOnlySha]: { committerId: 347502603, verificationVerified: true, verificationReason: 'valid' } } },
+    );
+    expect(reviewerOnly.ok).toBe(false);
+    expect(reviewerOnly.reason).toMatch(/founder approval: no founder-approval signature was supplied/u);
+    git(repo, ['reset', '-q', '--soft', 'HEAD~1']);
+    const message = buildLandingCommitMessage({ clearanceText: clearance, signatureB64: signText(clearance), founderSignatureB64: founderSign(clearance) });
     writeFileSync(messagePath, message);
     git(repo, ['commit', '-F', messagePath]);
     const landingSha = git(repo, ['rev-parse', 'HEAD']).trim();
@@ -240,13 +263,13 @@ describe('signed checkpoint liveness', () => {
         expect(readFileSync(join(repo, file), 'utf8')).toContain('JULIUS_GOVERNED_LANDER_BOT_ID: ${{ vars.JULIUS_GOVERNED_LANDER_BOT_ID }}');
       }
       const missing = await mod.requireTrustedVerifier(
-        { [mod.EXTERNAL_ANCHOR_VARIABLE]: spki },
+        { [mod.EXTERNAL_ANCHOR_VARIABLE]: spki, ...founderEnv },
         { root: repo, now: NOW, identities },
       );
       expect(missing.ok, missing.reason).toBe(false);
       expect(missing.reason).toMatch(/JULIUS_GOVERNED_LANDER_BOT_ID is unset/u);
       const accepted = await mod.requireTrustedVerifier(
-        { [mod.EXTERNAL_ANCHOR_VARIABLE]: spki, JULIUS_GOVERNED_LANDER_BOT_ID: '347502603' },
+        { [mod.EXTERNAL_ANCHOR_VARIABLE]: spki, ...founderEnv, JULIUS_GOVERNED_LANDER_BOT_ID: '347502603' },
         { root: repo, now: NOW, identities },
       );
       expect(accepted.ok, accepted.reason).toBe(true);
@@ -270,9 +293,17 @@ describe('signed checkpoint liveness', () => {
         landingVerificationVerified: true,
         landingVerificationReason: 'valid',
         externalReviewerKeySha256: spki,
+        founderKeyPem: founderPem,
+        externalFounderKeySha256: founderSpki,
       };
       const proved = provenance.evaluateMainProvenance({ ...fields, governedLanderBotId: '347502603' });
       expect(proved.verdict, proved.reason).toBe('provenant');
+      // H1: a reviewer signature and the App committer alone do not make a workflow change provenant.
+      const reviewerOnlyTip = provenance.evaluateMainProvenance({ ...fields, governedLanderBotId: '347502603', mainCommitMessage: buildLandingCommitMessage({ clearanceText: clearance, signatureB64: signText(clearance) }) });
+      expect(reviewerOnlyTip.verdict).toBe('unprovenanced');
+      expect(reviewerOnlyTip.reason).toMatch(/founder approval: no founder-approval signature was supplied/u);
+      const noFounderKey = provenance.evaluateMainProvenance({ ...fields, governedLanderBotId: '347502603', founderKeyPem: undefined });
+      expect(noFounderKey.reason).toMatch(/founder approval/u);
       const unset = provenance.evaluateMainProvenance(fields);
       expect(unset.verdict, unset.reason).toBe('unprovenanced');
       expect(unset.reason).toMatch(/JULIUS_GOVERNED_LANDER_BOT_ID is unset/u);
@@ -292,7 +323,7 @@ describe('signed checkpoint liveness', () => {
       const text = readFileSync(join(ROOT, file), 'utf8');
       const at = text.indexOf('node scripts/julius-main-provenance-trust.mjs --require-trusted-verifier');
       expect(at, file).toBeGreaterThan(0);
-      expect(text.slice(Math.max(0, at - 500), at)).toContain('GH_TOKEN: ${{ github.token }}');
+      expect(text.slice(Math.max(0, at - 700), at)).toContain('GH_TOKEN: ${{ github.token }}');
     }
     const repo = copyFixture();
     mkdirSync(join(repo, '.github/workflows'), { recursive: true });
@@ -320,13 +351,13 @@ describe('signed checkpoint liveness', () => {
       '',
     ].join('\n');
     const buildLandingCommitMessage = await landingBuilder();
-    const message = buildLandingCommitMessage({ clearanceText: clearance, signatureB64: signText(clearance) });
+    const message = buildLandingCommitMessage({ clearanceText: clearance, signatureB64: signText(clearance), founderSignatureB64: founderSign(clearance) });
     const messagePath = join(repo, '.git/identity-message.txt');
     writeFileSync(messagePath, message);
     git(repo, ['commit', '-F', messagePath]);
     const landingSha = git(repo, ['rev-parse', 'HEAD']).trim();
     const env = {
-      [mod.EXTERNAL_ANCHOR_VARIABLE]: spki,
+      [mod.EXTERNAL_ANCHOR_VARIABLE]: spki, ...founderEnv,
       JULIUS_GOVERNED_LANDER_BOT_ID: '347502603',
     };
     const original = globalThis.fetch;
@@ -373,7 +404,7 @@ describe('signed checkpoint liveness', () => {
     const dir = join(repo, mod.CHECKPOINT_ATTESTATION_DIR);
     for (const name of readdirSync(dir)) if (name.endsWith('.sig')) rmSync(join(dir, name));
     const result = await gate(repo, {
-      [mod.EXTERNAL_ANCHOR_VARIABLE]: spki,
+      [mod.EXTERNAL_ANCHOR_VARIABLE]: spki, ...founderEnv,
       JULIUS_CHECKPOINT_ATTESTATIONS: 'JULIUS-CHECKPOINT-V1\n',
       JULIUS_CHECKPOINT_ATTESTATION_SIGNATURE: signText('nope'),
     });
@@ -399,7 +430,7 @@ describe('signed checkpoint liveness', () => {
         .replace(/^expires: .*$/mu, `expires: ${item.expires}`);
       writeFileSync(join(dir, fileName), next);
       writeFileSync(join(dir, fileName.replace(/\.txt$/u, '.sig')), `${signText(next)}\n`);
-      const result = await gate(repo, { [mod.EXTERNAL_ANCHOR_VARIABLE]: spki }, item.now);
+      const result = await gate(repo, { [mod.EXTERNAL_ANCHOR_VARIABLE]: spki, ...founderEnv }, item.now);
       expect(result.ok, item.reason).toBe(false);
       expect(result.reason, item.reason).toContain(item.reason);
       rmSync(repo, { recursive: true, force: true });
@@ -576,6 +607,7 @@ describe('signed checkpoint liveness', () => {
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, `${checkpoint}.txt`), text);
     writeFileSync(join(dir, `${checkpoint}.sig`), `${signText(text)}\n`);
+    writeFileSync(join(dir, `${checkpoint}.founder.sig`), `${founderSign(text)}\n`);
     git(repo, ['add', '-A']);
     git(repo, ['commit', '-m', 'founder installer companions and attestation']);
     const installed = await gate(repo);
@@ -668,6 +700,7 @@ describe('signed checkpoint liveness', () => {
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, `${checkpoint}.txt`), text);
     writeFileSync(join(dir, `${checkpoint}.sig`), `${signText(text)}\n`);
+    writeFileSync(join(dir, `${checkpoint}.founder.sig`), `${founderSign(text)}\n`);
     git(repo, ['add', '-A']);
     git(repo, ['commit', '-m', 'rename arbitrary code onto an installer path']);
     const result = await gate(repo);
@@ -754,6 +787,7 @@ describe('signed checkpoint liveness', () => {
     const dir = join(both, mod.CHECKPOINT_ATTESTATION_DIR);
     writeFileSync(join(dir, `${checkpoint}.txt`), text);
     writeFileSync(join(dir, `${checkpoint}.sig`), `${signText(text, attacker.privateKey)}\n`);
+    writeFileSync(join(dir, `${checkpoint}.founder.sig`), `${founderSign(text)}\n`);
     const attackerResult = await gate(both);
     expect(attackerResult.ok).toBe(false);
     expect(attackerResult.reason).toContain('not the pinned reviewer key');
@@ -809,7 +843,7 @@ describe('signed checkpoint liveness', () => {
     const messagePath = join(repo, '.git/second-message.txt');
     writeFileSync(messagePath, buildLandingCommitMessage({ clearanceText: text, signatureB64: signText(text) }));
     git(repo, ['commit', '-F', messagePath]);
-    const aged = await gate(repo, { [mod.EXTERNAL_ANCHOR_VARIABLE]: spki }, later);
+    const aged = await gate(repo, { [mod.EXTERNAL_ANCHOR_VARIABLE]: spki, ...founderEnv }, later);
     expect(aged.ok, aged.reason).toBe(true);
     expect(aged.reason).not.toMatch(/expired/u);
 
@@ -841,7 +875,7 @@ describe('signed checkpoint liveness', () => {
     const latePath = join(repo, '.git/late-message.txt');
     writeFileSync(latePath, buildLandingCommitMessage({ clearanceText: lateText, signatureB64: signText(lateText) }));
     git(repo, ['commit', '-F', latePath], { GIT_AUTHOR_DATE: lateWhen, GIT_COMMITTER_DATE: lateWhen });
-    const fresh = await gate(repo, { [mod.EXTERNAL_ANCHOR_VARIABLE]: spki }, later);
+    const fresh = await gate(repo, { [mod.EXTERNAL_ANCHOR_VARIABLE]: spki, ...founderEnv }, later);
     expect(fresh.ok, fresh.reason).toBe(false);
     expect(fresh.reason).toContain('expired');
     rmSync(repo, { recursive: true, force: true });
@@ -874,6 +908,7 @@ describe('signed checkpoint liveness', () => {
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, `${checkpoint}.txt`), text);
     writeFileSync(join(dir, `${checkpoint}.sig`), `${signText(text)}\n`);
+    writeFileSync(join(dir, `${checkpoint}.founder.sig`), `${founderSign(text)}\n`);
     git(repo, ['add', '-A']);
     git(repo, ['commit', '-m', 'founder installer with signature']);
     const installed = await gate(repo);
@@ -932,6 +967,7 @@ describe('signed checkpoint liveness', () => {
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, `${checkpoint}.txt`), text);
     writeFileSync(join(dir, `${checkpoint}.sig`), `${signText(text)}\n`);
+    writeFileSync(join(dir, `${checkpoint}.founder.sig`), `${founderSign(text)}\n`);
     const fakePath = join(repo, '.git/fake-installer-message.txt');
     writeFileSync(fakePath, buildLandingCommitMessage({ clearanceText: fake, signatureB64: signText(fake, attacker.privateKey) }));
     git(repo, ['add', '-A']);
@@ -993,6 +1029,7 @@ describe('signed checkpoint liveness', () => {
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, `${checkpoint}.txt`), text);
     writeFileSync(join(dir, `${checkpoint}.sig`), `${signText(text)}\n`);
+    writeFileSync(join(dir, `${checkpoint}.founder.sig`), `${founderSign(text)}\n`);
     git(repo, ['add', '-A']);
     git(repo, ['commit', '-m', 'founder installer with signature']);
     for (let i = 0; i < 30; i += 1) git(repo, ['commit', '--allow-empty', '-m', `pad ${i}`]);
@@ -1006,7 +1043,7 @@ describe('signed checkpoint liveness', () => {
   it('B4: an expired attestation locks every gate, and the bootstrap installer shape re-attests main', async () => {
     const repo = copyFixture();
     const later = Date.parse('2027-05-01T00:00:00Z');
-    const locked = await gate(repo, { [mod.EXTERNAL_ANCHOR_VARIABLE]: spki }, later);
+    const locked = await gate(repo, { [mod.EXTERNAL_ANCHOR_VARIABLE]: spki, ...founderEnv }, later);
     expect(locked.ok).toBe(false);
     expect(locked.reason).toMatch(/has expired/u);
     // The recovery run: target is main itself. The installer removes the
@@ -1030,11 +1067,12 @@ describe('signed checkpoint liveness', () => {
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, `${main}.txt`), text);
     writeFileSync(join(dir, `${main}.sig`), `${signText(text)}\n`);
+    writeFileSync(join(dir, `${main}.founder.sig`), `${founderSign(text)}\n`);
     git(repo, ['add', '-A']);
     git(repo, ['commit', '-m', 'Add the signed checkpoint attestation.']);
     const changed = git(repo, ['diff', '--no-renames', '--name-only', 'HEAD~1', 'HEAD']).trim().split('\n').sort();
     expect(changed).toEqual([...plan.added, ...plan.removed].sort());
-    const recovered = await gate(repo, { [mod.EXTERNAL_ANCHOR_VARIABLE]: spki }, later);
+    const recovered = await gate(repo, { [mod.EXTERNAL_ANCHOR_VARIABLE]: spki, ...founderEnv }, later);
     expect(recovered.ok, recovered.reason).toBe(true);
     // Leaving the expired file next to the new one is the B2 lockout.
     const both = copyFixture();
@@ -1044,7 +1082,7 @@ describe('signed checkpoint liveness', () => {
     writeFileSync(join(both, mod.CHECKPOINT_ATTESTATION_DIR, `${bothMain}.sig`), `${signText(bothText)}\n`);
     git(both, ['add', '-A']);
     git(both, ['commit', '-m', 'Add the signed checkpoint attestation.']);
-    const stale = await gate(both, { [mod.EXTERNAL_ANCHOR_VARIABLE]: spki }, later);
+    const stale = await gate(both, { [mod.EXTERNAL_ANCHOR_VARIABLE]: spki, ...founderEnv }, later);
     expect(stale.ok).toBe(false);
     expect(stale.reason).toMatch(/more than one checkpoint attestation is on main/u);
     rmSync(repo, { recursive: true, force: true });

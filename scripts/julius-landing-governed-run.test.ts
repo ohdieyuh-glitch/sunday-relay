@@ -18,7 +18,6 @@ const H = 'a'.repeat(40);
 const T = 'b'.repeat(40);
 const B = 'c'.repeat(40);
 const S = '5'.repeat(40);
-const OTHER = 'd'.repeat(40);
 const NONCE = 'ab'.repeat(16);
 const APP = '5457712';
 const BOT = '347502603';
@@ -31,6 +30,13 @@ const der = Buffer.from(pair.publicKey.export({ type: 'spki', format: 'der' }));
 const spki = createHash('sha256').update(der).digest('hex');
 const raw = der.subarray(der.length - 32).toString('hex');
 const signWith = (text: string, key = pair.privateKey) => sign(null, Buffer.from(text, 'utf8'), key).toString('base64');
+/** H1: a throwaway founder-approval key, pinned only in the fixture copy. */
+const founder = generateKeyPairSync('ed25519');
+const founderPem = String(founder.publicKey.export({ type: 'spki', format: 'pem' }));
+const founderDer = Buffer.from(founder.publicKey.export({ type: 'spki', format: 'der' }));
+const founderSpki = createHash('sha256').update(founderDer).digest('hex');
+const founderRaw = founderDer.subarray(founderDer.length - 32).toString('hex');
+const founderSign = (text: string) => sign(null, Buffer.from(text, 'utf8'), founder.privateKey).toString('base64');
 const appKey = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
 
 const work = mkdtempSync(join(tmpdir(), 'julius-governed-run-'));
@@ -43,6 +49,12 @@ const repin = (path: string) => writeFileSync(path, readFileSync(path, 'utf8')
 repin(join(fixtureLanding, 'land-lib.mjs'));
 cpSync(join(ROOT, 'scripts/julius-main-provenance-trust.mjs'), join(fixtureRoot, 'scripts/julius-main-provenance-trust.mjs'));
 repin(join(fixtureRoot, 'scripts/julius-main-provenance-trust.mjs'));
+{
+  const trustPath = join(fixtureRoot, 'scripts/julius-main-provenance-trust.mjs');
+  writeFileSync(trustPath, readFileSync(trustPath, 'utf8')
+    .replace('export const PINNED_FOUNDER_APPROVAL_SPKI_SHA256 = null;', `export const PINNED_FOUNDER_APPROVAL_SPKI_SHA256 = '${founderSpki}';`)
+    .replace('export const PINNED_FOUNDER_APPROVAL_RAW_KEY = null;', `export const PINNED_FOUNDER_APPROVAL_RAW_KEY = '${founderRaw}';`));
+}
 writeFileSync(join(fixtureLanding, 'reviewer-ed25519.pub'), publicPem);
 
 type RunResult = { exitCode: number; notes: string[]; walked: { pr: number; ok: boolean; problems: string[] }[] };
@@ -88,8 +100,9 @@ export function clearanceText(optional: string[], digest: string) {
   ].join('\n');
 }
 
-export function delivery(text: string, signature = signWith(text)) {
-  return `-----BEGIN JULIUS CLEARANCE-----\n${text}-----END JULIUS CLEARANCE-----\n-----BEGIN JULIUS CLEARANCE SIGNATURE-----\n${signature}\n-----END JULIUS CLEARANCE SIGNATURE-----`;
+export function delivery(text: string, signature = signWith(text), founderSignature?: string) {
+  const founderBlock = founderSignature === undefined ? '' : `\n-----BEGIN JULIUS FOUNDER APPROVAL SIGNATURE-----\n${founderSignature}\n-----END JULIUS FOUNDER APPROVAL SIGNATURE-----`;
+  return `-----BEGIN JULIUS CLEARANCE-----\n${text}-----END JULIUS CLEARANCE-----\n-----BEGIN JULIUS CLEARANCE SIGNATURE-----\n${signature}\n-----END JULIUS CLEARANCE SIGNATURE-----${founderBlock}`;
 }
 
 type Route = { status: number; body?: unknown };
@@ -213,6 +226,7 @@ export const baseEnv = (over: Record<string, string> = {}) => ({
   JULIUS_GOVERNED_LANDER_TOKEN: 'ghs_read_token',
   JULIUS_GOVERNED_LANDER_PRIVATE_KEY: appKey,
   JULIUS_REVIEWER_KEY_SHA256: spki,
+  JULIUS_FOUNDER_APPROVAL_KEY_SHA256: founderSpki,
   DRY_RUN: 'false',
   PR: '7',
   ...over,
@@ -222,6 +236,7 @@ const localFiles: Record<string, string> = {
   'governed-queue.txt': '7\n',
   'required-checks.txt': 'Verify Relay @15368\n',
   'reviewer-ed25519.pub': publicPem,
+  'founder-approval-ed25519.pub': founderPem,
   'main-ruleset.json': snapshotText,
 };
 
@@ -293,5 +308,43 @@ describe('B3: the delivering clearance comment is outside the digest by a signed
     expect(result.exitCode).toBe(1);
     expect(result.text).toMatch(/does not sign the comments-digest rule/u);
     expect(result.calls.some((call) => call.method === 'PATCH')).toBe(false);
+  });
+});
+
+describe('H1: the governed lander needs the founder-approval signature for a governed path', () => {
+  const WORKFLOW = '.github/workflows/ci.yml';
+  const optional = [`protected-paths: ${WORKFLOW}`, 'landing-method: squash', 'depends: -', 'comments-digest: excludes-delivery'];
+  const minted = (calls: { method: string; path: string; body: unknown }[]) => calls.filter((call) => call.method === 'POST' && call.path.endsWith('/access_tokens'));
+
+  it('refuses a reviewer-only clearance on a workflow path before any write token exists', async () => {
+    const text = clearanceText(optional, seenDigest([botComment]));
+    const result = await run({ files: [WORKFLOW], issueComments: [botComment, reviewerComment(delivery(text))] });
+    expect(result.exitCode).toBe(1);
+    expect(result.text).toMatch(/founder approval required for \.github\/workflows\/ci\.yml: founder approval: no founder-approval signature was supplied/u);
+    expect(minted(result.calls)).toEqual([]);
+    expect(result.calls.some((call) => call.method === 'PATCH')).toBe(false);
+  });
+
+  it('lands with both signatures over the same bytes, and only then requests workflows:write', async () => {
+    const text = clearanceText(optional, seenDigest([botComment]));
+    const result = await run({ files: [WORKFLOW], issueComments: [botComment, reviewerComment(delivery(text, signWith(text), founderSign(text)))] });
+    expect(result.exitCode, result.text).toBe(0);
+    const tokens = minted(result.calls);
+    expect(tokens).toHaveLength(1);
+    expect((tokens[0]?.body as { permissions?: Record<string, string> })?.permissions?.workflows).toBe('write');
+    const created = result.calls.find((call) => call.method === 'POST' && call.path.endsWith('/git/commits'));
+    expect(String((created?.body as { message?: string })?.message)).toContain(`founder-signature-b64: ${founderSign(text)}`);
+  });
+
+  it('refuses a founder signature over other bytes, and the hourly schedule is held to the same rule', async () => {
+    const text = clearanceText(optional, seenDigest([botComment]));
+    const other = clearanceText(optional, seenDigest([]));
+    const mismatched = await run({ files: [WORKFLOW], issueComments: [botComment, reviewerComment(delivery(text, signWith(text), founderSign(other)))] });
+    expect(mismatched.exitCode).toBe(1);
+    expect(mismatched.text).toMatch(/founder-approval signature does not verify over these exact bytes/u);
+    const scheduled = await run({ files: [WORKFLOW], issueComments: [botComment, reviewerComment(delivery(text))] }, { GITHUB_EVENT_NAME: 'schedule', DRY_RUN: '', PR: '' });
+    expect(scheduled.exitCode).toBe(1);
+    expect(scheduled.text).toMatch(/founder approval required/u);
+    expect(minted(scheduled.calls)).toEqual([]);
   });
 });
