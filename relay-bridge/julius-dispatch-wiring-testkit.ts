@@ -6,6 +6,7 @@ import { J1_CODER_MODEL } from './julius-dispatch-adapters';
 import { createMemoryDispatchLedger } from './julius-dispatch';
 import { createJ1LiveDispatchWithPins, type J1Env, type J1WiringDeps, type J1WiringResult } from './julius-dispatch-wiring-core';
 import type { ShellEffectPort } from './julius/executor-effects';
+import { createInProcessSpendLedger } from './julius-dispatch-spend';
 
 /**
  * TEST KIT ONLY. Fakes and TEST PINS (the sha256 of fake bytes) for the J1 wiring tests. Production code, server.ts and everything they
@@ -132,3 +133,6 @@ export async function echoed(controller: { issueEcho: (i: { projectId: string; c
   if (!e.ok || e.echoId === undefined) throw new Error('echo_refused');
   return { ...dispatchInput, clientOffsetMs: 0, echoId: e.echoId };
 }
+
+/** TEST ONLY: an in-process ledger standing in for the durable spent-tag record. Production never labels one PRESENT. */
+export const createDurableStandInSpendLedger = () => createInProcessSpendLedger('PRESENT');

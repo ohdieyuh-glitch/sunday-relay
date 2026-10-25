@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createMemoryAdmissionStore } from './julius-dispatch-admission';
 import { providerRequestId } from './julius-dispatch';
 import { createSharedSpendLedger, createSpentTagSpendLedger, preSpendDecision, spendRefusalCode } from './julius-dispatch-spend';
+import { createDurableStandInSpendLedger } from './julius-dispatch-wiring-testkit';
 import { authorizeJuliusLiveSpend, summarizeJuliusPriorRunSpend, type JuliusSettlementFact } from '../src/relay/mission/julius/julius-spend-ceiling';
 
 /**
@@ -71,7 +72,7 @@ describe('claim store', () => {
 
 describe('one spend ledger, both directions', () => {
   it('a settlement the J1 port records is the spend authorizeJuliusLiveSpend refuses on', async () => {
-    const ledger = createSharedSpendLedger({ durableRecord: 'PRESENT' });
+    const ledger = createDurableStandInSpendLedger();
     const runId = 'run:aaaaaaaaaaaaaaaaaaaaaaaa';
     await ledger.record(runId, fact(runId, 30_000_001));
     const read = await ledger.readPrior({ missionId: 'julius-inworld-data-1', projectId: 'proj-1' });
@@ -82,7 +83,7 @@ describe('one spend ledger, both directions', () => {
     if (!again.authorized) expect(again.reasonCode).toBe('qualifying_pair_spend_exceeded');
   });
   it('a fact summarized by the runtime module, placed on the same port, is what a later read returns', async () => {
-    const ledger = createSharedSpendLedger({ durableRecord: 'PRESENT' });
+    const ledger = createDurableStandInSpendLedger();
     const prior = fact('run:bbbbbbbbbbbbbbbbbbbbbbbb', 10_000_000);
     await ledger.record(prior.taskId.slice(0, 28), prior);
     const summarized = summarizeJuliusPriorRunSpend('run:bbbbbbbbbbbbbbbbbbbbbbbb', [prior]);
@@ -133,8 +134,15 @@ describe('J1 dispatch reads the durable spent-tag record', () => {
     expect(spendRefusalCode('qualifying_pair_spend_absent')).toEqual({ status: 503, code: 'julius_dispatch_spend_record_absent' });
   });
 
-  it('does not write: the reservation tag belongs to the paid workflow', async () => {
-    const ledger = createSpentTagSpendLedger({ repository: 'ohdieyuh-glitch/sunday-relay', token: 'ghs_test_not_a_real_token', fetchImpl: listing(200, []) });
-    await expect(ledger.record('wlj_01234567-89ab-4cde-8fab-0123456789ab', {} as JuliusSettlementFact)).rejects.toThrow('paid workflow');
+  it('does not write: the reservation tag belongs to the paid workflow, and a settlement resolves without a request', async () => {
+    let calls = 0;
+    const ledger = createSpentTagSpendLedger({ repository: 'ohdieyuh-glitch/sunday-relay', token: 'ghs_test_not_a_real_token', fetchImpl: (async () => { calls += 1; return new Response('[]'); }) as typeof fetch });
+    await expect(ledger.record('wlj_01234567-89ab-4cde-8fab-0123456789ab', {} as JuliusSettlementFact)).resolves.toBeUndefined();
+    expect(calls).toBe(0);
+  });
+
+  it('the production in-process ledger is never the durable record', async () => {
+    expect((await createSharedSpendLedger().readPrior({ missionId: J1, projectId: 'proj-1' }))).toMatchObject({ durableRecord: 'ABSENT' });
+    expect((await createDurableStandInSpendLedger().readPrior({ missionId: J1, projectId: 'proj-1' }))).toMatchObject({ durableRecord: 'PRESENT' });
   });
 });
