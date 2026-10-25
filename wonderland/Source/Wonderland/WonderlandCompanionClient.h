@@ -90,6 +90,12 @@ public:
 		return bHaveMissionView && WljRunId.Equals(MissionTraceWljRunId, ESearchCase::CaseSensitive) ? &MissionView : nullptr;
 	}
 
+	/** HTTP status of the last mission companion read for WljRunId (404 = BRIDGE holds no companion row for a known run), or 0. */
+	int32 GetMissionViewHttpStatus(const FString& WljRunId) const
+	{
+		return bHaveMissionView && WljRunId.Equals(MissionTraceWljRunId, ESearchCase::CaseSensitive) ? MissionViewHttpStatus : 0;
+	}
+
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
 	FString GetMissionTraceId(const FString& WljRunId) const { return WljRunId.Equals(MissionTraceWljRunId, ESearchCase::CaseSensitive) ? MissionTraceId : FString(); }
 
@@ -115,5 +121,6 @@ private:
 	FString MissionTraceWljRunId;
 	WonderlandCompanionLogic::FCompanionMissionView MissionView;
 	bool bHaveMissionView = false;
+	int32 MissionViewHttpStatus = 0;
 	FString MissionTraceId;
 };

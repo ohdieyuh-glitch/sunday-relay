@@ -66,8 +66,11 @@ namespace
 		Lines.Add(TEXT("Companions on this mission"));
 		if (!Mission->bHasAnswer)
 		{
-			// A refused, unavailable or unreadable read is NOT "no companion": say only that the bridge did not answer.
-			Lines.Add(TEXT("Companion status is not available from the bridge right now."));
+			// BRIDGE answers a canonical wlj_ with no companion row with its uniform 404 (companion-route.ts:7). For a run the
+			// bridge has ADMITTED (it named our server run id), that is "no companion here". Anything else -- refused,
+			// unavailable, unreadable, or a 404 for a run it never admitted -- only says the bridge did not answer.
+			const bool bNoCompanionRow = Companion->GetMissionViewHttpStatus(Run) == 404 && Live->HasServerRunId();
+			Lines.Add(bNoCompanionRow ? TEXT("No companion has joined this mission.") : TEXT("Companion status is not available from the bridge right now."));
 			return Lines;
 		}
 		if (Mission->State == WonderlandCompanionLogic::ECompanionTaskState::None)

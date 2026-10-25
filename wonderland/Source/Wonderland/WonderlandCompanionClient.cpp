@@ -80,6 +80,7 @@ void UWonderlandCompanionClient::RefreshMissionAgents(const FString& WljRunId, c
 			MissionTraceId = Mission.TraceId.empty() ? FString() : FromUtf8(Mission.TraceId);
 			MissionView = Mission;
 			bHaveMissionView = true;
+			MissionViewHttpStatus = Status;
 			Changed();
 		});
 }
