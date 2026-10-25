@@ -17,6 +17,8 @@ namespace WonderlandJuliusMissionFlow
 	{
 		constexpr int JsonDepthLimit = 32;
 		constexpr std::size_t JsonNodeLimit = 4096;
+		/** /events: a full page is <= 500 events of <= 11 values each, plus the envelope. */
+		constexpr std::size_t LiveJsonNodeLimit = 8192;
 
 		enum class EJsonKind : std::uint8_t
 		{
@@ -99,8 +101,10 @@ namespace WonderlandJuliusMissionFlow
 		class FJsonParser
 		{
 		public:
-			explicit FJsonParser(std::string_view In)
+			explicit FJsonParser(std::string_view In, std::size_t InMaxArray = 64, std::size_t InMaxNodes = JsonNodeLimit)
 				: Text(In)
+				, MaxArray(InMaxArray)
+				, MaxNodes(InMaxNodes)
 			{
 			}
 
@@ -115,6 +119,8 @@ namespace WonderlandJuliusMissionFlow
 		private:
 			std::string_view Text;
 			std::size_t Index = 0;
+			std::size_t MaxArray = 64;
+			std::size_t MaxNodes = JsonNodeLimit;
 			std::size_t Nodes = 0;
 			bool Ok = true;
 
@@ -139,7 +145,7 @@ namespace WonderlandJuliusMissionFlow
 
 			bool AddNode()
 			{
-				if (Nodes >= JsonNodeLimit) { Fail(); return false; }
+				if (Nodes >= MaxNodes) { Fail(); return false; }
 				++Nodes;
 				return true;
 			}
@@ -322,7 +328,7 @@ namespace WonderlandJuliusMissionFlow
 					FJson Child;
 					if (!ParseValue(Child, Depth + 1)) { return false; }
 					Out.Array.push_back(std::move(Child));
-					if (Out.Array.size() > 64) { Fail(); return false; }
+					if (Out.Array.size() > MaxArray) { Fail(); return false; } // FLOW_JSON_ARRAY_CAP
 					Skip();
 					if (Index < Text.size() && Text[Index] == ',') { ++Index; continue; }
 					return Consume(']');
@@ -331,9 +337,9 @@ namespace WonderlandJuliusMissionFlow
 			}
 		};
 
-		bool ParseJson(std::string_view Text, FJson& Out)
+		bool ParseJson(std::string_view Text, FJson& Out, std::size_t MaxArray = 64, std::size_t MaxNodes = JsonNodeLimit)
 		{
-			FJsonParser Parser(Text);
+			FJsonParser Parser(Text, MaxArray, MaxNodes);
 			return Parser.Parse(Out);
 		}
 
@@ -1343,7 +1349,9 @@ namespace WonderlandJuliusMissionFlow
 		FLiveRead Out;
 		if (HttpStatus != 200 || !WonderlandJuliusMissionLogic::IsClientMintedRunId(WljRunId)) { return Out; }
 		FJson Root;
-		if (!ParseJson(Json, Root) || Root.Kind != EJsonKind::Object) { return Out; }
+		// An /events page holds up to LiveMaxEventsPerPage events (the result/progress bodies keep the 64 cap); a
+		// 106-event recorded page was refused whole under the shared cap (rehearsal, GitHub run 40228072875).
+		if (!ParseJson(Json, Root, LiveMaxEventsPerPage, LiveJsonNodeLimit) || Root.Kind != EJsonKind::Object) { return Out; }
 		const FReportedString Run = ReadString(&Root, "wljRunId");
 		if (!Run.bKnown || !SameText(Run.Text, WljRunId)) { return Out; } // FLOW_LIVE_OWN_RUN_ONLY
 		FLiveRead Read;
@@ -1387,7 +1395,7 @@ namespace WonderlandJuliusMissionFlow
 		else if (Workflow == nullptr || Workflow->Kind != EJsonKind::Null) { return Out; }
 		if (Read.Source != ELiveSource::None && Read.WorkflowRunId.empty()) { return Out; } // FLOW_LIVE_NEEDS_A_REAL_RUN
 		const FJson* Events = Field(Root, "events");
-		if (Events == nullptr || Events->Kind != EJsonKind::Array || Events->Array.size() > 500) { return Out; }
+		if (Events == nullptr || Events->Kind != EJsonKind::Array || Events->Array.size() > LiveMaxEventsPerPage) { return Out; }
 		if (Read.Source == ELiveSource::None && !Events->Array.empty()) { return Out; }
 		for (const FJson& Node : Events->Array)
 		{

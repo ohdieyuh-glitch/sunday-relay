@@ -591,6 +591,23 @@ const ABSENT_PHASE = {
 			Expect(PanelHas(P, "steps: 1 of 2 finished") && PanelHas(P, "  done: J / A (success)"), "finished step listed once");
 			++LiveCases;
 		}
+		// A full page: 500 events parse (the shared 64-element JSON cap refused a real 106-event page), 501 do not.
+		{
+			std::string Many;
+			for (int I = 1; I <= 501; ++I)
+			{
+				if (I > 1) { Many += ","; }
+				// The phase shape is the widest event (11 values): a full page of them must fit the node budget too.
+				Many += "{\"seq\":" + std::to_string(I) + ",\"at\":\"2026-10-25T18:00:11Z\",\"kind\":\"phase\",\"role\":\"coder\",\"taskType\":\"build\","
+					"\"state\":\"active\",\"ordinal\":" + std::to_string(I) + ",\"repairCycle\":0,\"marker\":null,\"sampled\":true}";
+			}
+			const std::string Last = ",{\"seq\":501,";
+			const std::string Page500 = LiveBody(LiveTop, Many.substr(0, Many.find(Last)));
+			const FLiveRead Full = ParseLiveEvents(LiveWlj, 200, Page500);
+			Expect(Full.bParsed && Full.Events.size() == 500, "a 500-event page parses");
+			Expect(!ParseLiveEvents(LiveWlj, 200, LiveBody(LiveTop, Many)).bParsed, "a 501-event page is refused");
+			++LiveCases;
+		}
 		// The real folded step name from the workflow.
 		Expect(ParseLiveEvents(LiveWlj, 200, Swap(Good, "LIVE: run the first real Julius mission", "Preflight complete - stopping here (no confirm_live given)")).bParsed, "real folded step name");
 		++LiveCases;

@@ -428,6 +428,7 @@ void UWonderlandJuliusMissionSubsystem::DropAdoptedSession(const TCHAR* Why)
 	AdoptedTokenCrc = 0;
 	Host->Session.SetNativeSessionToken(std::string());
 	UE_LOG(LogJuliusJ1, Display, TEXT("native session dropped: %s"), Why);
+	bLoggedNotConnected = true; // the line below already says it; the "restored" line is for a fresh start only
 	UE_LOG(LogJuliusJ1, Display, TEXT("JULIUS J1: not connected to the mission bridge -- pair again to keep watching%s (nothing is re-sent)"),
 		ClientRunId().IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" %s"), *ClientRunId()));
 }

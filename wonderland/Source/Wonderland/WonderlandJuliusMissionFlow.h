@@ -433,6 +433,9 @@ namespace WonderlandJuliusMissionFlow
 		bool bReset = false;
 	};
 
+	/** The bridge sends at most this many events per /events page (contract with MAIN JULIUS). */
+	inline constexpr std::size_t LiveMaxEventsPerPage = 500;
+
 	/** Strict: a malformed field anywhere fails the whole read closed (no partial, no invented event). */
 	FLiveRead ParseLiveEvents(std::string_view WljRunId, int HttpStatus, std::string_view Json);
 

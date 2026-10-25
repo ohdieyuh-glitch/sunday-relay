@@ -473,6 +473,11 @@ MUTATIONS = [
         'else if (E.Status == "in_progress") { Running.push_back(&E); }',
         "else if (false) { Running.push_back(&E); }",
     ),
+    (
+        "live_page_uses_shared_json_caps",
+        "ParseJson(Json, Root, LiveMaxEventsPerPage, LiveJsonNodeLimit)",
+        "ParseJson(Json, Root)",
+    ),
 ]
 
 
