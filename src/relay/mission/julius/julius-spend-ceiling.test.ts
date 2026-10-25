@@ -5,6 +5,7 @@ import {
   JULIUS_DEFAULT_NAMESPACE_CEILING,
   JULIUS_NAMESPACE_CEILINGS,
   JULIUS_QUALIFYING_PAIR_CAP_USD_MICROS,
+  JULIUS_QUALIFYING_PAIR_NAMESPACES,
   authorizeJuliusLiveSpend,
   interpretJuliusSpentTags,
   juliusSpentTagMessage,
@@ -165,6 +166,11 @@ describe('a durable prior-spend record can be compared with the $60 figure', () 
 
 describe('J1 (julius-inworld-data-1) is $30 and 3 repairs per run, and $60 across the run and its repeat', () => {
   const J1 = 'julius-inworld-data-1';
+
+  it('is a qualifying-pair namespace with a $30 / 3-cycle grant', () => {
+    expect(JULIUS_QUALIFYING_PAIR_NAMESPACES).toContain(J1);
+    expect(JULIUS_NAMESPACE_CEILINGS[J1]).toEqual({ spendUsd: 30, repairCycles: 3 });
+  });
 
   it('authorizes $30 and 3 repair cycles on a durable empty record', () => {
     const result = authorizeJuliusLiveSpend({ namespace: J1, spendUsd: 30, repairCycles: 3, ledger: durableEmpty });
