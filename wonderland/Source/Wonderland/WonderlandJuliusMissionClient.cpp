@@ -916,6 +916,22 @@ namespace WonderlandJuliusMissionClient
 			const std::uint64_t NowMs = Clock.NowUtcMs();
 			NextPollAtUtcMs = NowMs;
 			TouchActivity(NowMs);
+			// RESTORED ADMISSION (REVIEW, 2026-10-25): the tracker above was rebuilt empty, so it would ignore the status
+			// route's answers -- a restored held run never followed BRIDGE's AWAITING_OPERATOR_EXPIRED or "dispatched".
+			// Replay the admission the save already proves (Accepted), silently: no trace line, no UI change. The status
+			// route then decides, and the local hold window is only the no-answer fallback, timed from this restore.
+			if (Progress.has_value())
+			{
+				WonderlandJuliusMissionLogic::FStatusAnswer Fields;
+				Fields.HttpStatus = 202;
+				Fields.bHasData = true;
+				Fields.Vocabulary = WonderlandJuliusMissionLogic::EStatusVocabulary::Admission;
+				Fields.ClientRunId = CurrentRunId;
+				Fields.ServerRunId = bServerRunIdKnown ? CurrentServerRunId : std::string();
+				Fields.Status = "ADMISSION_HELD";
+				Fields.ReceivedUtcMs = NowMs;
+				Progress->RecordDispatchAnswer(WonderlandJuliusMissionLogic::EDispatchAnswer::Accepted, Fields); // FLOW_RESTORE_REPLAYS_ADMISSION
+			}
 		}
 		if (bOpen && !bStillWaiting && !bFailClosed && NextResendAtUtcMs == 0)
 		{

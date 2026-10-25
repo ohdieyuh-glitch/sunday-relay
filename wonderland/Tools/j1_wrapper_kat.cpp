@@ -1085,6 +1085,40 @@ int main()
 		Expect(!Rig.Session.IsFailClosed(), "l6_hold_window_is_not_fail_closed");
 	}
 
+	// RESTORED HELD (REVIEW, 2026-10-25): after a restart the status route's state is authoritative. The local hold window
+	// (PollHoldWatchMs) is only the no-answer fallback; it never decides a run the bridge has answered for.
+	{
+		const char* const Server = "run:0a1b2c3d4e5f60718293a4b5";
+		FRig Rig(1);
+		Expect(Rig.Session.Dispatch("demo-mission", "").bSent, "restore_held_dispatch");
+		const std::string Run = Rig.Session.RunId();
+		Rig.Session.OnDispatchHttp(Http(202, AdmissionBody(Run, "ADMISSION_HELD", Server, false, false), false));
+		Rig.Session.OnStatusHttp(Http(200, BridgeStatusBody(Run, "awaiting_operator", Server, nullptr, nullptr), false));
+		Expect(Rig.Session.UiState() == EJuliusUiState::AdmittedWaiting, "restore_held_before_restart");
+
+		// The bridge expired the hold while the client was closed: its answer, not the local clock, ends the run.
+		FRig Expired(1);
+		Expired.Store.Text = Rig.Store.Text;
+		Expired.Clock.Now = Rig.Clock.Now + 10ull * 60ull * 1000ull;
+		Expect(Expired.Session.Load(), "restore_held_loads");
+		Expect(Expired.Session.RunId() == Run && Expired.Session.IsAdmitted(), "restore_held_same_admitted_run");
+		Expect(Expired.Session.UiState() != EJuliusUiState::NotStarted, "restore_held_not_decided_by_load");
+		Expired.Session.OnStatusHttp(Http(200, BridgeStatusBody(Run, "failed", Server, nullptr, "AWAITING_OPERATOR_EXPIRED"), false));
+		Expect(Expired.Session.UiState() == EJuliusUiState::NotStarted, "restore_held_server_expiry_is_not_started");
+		Expect(Expired.Trace.CountEvent(Run, "hold_window_expired") == 0, "restore_held_expiry_is_the_servers_not_the_local_timer");
+		Expect(Expired.Session.UiState() != EJuliusUiState::Failed && !Expired.Session.IsFailClosed(), "restore_held_expiry_is_neutral");
+
+		// The local clock is already past the fallback, but the bridge answers first that the operator dispatched: the answer wins.
+		FRig Late(1);
+		Late.Store.Text = Rig.Store.Text;
+		Late.Clock.Now = Rig.Clock.Now + PollHoldWatchMs + 60000ull;
+		Expect(Late.Session.Load(), "restore_late_loads");
+		const std::string When = FormatIso8601UtcMs(Late.Clock.Now - 1000ull);
+		Late.Session.OnStatusHttp(Http(200, BridgeStatusBody(Run, "dispatched", Server, When.c_str(), nullptr), false));
+		Expect(Late.Session.UiState() == EJuliusUiState::OperatorStarted, "restore_late_server_dispatch_wins");
+		Expect(Late.Trace.CountEvent(Run, "hold_window_expired") == 0, "restore_late_no_local_expiry_over_an_answer");
+	}
+
 	Expect(CheckJuliusModuleRootIncludes(), "julius_no_bare_module_root_include");
 	Expect(CheckPlatformCryptoTypesInclude(), "platform_crypto_result_includes_types");
 
