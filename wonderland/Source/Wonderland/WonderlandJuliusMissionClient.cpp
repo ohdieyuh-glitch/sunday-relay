@@ -531,7 +531,8 @@ namespace WonderlandJuliusMissionClient
 			else { Host.assign(HostPort.data(), HostPort.size()); }
 		}
 		if (!Port.empty() && !ParsePort(Port)) { return false; }
-		return Host == "127.0.0.1" || Host == "localhost" || Host == "::1";
+		// Literal addresses only (REVIEW #456 LOW): "localhost" is whatever the hosts file says.
+		return Host == "127.0.0.1" || Host == "::1";
 	}
 
 	std::string JuliusTraceFilePath(std::string_view ProjectSavedDir, std::string_view RunId)

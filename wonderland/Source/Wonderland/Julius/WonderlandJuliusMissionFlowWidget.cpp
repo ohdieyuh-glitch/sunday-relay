@@ -225,9 +225,10 @@ void SWonderlandJuliusMissionFlow::SetMissionResponses(
 void SWonderlandJuliusMissionFlow::PullWrapper()
 {
 	UWonderlandJuliusMissionSubsystem* Live = Session.Get();
-	if (Live != nullptr && !Live->ClientRunId().IsEmpty() && !Flow.View().bDispatchHanded)
+	if (Live != nullptr && !Live->ClientRunId().IsEmpty() && !Live->CanStartNewMission() && !Flow.View().bDispatchHanded)
 	{
-		// A run restored from the save after a restart: watch it, never offer a second paid Confirm over it.
+		// A LIVE run restored from the save after a restart: watch it, never offer a second paid Confirm over it.
+		// A terminal saved run is not resumed (REVIEW M4): an old result is never shown as the current mission.
 		Flow.ResumeWatching(TCHAR_TO_UTF8(*Live->CurrentMissionId()));
 	}
 	if (Live != nullptr && bNoticeUntilPaired && Live->HasNativeSession())
@@ -285,6 +286,8 @@ void SWonderlandJuliusMissionFlow::Rebuild()
 {
 	const WonderlandJuliusMissionFlow::FFlowView View = Flow.View();
 	UWonderlandJuliusMissionSubsystem* Live = Session.Get();
+	// REVIEW M4 (#456): after a terminal run the player can start again; while a run is live they cannot.
+	const bool bCanStartAgain = View.Step == WonderlandJuliusMissionFlow::EFlowStep::Watching && Live != nullptr && Live->CanStartNewMission();
 	const FString WrapperLabel = Live != nullptr ? Live->PlayerLabel() : FString();
 	FString ProgressLine = MissionFlowUtf8(View.Progress.Line);
 	if (View.Progress.bUsesWrapperLabel)
@@ -309,7 +312,7 @@ void SWonderlandJuliusMissionFlow::Rebuild()
 		*MissionFlowUtf8(View.PaidOnDispatch),
 		View.Result.bShowsArtifact ? 1 : 0,
 		View.Result.bFinished ? 1 : 0,
-		*Reported) + TEXT("|") + Notice;
+		*Reported) + TEXT("|") + Notice + (bCanStartAgain ? TEXT("|again") : TEXT(""));
 	if (Key == ShownKey) { return; }
 	ShownKey = Key;
 
@@ -401,4 +404,29 @@ void SWonderlandJuliusMissionFlow::Rebuild()
 			AddText(MissionFlowUtf8(Line.c_str()));
 		}
 	}
+
+	if (bCanStartAgain)
+	{
+		Body->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)
+		[
+			SNew(SButton)
+			.OnClicked(this, &SWonderlandJuliusMissionFlow::StartAgain)
+			[
+				SNew(STextBlock).Text(FText::FromString(TEXT("New mission")))
+			]
+		];
+	}
+}
+
+FReply SWonderlandJuliusMissionFlow::StartAgain()
+{
+	UWonderlandJuliusMissionSubsystem* Live = Session.Get();
+	if (Live != nullptr && Live->CanStartNewMission() && Flow.StartAgain())
+	{
+		PulledReadKey.Reset();
+		bHaveMissionRead = false;
+		MissionRead.Clear();
+	}
+	Rebuild();
+	return FReply::Handled();
 }

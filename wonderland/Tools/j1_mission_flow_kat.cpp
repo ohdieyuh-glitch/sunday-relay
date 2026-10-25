@@ -1060,6 +1060,22 @@ int main()
 	Expect(Flow.ResumeWatching("julius-first-live") == false, "no resume after a handed dispatch");
 	++FlowSteps;
 
+	// START AGAIN (REVIEW #456 M4): only from Watching; back to Choosing with nothing chosen and nothing sent.
+	FMissionFlow Again;
+	Again.SetOffers({FMissionOffer{"julius-inworld-data-1", "julius-inworld-data-1"}});
+	Expect(Again.StartAgain() == false, "start again refused at the terminal");
+	Again.InteractWithTerminal();
+	Expect(Again.StartAgain() == false, "start again refused while choosing");
+	Expect(Again.ResumeWatching("julius-inworld-data-1"), "watching before start again");
+	Again.NoteClientRunId(WljOk);
+	Expect(Again.StartAgain(), "start again from watching");
+	const FFlowView AgainView = Again.View();
+	Expect(AgainView.Step == EFlowStep::Choosing && AgainView.bShowChoice && !AgainView.bShowConfirm && !AgainView.bShowProgress, "start again shows the choice");
+	Expect(!AgainView.bDispatchHanded && !AgainView.bRunIdOk && Again.Confirm().bSend == false, "start again keeps no run and sends nothing");
+	Expect(Again.Offers().size() == 1 && Again.ChooseMission("julius-inworld-data-1") && Again.Confirm().bSend, "start again offers the mission again");
+	Expect(std::strstr(CopyStateCompleted, "not independently verified") != nullptr, "completed copy names its source");
+	++FlowSteps;
+
 	BridgeRouteFixtures();
 	PhaseFixtures();
 

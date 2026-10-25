@@ -62,6 +62,7 @@ private:
 	FReply PickMission(FString MissionId);
 	FReply ConfirmMission();
 	FReply ReturnToChoice();
+	FReply StartAgain();
 
 	TWeakObjectPtr<UWonderlandJuliusMissionSubsystem> Session;
 	FSimpleDelegate OnRequestClose;

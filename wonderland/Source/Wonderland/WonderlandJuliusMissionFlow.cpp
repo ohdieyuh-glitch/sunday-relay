@@ -454,8 +454,6 @@ namespace WonderlandJuliusMissionFlow
 			{
 				Out.ProviderMessageId = ReadString(Receipt, "providerMessageId");
 			}
-			Out.SecretText = ReadString(Completion, "apiKey");
-			if (!Out.SecretText.bKnown) { Out.SecretText = ReadString(Completion, "token"); }
 		}
 
 		constexpr std::int64_t MaxSafeInteger = 9007199254740991LL; // Number.MAX_SAFE_INTEGER
@@ -856,10 +854,6 @@ namespace WonderlandJuliusMissionFlow
 		{
 			Out.Lines.push_back(std::string("providerMessageId: ") + Read.ProviderMessageId.Text);
 		}
-		if (Read.bEchoSecret && Read.SecretText.bKnown)
-		{
-			Out.Lines.push_back(std::string("apiKey: ") + Read.SecretText.Text);
-		}
 		return Out;
 	}
 
@@ -992,7 +986,6 @@ namespace WonderlandJuliusMissionFlow
 		}
 		Out.bDispatchedCeiling = Out.bParsed && !Out.bVerified && Out.State == "dispatched";
 		Out.bEchoProviderMessageId = false; // FLOW_MESSAGE_ID_IS_NOT_A_RECEIPT
-		Out.bEchoSecret = false; // FLOW_SECRET_NOT_DISPLAYED
 		return Out;
 	}
 
@@ -1092,6 +1085,16 @@ namespace WonderlandJuliusMissionFlow
 		ChosenId.assign(MissionId.data(), MissionId.size());
 		bDispatchHanded = true;
 		Step = EFlowStep::Watching;
+		return true;
+	}
+
+	bool FMissionFlow::StartAgain()
+	{
+		if (Step != EFlowStep::Watching) { return false; }
+		const std::vector<FMissionOffer> Kept = OfferList;
+		*this = FMissionFlow();
+		OfferList = Kept;
+		Step = EFlowStep::Choosing;
 		return true;
 	}
 

@@ -261,6 +261,8 @@ namespace WonderlandJuliusMissionClient
 		bool HasServerRunId() const { return bServerRunIdKnown; }
 		bool IsFailClosed() const { return bFailClosed; }
 		bool IsAdmitted() const { return bAdmitted; }
+		/** False while a pair is open, in flight, still waiting, fail-closed, or admitted and unfinished. */
+		bool CanStartNewAttempt() const { return !BlocksMint(); }
 
 		/** One JSON object, no newline. Includes server_run_id. Never includes the token or the idempotency key. */
 		std::string StatusJson() const;

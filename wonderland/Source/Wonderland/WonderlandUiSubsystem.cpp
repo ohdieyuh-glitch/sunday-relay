@@ -5835,8 +5835,18 @@ namespace WonderlandJuliusMissionQa
 		Ar.Log(Self->IsJuliusMissionTerminalOpen() ? TEXT("julius mission terminal open") : TEXT("julius mission terminal not open"));
 	}
 
+#if !UE_BUILD_SHIPPING
+	/** REVIEW H1 (#456): QA doors that press the paid path are developer sessions only (editor or -wldev). */
+	bool DeveloperDoor(const TCHAR* Name, FOutputDevice& Ar)
+	{
+		if (WonderlandBeta::IsDeveloperSession()) { return true; }
+		Ar.Log(FString::Printf(TEXT("%s: developer sessions only (-wldev)"), Name));
+		return false;
+	}
+
 	void Pick(const TArray<FString>& Args, UWorld* World, FOutputDevice& Ar)
 	{
+		if (!DeveloperDoor(TEXT("wl.Julius.J1.Panel.Pick"), Ar)) { return; }
 		UWonderlandUiSubsystem* Self = Ui(World);
 		const TSharedPtr<SWonderlandJuliusMissionFlow> Panel = Self != nullptr ? Self->GetJuliusMissionPanel() : nullptr;
 		if (!Panel.IsValid() || Args.Num() != 1) { Ar.Log(TEXT("usage: wl.Julius.J1.Panel.Pick <missionId> (open the terminal first)")); return; }
@@ -5845,11 +5855,13 @@ namespace WonderlandJuliusMissionQa
 
 	void Confirm(const TArray<FString>& Args, UWorld* World, FOutputDevice& Ar)
 	{
+		if (!DeveloperDoor(TEXT("wl.Julius.J1.Panel.Confirm"), Ar)) { return; }
 		UWonderlandUiSubsystem* Self = Ui(World);
 		const TSharedPtr<SWonderlandJuliusMissionFlow> Panel = Self != nullptr ? Self->GetJuliusMissionPanel() : nullptr;
 		if (!Panel.IsValid()) { Ar.Log(TEXT("wl.Julius.J1.Panel.Confirm: open the terminal first")); return; }
 		Ar.Log(Panel->QaConfirm() ? TEXT("confirm pressed") : TEXT("confirm not on screen"));
 	}
+#endif
 
 	void Describe(const TArray<FString>& Args, UWorld* World, FOutputDevice& Ar)
 	{
@@ -5861,8 +5873,10 @@ namespace WonderlandJuliusMissionQa
 	}
 
 	/** After N seconds: log a WLJ1PANEL line and save an in-engine screenshot WITH the UI to Saved/Screenshots/WLJ1/<name>.png. */
+#if !UE_BUILD_SHIPPING
 	void ShotIn(const TArray<FString>& Args, UWorld* World, FOutputDevice& Ar)
 	{
+		if (!DeveloperDoor(TEXT("wl.Julius.J1.Panel.ShotIn"), Ar)) { return; }
 		if (Args.Num() != 2 || !Args[1].IsNumeric()) { Ar.Log(TEXT("usage: wl.Julius.J1.Panel.ShotIn <name> <seconds>")); return; }
 		const FString Name = FPaths::MakeValidFileName(Args[0]);
 		const float Delay = FMath::Max(0.0f, FCString::Atof(*Args[1]));
@@ -5906,6 +5920,7 @@ namespace WonderlandJuliusMissionQa
 	/** QA sequencing for -ExecCmds: run one wl.Julius.* console command after N seconds (pair, then confirm, then read). */
 	void After(const TArray<FString>& Args, UWorld* World, FOutputDevice& Ar)
 	{
+		if (!DeveloperDoor(TEXT("wl.Julius.J1.Qa.After"), Ar)) { return; }
 		if (Args.Num() < 2 || !Args[0].IsNumeric() || !Args[1].StartsWith(TEXT("wl.Julius.")))
 		{
 			Ar.Log(TEXT("usage: wl.Julius.J1.Qa.After <seconds> wl.Julius.<command> [args]"));
@@ -5935,15 +5950,18 @@ namespace WonderlandJuliusMissionQa
 	FAutoConsoleCommandWithWorldArgsAndOutputDevice GShotIn(TEXT("wl.Julius.J1.Panel.ShotIn"),
 		TEXT("Usage: wl.Julius.J1.Panel.ShotIn <name> <seconds>. Logs the panel line and saves a UI screenshot under Saved/Screenshots/WLJ1."),
 		FConsoleCommandWithWorldArgsAndOutputDeviceDelegate::CreateStatic(&ShotIn));
+#endif
 	FAutoConsoleCommandWithWorldArgsAndOutputDevice GOpen(TEXT("wl.Julius.J1.Panel.Open"),
 		TEXT("Open the J1 paid-mission terminal (same as K). Sends nothing."),
 		FConsoleCommandWithWorldArgsAndOutputDeviceDelegate::CreateStatic(&Open));
+#if !UE_BUILD_SHIPPING
 	FAutoConsoleCommandWithWorldArgsAndOutputDevice GPick(TEXT("wl.Julius.J1.Panel.Pick"),
 		TEXT("Press the mission button on the J1 terminal. Usage: wl.Julius.J1.Panel.Pick <missionId>. Sends nothing."),
 		FConsoleCommandWithWorldArgsAndOutputDeviceDelegate::CreateStatic(&Pick));
 	FAutoConsoleCommandWithWorldArgsAndOutputDevice GConfirm(TEXT("wl.Julius.J1.Panel.Confirm"),
 		TEXT("Press Confirm on the J1 paid-mission screen: the same dispatch as the button (admission only; BRIDGE holds it)."),
 		FConsoleCommandWithWorldArgsAndOutputDeviceDelegate::CreateStatic(&Confirm));
+#endif
 	FAutoConsoleCommandWithWorldArgsAndOutputDevice GDescribe(TEXT("wl.Julius.J1.Panel.Describe"),
 		TEXT("Log one WLJ1PANEL line: step, progress and result as the panel shows them."),
 		FConsoleCommandWithWorldArgsAndOutputDeviceDelegate::CreateStatic(&Describe));

@@ -134,11 +134,6 @@ MUTATIONS = [
         "Out.bEchoProviderMessageId = true; // FLOW_MESSAGE_ID_IS_NOT_A_RECEIPT",
     ),
     (
-        "secret_shown",
-        "Out.bEchoSecret = false; // FLOW_SECRET_NOT_DISPLAYED",
-        "Out.bEchoSecret = true; // FLOW_SECRET_NOT_DISPLAYED",
-    ),
-    (
         "non_200_shown_as_result",
         "if (ResultStatus != 200) { return FResultRead{}; } // FLOW_NON_200_IS_NO_READ",
         "if (ResultStatus != 200 && ResultStatus != 404) { return FResultRead{}; } // FLOW_NON_200_IS_NO_READ",

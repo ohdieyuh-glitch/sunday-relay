@@ -77,6 +77,8 @@ public:
 	bool HasNativeSession() const { return bAdoptedToken; }
 	/** The mission id of the current attempt (restored from the save after a restart), or empty. */
 	FString CurrentMissionId() const;
+	/** True when the wrapper would mint a new attempt: no pair open and no admitted run still unfinished. */
+	bool CanStartNewMission() const;
 	/** The client-minted wlj_ id of the current attempt, or empty. */
 	FString ClientRunId() const;
 
@@ -124,6 +126,8 @@ private:
 	FMissionReadSlot ResultRead;
 	FMissionReadSlot ProgressRead;
 	uint64 NextMissionReadAtUtcMs = 0;
+	int32 MissionReadFailures = 0;
+	bool bFinalMissionReadSent = false;
 	uint32 AdoptedTokenCrc = 0;
 	bool bAdoptedToken = false;
 	FString AdoptedProjectId;
@@ -131,6 +135,8 @@ private:
 
 	/** Once a second: take the paired session from the Julius stream subsystem, when it has one. */
 	void SyncFromPairing();
+	void DropAdoptedSession(const TCHAR* Why);
+	static constexpr int32 MissionReadMaxBytes = 256 * 1024;
 
 	bool HandleTick(float DeltaSeconds);
 	void PollMissionReads();
