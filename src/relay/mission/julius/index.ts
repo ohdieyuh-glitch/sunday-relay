@@ -63,4 +63,4 @@ export * from './julius-peer-channel';
 export * from './julius-peer-runtime';
 export * from './julius-review-verdict';
 export * from './julius-disagreement';
-export { JULIUS_FILE_CREATION_GRANTS, juliusFileCreationGrant, type JuliusFileCreationGrant } from './julius-file-authority';
+export { JULIUS_FILE_CREATION_CONTRACTS, JULIUS_FILE_CREATION_GRANTS, juliusFileCreationGrant, juliusFileCreationGrantFor, type JuliusFileCreationGrant } from './julius-file-authority';

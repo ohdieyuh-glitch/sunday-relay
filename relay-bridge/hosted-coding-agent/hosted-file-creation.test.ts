@@ -254,3 +254,27 @@ describe('the grant cannot be selected from coder-reachable input', () => {
     expect(seen.map((s) => s.fileCreation ?? null)).toEqual([null, null, { prefix: 'out/' }]);
   });
 });
+
+describe('the Write grant follows the reviewed contract bytes, not just its namespace', () => {
+  it('the grant table names J1 by its pinned contract sha256, and the paid workflow\'s J1 contract is granted', async () => {
+    const { createHash } = await import('node:crypto');
+    const { readFileSync } = await import('node:fs');
+    const { J1_PINNED_CONTRACT_SHA256 } = await import('../julius-inworld-checker');
+    const { JULIUS_FILE_CREATION_CONTRACTS, juliusFileCreationGrantFor } = await import('../../src/relay/mission/julius');
+    expect(JULIUS_FILE_CREATION_CONTRACTS[J1]).toBe(J1_PINNED_CONTRACT_SHA256);
+    const bytes = readFileSync('.github/julius-missions/julius-inworld-data-1/contract.json', 'utf8');
+    const sha = createHash('sha256').update(bytes, 'utf8').digest('hex');
+    expect(juliusFileCreationGrantFor(J1, sha)).toEqual({ prefix: 'out/' });
+    const edited = createHash('sha256').update(`${bytes} `, 'utf8').digest('hex');
+    expect(juliusFileCreationGrantFor(J1, edited)).toBeNull();
+    expect(juliusFileCreationGrantFor(J1, null)).toBeNull();
+    expect(juliusFileCreationGrantFor('julius-live-mission-6', sha)).toBeNull();
+  });
+
+  it('the live entry looks the grant up by namespace AND contract sha256', async () => {
+    const { readFileSync } = await import('node:fs');
+    const entry = readFileSync('relay-bridge/julius-live-mission.ts', 'utf8');
+    expect(entry).toContain("juliusFileCreationGrantFor(contract.markerNamespace, createHash('sha256').update(rawContract, 'utf8').digest('hex'))");
+    expect(entry).not.toMatch(/juliusFileCreationGrant\(contract/u);
+  });
+});

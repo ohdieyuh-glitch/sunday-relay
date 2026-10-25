@@ -49,7 +49,7 @@ import { observeCoderLogin, resolveCoderClaudeExecutable } from './hosted-coding
 import { readFileSync } from 'node:fs';
 import { parseJuliusAdmissionRunId } from '../scripts/julius-admission-run-id.mjs';
 import { juliusMissionTraceId } from '../scripts/julius-mission-trace.mjs';
-import { createPublicKey, type KeyObject } from 'node:crypto';
+import { createHash, createPublicKey, type KeyObject } from 'node:crypto';
 import { Pool } from 'pg';
 import { listenJuliusPool } from '../src/relay/persistence/julius-pg-held';
 import { JULIUS_RUNTIME_DATABASE_ENV_NAMES, juliusRuntimeDatabaseUrl } from '../src/relay/persistence/julius-test-database';
@@ -117,7 +117,7 @@ function tickOverrideOf(value: string | null): { readonly ok: true; readonly ove
   if (!/^[1-9][0-9]{0,5}$/u.test(value)) return { ok: false };
   return { ok: true, override: Number(value) };
 }
-import { authorizeJuliusLiveSpend, JULIUS_QUALIFYING_PAIR_NAMESPACES, juliusFileCreationGrant, noJuliusResearch, type JuliusResearchPolicy } from '../src/relay/mission/julius';
+import { authorizeJuliusLiveSpend, JULIUS_QUALIFYING_PAIR_NAMESPACES, juliusFileCreationGrantFor, noJuliusResearch, type JuliusResearchPolicy } from '../src/relay/mission/julius';
 import { readJuliusPriorRunSpend, readJuliusSpentTagLedger } from './julius/julius-prior-spend';
 import {
   LIVE_REACH_ACTION_CAPABILITIES,
@@ -650,11 +650,11 @@ async function main(argv: readonly string[]): Promise<number> {
   const contract = parsedContract.contract;
   /**
    * THE MISSION'S FILE-CREATION GRANT, decided HERE and only here: from the
-   * parsed, verified contract's `markerNamespace` through a frozen table. It is
+   * parsed, verified contract's `markerNamespace` AND the sha256 of its exact bytes, through frozen tables. It is
    * handed to the Coding Agent as a typed option; no environment variable, request
    * field or coder-reachable input selects it. Null for every mission but J1.
    */
-  const coderFileCreation = juliusFileCreationGrant(contract.markerNamespace);
+  const coderFileCreation = juliusFileCreationGrantFor(contract.markerNamespace, createHash('sha256').update(rawContract, 'utf8').digest('hex'));
 
   const env = process.env as Record<string, string | undefined>;
   const cardRevision = env.RELAY_JULIUS_CARD_REVISION?.trim() || 'card:julius-live:1';

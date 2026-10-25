@@ -119,3 +119,21 @@ export function juliusFileCreationGrant(namespace: string | null | undefined): J
   if (!Object.prototype.hasOwnProperty.call(JULIUS_FILE_CREATION_GRANTS, namespace)) return null;
   return JULIUS_FILE_CREATION_GRANTS[namespace] ?? null;
 }
+
+/**
+ * THE CONTRACT EACH GRANT BELONGS TO, by sha256 of its exact bytes. A namespace alone is a name a
+ * contract chooses for itself; the grant follows the reviewed contract, so an edited contract
+ * carrying the same namespace is granted nothing. J1's is J1_PINNED_CONTRACT_SHA256
+ * (relay-bridge/julius-inworld-checker.ts); a test holds the two equal.
+ */
+export const JULIUS_FILE_CREATION_CONTRACTS: Readonly<Record<string, string>> = Object.freeze({
+  'julius-inworld-data-1': 'bfa90f50f70916ff52180a94537f243300da8dcc51ee06d3952b0f18876226aa',
+});
+
+/** What the live entry uses: the namespace's grant, only when the contract's bytes are the pinned ones. */
+export function juliusFileCreationGrantFor(namespace: string | null | undefined, contractSha256: string | null | undefined): JuliusFileCreationGrant | null {
+  const grant = juliusFileCreationGrant(namespace);
+  if (grant === null || typeof namespace !== 'string' || typeof contractSha256 !== 'string') return null;
+  if (!Object.prototype.hasOwnProperty.call(JULIUS_FILE_CREATION_CONTRACTS, namespace)) return null;
+  return JULIUS_FILE_CREATION_CONTRACTS[namespace] === contractSha256 ? grant : null;
+}
