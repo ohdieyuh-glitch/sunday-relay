@@ -119,6 +119,7 @@ describe('wonderland companion read', () => {
       exactMissionResult: false,
       exactMissionProgress: false,
       exactMissionEvents: false,
+      exactMissionStart: false,
       exactCompanion: true,
     });
     for (const raw of [
@@ -295,6 +296,7 @@ describe('wonderland companion read', () => {
         exactMissionResult: false,
         exactMissionProgress: false,
         exactMissionEvents: false,
+        exactMissionStart: false,
         exactCompanion: true,
       });
       expect(isWonderlandCompanionRoute(`/wonderland/companions/agents/${AGENT_A}`)).toBe(false);

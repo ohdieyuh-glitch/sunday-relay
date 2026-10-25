@@ -80,6 +80,7 @@ import { classifyWonderlandDispatchPath, handleWonderlandRoute } from './wonderl
 import { createWonderlandAdmissionBridge, createWonderlandAdmissionService, createWonderlandStatusBridge, isWonderlandAdmissionRoute, isWonderlandStatusRoute, type WonderlandAdmissionRoutePorts } from './wonderland-admission-route';
 import { createWonderlandMissionReadBridge, isWonderlandMissionReadRoute } from './wonderland-mission-result-route';
 import { createWonderlandMissionEventsBridge, isWonderlandMissionEventsRoute } from './wonderland-mission-events-route';
+import { createWonderlandMissionStartBridge, isWonderlandMissionStartRoute, type WonderlandMissionStartBridge } from './wonderland-mission-start-route';
 import { wonderlandLiveReadsFrom } from './wonderland-live-wiring';
 import { createCompanionResultStore, createWonderlandCompanionBridge, isWonderlandCompanionAgentRoute, isWonderlandCompanionRoute } from './wonderland-companion-route';
 import { createCompanionAdapterRegistry, type CompanionAdapterRegistry } from './wonderland-companion-registry';
@@ -473,6 +474,14 @@ let wonderlandLiveCache: {
   readonly reads: ReturnType<typeof wonderlandLiveReadsFrom>;
   readonly events: ReturnType<typeof createWonderlandMissionEventsBridge>;
 } | null = null;
+/** One Start bridge (and so one claim core) per admission service, so its claims run one after another. */
+let wonderlandStartCache: { readonly ports: WonderlandAdmissionRoutePorts; readonly bridge: WonderlandMissionStartBridge } | null = null;
+const wonderlandMissionStart = (wonderlandAdmission: WonderlandAdmissionRoutePorts): WonderlandMissionStartBridge => {
+  if (wonderlandStartCache === null || wonderlandStartCache.ports !== wonderlandAdmission) {
+    wonderlandStartCache = { ports: wonderlandAdmission, bridge: createWonderlandMissionStartBridge(wonderlandAdmission) };
+  }
+  return wonderlandStartCache.bridge;
+};
 const wonderlandLive = (wonderlandAdmission: WonderlandAdmissionRoutePorts) => {
   if (wonderlandLiveCache === null || wonderlandLiveCache.ports !== wonderlandAdmission) {
     const reads = wonderlandLiveReadsFrom(process.env);
@@ -509,6 +518,8 @@ const juliusMissionPorts = (
     wonderlandMissionReadBridge: createWonderlandMissionReadBridge(wonderlandAdmission, wonderlandLive(wonderlandAdmission).reads?.evidenceReader),
     // The live view of a dispatched run: GitHub reads only, no dispatch path.
     wonderlandMissionEventsBridge: wonderlandLive(wonderlandAdmission).events,
+    // The founder's Start from the Julius Mission Terminal: the operator claim core, off unless JULIUS_WONDERLAND_START=1.
+    wonderlandMissionStartBridge: wonderlandMissionStart(wonderlandAdmission),
     wonderlandCompanionBridge: createWonderlandCompanionBridge({ ...wonderlandAdmission, companionResults, companionAgents }),
   };
 };
@@ -1115,6 +1126,7 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
           || ((wonderlandDispatch.exactMissionResult || wonderlandDispatch.exactMissionProgress)
             && isWonderlandMissionReadRoute(missionPath))
           || (wonderlandDispatch.exactMissionEvents && isWonderlandMissionEventsRoute(missionPath))
+          || (wonderlandDispatch.exactMissionStart && isWonderlandMissionStartRoute(missionPath))
           || (wonderlandDispatch.exactCompanion && (isWonderlandCompanionRoute(missionPath) || isWonderlandCompanionAgentRoute(missionPath)))) {
           const missionAuthz = typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
           const missionResult = await handleJuliusMissionRoute({

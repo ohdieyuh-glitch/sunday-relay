@@ -12,6 +12,7 @@ import {
 } from './wonderland-admission-route';
 import { isWonderlandMissionReadRoute, wonderlandMissionRead } from './wonderland-mission-result-route';
 import { isWonderlandMissionEventsRoute } from './wonderland-mission-events-route';
+import { isWonderlandMissionStartRoute } from './wonderland-mission-start-route';
 
 export interface WonderlandRouteRequest {
   readonly method: string; readonly path: string; readonly url: string;
@@ -35,6 +36,7 @@ export function isWonderlandRoute(path: string): boolean {
   if (pathname === WONDERLAND_ADMISSION_PATH || pathname === WONDERLAND_STATUS_PATH) return false;
   if (isWonderlandMissionReadRoute(pathname)) return false;
   if (isWonderlandMissionEventsRoute(pathname)) return false;
+  if (isWonderlandMissionStartRoute(pathname)) return false;
   if (isWonderlandCompanionRoute(pathname)) return false;
   if (isWonderlandCompanionAgentRoute(pathname)) return false;
   if (pathname === '/wonderland' || pathname.startsWith('/wonderland/')) return true;
@@ -43,7 +45,7 @@ export function isWonderlandRoute(path: string): boolean {
   if (isWonderlandCompanionAgentRoute(folded)) return true;
   return folded === WONDERLAND_ADMISSION_PATH || folded.startsWith(`${WONDERLAND_ADMISSION_PATH}/`)
     || folded === WONDERLAND_STATUS_PATH || folded.startsWith(`${WONDERLAND_STATUS_PATH}/`)
-    || /^\/wonderland\/julius\/missions\/[^/]+\/(result|progress|events)(\/.*)?$/.test(folded);
+    || /^\/wonderland\/julius\/missions\/[^/]+\/(result|progress|events|start)(\/.*)?$/.test(folded);
 }
 
 /**
@@ -62,6 +64,7 @@ export function classifyWonderlandDispatchPath(bridgePath: string, rawPath: stri
   readonly exactMissionResult: boolean;
   readonly exactMissionProgress: boolean;
   readonly exactMissionEvents: boolean;
+  readonly exactMissionStart: boolean;
   readonly exactCompanion: boolean;
 } {
   const classified = (
@@ -72,6 +75,7 @@ export function classifyWonderlandDispatchPath(bridgePath: string, rawPath: stri
       readonly exactMissionResult?: boolean;
       readonly exactMissionProgress?: boolean;
       readonly exactMissionEvents?: boolean;
+      readonly exactMissionStart?: boolean;
       readonly exactCompanion?: boolean;
     } = {},
   ) => ({
@@ -81,6 +85,7 @@ export function classifyWonderlandDispatchPath(bridgePath: string, rawPath: stri
     exactMissionResult: over.exactMissionResult ?? false,
     exactMissionProgress: over.exactMissionProgress ?? false,
     exactMissionEvents: over.exactMissionEvents ?? false,
+    exactMissionStart: over.exactMissionStart ?? false,
     exactCompanion: over.exactCompanion ?? false,
   });
   if (isWonderlandAdmissionRoute(rawPath)) return classified({ exactAdmission: true });
@@ -89,6 +94,7 @@ export function classifyWonderlandDispatchPath(bridgePath: string, rawPath: stri
   if (missionRead?.kind === 'result') return classified({ exactMissionResult: true });
   if (missionRead?.kind === 'progress') return classified({ exactMissionProgress: true });
   if (isWonderlandMissionEventsRoute(rawPath)) return classified({ exactMissionEvents: true });
+  if (isWonderlandMissionStartRoute(rawPath)) return classified({ exactMissionStart: true });
   if (isWonderlandCompanionRoute(rawPath) || isWonderlandCompanionAgentRoute(rawPath)) {
     return classified({ exactCompanion: true });
   }
