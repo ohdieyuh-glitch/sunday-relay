@@ -26,7 +26,7 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | from | to | edges | type |
 | --- | --- | --- | --- |
 | bridge provider stacks (hosted Claude, Hermes, redaction) | connectors (gpt-architect, prompt-architect contracts) | 2 | 0 |
-| bridge provider stacks (hosted Claude, Hermes, redaction) | kernel (src/relay/mission/julius/) | 10 | 3 |
+| bridge provider stacks (hosted Claude, Hermes, redaction) | kernel (src/relay/mission/julius/) | 11 | 3 |
 | bridge provider stacks (hosted Claude, Hermes, redaction) | live composition (relay-bridge/julius/) | 6 | 0 |
 | bridge provider stacks (hosted Claude, Hermes, redaction) | other | 8 | 0 |
 | bridge provider stacks (hosted Claude, Hermes, redaction) | persistence (src/relay/persistence/) | 4 | 0 |

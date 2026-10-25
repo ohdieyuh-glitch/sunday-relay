@@ -23,6 +23,7 @@ import { createHash } from 'node:crypto';
 
 import { deriveJuliusSpentTag } from '../scripts/julius-admission-run-id.mjs';
 import { juliusMissionTraceId } from '../scripts/julius-mission-trace.mjs';
+import { projectJuliusSlotViews, type JuliusTimelineEntry } from '../src/relay/mission/julius/julius-runtime-api';
 
 export const JULIUS_SPEND_TAG_SCHEMA = 'julius-run-spent.v1' as const;
 const EVIDENCE_ARTIFACT = 'julius-live-evidence';
@@ -472,6 +473,97 @@ function evidenceFiles(artifact: JuliusMissionWorkflowArtifact | undefined): rea
   }));
 }
 
+const SLOT_EVENT_COLUMNS = [
+  'run_id', 'sequence', 'event_id', 'event_type', 'task_id', 'worker_id', 'role',
+  'cost_basis', 'usd_micros', 'reservation_id', 'failure_class', 'provider', 'provider_id',
+  'requested_model', 'served_model', 'stage', 'attempt', 'occurred_at',
+] as const;
+
+/**
+ * Slot rows from `slot-events.tsv`. The file is every `julius.*` event in ledger
+ * order. `projectJuliusSlotViews` is the projection; this function only restores
+ * the integer `usdMicros` psql stringified and reads stage and attempt off the
+ * same rows. A missing file, the word `unavailable`, a drifted header, a repeated
+ * sequence, or a non-integer `usd_micros` or `attempt` is null. A header and no
+ * rows is the projection of an empty ledger. A stage outside the four phase words
+ * is a real fact and leaves the list intact.
+ */
+function phasesFrom(text: string | null, runId: string): readonly JuliusMissionPhaseEvidence[] | null {
+  if (text === null || text.trim() === 'unavailable') return null;
+  const table = parseTable(text);
+  if (table === null || SLOT_EVENT_COLUMNS.some((column) => !table.columns.includes(column))) return null;
+  const rows = table.rows.filter((row) => row.run_id === runId);
+  const seen = new Set<string>();
+  const entries: JuliusTimelineEntry[] = [];
+  const stageOf = new Map<JuliusMissionPhaseRole, JuliusMissionPhaseStage>();
+  const attemptOf = new Map<JuliusMissionPhaseRole, number>();
+  const roleOfTask = new Map<string, JuliusMissionPhaseRole>();
+  const ordered = [...rows].sort((left, right) => (nonNegative(left.sequence ?? '') ?? 0) - (nonNegative(right.sequence ?? '') ?? 0));
+  for (const row of ordered) {
+    const sequence = nonNegative(row.sequence ?? '');
+    if (sequence === null || sequence < 1 || seen.has(row.sequence)) return null;
+    seen.add(row.sequence);
+    if (!row.event_type.startsWith('julius.') || row.event_type.length === 'julius.'.length) return null;
+    const usd = row.usd_micros === '' ? null : nonNegative(row.usd_micros);
+    if (row.usd_micros !== '' && usd === null) return null;
+    const attempt = row.attempt === '' ? null : nonNegative(row.attempt);
+    if (row.attempt !== '' && attempt === null) return null;
+    const stated = (JULIUS_MISSION_PHASE_ROLES as readonly string[]).includes(row.role) ? row.role as JuliusMissionPhaseRole : null;
+    const taskId = row.task_id === '' ? null : row.task_id;
+    const role = stated ?? (taskId === null ? null : roleOfTask.get(taskId) ?? null);
+    if (role !== null && taskId !== null) roleOfTask.set(taskId, role);
+    const stage = oneOf(row.stage, JULIUS_MISSION_PHASE_STAGES);
+    if (role !== null && stage !== null) stageOf.set(role, stage);
+    if (role !== null && attempt !== null) attemptOf.set(role, attempt);
+    const facts: Record<string, string | number | boolean | null> = {};
+    const textFact = (key: string, value: string): void => {
+      if (value !== '') facts[key] = value;
+    };
+    textFact('role', row.role);
+    textFact('costBasis', row.cost_basis);
+    if (usd !== null) facts.usdMicros = usd;
+    textFact('reservationId', row.reservation_id);
+    textFact('failureClass', row.failure_class);
+    textFact('provider', row.provider);
+    textFact('providerId', row.provider_id);
+    textFact('requestedModel', row.requested_model);
+    textFact('servedModel', row.served_model);
+    entries.push({
+      eventId: row.event_id === '' ? `sequence:${row.sequence}` : row.event_id,
+      sequence,
+      type: row.event_type.slice('julius.'.length),
+      taskId,
+      workerId: row.worker_id === '' ? null : row.worker_id,
+      occurredAt: row.occurred_at,
+      facts,
+    });
+  }
+  return projectJuliusSlotViews(entries).map((slot): JuliusMissionPhaseEvidence => ({
+    role: slot.role,
+    state: slot.state,
+    stage: stageOf.get(slot.role) ?? null,
+    attempt: attemptOf.get(slot.role) ?? null,
+    spanId: null,
+    traceparent: null,
+    knownUsdMicros: slot.knownUsdMicros,
+    costComplete: slot.costComplete,
+  }));
+}
+
+/**
+ * `julius_runs.project_brain_revision` from `runs.tsv`. `0` is the stored counter.
+ * A missing file, a header without the column, an empty cell, or a non-integer is
+ * null. This does not read `project-brain.tsv`.
+ */
+function brainRevision(text: string | null, runId: string): number | null {
+  if (text === null) return null;
+  const rows = rowsForRun(text, runId);
+  if (rows === null || rows.length !== 1) return null;
+  const cell = rows[0].project_brain_revision;
+  if (cell === undefined || cell === '') return null;
+  return nonNegative(cell);
+}
+
 function archiveFrom(evidence: JuliusMissionWorkflowArtifact | undefined, run: JuliusMissionWorkflowRun): JuliusMissionArchiveEvidence | null {
   if (evidence === undefined) return null;
   const files = evidenceFiles(evidence);
@@ -520,17 +612,22 @@ export function createJuliusMissionEvidenceReader(github: JuliusMissionGitHub): 
       if (!resultCompleted(fileText(evidence, 'live-mission.evidence.txt'), derived.runId)) return null;
       if (!runtimeAgrees(fileText(evidence, 'runs.tsv'), derived.runId)) return null;
       const diagnosticRows = rowsForRun(fileText(evidence, 'worker-diagnostics.tsv'), derived.runId);
+      const runsText = fileText(evidence, 'runs.tsv');
       const completion: JuliusMissionCompletionEvidence = {
         juliusFinalState: 'COMPLETED',
         spendTag,
+        // The admission step writes this run's seven-line reservation and does not
+        // compute knownUsdMicros, unknownCostComponents, unverifiableApiSpend, or
+        // spendVerified. cost-accounting.tsv is missionCost. The reservation is
+        // spendTag.reservedUsdMicros.
         spendAccounting: null,
         coderCost: coderCostFrom(diagnosticRows),
         missionCost: missionCostFrom(fileText(evidence, 'cost-accounting.tsv'), derived.runId),
         providerReceipt: coderReceipt(diagnosticRows),
         archive: archiveFrom(evidence, observed),
         workArtifactRefs: workRefsFrom(fileText(evidence, 'evidence.tsv'), derived.runId),
-        projectBrainRevision: null,
-        phases: null,
+        projectBrainRevision: brainRevision(runsText, derived.runId),
+        phases: phasesFrom(fileText(evidence, 'slot-events.tsv'), derived.runId),
         traceId: juliusMissionTraceId(derived.runId),
         traceparent: null,
       };
