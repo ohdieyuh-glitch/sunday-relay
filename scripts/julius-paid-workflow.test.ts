@@ -376,12 +376,57 @@ describe('the coder stops before a provider call unless the user-owned API key i
   });
 });
 
+describe('a paid run is attempt 1 only', () => {
+  const RERUN_GATE = "'Gate: a paid run is attempt 1 only'";
+  const runGate = (text: string, env: Record<string, string>): { status: number; stderr: string } => {
+    try {
+      execFileSync('bash', [...GITHUB_BASH, text], { cwd: ROOT, env: { ...process.env, ...env }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+      return { status: 0, stderr: '' };
+    } catch (error) {
+      const failed = error as { status?: number; stderr?: string };
+      return { status: failed.status ?? 1, stderr: failed.stderr ?? '' };
+    }
+  };
+
+  it('is the paid job\'s first step, paid-only, and refuses a re-run before anything else runs', () => {
+    const paidJob = job('first-live-mission');
+    const steps = paidJob.slice(paidJob.indexOf('\n    steps:\n'));
+    const first = steps.search(/\n      - (name|uses):/u);
+    expect(steps.slice(first + 1).startsWith(`      - name: ${RERUN_GATE}`)).toBe(true);
+    const gate = step(paidJob, RERUN_GATE);
+    expect(gate).toContain("if: inputs.confirm_live == 'RUN LIVE MISSION'\n");
+    const text = script(gate);
+    expect(runGate(text, { GITHUB_RUN_ATTEMPT: '1' }).status).toBe(0);
+    for (const attempt of ['2', '10', '', '01', '1 ']) {
+      const refused = runGate(text, { GITHUB_RUN_ATTEMPT: attempt });
+      expect(refused.status, JSON.stringify(attempt)).not.toBe(0);
+      expect(refused.stderr, JSON.stringify(attempt)).toContain('PAID_RERUN_REFUSED');
+    }
+  });
+});
+
 describe('one spent tag per admission run id, before any provider call', () => {
   const HEX = '0123456789abcdef01234567';
   const WLJ = 'wlj_01234567-89ab-4cde-8fab-0123456789ab';
   const WLJ_HEX = '0123456789ab4cde8fab0123456789ab';
   const tagJob = job('spend-tag');
   const tagScript = script(step(tagJob, "'Gate: one spent tag for this admission run id, before any provider call'"));
+
+  it('a paid re-run (attempt above 1) halts PAID_RERUN_REFUSED before any API call; a preflight re-run creates no tag either way', () => {
+    const paid = { JULIUS_RUN_ID: WLJ, CONFIRM_LIVE: 'RUN LIVE MISSION' };
+    for (const attempt of ['2', '3', '']) {
+      const refused = runTag({ ...paid, GITHUB_RUN_ATTEMPT: attempt });
+      expect(refused.status, JSON.stringify(attempt)).not.toBe(0);
+      expect(refused.stderr, JSON.stringify(attempt)).toContain('PAID_RERUN_REFUSED');
+      expect(refused.curlLog, JSON.stringify(attempt)).toBe('');
+    }
+    const preflight = runTag({ JULIUS_RUN_ID: WLJ, CONFIRM_LIVE: '', GITHUB_RUN_ATTEMPT: '2' });
+    expect(preflight.status).toBe(0);
+    expect(preflight.curlLog).toBe('');
+    const first = runTag({ ...paid, GITHUB_RUN_ATTEMPT: '1' });
+    expect(first.stderr).not.toContain('PAID_RERUN_REFUSED');
+    expect(first.curlLog).not.toBe('');
+  });
 
   const runTag = (env: Record<string, string>, curl?: { code?: string; body?: string; exitCode?: string; getCode?: string; getBody?: string; refCode?: string; refBody?: string }): { status: number; stderr: string; output: string; curlLog: string } => {
     const bin = mkdtempSync(join(tmpdir(), 'julius-spent-tag-'));

@@ -131,6 +131,12 @@ jobs:
   # it, halts RUN_ID_ALREADY_SPENT. Its message is not read, and it never
   # allows a run. Any other result is SPENT_TAG_UNVERIFIED. A preflight with a
   # valid id creates no tag. The paid job's one-at-a-time group is unchanged.
+  #
+  # A PAID RUN IS ATTEMPT 1 ONLY. Re-run keeps the Actions run id and raises
+  # GITHUB_RUN_ATTEMPT. A run that failed before this gate and was re-run would
+  # otherwise tag and spend while the operator's record says it failed. A paid
+  # attempt above 1 halts PAID_RERUN_REFUSED before any API call, here and as
+  # the paid job's first step (a re-run of failed jobs skips this one).
   spend-tag:
     name: spend-tag
     runs-on: ubuntu-24.04
@@ -194,6 +200,10 @@ jobs:
           # A preflight creates no tag. The id was already required above.
           if [ "$CONFIRM_LIVE" != 'RUN LIVE MISSION' ]; then
             exit 0
+          fi
+          if [ "${GITHUB_RUN_ATTEMPT:-}" != '1' ]; then
+            echo "PAID_RERUN_REFUSED: a paid run is attempt 1 only (this is attempt ${GITHUB_RUN_ATTEMPT:-unknown}). Dispatch a new run with a new run id." >&2
+            exit 1
           fi
           if ! printf '%s' "${GITHUB_SHA:?}" | grep -Eqx '[0-9a-f]{40}'; then
             echo 'SPENT_TAG_UNVERIFIED' >&2
@@ -555,6 +565,17 @@ jobs:
       HERMES_REQUEST_TIMEOUT_SECONDS: '480'
 
     steps:
+      # FIRST, BEFORE ANYTHING ELSE RUNS: a paid run is attempt 1 only. "Re-run
+      # failed jobs" re-runs this job alone with spend-tag's outputs from attempt
+      # 1, so the spend-tag gate cannot catch it; this step does.
+      - name: 'Gate: a paid run is attempt 1 only'
+        if: inputs.confirm_live == 'RUN LIVE MISSION'
+        run: |
+          if [ "${GITHUB_RUN_ATTEMPT:-}" != '1' ]; then
+            echo "PAID_RERUN_REFUSED: a paid run is attempt 1 only (this is attempt ${GITHUB_RUN_ATTEMPT:-unknown}). Dispatch a new run with a new run id." >&2
+            exit 1
+          fi
+
       # Pinned to immutable commit SHAs. A mutable tag can be repointed by the
       # action's owner at any time, which would change what runs here without
       # changing anything in this repository.
