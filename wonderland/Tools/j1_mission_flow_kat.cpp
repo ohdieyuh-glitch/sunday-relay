@@ -681,11 +681,39 @@ const ABSENT_PHASE = {
 		{
 			return Load(ResultJson(BridgeRun, "completed", TraceJson.c_str(), nullptr, HappyCompletion.c_str(), Extra), HappyProgress);
 		};
-		const FResultRead Passed = WithVerdict(",\"checkerVerdict\":\"PASS\"");
+		// completion.checker (#448 57ed1d61): a PASS must name the judged sha256 it graded.
+		const std::string Judged = Repeat('c', 64);
+		const auto WithChecker = [&](const char* Verdict, const std::string& CheckerObject)
+		{
+			std::string Completion = HappyCompletion;
+			Completion.insert(1, std::string("\"checker\":") + CheckerObject + ",");
+			return Load(ResultJson(BridgeRun, "completed", TraceJson.c_str(), nullptr, Completion.c_str(),
+				(std::string(",\"checkerVerdict\":\"") + Verdict + "\"").c_str()), HappyProgress);
+		};
+		const std::string GoodChecker = std::string("{\"reason\":\"ok\",\"taskId\":\"t1\",\"judgedTrimmedSha256\":\"") + Judged
+			+ "\",\"gameDigest\":\"0123456789ab\",\"checkerSha256\":\"" + Repeat('d', 64) + "\"}";
+		const FResultRead Passed = WithChecker("PASS", GoodChecker);
 		const FResultPanel PassedPanel = ResultPanelFor(Passed);
-		Expect(Passed.bCheckerReported && Passed.Checker == ECheckerVerdict::Pass, "pass parsed");
+		Expect(Passed.bCheckerReported && Passed.Checker == ECheckerVerdict::Pass && !Passed.bCheckerUnbound, "pass parsed");
 		Expect(Same(PassedPanel.Line, CopyStateCompletedChecked) && PassedPanel.bVerified && PassedPanel.bFinished && PassedPanel.bShowsArtifact, "pass shows completed");
 		Expect(HasLine(PassedPanel, "checkerVerdict: PASS"), "pass named");
+		Expect(HasLine(PassedPanel, "checker.gameDigest: 0123456789ab"), "pass shows the in-game digest");
+		Expect(HasLine(PassedPanel, (std::string("checker.judgedTrimmedSha256: ") + Judged).c_str()), "pass names what it judged");
+		++Bridge;
+		const FResultRead Unbound = WithVerdict(",\"checkerVerdict\":\"PASS\"");
+		Expect(Unbound.bCheckerUnbound && !Same(ResultPanelFor(Unbound).Line, CopyStateCompletedChecked), "pass naming no judged sha is not completed");
+		Expect(HasLine(ResultPanelFor(Unbound), "checkerVerdict: PASS (names no judged sha256; not verified)"), "unbound pass says so");
+		++Bridge;
+		const FResultRead BadHex = WithChecker("PASS", "{\"judgedTrimmedSha256\":\"" + Repeat('C', 64) + "\",\"gameDigest\":\"0123456789abc\"}");
+		const FResultPanel BadHexPanel = ResultPanelFor(BadHex);
+		Expect(BadHex.bCheckerUnbound && !Same(BadHexPanel.Line, CopyStateCompletedChecked), "malformed judged sha unbinds the pass");
+		Expect(HasLine(BadHexPanel, "checker.gameDigest: Unknown") && HasLine(BadHexPanel, "checker.judgedTrimmedSha256: Unknown"), "malformed checker values read Unknown");
+		Expect(!ContainsText(BadHexPanel, "0123456789abc") && !ContainsText(BadHexPanel, Repeat('C', 64).c_str()), "malformed checker values are not echoed");
+		++Bridge;
+		const FResultPanel FailDetail = ResultPanelFor(WithChecker("FAIL", GoodChecker));
+		Expect(Same(FailDetail.Line, CopyCheckerFailed) && HasLine(FailDetail, "checker.gameDigest: 0123456789ab"), "fail shows what it judged");
+		const FResultPanel NotRunDetail = ResultPanelFor(WithChecker("NOT_RUN", GoodChecker));
+		Expect(!ContainsText(NotRunDetail, "checker.gameDigest") && Same(NotRunDetail.Line, CopyStateCompleted), "not run shows no checker detail");
 		++Bridge;
 		const FResultRead Failed = WithVerdict(",\"checkerVerdict\":\"FAIL\"");
 		const FResultPanel FailedPanel = ResultPanelFor(Failed);

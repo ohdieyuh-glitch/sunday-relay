@@ -121,6 +121,8 @@ namespace WonderlandJuliusMissionFlow
 		bool bKnown = false;
 		bool bNull = false;
 		std::string Text;
+		/** Set only by format-checked reads: the field was sent but failed its format (shown Unknown, never echoed). */
+		bool bPresent = false;
 	};
 
 	struct FReportedInt64
@@ -242,6 +244,12 @@ namespace WonderlandJuliusMissionFlow
 		ECheckerVerdict Checker = ECheckerVerdict::NotRun;
 		/** True only when the field was present with one of the three words (so the panel names it, never invents it). */
 		bool bCheckerReported = false;
+		/** completion.checker (#448 57ed1d61): the in-game digest (12 lowercase hex) and the judged sha256 (64 lowercase hex),
+		 *  as reported. A present but malformed value reads as known=false, null=false (shown Unknown). */
+		FReportedString CheckerGameDigest;
+		FReportedString CheckerJudgedSha256;
+		/** PASS that does not name a well-formed judged sha256: not bound to what was graded, so never shown as Completed. */
+		bool bCheckerUnbound = false;
 	};
 
 	class IMissionResultReader
