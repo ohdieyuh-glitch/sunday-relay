@@ -32,6 +32,8 @@ import { branchRulesProblems, governedCommitBody, readGovernedEnvironment } from
 import {
   CHECKPOINT_ATTESTATION_DIR,
   FOUNDER_APPROVAL_KEY_PATH,
+  PINNED_FOUNDER_APPROVAL_SPKI_SHA256,
+  PINNED_REVIEWER_SPKI_SHA256,
   TRUSTED_CHECKPOINT_SHA,
   TRUSTED_COMPUTING_BASE,
   attestationShapeProblem,
@@ -41,6 +43,93 @@ import {
   parseCheckpointAttestation,
   reviewerKeyPinRefusal,
 } from './julius-main-provenance-trust.mjs';
+
+export const GOVERNED_LANDER_APP_ID = '5457712';
+export const GOVERNED_LANDER_BOT_ID = '347502603';
+
+/**
+ * The inline token mint in the founder block. It runs on the founder's machine,
+ * reads the PEM path the founder sets, and writes the token only to stdout,
+ * which the block captures into a shell variable. This script never runs it,
+ * never reads a PEM, and never prints a token.
+ */
+const FOUNDER_MINT_JS = [
+  'import { createSign } from "node:crypto"; import { readFileSync } from "node:fs";',
+  'const now = Math.floor(Date.now() / 1000); const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");',
+  'const unsigned = b64({ alg: "RS256", typ: "JWT" }) + "." + b64({ iat: now - 60, exp: now + 540, iss: process.env.JULIUS_GOVERNED_LANDER_APP_ID });',
+  'const jwt = unsigned + "." + createSign("RSA-SHA256").update(unsigned).sign(readFileSync(process.env.JULIUS_APP_PEM_FILE)).toString("base64url");',
+  'const h = { Authorization: "Bearer " + jwt, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" };',
+  'const inst = await fetch("https://api.github.com/repos/ohdieyuh-glitch/sunday-relay/installation", { headers: h });',
+  'if (!inst.ok) { console.error("installation lookup answered " + inst.status); process.exit(1); }',
+  'const { id } = await inst.json();',
+  'const body = JSON.stringify({ repositories: ["sunday-relay"], permissions: { contents: "write", metadata: "read", actions: "read" } });',
+  'const res = await fetch("https://api.github.com/app/installations/" + id + "/access_tokens", { method: "POST", headers: { ...h, "Content-Type": "application/json" }, body });',
+  'if (!res.ok) { console.error("token mint answered " + res.status); process.exit(1); }',
+  'process.stdout.write((await res.json()).token);',
+];
+
+/**
+ * The one command block the founder runs, on the founder's own machine, from a
+ * clean checkout of the target. No workflow on main can mint the App token
+ * before this bootstrap, and no agent may handle the App private key, so the
+ * founder mints a one-hour installation token from the PEM they hold. The
+ * token lives only in a subshell variable and is revoked on exit. The block
+ * stops at the first failed check (set -euo pipefail).
+ */
+export function founderCommandBlock({ mainSha, target, targetTree, attestation, signature, founderSignature } = {}) {
+  const value = (text, placeholder) => (typeof text === 'string' && text !== '' ? text : placeholder);
+  const founderPin = typeof PINNED_FOUNDER_APPROVAL_SPKI_SHA256 === 'string' && PINNED_FOUNDER_APPROVAL_SPKI_SHA256 !== ''
+    ? PINNED_FOUNDER_APPROVAL_SPKI_SHA256
+    : 'NOT-PINNED-the-founder-approval-key-must-be-installed-in-the-target-first';
+  const q = (text) => `'${String(text).replace(/'/gu, "'\\''")}'`;
+  return [
+    '# ---- FOUNDER: run this whole block in bash on your own machine, from a clean checkout of the target. ----',
+    '# Nothing in it prints the token or the PEM. It stops at the first failed check.',
+    '(',
+    'set -euo pipefail',
+    '# 1. The values this landing is bound to. Export JULIUS_APP_PEM_FILE (the App private key file you hold) first.',
+    `MAIN_SHA=${q(value(mainSha, '<main sha>'))}`,
+    `TARGET=${q(value(target, '<target sha>'))}`,
+    `TARGET_TREE=${q(value(targetTree, '<target tree>'))}`,
+    `ATTESTATION=${q(value(attestation, '<path to the signed attestation .txt>'))}`,
+    `SIGNATURE=${q(value(signature, '<path to the reviewer .sig>'))}`,
+    `FOUNDER_SIGNATURE=${q(value(founderSignature, '<path to your founder-approval .founder.sig>'))}`,
+    ': "${JULIUS_APP_PEM_FILE:?export JULIUS_APP_PEM_FILE=<the App private key file> first}"',
+    `export JULIUS_GOVERNED_LANDER_APP_ID=${GOVERNED_LANDER_APP_ID} JULIUS_GOVERNED_LANDER_BOT_ID=${GOVERNED_LANDER_BOT_ID}`,
+    `export JULIUS_REVIEWER_KEY_SHA256=${PINNED_REVIEWER_SPKI_SHA256}`,
+    `export JULIUS_FOUNDER_APPROVAL_KEY_SHA256=${founderPin}`,
+    '# 2. Prerequisites. Each line fails the block if it does not hold.',
+    'command -v node >/dev/null; command -v git >/dev/null; command -v gh >/dev/null; command -v curl >/dev/null',
+    'node -e \'process.exit(Number(process.versions.node.split(".")[0]) >= 22 ? 0 : 1)\'',
+    'git diff --quiet; git diff --cached --quiet',
+    'test "$(git rev-parse HEAD)" = "$TARGET"',
+    'test "$(git rev-parse "HEAD^{tree}")" = "$TARGET_TREE"',
+    'test -s "$ATTESTATION"; test -s "$SIGNATURE"; test -s "$FOUNDER_SIGNATURE"; test -r "$JULIUS_APP_PEM_FILE"',
+    `test "$(gh api repos/${REPO}/git/ref/heads/main --jq .object.sha)" = "$MAIN_SHA"`,
+    `test "$(gh api repos/${REPO}/actions/variables/JULIUS_REVIEWER_KEY_SHA256 --jq .value)" = "$JULIUS_REVIEWER_KEY_SHA256"`,
+    `test "$(gh api repos/${REPO}/actions/variables/JULIUS_FOUNDER_APPROVAL_KEY_SHA256 --jq .value)" = "$JULIUS_FOUNDER_APPROVAL_KEY_SHA256"`,
+    '# 3. Mint a one-hour installation token for this repository only. It stays in this subshell and is revoked on exit.',
+    `JULIUS_GOVERNED_LANDER_TOKEN="$(node --input-type=module -e ${q(FOUNDER_MINT_JS.join('\n'))})"`,
+    'export JULIUS_GOVERNED_LANDER_TOKEN',
+    'trap \'curl -fsS -o /dev/null -X DELETE -H "Authorization: Bearer $JULIUS_GOVERNED_LANDER_TOKEN" https://api.github.com/installation/token || true\' EXIT',
+    'ARGS=(--main-sha "$MAIN_SHA" --target "$TARGET" --target-tree "$TARGET_TREE" --attestation "$ATTESTATION" --signature "$SIGNATURE" --founder-signature "$FOUNDER_SIGNATURE")',
+    '# 4. Dry run. It only reads. It must print "DRY RUN: every check passed" and exit 0.',
+    'node scripts/julius-governed-bootstrap.mjs "${ARGS[@]}"',
+    '# 5. Execute. Creates the installer commit as the App and moves main with force:false.',
+    'node scripts/julius-governed-bootstrap.mjs "${ARGS[@]}" --execute',
+    '# 6. Verify: main is one installer commit on the target, it only touches the checkpoint directory, and the verifier accepts it.',
+    'git fetch -q origin main',
+    'test "$(git rev-parse origin/main^)" = "$TARGET"',
+    `test -z "$(git diff --name-only "$TARGET" origin/main | grep -v '^${CHECKPOINT_ATTESTATION_DIR}/' || true)"`,
+    'VERIFY="$(mktemp -d)/main"; git worktree add -q --detach "$VERIFY" origin/main',
+    '(cd "$VERIFY" && env -u GH_TOKEN -u JULIUS_GOVERNED_LANDER_TOKEN node scripts/julius-main-provenance-trust.mjs --require-trusted-verifier)',
+    'git worktree remove --force "$VERIFY"',
+    'echo "bootstrap verified: main is $(git rev-parse origin/main)"',
+    ')',
+    '# ---- end of founder block ----',
+    '',
+  ].join('\n');
+}
 
 /** The longest window this script installs. Six months, the default the reviewer is asked to sign. */
 export const ATTESTATION_MAX_WINDOW_MS = 184 * 24 * 60 * 60 * 1000;
@@ -287,9 +376,18 @@ export async function runBootstrap({ argv = [], env = {}, request, readFile, now
     snapshotText = read(join(ROOT, '..', SNAPSHOT_PATH));
     snapshot = JSON.parse(snapshotText);
   } catch { problems.push('the main ruleset snapshot could not be read'); }
+  const instructions = founderCommandBlock({
+    mainSha: expectedMainSha,
+    target: targetSha,
+    targetTree: targetTreeArg,
+    attestation: attestationPath,
+    signature: signaturePath,
+    founderSignature: founderSignaturePath,
+  });
   if (token === '' || typeof request !== 'function' || problems.length > 0) {
     if (typeof request !== 'function' && token !== '') problems.push('the GitHub client is unavailable');
-    return { ok: false, execute, problems, record: null };
+    // Without a token, say exactly what the founder runs instead of a bare refusal.
+    return { ok: false, execute, problems, record: null, instructions: token === '' ? instructions : null };
   }
   const mainResponse = await github(request, token, `/repos/${REPO}/git/ref/heads/main`);
   const mainSha = mainResponse.status === 200 ? mainResponse.body?.object?.sha : undefined;
@@ -358,7 +456,17 @@ export async function runBootstrap({ argv = [], env = {}, request, readFile, now
     tree: targetTreeArg,
     installer: 'pending',
   });
-  if (!execute) return { ok: true, execute: false, problems: [], record: pending };
+  if (!execute) {
+    const plan = installerDiffPlan(targetSha, existingCheckpointNames);
+    const summary = [
+      'DRY RUN: every check passed and nothing was written.',
+      `main ${mainSha} -> one installer commit on target ${targetSha} (tree ${targetTreeArg})${decision.recovery ? ' [recovery: the target is main]' : ''}`,
+      ...plan.removed.map((path) => `  remove ${path}`),
+      ...plan.added.map((path) => `  add    ${path}`),
+      'Next: step 5 of the founder block below, the same command with --execute.',
+    ].join('\n');
+    return { ok: true, execute: false, problems: [], record: pending, summary, instructions };
+  }
   const paths = attestationRelPaths(targetSha);
   const plan = installerDiffPlan(targetSha, existingCheckpointNames);
   const blobFor = async (content) => {
@@ -474,7 +582,7 @@ if (entrypoint !== null && import.meta.url === entrypoint) {
       return { status: response.status, body };
     },
   });
-  const lines = [...result.problems, result.record ?? ''].filter((line) => line !== '');
+  const lines = [...result.problems, result.summary ?? '', result.record ?? '', result.instructions ?? ''].filter((line) => line !== '');
   const stream = result.ok ? process.stdout : process.stderr;
   stream.write(`${lines.join('\n')}\n`);
   process.exitCode = result.ok ? 0 : 1;

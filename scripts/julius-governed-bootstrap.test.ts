@@ -391,6 +391,55 @@ describe('runBootstrap talks to GitHub only with a token and never prints it', (
     JULIUS_FOUNDER_APPROVAL_KEY_SHA256: founderSpki,
   };
 
+  it('the founder block: one bash block, prerequisites and fail-fast first, then the dry run, --execute, and verification', async () => {
+    const result = await boot.runBootstrap({ argv, env: {}, request: async () => ({ status: 500, body: null }), now: NOW }) as { instructions?: string | null };
+    const block = String(result.instructions);
+    expect(block.match(/FOUNDER: run this whole block/gu)).toHaveLength(1);
+    expect(block).toContain('set -euo pipefail');
+    const at = (needle: string) => {
+      const index = block.indexOf(needle);
+      expect(index, needle).toBeGreaterThan(-1);
+      return index;
+    };
+    const order = [
+      at('command -v node'),
+      at('test "$(git rev-parse HEAD)" = "$TARGET"'),
+      at('actions/variables/JULIUS_REVIEWER_KEY_SHA256'),
+      at('/access_tokens'),
+      at('node scripts/julius-governed-bootstrap.mjs "${ARGS[@]}"\n'),
+      at('node scripts/julius-governed-bootstrap.mjs "${ARGS[@]}" --execute'),
+      at('test "$(git rev-parse origin/main^)" = "$TARGET"'),
+      at('--require-trusted-verifier'),
+    ];
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(block).toContain(`MAIN_SHA='${MAIN}'`);
+    expect(block).toContain(`TARGET='${TARGET}'`);
+    expect(block).toContain(`TARGET_TREE='${TREE}'`);
+    expect(block).toContain('JULIUS_GOVERNED_LANDER_APP_ID=5457712 JULIUS_GOVERNED_LANDER_BOT_ID=347502603');
+    expect(block).toContain('repositories: ["sunday-relay"]');
+    expect(block).toContain('X DELETE');
+    // The token goes only into a variable; nothing echoes it or the PEM.
+    expect(block).not.toMatch(/echo[^\n]*(TOKEN|PEM)/u);
+    expect(block).not.toMatch(/(cat|printf)[^\n]*(TOKEN|PEM)/u);
+    expect(block).not.toContain('set -x');
+    expect(block).not.toContain(TOKEN);
+  });
+
+  it('dry run explains what it checked and would write, and ends with the founder block', async () => {
+    const { request } = client();
+    const result = await boot.runBootstrap({ argv, env, request, now: NOW }) as { ok: boolean; summary?: string; instructions?: string };
+    expect(result.ok).toBe(true);
+    expect(result.summary).toContain('DRY RUN: every check passed and nothing was written.');
+    expect(result.summary).toContain(`add    .github/julius-landing/checkpoints/${TARGET}.founder.sig`);
+    expect(result.instructions).toContain('FOUNDER: run this whole block');
+    expect(JSON.stringify(result)).not.toContain(TOKEN);
+    // The script never opens the App private key, even when the founder's shell has it set.
+    const opened: string[] = [];
+    const readFile = (path: string) => { opened.push(path); return readFileSync(path, 'utf8'); };
+    await boot.runBootstrap({ argv, env: { ...env, JULIUS_APP_PEM_FILE: '/founder/app.pem' }, request: client().request, readFile, now: NOW });
+    expect(opened.some((path) => path.includes('app.pem'))).toBe(false);
+  });
+
   it('returns before any request when the token is unset', async () => {
     let called = false;
     const result = await boot.runBootstrap({
