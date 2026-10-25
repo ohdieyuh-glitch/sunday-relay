@@ -8,10 +8,12 @@ import {
   JULIUS_NAMESPACE_CEILINGS,
   authorizeJuliusLiveSpend,
   summarizeJuliusPriorRunSpend,
+  type JuliusDurablePriorSpend,
   type JuliusSettlementFact,
   type JuliusSpendAuthorization,
   type JuliusSpendLedgerRead,
 } from '../src/relay/mission/julius/julius-spend-ceiling';
+import { readJuliusSpentTagLedger } from './julius/julius-prior-spend';
 
 export interface JuliusSpendLedgerPort {
   readPrior(input: { readonly missionId: string; readonly projectId: string; readonly excludeRunId?: string }): Promise<JuliusSpendLedgerRead>;
@@ -45,6 +47,7 @@ export function preSpendDecision(input: {
 
 export function spendRefusalCode(reasonCode: string): { readonly status: number; readonly code: string } {
   if (reasonCode === 'spend_ledger_unreadable') return { status: 503, code: 'julius_dispatch_spend_ledger_unreadable' };
+  if (reasonCode === 'qualifying_pair_spend_absent') return { status: 503, code: 'julius_dispatch_spend_record_absent' };
   if (reasonCode === 'qualifying_pair_third_run_refused') return { status: 409, code: 'julius_dispatch_repeat_already_used' };
   if (reasonCode === 'qualifying_pair_spend_unverified') return { status: 409, code: 'julius_dispatch_repeat_spend_unknown' };
   if (reasonCode === 'qualifying_pair_spend_exceeded') return { status: 409, code: 'julius_dispatch_repeat_combined_ceiling' };
@@ -52,21 +55,54 @@ export function spendRefusalCode(reasonCode: string): { readonly status: number;
   return { status: 409, code: 'julius_dispatch_spend_ceiling' };
 }
 
-/** A ledger whose rows are {@link JuliusSettlementFact}s, summarized by the same function #404 uses. */
-export function createSharedSpendLedger(): JuliusSpendLedgerPort & { readonly facts: ReadonlyMap<string, readonly JuliusSettlementFact[]> } {
+/**
+ * A ledger whose rows are {@link JuliusSettlementFact}s, summarized by the same function #404 uses.
+ * It lives in this process, so it is not the durable cross-job record: its reads say `ABSENT`, and a
+ * qualifying pair is refused on them. A test that stands it in for the durable record says so with
+ * `durableRecord: 'PRESENT'`.
+ */
+export function createSharedSpendLedger(options: { readonly durableRecord?: JuliusDurablePriorSpend } = {}): JuliusSpendLedgerPort & { readonly facts: ReadonlyMap<string, readonly JuliusSettlementFact[]> } {
   const facts = new Map<string, JuliusSettlementFact[]>();
+  const durableRecord = options.durableRecord ?? 'ABSENT';
   return {
     facts,
     async readPrior(input) {
       const priorRuns = [...facts.entries()]
         .filter(([runId]) => runId !== input.excludeRunId)
         .map(([runId, settlements]) => summarizeJuliusPriorRunSpend(runId, settlements));
-      return { readable: true, priorRuns };
+      return { readable: true, priorRuns, durableRecord };
     },
     async record(runId, fact) {
       const list = facts.get(runId) ?? [];
       list.push(fact);
       facts.set(runId, list);
+    },
+  };
+}
+
+/**
+ * THE DURABLE J1 LEDGER: the `julius-run-spent-*` tags the paid workflow writes before a provider call.
+ * A read lists them for the mission's namespace (#404's reader, unchanged). A failed listing is
+ * unreadable, never an empty history. This port does not write: the reservation tag is the paid
+ * workflow's, so a settlement offered here is refused, and the caller treats that as unwritten.
+ */
+export function createSpentTagSpendLedger(input: {
+  readonly repository: string;
+  readonly token: string;
+  readonly fetchImpl?: typeof fetch;
+}): JuliusSpendLedgerPort {
+  return {
+    async readPrior(read) {
+      return readJuliusSpentTagLedger({
+        repository: input.repository,
+        token: input.token,
+        namespace: read.missionId,
+        ...(read.excludeRunId === undefined ? {} : { excludeRunId: read.excludeRunId }),
+        ...(input.fetchImpl === undefined ? {} : { fetchImpl: input.fetchImpl }),
+      });
+    },
+    async record() {
+      throw new Error('The spent-tag ledger is written by the paid workflow, not by the dispatch controller.');
     },
   };
 }
