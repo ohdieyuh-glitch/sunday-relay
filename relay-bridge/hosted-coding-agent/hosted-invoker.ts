@@ -5,7 +5,6 @@ import type { AgentExecutionReport } from '../../src/relay/connectors/claude-cod
 import type { AgentInvoker } from '../agent-invoker';
 import { HOSTED_ADAPTER_ID } from './hosted-readiness';
 import { loadHostedQuery, runHostedCodingAgent, type HostedQueryFn } from './hosted-runner';
-import { writeJuliusFinalMessage } from '../julius/julius-final-message';
 
 /**
  * THE HOSTED CODING SURFACE, BEHIND THE ONE SEAM THAT VARIES.
@@ -51,14 +50,7 @@ export function createHostedClaudeInvoker(input: {
   readonly requestedModel: string | null;
   /** Injected in tests so the whole pipeline is provable with no paid call. */
   readonly queryFn?: HostedQueryFn;
-  /**
-   * Where the coder's final message is kept for the hidden checker
-   * (`julius-final-message.ts`). Only the paid workflow sets
-   * `JULIUS_FINAL_MESSAGE_DIR`; unset, nothing is written.
-   */
-  readonly finalMessageDir?: string | null;
 }): AgentInvoker {
-  const finalMessageDir = input.finalMessageDir === undefined ? (process.env.JULIUS_FINAL_MESSAGE_DIR ?? null) : input.finalMessageDir;
   return async (request) => {
     /**
      * A MISSING SDK IS A LAUNCH FAILURE, NOT A MISSION FAULT.
@@ -155,14 +147,6 @@ export function createHostedClaudeInvoker(input: {
     }
 
     const finalText = result.observation.finalText;
-    // Kept for the hidden checker, outside the workspace. Best effort: an unwritten record grades NOT_RUN.
-    writeJuliusFinalMessage({
-      directory: finalMessageDir,
-      workspacePath: request.workspacePath,
-      taskId: request.association.taskId,
-      runId: request.association.runId,
-      finalText,
-    });
     return {
       outcome: {
         startedAt: result.startedAt,

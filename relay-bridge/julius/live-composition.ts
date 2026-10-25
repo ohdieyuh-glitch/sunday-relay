@@ -495,6 +495,8 @@ export function resolveLiveWorkers(options: {
         ...(options.coderEffort == null ? {} : { effort: options.coderEffort }),
         ...(options.coderSelfTestCalls == null ? {} : { selfTestCalls: options.coderSelfTestCalls }),
         ...(options.coderFileCreation == null ? {} : { fileCreation: options.coderFileCreation }),
+        // The paid workflow names it for J1 only; empty or unset writes nothing.
+        ...(options.env.JULIUS_FINAL_MESSAGE_DIR ? { finalMessageDir: options.env.JULIUS_FINAL_MESSAGE_DIR } : {}),
         requestedModel: requested.codingModel ?? '', workspacePath: options.workspacePath,
         testCommand: options.testCommand, shell: options.shell as ShellEffectPort,
         ...(options.researchPolicyFor === undefined ? {} : { researchPolicyFor: options.researchPolicyFor }),

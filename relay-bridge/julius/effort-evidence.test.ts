@@ -255,6 +255,6 @@ describe('the kernel allowlist and the evidence dump', () => {
     expect(line.indexOf('AS review_evidence_test_output_omitted')).toBeLessThan(line.indexOf('AS effort_sent'));
     expect(line.indexOf('AS effort_sent')).toBeLessThan(line.indexOf('AS effort_echoed'));
     // the mission trace columns are appended after the effort columns, so neither moves
-    expect(line).toMatch(/AS effort_echoed,e\.payload->'facts'->>'diag_traceId' AS trace_id,e\.payload->'facts'->>'diag_spanId' AS span_id,e\.payload->'facts'->>'diag_traceparent' AS traceparent FROM relay_wonderland\.events e/u);
+    expect(line).toMatch(/AS effort_echoed,e\.payload->'facts'->>'diag_traceId' AS trace_id,e\.payload->'facts'->>'diag_spanId' AS span_id,e\.payload->'facts'->>'diag_traceparent' AS traceparent,e\.payload->'facts'->>'diag_finalMessageSha256' AS final_message_sha256,e\.payload->'facts'->>'diag_finalMessageContextId' AS final_message_context_id,e\.payload->'facts'->>'diag_finalMessageWrite' AS final_message_write FROM relay_wonderland\.events e/u);
   });
 });

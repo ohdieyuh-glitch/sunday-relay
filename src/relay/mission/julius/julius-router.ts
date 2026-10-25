@@ -59,6 +59,10 @@ export const safeFailureClass=(value:unknown):string|null=>typeof value==='strin
  * explain a paid failure — so the alphabet is widened here and nowhere else.
  */
 export const safeReasonCode=(value:unknown):string|null=>typeof value==='string'&&/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(value)?value:null;
+/** A lowercase sha256 hex digest, or null. */
+export const safeSha256Hex=(value:unknown):string|null=>typeof value==='string'&&/^[0-9a-f]{64}$/.test(value)?value:null;
+/** A Julius dispatch context id (`ids.next('context')`), or null. */
+export const safeContextId=(value:unknown):string|null=>typeof value==='string'&&/^[A-Za-z0-9:_-]{1,128}$/.test(value)?value:null;
 /**
  * WHY A HOSTED CODING AGENT FAILED, AS A CLOSED SET THE DOMAIN OWNS.
  *
@@ -611,6 +615,12 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
      adapter built, never from the mission's declaration; `effortEchoed` is the provider's own report, where its response carries one. --- */
   ...(safeReasonCode(v.effortSent)===null?{}:{effortSent:safeReasonCode(v.effortSent) as string}),
   ...(safeReasonCode(v.effortEchoed)===null?{}:{effortEchoed:safeReasonCode(v.effortEchoed) as string}),
+  /* --- THE GRADED ARTIFACT'S RECORD (PR-B). The sha256 of the trimmed final message the Coding Agent's dispatch returned, and that
+     dispatch's context id, present only when the paid workflow asked for the message to be kept and it was; `finalMessageWrite` is the
+     closed reason it was not. The hidden checker grades only a kept message whose sha256 equals this record. --- */
+  ...(safeSha256Hex(v.finalMessageSha256)===null?{}:{finalMessageSha256:safeSha256Hex(v.finalMessageSha256) as string}),
+  ...(safeContextId(v.finalMessageContextId)===null?{}:{finalMessageContextId:safeContextId(v.finalMessageContextId) as string}),
+  ...(safeReasonCode(v.finalMessageWrite)===null?{}:{finalMessageWrite:safeReasonCode(v.finalMessageWrite) as string}),
   /**
    * CORRELATION, NOT A RECEIPT AND NOT SPEND. Always null from this allowlist.
    * An adapter that puts `traceId`, `spanId`, or `traceparent` on its

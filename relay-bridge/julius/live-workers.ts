@@ -2068,6 +2068,8 @@ export function createLiveHostedCodingAdapter(input: {
   readonly selfTestCalls?: number;
   /** The verified contract's file-creation grant (`juliusFileCreationGrant`); absent grants no creation. */
   readonly fileCreation?: JuliusFileCreationGrant | null;
+  /** The paid workflow's final-message directory (`JULIUS_FINAL_MESSAGE_DIR`); absent writes nothing. */
+  readonly finalMessageDir?: string | null;
   /** Test seam for the SDK's tool helpers; production omits it. */
   readonly sdkHelpersLoader?: () => Promise<HostedSdkHelpers>;
 }): JuliusProviderAdapter {
@@ -2093,6 +2095,7 @@ export function createLiveHostedCodingAdapter(input: {
       ...(input.authMode === undefined ? {} : { authMode: input.authMode }),
       ...(input.effort === undefined ? {} : { effort: input.effort }),
       ...(input.fileCreation == null ? {} : { fileCreation: input.fileCreation }),
+      ...(input.finalMessageDir == null ? {} : { finalMessageDir: input.finalMessageDir }),
       ...(input.sdkHelpersLoader === undefined ? {} : { sdkHelpersLoader: input.sdkHelpersLoader }),
       ...(input.run === undefined ? {} : { run: input.run }),
       ...(input.queryLoader === undefined ? {} : { queryLoader: input.queryLoader }),

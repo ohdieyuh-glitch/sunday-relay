@@ -3315,7 +3315,7 @@ describe('every diagnostic the allowlist admits reaches the exported bundle', ()
     const literal = source.slice(open, close);
     const keys = [
       ...[...literal.matchAll(/^ {2}([A-Za-z][A-Za-z0-9]*):/gmu)].map((match) => match[1]),
-      ...[...literal.matchAll(/^ {2}\.\.\.\((?:safePositiveCount|safeReasonCode)\(v\.([A-Za-z][A-Za-z0-9]*)\)===null\?\{\}:\{\1:/gmu)].map((match) => match[1]),
+      ...[...literal.matchAll(/^ {2}\.\.\.\((?:safePositiveCount|safeReasonCode|safeSha256Hex|safeContextId)\(v\.([A-Za-z][A-Za-z0-9]*)\)===null\?\{\}:\{\1:/gmu)].map((match) => match[1]),
     ];
     // A STRUCTURAL TEST THAT PARSES SOURCE MUST FAIL WHEN ITS PARSE STOPS
     // WORKING, rather than passing over an empty set. Reformatting the
