@@ -35,7 +35,15 @@ export const CLEARANCE_KEYS = ['pr', 'head', 'tree', 'base', 'kind', 'bot-commen
  * by the same signature: it is how a governed landing names founder-governed
  * paths. The historical lander does not honor it.
  */
-export const CLEARANCE_OPTIONAL_KEYS = Object.freeze(['protected-paths', 'landing-method', 'binds-draft', 'depends']);
+export const CLEARANCE_OPTIONAL_KEYS = Object.freeze(['protected-paths', 'landing-method', 'binds-draft', 'depends', 'comments-digest']);
+/**
+ * The signed rule for `bot-comments-sha256` on a governed landing. A clearance
+ * delivered as a pull-request comment cannot hash its own comment, so the
+ * governed lander leaves out every issue comment that consists only of a
+ * delivery of this exact clearance text. That rule is signed: a clearance
+ * without `comments-digest: excludes-delivery` is refused by the governed lander.
+ */
+export const COMMENTS_DIGEST_RULE = 'excludes-delivery';
 
 export function splitClearanceList(value) {
   if (value === undefined || value === '-') return [];
@@ -75,6 +83,7 @@ function optionalClearanceProblems(fields) {
     problems.push('landing-method must be squash or fast-forward');
   }
   if (fields['binds-draft'] !== undefined && fields['binds-draft'] !== 'yes') problems.push('binds-draft must be yes');
+  if (fields['comments-digest'] !== undefined && fields['comments-digest'] !== COMMENTS_DIGEST_RULE) problems.push(`comments-digest must be ${COMMENTS_DIGEST_RULE}`);
   if (fields.depends !== undefined) {
     const value = fields.depends;
     const parts = value === '-' ? [] : value.split(',');

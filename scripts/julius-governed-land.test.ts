@@ -171,8 +171,11 @@ const openPr = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
+/** The governed lander requires the signed digest rule; it is appended unless a test drops it on purpose. */
+const DIGEST_RULE = 'comments-digest: excludes-delivery';
+const withRule = (optional: string[]) => (optional.includes('NO-DIGEST-RULE') ? optional.filter((line) => line !== 'NO-DIGEST-RULE') : [...optional, DIGEST_RULE]);
 const landingInput = (over: Record<string, unknown> = {}, optional = ['landing-method: squash', 'depends: -']) => {
-  const text = typeof over.clearanceText === 'string' ? over.clearanceText : clearance(optional);
+  const text = typeof over.clearanceText === 'string' ? over.clearanceText : clearance(withRule(optional));
   const signatureB64 = typeof over.signatureB64 === 'string' ? over.signatureB64 : signWith(text);
   const rest = { ...over };
   delete rest.clearanceText;
@@ -478,6 +481,13 @@ describe('eligibility fails closed', () => {
     expect(problemsOf({ pr: openPr({ head: { sha: OTHER, repo: { full_name: REPO } } }) })).toMatch(new RegExp(`the PR head is ${OTHER}`));
     expect(problemsOf({ commit: { commit: { tree: { sha: OTHER } }, parents: [{ sha: B }] } })).toMatch(new RegExp(`the head tree is ${OTHER}`));
     expect(problemsOf({ mainSha: OTHER })).toMatch(new RegExp(`main is ${OTHER}, the clearance names base ${B}`));
+  });
+
+  it('refuses a governed clearance that does not sign the comments-digest rule', () => {
+    expect(problemsOf({}, ['landing-method: squash', 'NO-DIGEST-RULE'])).toMatch(/does not sign the comments-digest rule/u);
+    expect(realLand.parseClearance(clearance(['landing-method: squash', 'comments-digest: all'])).problems.join('\n')).toMatch(/comments-digest must be excludes-delivery/u);
+    expect(parseSignedClearance(clearance(['landing-method: squash', 'comments-digest: all']), REPO).problems.join('\n')).toMatch(/comments-digest must be excludes-delivery/u);
+    expect(parseSignedClearance(clearance(['landing-method: squash', DIGEST_RULE]), REPO).problems).toEqual([]);
   });
 
   it('refuses an expired clearance and a replayed nonce', () => {

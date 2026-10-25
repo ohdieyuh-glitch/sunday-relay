@@ -258,14 +258,40 @@ describe('the governed lander runs against an injected GitHub', () => {
     expect(result.calls).toEqual([]);
   });
 
-  it('a signed clearance over a digest that includes its own delivery never matches', async () => {
-    const included = lib.botCommentsDigest({ issueComments: [botComment], inlineComments: [], reviews: [] });
-    const text = clearanceText(['landing-method: squash', 'depends: -'], included);
-    const result = await run({
-      issueComments: [botComment, { id: 12, user: { login: 'ohdieyuh-glitch' }, created_at: '2026-10-23T18:01:00Z', updated_at: '2026-10-23T18:01:00Z', body: delivery(text) }],
-    });
+});
+
+const reviewerComment = (body: string, id = 12) => ({ id, user: { login: 'ohdieyuh-glitch' }, created_at: '2026-10-23T18:01:00Z', updated_at: '2026-10-23T18:01:00Z', body });
+const governedOptional = ['landing-method: squash', 'depends: -', 'comments-digest: excludes-delivery'];
+/** The digest the reviewer signs, derived from the comment list the reviewer saw, without the delivery comment. */
+const seenDigest = (issueComments: unknown[]) => lib.botCommentsDigest({ issueComments, inlineComments: [], reviews: [] });
+
+describe('B3: the delivering clearance comment is outside the digest by a signed rule', () => {
+  it('lands a squash whose signed digest was derived from the comment list without its delivery', async () => {
+    const text = clearanceText(governedOptional, seenDigest([botComment]));
+    const result = await run({ issueComments: [botComment, reviewerComment(delivery(text))] });
+    expect(result.exitCode, result.text).toBe(0);
+    const patch = result.calls.find((call) => call.method === 'PATCH' && call.path.endsWith('/git/refs/heads/main'));
+    expect(patch?.body).toEqual({ sha: S, force: false });
+    expect(result.state.main).toBe(S);
+  });
+
+  it('still binds every other comment: a later bot comment or an edited delivery is refused', async () => {
+    const text = clearanceText(governedOptional, seenDigest([botComment]));
+    const later = { ...botComment, id: 13, body: 'a later bot comment' };
+    const added = await run({ issueComments: [botComment, reviewerComment(delivery(text)), later] });
+    expect(added.exitCode).toBe(1);
+    expect(added.text).toMatch(/differs from what the reviewer saw/u);
+    const edited = await run({ issueComments: [botComment, reviewerComment(`${delivery(text)}\nalso: ship it`)] });
+    expect(edited.exitCode).toBe(1);
+    expect(edited.text).toMatch(/differs from what the reviewer saw/u);
+    for (const result of [added, edited]) expect(result.calls.some((call) => call.method === 'PATCH')).toBe(false);
+  });
+
+  it('refuses a clearance that does not sign the rule, even when its digest happens to exclude the delivery', async () => {
+    const text = clearanceText(['landing-method: squash', 'depends: -'], seenDigest([botComment]));
+    const result = await run({ issueComments: [botComment, reviewerComment(delivery(text))] });
     expect(result.exitCode).toBe(1);
-    expect(result.text).toMatch(/differs from what the reviewer saw/u);
+    expect(result.text).toMatch(/does not sign the comments-digest rule/u);
     expect(result.calls.some((call) => call.method === 'PATCH')).toBe(false);
   });
 });

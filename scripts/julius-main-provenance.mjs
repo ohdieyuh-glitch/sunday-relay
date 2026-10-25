@@ -120,7 +120,7 @@ export const LANDING_BEGIN = '-----BEGIN JULIUS LANDING-----';
 export const LANDING_END = '-----END JULIUS LANDING-----';
 const LANDING_REPO = 'ohdieyuh-glitch/sunday-relay';
 const CLEARANCE_KEYS = ['pr', 'head', 'tree', 'base', 'kind', 'bot-comments-sha256', 'governed-exceptions', 'nonce', 'by', 'issued', 'expires'];
-const CLEARANCE_OPTIONAL_KEYS = ['protected-paths', 'landing-method', 'binds-draft', 'depends'];
+const CLEARANCE_OPTIONAL_KEYS = ['protected-paths', 'landing-method', 'binds-draft', 'depends', 'comments-digest'];
 const EXCEPTION_ELIGIBLE = ['relay-bridge/julius/role-effort.test.ts', 'scripts/julius-live-contract-check.mjs'];
 const CANONICAL_BASE64 = /^[A-Za-z0-9+/]+={0,2}$/u;
 const isCanonicalBase64 = (text) => typeof text === 'string' && CANONICAL_BASE64.test(text)
@@ -217,6 +217,7 @@ export function parseSignedClearance(text, queriedRepo) {
     problems.push('landing-method must be squash or fast-forward');
   }
   if (fields['binds-draft'] !== undefined && fields['binds-draft'] !== 'yes') problems.push('binds-draft must be yes');
+  if (fields['comments-digest'] !== undefined && fields['comments-digest'] !== 'excludes-delivery') problems.push('comments-digest must be excludes-delivery');
   if (fields.depends !== undefined) {
     const value = fields.depends;
     const parts = value === '-' ? [] : value.split(',');

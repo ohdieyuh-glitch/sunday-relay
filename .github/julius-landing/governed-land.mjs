@@ -6,6 +6,7 @@ import { appendFileSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
+  COMMENTS_DIGEST_RULE,
   REPO,
   botCommentsDigest,
   buildLandingCommitMessage,
@@ -37,26 +38,75 @@ const BEGIN = '-----BEGIN JULIUS CLEARANCE-----\n';
 const BETWEEN = '-----END JULIUS CLEARANCE-----\n-----BEGIN JULIUS CLEARANCE SIGNATURE-----\n';
 const SIGNATURE_END = '\n-----END JULIUS CLEARANCE SIGNATURE-----';
 
+/** Clearance blocks in one body, with the [start, end) offsets each block occupies. */
+function deliverySpans(body) {
+  const text = String(body ?? '');
+  const spans = [];
+  let cursor = 0;
+  while (text.indexOf(BEGIN, cursor) >= 0) {
+    const start = text.indexOf(BEGIN, cursor);
+    const textStart = start + BEGIN.length;
+    const mid = text.indexOf(BETWEEN, textStart);
+    if (mid < 0) break;
+    const clearanceText = text.slice(textStart, mid);
+    const signatureStart = mid + BETWEEN.length;
+    const close = text.indexOf(SIGNATURE_END, signatureStart);
+    if (close < 0) break;
+    const signatureB64 = text.slice(signatureStart, close);
+    const end = close + SIGNATURE_END.length;
+    if (!signatureB64.includes('\n') && signatureB64 !== '') spans.push({ clearanceText, signatureB64, start, end });
+    cursor = end;
+  }
+  return spans;
+}
+
 /** Every clearance block in the comment bodies. The signature, not the commenter, is the authority. */
 export function extractClearanceDeliveries(bodies) {
   const deliveries = [];
   for (const body of Array.isArray(bodies) ? bodies : []) {
-    let rest = String(body ?? '');
-    while (rest.includes(BEGIN)) {
-      const start = rest.indexOf(BEGIN);
-      const after = rest.slice(start + BEGIN.length);
-      const mid = after.indexOf(BETWEEN);
-      if (mid < 0) break;
-      const clearanceText = after.slice(0, mid);
-      const signed = after.slice(mid + BETWEEN.length);
-      const end = signed.indexOf(SIGNATURE_END);
-      if (end < 0) break;
-      const signatureB64 = signed.slice(0, end);
-      if (!signatureB64.includes('\n') && signatureB64 !== '') deliveries.push({ clearanceText, signatureB64 });
-      rest = signed.slice(end + SIGNATURE_END.length);
-    }
+    for (const { clearanceText, signatureB64 } of deliverySpans(body)) deliveries.push({ clearanceText, signatureB64 });
   }
   return deliveries;
+}
+
+const CANONICAL_SIGNATURE = (b64) => typeof b64 === 'string' && /^[A-Za-z0-9+/]+={0,2}$/u.test(b64)
+  && Buffer.from(b64, 'base64').length === 64 && Buffer.from(b64, 'base64').toString('base64') === b64;
+
+/**
+ * True when the comment is only deliveries of this exact clearance text: every
+ * block carries that text and a canonical 64-byte signature, and nothing but
+ * whitespace sits outside the blocks. Such a comment cannot be inside the
+ * digest it carries. Any other comment, including one that adds a word to a
+ * delivery or delivers a different clearance, stays in the digest.
+ */
+export function isClearanceDeliveryComment(body, clearanceText) {
+  const text = String(body ?? '');
+  const spans = deliverySpans(text);
+  if (spans.length === 0 || typeof clearanceText !== 'string' || clearanceText === '') return false;
+  let outside = '';
+  let cursor = 0;
+  for (const span of spans) {
+    if (span.clearanceText !== clearanceText || !CANONICAL_SIGNATURE(span.signatureB64)) return false;
+    outside += text.slice(cursor, span.start);
+    cursor = span.end;
+  }
+  outside += text.slice(cursor);
+  return outside.trim() === '';
+}
+
+/**
+ * The digest a governed clearance signs, under its signed
+ * `comments-digest: excludes-delivery` rule: the historical botCommentsDigest
+ * over every inline comment, every review, and every issue comment except
+ * those that only deliver this exact clearance.
+ */
+export function governedCommentsDigest({ issueComments, inlineComments, reviews, clearanceText }) {
+  const kept = (Array.isArray(issueComments) ? issueComments : []).filter((comment) => !isClearanceDeliveryComment(comment?.body, clearanceText));
+  return botCommentsDigest({
+    issueComments: kept,
+    inlineComments: Array.isArray(inlineComments) ? inlineComments : [],
+    reviews: Array.isArray(reviews) ? reviews : [],
+  });
 }
 
 /**
@@ -414,6 +464,9 @@ export function evaluateGovernedLanding(input) {
   const problems = [];
   if (fields['landing-method'] !== 'squash' && fields['landing-method'] !== 'fast-forward') {
     problems.push('the clearance does not name a landing method');
+  }
+  if (fields['comments-digest'] !== COMMENTS_DIGEST_RULE) {
+    problems.push(`the clearance does not sign the comments-digest rule (comments-digest: ${COMMENTS_DIGEST_RULE})`);
   }
   const windowProblem = judgeClearanceWindow(fields, input?.now);
   if (windowProblem) problems.push(windowProblem);
@@ -859,7 +912,7 @@ async function landQueue({ env, fetchImpl, readLocal, now, stdout, stderr, state
           treeDiffComplete,
           compare: { behind_by: compare?.behind_by, ahead_by: compare?.ahead_by, status: compare?.status },
           mainSha,
-          digest: botCommentsDigest({ issueComments, inlineComments, reviews }),
+          digest: governedCommentsDigest({ issueComments, inlineComments, reviews, clearanceText: chosen.delivery.clearanceText }),
           commitMessages: [],
           nonceTagExists: tag.status === 200,
           nonceTagCommitterId,
