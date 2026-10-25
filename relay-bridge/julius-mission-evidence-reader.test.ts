@@ -8,6 +8,7 @@ import { juliusMissionTraceId } from '../scripts/julius-mission-trace.mjs';
 import {
   checkerVerdictFrom,
   createJuliusMissionEvidenceReader,
+  type JuliusMissionCompletionEvidence,
   type JuliusMissionGitHub,
   type JuliusMissionWorkflowRun,
 } from './julius-mission-evidence-reader';
@@ -50,11 +51,14 @@ function github(message: string | null, run: JuliusMissionWorkflowRun | null | '
   };
 }
 
+const CREATED = '2026-10-24T12:58:41Z';
+
 function workflow(overrides: Partial<JuliusMissionWorkflowRun> = {}): JuliusMissionWorkflowRun {
   return {
     workflowRunId: RUN,
     workflowRunAttempt: ATTEMPT,
     headSha: SHA,
+    createdAt: CREATED,
     status: 'completed',
     conclusion: 'success',
     failedSteps: [],
@@ -192,6 +196,7 @@ describe('JuliusMissionEvidenceReader', () => {
         workflowRunId: RUN,
         workflowRunAttempt: ATTEMPT,
         headSha: SHA,
+        workflowRunCreatedAt: CREATED,
       },
       spendAccounting: null,
       coderCost: {
@@ -521,6 +526,23 @@ describe('JuliusMissionEvidenceReader', () => {
       { path: 'live-mission.evidence.txt', text: RESULT },
       { path: 'runs.tsv', text: runs },
     ]))).read(WLJ)).toBeNull();
+  });
+
+  it('carries the matched run\'s created_at into the spend tag, and is not completion without a well-formed one', async () => {
+    const files = [
+      { path: 'live-mission.evidence.txt', text: RESULT },
+      { path: 'runs.tsv', text: `run_id\tstate\n${WLJ}\tCOMPLETED\n(1 row)\n` },
+    ];
+    const read = (createdAt: unknown) => createJuliusMissionEvidenceReader(github(tagMessage(WLJ),
+      withProof(files, { createdAt } as Partial<JuliusMissionWorkflowRun>))).read(WLJ);
+
+    const carried = await read('2026-10-25T09:30:05Z');
+    expect((carried as JuliusMissionCompletionEvidence | null)?.spendTag.workflowRunCreatedAt).toBe('2026-10-25T09:30:05Z');
+
+    for (const bad of [null, undefined, '', 1_761_384_605, '2026-10-25 09:30:05Z', '2026-10-25T09:30:05+00:00',
+      '2026-10-25T09:30:05.123Z', '2026-10-25T09:30:05', '2026-13-45T99:99:99Z', ' 2026-10-25T09:30:05Z']) {
+      expect(await read(bad), String(bad)).toBeNull();
+    }
   });
 });
 
