@@ -75,6 +75,8 @@ void UWonderlandCompanionClient::RefreshMissionAgents(const FString& WljRunId, c
 			// #447 traceId: kept as reported for THIS run only; an answer without one clears the last one (never reused).
 			MissionTraceWljRunId = FromUtf8(Wlj);
 			MissionTraceId = Mission.TraceId.empty() ? FString() : FromUtf8(Mission.TraceId);
+			MissionView = Mission;
+			bHaveMissionView = true;
 			Changed();
 		});
 }

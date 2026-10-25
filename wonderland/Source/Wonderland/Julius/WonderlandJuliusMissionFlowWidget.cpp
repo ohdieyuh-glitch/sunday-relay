@@ -2,6 +2,7 @@
 
 #include "Wonderland/WonderlandJuliusMissionFlow.h"
 #include "WonderlandJuliusMissionSubsystem.h"
+#include "Wonderland/WonderlandCompanionClient.h"
 
 #include "Styling/CoreStyle.h"
 #include "Widgets/Input/SButton.h"
@@ -19,6 +20,85 @@ namespace
 	}
 
 	/** The wrapper's status line carries wlj_run_id. A miss stays unknown; nothing is invented. */
+	/**
+	 * #436 COMPANIONS, READ-ONLY AND TRUTHFUL: what BRIDGE's mission companion route says about THIS run, nothing more. No
+	 * chat, no delegation, no "verified" (the route's verified is a literal false); a result is labelled untrusted.
+	 */
+	const TCHAR* CompanionTaskWord(WonderlandCompanionLogic::ECompanionTaskState State)
+	{
+		using E = WonderlandCompanionLogic::ECompanionTaskState;
+		switch (State)
+		{
+		case E::Invited: return TEXT("invited");
+		case E::Delivered: return TEXT("task delivered");
+		case E::DeliveryFailed: return TEXT("delivery failed");
+		case E::ResultReceived: return TEXT("result received");
+		case E::Integrated: return TEXT("result integrated");
+		case E::Rejected: return TEXT("result rejected");
+		case E::TimedOut: return TEXT("timed out");
+		case E::NoResult: return TEXT("no result");
+		case E::Cancelled: return TEXT("cancelled");
+		default: return TEXT("none");
+		}
+	}
+
+	const TCHAR* CompanionConnectionWord(WonderlandCompanionLogic::EAgentConnection Connection)
+	{
+		using E = WonderlandCompanionLogic::EAgentConnection;
+		switch (Connection)
+		{
+		case E::Connected: return TEXT("connected");
+		case E::Disconnected: return TEXT("disconnected");
+		case E::Unsupported: return TEXT("unsupported (no adapter on this bridge)");
+		default: return TEXT("error");
+		}
+	}
+
+	TArray<FString> CompanionLinesFor(const UWonderlandJuliusMissionSubsystem* Live)
+	{
+		TArray<FString> Lines;
+		const UGameInstance* Instance = Live != nullptr ? Live->GetGameInstance() : nullptr;
+		const UWonderlandCompanionClient* Companion = Instance != nullptr ? Instance->GetSubsystem<UWonderlandCompanionClient>() : nullptr;
+		const FString Run = Live != nullptr ? Live->ClientRunId() : FString();
+		if (Companion == nullptr || Run.IsEmpty() || !Companion->HasSession()) { return Lines; }
+		const WonderlandCompanionLogic::FCompanionMissionView* Mission = Companion->GetMissionView(Run);
+		if (Mission == nullptr) { return Lines; }
+		Lines.Add(TEXT("Companions on this mission"));
+		if (!Mission->bHasAnswer || Mission->State == WonderlandCompanionLogic::ECompanionTaskState::None)
+		{
+			Lines.Add(TEXT("No companion is taking part in this mission."));
+		}
+		else
+		{
+			Lines.Add(FString::Printf(TEXT("Companion task: %s"), CompanionTaskWord(Mission->State)));
+			if (Mission->bHasResult)
+			{
+				Lines.Add(FString::Printf(TEXT("Companion result (untrusted, not verified): %s"), UTF8_TO_TCHAR(Mission->Summary.c_str())));
+				if (!Mission->ArtifactSha256.empty())
+				{
+					Lines.Add(FString::Printf(TEXT("artifact sha256: %s (%llu bytes)"), UTF8_TO_TCHAR(Mission->ArtifactSha256.c_str()), static_cast<unsigned long long>(Mission->ArtifactByteLength)));
+				}
+			}
+			if (Mission->bHasProvenance && !Mission->Provenance.SelfReportedName.empty())
+			{
+				Lines.Add(FString::Printf(TEXT("provenance: self-reported \"%s\"%s"), UTF8_TO_TCHAR(Mission->Provenance.SelfReportedName.c_str()),
+					Mission->Provenance.bSimulated ? TEXT(" (simulated)") : TEXT("")));
+			}
+		}
+		for (const FString& AgentId : Companion->GetAgentIds())
+		{
+			const WonderlandCompanionLogic::FAgentView* Agent = Companion->GetAgentView(AgentId);
+			if (Agent == nullptr) { continue; }
+			FString Caps;
+			for (const std::string& Cap : Agent->AuthorizedCapabilities) { Caps += (Caps.IsEmpty() ? TEXT("") : TEXT(", ")) + FString(UTF8_TO_TCHAR(Cap.c_str())); }
+			Lines.Add(FString::Printf(TEXT("agent %s: %s%s"),
+				Agent->DisplayName.empty() ? TEXT("(unnamed)") : UTF8_TO_TCHAR(Agent->DisplayName.c_str()),
+				CompanionConnectionWord(Agent->Connection),
+				Caps.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" -- may: %s"), *Caps)));
+		}
+		return Lines;
+	}
+
 	FString MissionFlowWljRunId(const FString& StatusLine)
 	{
 		const FString Key = TEXT("\"wlj_run_id\":");
@@ -288,6 +368,7 @@ void SWonderlandJuliusMissionFlow::Rebuild()
 	UWonderlandJuliusMissionSubsystem* Live = Session.Get();
 	// REVIEW M4 (#456): after a terminal run the player can start again; while a run is live they cannot.
 	const bool bCanStartAgain = View.Step == WonderlandJuliusMissionFlow::EFlowStep::Watching && Live != nullptr && Live->CanStartNewMission();
+	const TArray<FString> CompanionLines = View.Step == WonderlandJuliusMissionFlow::EFlowStep::Watching ? CompanionLinesFor(Live) : TArray<FString>();
 	const FString WrapperLabel = Live != nullptr ? Live->PlayerLabel() : FString();
 	FString ProgressLine = MissionFlowUtf8(View.Progress.Line);
 	if (View.Progress.bUsesWrapperLabel)
@@ -312,7 +393,8 @@ void SWonderlandJuliusMissionFlow::Rebuild()
 		*MissionFlowUtf8(View.PaidOnDispatch),
 		View.Result.bShowsArtifact ? 1 : 0,
 		View.Result.bFinished ? 1 : 0,
-		*Reported) + TEXT("|") + Notice + (bCanStartAgain ? TEXT("|again") : TEXT(""));
+		*Reported) + TEXT("|") + Notice + (bCanStartAgain ? TEXT("|again") : TEXT(""))
+		+ TEXT("|") + FString::Join(CompanionLines, TEXT("/"));
 	if (Key == ShownKey) { return; }
 	ShownKey = Key;
 
@@ -403,6 +485,11 @@ void SWonderlandJuliusMissionFlow::Rebuild()
 		{
 			AddText(MissionFlowUtf8(Line.c_str()));
 		}
+	}
+
+	for (const FString& Line : CompanionLines)
+	{
+		AddText(Line);
 	}
 
 	if (bCanStartAgain)

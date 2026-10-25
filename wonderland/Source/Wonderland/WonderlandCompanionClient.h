@@ -84,6 +84,12 @@ public:
 	const WonderlandCompanionLogic::FCompanionSessionView& GetSessionView() const { return Session->SessionView(); }
 
 	/** #447: the companion route's traceId for WljRunId as BRIDGE reported it; empty when absent, null, malformed or another run. */
+	/** The mission companion read for WljRunId as BRIDGE answered it (state, untrusted result, provenance), or null. */
+	const WonderlandCompanionLogic::FCompanionMissionView* GetMissionView(const FString& WljRunId) const
+	{
+		return bHaveMissionView && WljRunId.Equals(MissionTraceWljRunId, ESearchCase::CaseSensitive) ? &MissionView : nullptr;
+	}
+
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
 	FString GetMissionTraceId(const FString& WljRunId) const { return WljRunId.Equals(MissionTraceWljRunId, ESearchCase::CaseSensitive) ? MissionTraceId : FString(); }
 
@@ -107,5 +113,7 @@ private:
 	FString SessionToken;
 	/** Last companion read's run and its parsed traceId (ParseCompanionMission). */
 	FString MissionTraceWljRunId;
+	WonderlandCompanionLogic::FCompanionMissionView MissionView;
+	bool bHaveMissionView = false;
 	FString MissionTraceId;
 };
