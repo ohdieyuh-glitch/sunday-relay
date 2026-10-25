@@ -2,7 +2,34 @@
 #include "WonderlandMissionHandoff.h"
 
 #include "Misc/Paths.h"
+#include "Misc/DateTime.h"
 #include "WonderlandBeta.h"
+#include "WonderlandQaFormat.h"
+
+#if !UE_BUILD_SHIPPING
+namespace WonderlandQaLocalHandoff
+{
+	void Note(int32 Was, int32 Next)
+	{
+		if (!WonderlandQa::IsEnabled())
+		{
+			return;
+		}
+		const WonderlandQa::FEdge Edge = WonderlandQa::LocalEdge(Was, Next);
+		if (!Edge.bEmit)
+		{
+			return;
+		}
+		const FDateTime Now = FDateTime::UtcNow();
+		const int64 Ts = static_cast<int64>(Now.ToUnixTimestamp()) * 1000 + static_cast<int64>(Now.GetMillisecond());
+		const std::string Line = WonderlandQa::ActivationLine(Ts, "sender", "local", false, std::string(), !Edge.Corr.empty(), Edge.Corr, Edge.Event);
+		if (!Line.empty())
+		{
+			UE_LOG(LogTemp, Display, TEXT("%s"), *FString(ANSI_TO_TCHAR(Line.c_str())));
+		}
+	}
+}
+#endif
 
 namespace
 {
@@ -112,6 +139,9 @@ void FWonderlandMissionHandoff::SetState(EWonderlandHandoffState Next)
 	{
 		Persist();
 	}
+#if !UE_BUILD_SHIPPING
+	WonderlandQaLocalHandoff::Note(static_cast<int32>(Was), static_cast<int32>(State));
+#endif
 	// INSIDE THE SCOPE: every caller of SetState holds an FScope, so whatever a listener does is on the spy's books
 	FScope Scope;
 	OnStateChanged.Broadcast(Was, State);
