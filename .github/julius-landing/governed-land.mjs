@@ -529,13 +529,31 @@ const entrypoint = (() => {
   try { return pathToFileURL(realpathSync(process.argv[1])).href; } catch { return ''; }
 })();
 
-async function runCli() {
-  const env = process.env;
+/**
+ * The workflow entry. Every GitHub call goes through `fetchImpl` and every
+ * governed file is read through `readLocal`, so tests can drive the whole run
+ * against a fake GitHub. Returns the exit code instead of setting it.
+ */
+export async function runGovernedLand({
+  env = process.env,
+  fetchImpl = globalThis.fetch,
+  readLocal = (name) => readFileSync(join(here, name), 'utf8'),
+  now = () => Date.now(),
+  stdout = (text) => process.stdout.write(text),
+  stderr = (text) => process.stderr.write(text),
+} = {}) {
+  const state = { exitCode: 0, notes: [] };
+  const walked = await landQueue({ env, fetchImpl, readLocal, now, stdout, stderr, state });
+  return { exitCode: state.exitCode, notes: state.notes, walked: walked ?? [] };
+}
+
+async function landQueue({ env, fetchImpl, readLocal, now, stdout, stderr, state }) {
   const fail = (problems) => {
     const text = problems.join('\n');
-    process.stderr.write(`${text}\n`);
+    state.notes.push(text);
+    stderr(`${text}\n`);
     if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, `${text}\n`);
-    process.exitCode = 1;
+    state.exitCode = 1;
   };
   const origin = checkWorkflowOrigin({
     ref: env.GITHUB_REF,
@@ -569,7 +587,7 @@ async function runCli() {
   }
   const token = env.JULIUS_GOVERNED_LANDER_TOKEN;
   const apiWith = (bearer) => async (path, init = {}) => {
-    const response = await fetch(`https://api.github.com${path}`, {
+    const response = await fetchImpl(`https://api.github.com${path}`, {
       ...init,
       signal: AbortSignal.timeout(30_000),
       headers: {
@@ -593,7 +611,7 @@ async function runCli() {
   const pageUrl = (path, page) => `${path}${path.includes('?') ? '&' : '?'}per_page=100&page=${page}`;
   const paged = (path) => readAllPages((page) => api(pageUrl(path, page)));
   const readRaw = async (path) => {
-    const response = await fetch(`https://api.github.com${path}`, {
+    const response = await fetchImpl(`https://api.github.com${path}`, {
       signal: AbortSignal.timeout(30_000),
       headers: {
         Authorization: `Bearer ${token}`,
@@ -612,7 +630,7 @@ async function runCli() {
     fail(runtime);
     return;
   }
-  const queue = parseGovernedQueue(readFileSync(join(here, 'governed-queue.txt'), 'utf8'));
+  const queue = parseGovernedQueue(readLocal('governed-queue.txt'));
   if (queue.problems.length > 0) {
     fail(queue.problems);
     return;
@@ -630,15 +648,15 @@ async function runCli() {
       return;
     }
   }
-  const requiredChecks = parseRequiredChecks(readFileSync(join(here, 'required-checks.txt'), 'utf8').split('\n').map((line) => line.trim()).filter((line) => line && !line.startsWith('#')));
+  const requiredChecks = parseRequiredChecks(readLocal('required-checks.txt').split('\n').map((line) => line.trim()).filter((line) => line && !line.startsWith('#')));
   if (requiredChecks.length === 0) {
     fail(['required-checks.txt is empty: refusing to land without a required-check list']);
     return;
   }
-  const publicKeyPem = readFileSync(join(here, 'reviewer-ed25519.pub'), 'utf8');
+  const publicKeyPem = readLocal('reviewer-ed25519.pub');
   let snapshot;
   try {
-    snapshot = JSON.parse(readFileSync(join(here, 'main-ruleset.json'), 'utf8'));
+    snapshot = JSON.parse(readLocal('main-ruleset.json'));
   } catch {
     fail(['the main ruleset snapshot could not be read']);
     return;
@@ -662,12 +680,12 @@ async function runCli() {
   }
   const identity = { name: bot.login, email: `${botId}+${bot.login}@users.noreply.github.com` };
   const mintWriteToken = async (permissions) => {
-    const jwt = githubAppJwt(appId, privateKey);
+    const jwt = githubAppJwt(appId, privateKey, now());
     const headers = { Authorization: `Bearer ${jwt}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
-    const installation = await fetch(`https://api.github.com/repos/${REPO}/installation`, { headers, signal: AbortSignal.timeout(30_000) });
+    const installation = await fetchImpl(`https://api.github.com/repos/${REPO}/installation`, { headers, signal: AbortSignal.timeout(30_000) });
     if (!installation.ok) throw new Error(`GET /repos/${REPO}/installation -> ${installation.status}`);
     const installed = await installation.json();
-    const minted = await fetch(`https://api.github.com/app/installations/${installed.id}/access_tokens`, {
+    const minted = await fetchImpl(`https://api.github.com/app/installations/${installed.id}/access_tokens`, {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({ permissions }),
@@ -733,7 +751,8 @@ async function runCli() {
   const auditsLanded = () => landedPullsFromAudits(audits, mainShaNow, (ancestor) => provenAncestors.has(ancestor), botId);
   const landedOnMain = auditsLanded();
   const note = (text) => {
-    process.stdout.write(`${text}\n`);
+    state.notes.push(text);
+    stdout(`${text}\n`);
     if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, `${text}\n`);
   };
   let refused = false;
@@ -778,7 +797,7 @@ async function runCli() {
         ]);
         const statusResponse = await readRaw(`/repos/${REPO}/commits/${head}/status?per_page=100`);
         const statusPage = commitStatusPage(statusResponse.body, statusResponse.status);
-        const tag = await fetch(`https://api.github.com/repos/${REPO}/git/ref/tags/julius-landing-nonce-${clearance.nonce}`, {
+        const tag = await fetchImpl(`https://api.github.com/repos/${REPO}/git/ref/tags/julius-landing-nonce-${clearance.nonce}`, {
           headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
           signal: AbortSignal.timeout(30_000),
         });
@@ -833,7 +852,7 @@ async function runCli() {
           clearanceText: chosen.delivery.clearanceText,
           signatureB64: chosen.delivery.signatureB64,
           publicKeyPem,
-          now: Date.now(),
+          now: now(),
           pr: pull,
           commit,
           files: changedPaths,
@@ -1030,11 +1049,12 @@ async function runCli() {
     }
   }
   if (entries.length === 0) note('the governed queue is empty');
-  if (finalizeFailed && !refused) process.exitCode = 0;
-  if (refused) process.exitCode = 1;
+  if (finalizeFailed && !refused) state.exitCode = 0;
+  if (refused) state.exitCode = 1;
   return walked;
 }
 
 if (entrypoint !== '' && import.meta.url === entrypoint) {
-  await runCli();
+  const result = await runGovernedLand();
+  process.exitCode = result.exitCode;
 }
