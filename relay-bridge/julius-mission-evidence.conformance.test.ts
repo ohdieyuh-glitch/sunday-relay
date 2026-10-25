@@ -13,7 +13,13 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
 import { juliusMissionTraceId } from '../scripts/julius-mission-trace.mjs';
-import { JULIUS_PINNED_CHECKER_SHA256, acceptJuliusMissionEvidence } from './julius-mission-evidence';
+import {
+  JULIUS_ARCHIVE_FILES_MAX,
+  JULIUS_FAILED_STEPS_MAX,
+  JULIUS_PINNED_CHECKER_SHA256,
+  JULIUS_WORK_ARTIFACT_REFS_MAX,
+  acceptJuliusMissionEvidence,
+} from './julius-mission-evidence';
 
 const WLJ = 'wlj_01234567-89ab-4cde-8fab-0123456789ab';
 const SHA = 'a'.repeat(40);
@@ -434,5 +440,30 @@ describe('only the pinned hidden checker grades', () => {
     const judged = 'b'.repeat(64);
     const checker = { reason: 'none', taskId: 'task:build-1', judgedTrimmedSha256: judged, gameDigest: judged.slice(0, 12), checkerSha256: 'c'.repeat(64) };
     expect(acceptJuliusMissionEvidence(WLJ, { ...(readerOutput() as Record<string, unknown>), checkerVerdict: 'PASS', checker }).completion?.checkerVerdict).toBe('NOT_RUN');
+  });
+});
+
+describe('reader arrays are bounded', () => {
+  it('an archive file list, failed-step list, or work-artifact list past its cap is null, not truncated', () => {
+    const fixture = readerOutput();
+    const archive = fixture.archive as Record<string, unknown>;
+    const file = (archive.files as unknown[])[0];
+    const atCap = acceptJuliusMissionEvidence(WLJ, {
+      ...fixture,
+      archive: { ...archive, files: Array.from({ length: JULIUS_ARCHIVE_FILES_MAX }, () => file), failedSteps: Array.from({ length: JULIUS_FAILED_STEPS_MAX }, () => 'step') },
+      workArtifactRefs: Array.from({ length: JULIUS_WORK_ARTIFACT_REFS_MAX }, () => 'artifact:julius-work-artifact.v1:plan'),
+    }).completion;
+    expect(atCap?.archive?.files).toHaveLength(JULIUS_ARCHIVE_FILES_MAX);
+    expect(atCap?.archive?.failedSteps).toHaveLength(JULIUS_FAILED_STEPS_MAX);
+    expect(atCap?.workArtifactRefs).toHaveLength(JULIUS_WORK_ARTIFACT_REFS_MAX);
+    const over = acceptJuliusMissionEvidence(WLJ, {
+      ...fixture,
+      archive: { ...archive, files: Array.from({ length: JULIUS_ARCHIVE_FILES_MAX + 1 }, () => file), failedSteps: Array.from({ length: JULIUS_FAILED_STEPS_MAX + 1 }, () => 'step') },
+      workArtifactRefs: Array.from({ length: JULIUS_WORK_ARTIFACT_REFS_MAX + 1 }, () => 'artifact:julius-work-artifact.v1:plan'),
+    }).completion;
+    expect(over).not.toBeNull();
+    expect(over?.archive?.files).toBeNull();
+    expect(over?.archive?.failedSteps).toBeNull();
+    expect(over?.workArtifactRefs).toBeNull();
   });
 });

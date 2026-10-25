@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -8,6 +8,11 @@ import {
   type WonderlandAdmissionRouteRequest,
 } from './wonderland-admission-route';
 import {
+  COMPANION_AGENT_SLOT_MAX,
+  CompanionAgentSlotsFullError,
+  CompanionResultStoreClosedError,
+  companionStoreCollides,
+  createCompanionResultStore,
   createFileCompanionResultStore,
   createMemoryCompanionResultStore,
   handleWonderlandCompanionAgentRoute,
@@ -17,6 +22,7 @@ import {
 import {
   createCompanionAdapterRegistry,
   type CompanionAdapter,
+  type CompanionAgentRecord,
   type CompanionProviderSession,
 } from './wonderland-companion-registry';
 
@@ -323,6 +329,88 @@ describe('companion agent routes', () => {
       expect(saved).not.toContain(SECRET);
     } finally {
       admission.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('the companion store is bounded, locked, and kept apart from the admission store', () => {
+  const agent = (index: number): CompanionAgentRecord => ({
+    agentId: `agt_${index.toString(16).padStart(8, '0')}-bbbb-4ccc-8ddd-eeeeeeeeeeee`,
+    providerId: 'alpha-lab',
+    wljRunId: RUN,
+    requestedDisplayName: null,
+    disconnected: false,
+  });
+
+  it('keeps at most COMPANION_AGENT_SLOT_MAX slots; an existing slot can still be rewritten', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wlj-agents-'));
+    try {
+      for (const store of [createFileCompanionResultStore(join(dir, 'companion.json')), createMemoryCompanionResultStore()]) {
+        for (let index = 0; index < COMPANION_AGENT_SLOT_MAX; index += 1) store.putAgent(agent(index));
+        expect(() => store.putAgent(agent(COMPANION_AGENT_SLOT_MAX))).toThrow(CompanionAgentSlotsFullError);
+        expect(store.listAgents()).toHaveLength(COMPANION_AGENT_SLOT_MAX);
+        store.putAgent({ ...agent(0), disconnected: true });
+        expect(store.readAgent(agent(0).agentId)?.disconnected).toBe(true);
+      }
+      const store = createFileCompanionResultStore(join(dir, 'companion.json'));
+      const registry = createCompanionAdapterRegistry(store);
+      const admission = createWonderlandAdmissionService({
+        env: env(join(dir, 'admission.json')),
+        operatorToken: 'operator-token',
+        verifyNativeSession: ({ token }) => (token === 'native-token' ? { playerId: 'founder', projectId: PROJECT, sessionId: 'sess-1' } : null),
+        readWorkflowText: () => null,
+      });
+      const ports = { ...admission, companionResults: store, companionAgents: registry };
+      try {
+        const refused = await handleWonderlandCompanionAgentRoute(request(AGENTS, {
+          method: 'POST',
+          rawBody: JSON.stringify({ providerId: 'alpha-lab', wljRunId: RUN }),
+        }), ports);
+        expect(refused?.status).toBe(409);
+        expect(refused?.body).toMatchObject({ error: { kind: 'companion_agent_slots_full' } });
+      } finally {
+        ports.close();
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('a held companion lock closes the write after a bounded wait and leaves the file and the lock as they were', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wlj-agents-'));
+    const file = join(dir, 'companion.json');
+    try {
+      const store = createFileCompanionResultStore(file);
+      store.putAgent(agent(1));
+      const before = readFileSync(file, 'utf8');
+      const foreign = JSON.stringify({ pid: 999_999, purpose: 'wonderland-companion' });
+      writeFileSync(`${file}.lock`, foreign, { flag: 'wx' });
+      expect(() => store.putAgent(agent(2))).toThrow(CompanionResultStoreClosedError);
+      expect(readFileSync(file, 'utf8')).toBe(before);
+      expect(readFileSync(`${file}.lock`, 'utf8')).toBe(foreign);
+      expect(readdirSync(dir).filter((name) => name.endsWith('.tmp'))).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it('a companion path equal to the admission store, its journal, or its locks is a closed store that writes nothing', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wlj-agents-'));
+    const admission = join(dir, 'admission.json');
+    try {
+      for (const companion of [admission, `${admission}.operator.json`, `${admission}.lock`, `${admission}.bridge.lock`]) {
+        expect(companionStoreCollides(companion, admission), companion).toBe(true);
+        const store = createCompanionResultStore(companion, admission);
+        expect(() => store.putAgent(agent(1)), companion).toThrow(CompanionResultStoreClosedError);
+        expect(() => store.read(RUN), companion).toThrow(CompanionResultStoreClosedError);
+        expect(existsSync(companion), companion).toBe(false);
+      }
+      expect(companionStoreCollides(join(dir, 'companion.json'), admission)).toBe(false);
+      const separate = createCompanionResultStore(join(dir, 'companion.json'), admission);
+      separate.putAgent(agent(1));
+      expect(separate.readAgent(agent(1).agentId)?.agentId).toBe(agent(1).agentId);
+    } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });

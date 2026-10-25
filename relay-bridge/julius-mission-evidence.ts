@@ -205,6 +205,11 @@ const WORK_ARTIFACT = /julius-work-artifact\.v1/;
 
 const absent = { completion: null, phases: null } as const;
 
+/** Bounds on reader arrays. A longer list is not truncated: it is unknown (null). */
+export const JULIUS_ARCHIVE_FILES_MAX = 512;
+export const JULIUS_FAILED_STEPS_MAX = 64;
+export const JULIUS_WORK_ARTIFACT_REFS_MAX = 256;
+
 function record(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
@@ -355,7 +360,7 @@ function providerReceipt(value: unknown): JuliusMissionProviderReceipt | null {
 }
 
 function archiveFiles(value: unknown): readonly JuliusMissionArchiveFile[] | null {
-  if (!Array.isArray(value)) return null;
+  if (!Array.isArray(value) || value.length > JULIUS_ARCHIVE_FILES_MAX) return null;
   const files: JuliusMissionArchiveFile[] = [];
   for (const entry of value) {
     const body = record(entry);
@@ -370,7 +375,7 @@ function archiveFiles(value: unknown): readonly JuliusMissionArchiveFile[] | nul
 }
 
 function failedSteps(value: unknown): readonly string[] | null {
-  if (!Array.isArray(value)) return null;
+  if (!Array.isArray(value) || value.length > JULIUS_FAILED_STEPS_MAX) return null;
   const steps: string[] = [];
   for (const entry of value) {
     const step = plain(entry, 300);
@@ -396,7 +401,7 @@ function archive(value: unknown): JuliusMissionArchiveEvidence | null {
 }
 
 function workArtifactRefs(value: unknown): readonly string[] | null {
-  if (!Array.isArray(value)) return null;
+  if (!Array.isArray(value) || value.length > JULIUS_WORK_ARTIFACT_REFS_MAX) return null;
   const refs: string[] = [];
   for (const entry of value) {
     const ref = plain(entry, 400);

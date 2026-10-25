@@ -279,7 +279,7 @@ export function createBridgeServer(
    * JULIUS_WONDERLAND_COMPANION_STORE. Unset, the read is an empty memory
    * store. There is no ingest and no outbound call.
    */
-  const companionResults = createCompanionResultStore(process.env.JULIUS_WONDERLAND_COMPANION_STORE);
+  const companionResults = createCompanionResultStore(process.env.JULIUS_WONDERLAND_COMPANION_STORE, process.env.JULIUS_WONDERLAND_ADMISSION_STORE);
   /**
    * Companion adapters are optional. The registry starts empty and stores
    * slots in the same local companion file. No provider is built in.

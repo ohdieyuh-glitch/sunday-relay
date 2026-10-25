@@ -35,7 +35,8 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import { closeSync, fsyncSync, openSync, readFileSync, renameSync, unlinkSync, writeSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 import { juliusMissionTraceId } from '../scripts/julius-mission-trace.mjs';
 import { parseJuliusAdmissionRunId } from '../src/relay/integration/wonderland-admission/admission-run-id';
@@ -108,6 +109,19 @@ export class CompanionResultStoreClosedError extends Error {
 export function isCompanionResultStoreClosed(error: unknown): error is CompanionResultStoreClosedError {
   return error instanceof CompanionResultStoreClosedError;
 }
+
+/** At most this many agent slots per companion store. A new slot past it is refused. */
+export const COMPANION_AGENT_SLOT_MAX = 32;
+
+export class CompanionAgentSlotsFullError extends Error {
+  constructor() {
+    super('companion_agent_slots_full');
+    this.name = 'CompanionAgentSlotsFullError';
+  }
+}
+
+/** How long a companion writer waits for `<store>.lock` before the store is closed. */
+const COMPANION_LOCK_WAIT_MS = 2_000;
 
 export interface CompanionResultProvenance {
   readonly source: 'companion_port' | 'simulated';
@@ -367,6 +381,9 @@ function agentDirectory(ports: WonderlandCompanionRoutePorts): CompanionAdapterR
 }
 
 function agentStoreFailure(error: unknown): { status: number; body: unknown } {
+  if (error instanceof CompanionAgentSlotsFullError) {
+    return err(409, 'companion_agent_slots_full', `At most ${COMPANION_AGENT_SLOT_MAX} agent slots are kept. Nothing was created.`);
+  }
   if (isCompanionResultStoreClosed(error)) {
     return err(503, 'julius_dispatch_unavailable', 'Wonderland admission store is not available. Nothing was reserved.');
   }
@@ -430,6 +447,7 @@ export function createMemoryCompanionResultStore(): CompanionLocalStore & {
       return rows.get(wljRunId) ?? null;
     },
     putAgent(record) {
+      if (!agents.has(record.agentId) && agents.size >= COMPANION_AGENT_SLOT_MAX) throw new CompanionAgentSlotsFullError();
       agents.set(record.agentId, record);
     },
     readAgent(agentId) {
@@ -456,9 +474,16 @@ export function createFileCompanionResultStore(storePath: string): CompanionLoca
       return validateCompanionResult(raw);
     },
     putAgent(record) {
-      const document = loadCompanionDocument(storePath) ?? emptyCompanionDocument();
-      document.agents[record.agentId] = record;
-      saveCompanionDocument(storePath, document);
+      // One read-modify-write under `<store>.lock`, so two writers never
+      // interleave and a slot written by one is not lost by the other.
+      withCompanionLock(storePath, () => {
+        const document = loadCompanionDocument(storePath) ?? emptyCompanionDocument();
+        if (!Object.hasOwn(document.agents, record.agentId) && Object.keys(document.agents).length >= COMPANION_AGENT_SLOT_MAX) {
+          throw new CompanionAgentSlotsFullError();
+        }
+        document.agents[record.agentId] = record;
+        saveCompanionDocument(storePath, document);
+      });
     },
     readAgent(agentId) {
       const document = loadCompanionDocument(storePath);
@@ -516,11 +541,57 @@ function loadCompanionDocument(storePath: string): CompanionDocument | null {
   return { schemaVersion: COMPANION_RESULT_SCHEMA_VERSION, results: document.results as Record<string, unknown>, agents };
 }
 
+const lockSleeper = new Int32Array(new SharedArrayBuffer(4));
+
+/**
+ * Create `<store>.lock` exclusively, run `job`, delete it. A held lock is
+ * retried for COMPANION_LOCK_WAIT_MS and then closes the store. It is never
+ * stolen, whatever pid it names.
+ */
+function withCompanionLock<T>(storePath: string, job: () => T): T {
+  if (!isLocalStorePath(storePath)) throw new CompanionResultStoreClosedError();
+  const lockPath = `${storePath}.lock`;
+  const deadline = Date.now() + COMPANION_LOCK_WAIT_MS;
+  let fd: number;
+  for (;;) {
+    try {
+      fd = openSync(lockPath, 'wx', 0o600);
+      break;
+    } catch (error) {
+      const code = error !== null && typeof error === 'object' && 'code' in error ? error.code : '';
+      const left = deadline - Date.now();
+      if (code !== 'EEXIST' || left <= 0) throw new CompanionResultStoreClosedError();
+      Atomics.wait(lockSleeper, 0, 0, Math.min(25, left));
+    }
+  }
+  try {
+    writeSync(fd, JSON.stringify({ pid: process.pid, purpose: 'wonderland-companion' }), null, 'utf8');
+    fsyncSync(fd);
+  } catch {
+    try { closeSync(fd); } catch { /* closing */ }
+    try { unlinkSync(lockPath); } catch { /* lock may be absent */ }
+    throw new CompanionResultStoreClosedError();
+  }
+  closeSync(fd);
+  try {
+    return job();
+  } finally {
+    try { unlinkSync(lockPath); } catch { /* already released */ }
+  }
+}
+
+/** Temp file in the same directory, fsync, rename onto the store. */
 function saveCompanionDocument(storePath: string, document: CompanionDocument): void {
   if (!isLocalStorePath(storePath)) throw new CompanionResultStoreClosedError();
   const temporary = `${storePath}.${randomUUID()}.tmp`;
   try {
-    writeFileSync(temporary, `${JSON.stringify(document)}\n`, 'utf8');
+    const fd = openSync(temporary, 'wx', 0o600);
+    try {
+      writeSync(fd, `${JSON.stringify(document)}\n`, null, 'utf8');
+      fsyncSync(fd);
+    } finally {
+      closeSync(fd);
+    }
     renameSync(temporary, storePath);
   } catch {
     try {
@@ -556,9 +627,32 @@ function validateStoredAgent(value: unknown): CompanionAgentRecord | null {
   };
 }
 
-export function createCompanionResultStore(storePath: string | undefined): CompanionLocalStore {
+/**
+ * The companion file must not be the admission store or any file the
+ * admission store owns (its operator journal and its locks). A collision is a
+ * closed store: every read and write fails, and nothing is written there.
+ */
+export function companionStoreCollides(companionPath: string, admissionStorePath: string | undefined): boolean {
+  const admission = (admissionStorePath ?? '').trim();
+  if (admission === '') return false;
+  const key = (value: string): string => {
+    const resolved = resolve(value);
+    return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+  };
+  const companion = key(companionPath);
+  const base = resolve(admission);
+  return [base, `${base}.operator.json`, `${base}.lock`, `${base}.bridge.lock`].some((owned) => key(owned) === companion);
+}
+
+function closedCompanionStore(): CompanionLocalStore {
+  const closed = (): never => { throw new CompanionResultStoreClosedError(); };
+  return { read: closed, putAgent: closed, readAgent: closed, listAgents: closed };
+}
+
+export function createCompanionResultStore(storePath: string | undefined, admissionStorePath?: string): CompanionLocalStore {
   const trimmed = (storePath ?? '').trim();
   if (trimmed === '') return createMemoryCompanionResultStore();
+  if (companionStoreCollides(trimmed, admissionStorePath)) return closedCompanionStore();
   return createFileCompanionResultStore(trimmed);
 }
 
