@@ -422,7 +422,7 @@ describe('one reviewer path', () => {
 const identity: JuliusApiIdentity = { tenantId: 't', projectId: 'proj-1', actorId: 'bridge', scopes: ['run:read'] };
 const view = (over: Partial<JuliusRunView> = {}): JuliusRunView => ({
   runId: 'run:1', missionId: 'mission-1', state: 'READY', revision: 1, cardRevision: 'c', missionContractRevision: 1, projectBrainRevision: 1,
-  taskCounts: {} as never, activeTasks: 0, pendingApprovals: 0, ...over,
+  taskCounts: {} as never, activeTasks: 0, pendingApprovals: 0, traceId: null, spanId: null, traceparent: null, ...over,
 });
 const CONTRACT_BYTES = Buffer.from('exact contract file bytes\r\n', 'utf8');
 const CONTRACT_SHA = createHash('sha256').update(CONTRACT_BYTES).digest('hex');
