@@ -1464,7 +1464,6 @@ jobs:
           RUN_ATTEMPT: ${{ github.run_attempt }}
           WLJ: ${{ needs.spend-tag.outputs.run_id }}
           HEAD_SHA: ${{ github.sha }}
-          PG_CONTAINER: julius-postgres
           PGPASSWORD: ${{ steps.identity.outputs.database_password }}
         run: |
           nohup node .github/julius-live-progress.mjs > "${RUNNER_TEMP}/julius-live-progress.log" 2>&1 &

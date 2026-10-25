@@ -26,7 +26,6 @@ const ENV = {
   HEAD_SHA: 'c'.repeat(40),
   GITHUB_REPOSITORY: 'ohdieyuh-glitch/sunday-relay',
   GH_TOKEN: 'job-token-stand-in',
-  PG_CONTAINER: 'julius-postgres',
   PGUSER: 'julius',
   PGDATABASE: 'julius',
   PGPASSWORD: 'db-password-stand-in',
@@ -89,7 +88,7 @@ describe('the progress projection', () => {
     }
   });
 
-  it('refuses to publish at all unless the run is bound: attempt 1, a wlj, a run id, a head sha, a repo, a token, a container', () => {
+  it('refuses to publish at all unless the run is bound: attempt 1, a wlj, a run id, a head sha, a repo, a token', () => {
     expect(configFrom(ENV).refused).toBeNull();
     for (const [key, value, reason] of [
       ['RUN_ATTEMPT', '2', 'attempt_not_1'],
@@ -98,7 +97,6 @@ describe('the progress projection', () => {
       ['HEAD_SHA', 'main', 'head_sha_invalid'],
       ['GITHUB_REPOSITORY', 'nope', 'repo_invalid'],
       ['GH_TOKEN', '', 'token_missing'],
-      ['PG_CONTAINER', 'a;b', 'container_invalid'],
     ] as const) {
       expect(configFrom({ ...ENV, [key]: value }).refused, key).toBe(reason);
     }
@@ -161,8 +159,9 @@ describe('the publisher loop', () => {
 });
 
 describe('the token never reaches a child, and the status goes only to this run\'s head sha', () => {
-  it('the psql child gets PATH and the database password only', async () => {
+  it('the psql child gets PATH and the database login only; its argv is literal and the run id goes on stdin', async () => {
     const seen: { command: string; args: readonly string[]; env: Record<string, string> }[] = [];
+    let stdin = '';
     const fakeSpawn = (command: string, args: readonly string[], options: { env: Record<string, string> }) => {
       seen.push({ command, args, env: options.env });
       const listeners: Record<string, (value: unknown) => void> = {};
@@ -173,7 +172,7 @@ describe('the token never reaches a child, and the status goes only to this run\
       }, 0);
       return {
         stdout: { on: (_event: string, listener: (chunk: string) => void) => { stdoutListeners.push(listener); } },
-        stdin: { end: () => {} },
+        stdin: { end: (text: string) => { stdin = text; } },
         on: (event: string, listener: (value: unknown) => void) => { listeners[event] = listener; },
         kill: () => {},
       };
@@ -182,8 +181,9 @@ describe('the token never reaches a child, and the status goes only to this run\
     const rows = await readTasks(config, fakeSpawn as never);
     expect(rows).toEqual([task('CODING_AGENT', 'build', 'ACTIVE', 1)]);
     expect(seen[0]?.command).toBe('docker');
-    expect(seen[0]?.args).toEqual(['exec', '-i', '-e', 'PGPASSWORD', 'julius-postgres', 'psql', '-U', 'julius', '-d', 'julius', '-A', '-t', '-F', '\t', '-v', `wlj=${WLJ}`, '-v', 'ON_ERROR_STOP=1']);
-    expect(Object.keys(seen[0]?.env ?? {}).sort()).toEqual(['PATH', 'PGPASSWORD']);
+    expect(seen[0]?.args).toEqual(['exec', '-i', '-e', 'PGUSER', '-e', 'PGDATABASE', '-e', 'PGPASSWORD', 'julius-postgres', 'psql', '-A', '-t', '-F', '\t', '-v', 'ON_ERROR_STOP=1']);
+    expect(Object.keys(seen[0]?.env ?? {}).sort()).toEqual(['PATH', 'PGDATABASE', 'PGPASSWORD', 'PGUSER']);
+    expect(stdin).toBe(`\\set wlj '${WLJ}'\n${TASK_QUERY}\n`);
     expect(JSON.stringify(seen)).not.toContain('job-token-stand-in');
   });
 

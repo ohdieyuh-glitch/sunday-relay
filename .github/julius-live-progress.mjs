@@ -115,7 +115,6 @@ export function configFrom(env) {
   if (!SHA40.test(env.HEAD_SHA ?? '')) return { refused: 'head_sha_invalid' };
   if (!REPO.test(env.GITHUB_REPOSITORY ?? '')) return { refused: 'repo_invalid' };
   if ((env.GH_TOKEN ?? '') === '') return { refused: 'token_missing' };
-  if (!/^[A-Za-z0-9_.-]{1,128}$/u.test(env.PG_CONTAINER ?? '')) return { refused: 'container_invalid' };
   return {
     refused: null,
     wlj: env.WLJ,
@@ -124,24 +123,29 @@ export function configFrom(env) {
     headSha: env.HEAD_SHA,
     repo: env.GITHUB_REPOSITORY,
     token: env.GH_TOKEN,
-    container: env.PG_CONTAINER,
     pg: { PGUSER: env.PGUSER ?? '', PGDATABASE: env.PGDATABASE ?? '', PGPASSWORD: env.PGPASSWORD ?? '' },
   };
 }
 
 /** One read of the store. The child's environment carries the database login only, never GH_TOKEN. */
-export function readTasks(config, spawnImpl = spawn) {
+export function readTasks(config, spawnImpl) {
   return new Promise((resolve) => {
-    const child = spawnImpl('docker', [
-      'exec', '-i', '-e', 'PGPASSWORD', config.container,
-      'psql', '-U', config.pg.PGUSER, '-d', config.pg.PGDATABASE, '-A', '-t', '-F', '\t', '-v', `wlj=${config.wlj}`, '-v', 'ON_ERROR_STOP=1',
-    ], { env: { PATH: process.env.PATH ?? '', PGPASSWORD: config.pg.PGPASSWORD }, stdio: ['pipe', 'pipe', 'ignore'] });
+    // The login travels as environment names; the run id reaches psql on stdin as a
+    // `\set` of a value already held to the wlj_ UUIDv4 grammar. The argv is literal.
+    const options = {
+      env: { PATH: process.env.PATH ?? '', PGUSER: config.pg.PGUSER, PGDATABASE: config.pg.PGDATABASE, PGPASSWORD: config.pg.PGPASSWORD },
+      stdio: ['pipe', 'pipe', 'ignore'],
+    };
+    const child = spawnImpl === undefined
+      ? spawn('docker', ['exec', '-i', '-e', 'PGUSER', '-e', 'PGDATABASE', '-e', 'PGPASSWORD', 'julius-postgres', 'psql', '-A', '-t', '-F', '\t', '-v', 'ON_ERROR_STOP=1'], options)
+      : spawnImpl('docker', ['exec', '-i', '-e', 'PGUSER', '-e', 'PGDATABASE', '-e', 'PGPASSWORD', 'julius-postgres', 'psql', '-A', '-t', '-F', '\t', '-v', 'ON_ERROR_STOP=1'], options);
     let out = '';
     const timer = setTimeout(() => child.kill('SIGKILL'), 8_000);
     child.stdout.on('data', (chunk) => { if (out.length < 1_000_000) out += chunk; });
     child.on('error', () => { clearTimeout(timer); resolve(null); });
     child.on('close', (code) => { clearTimeout(timer); resolve(code === 0 ? parseTaskRows(out) : null); });
-    child.stdin.end(TASK_QUERY);
+    // configFrom held config.wlj to WLJ (hex, dashes, `wlj_`), so it cannot close the quote.
+    child.stdin.end(`\\set wlj '${config.wlj}'\n${TASK_QUERY}\n`);
   });
 }
 
