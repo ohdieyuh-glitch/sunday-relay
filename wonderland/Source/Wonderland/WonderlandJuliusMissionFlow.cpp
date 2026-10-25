@@ -931,6 +931,12 @@ namespace WonderlandJuliusMissionFlow
 			{
 				Out.bCheckerUnbound = true; // FLOW_PASS_MUST_NAME_JUDGED_SHA
 			}
+			// The in-game digest is the judged sha256's first 12 hex (bridge-enforced; checked again here, REVIEW #462 LOW).
+			if (Out.Checker == ECheckerVerdict::Pass && Out.CheckerJudgedSha256.bKnown && Out.CheckerGameDigest.bKnown
+				&& Out.CheckerGameDigest.Text != Out.CheckerJudgedSha256.Text.substr(0, 12))
+			{
+				Out.bCheckerUnbound = true; // FLOW_PASS_DIGEST_MATCHES_JUDGED
+			}
 		};
 		Out.Cause = ReadString(&Root, "cause");
 		Out.Phases = ReadPhases(&Root, Out.PhaseSlots);

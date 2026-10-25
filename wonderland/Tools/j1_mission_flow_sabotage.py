@@ -374,6 +374,11 @@ MUTATIONS = [
         "Out.bCheckerUnbound = false; // FLOW_PASS_MUST_NAME_JUDGED_SHA",
     ),
     (
+        "digest_prefix_unchecked",
+        "Out.bCheckerUnbound = true; // FLOW_PASS_DIGEST_MATCHES_JUDGED",
+        "Out.bCheckerUnbound = Out.bCheckerUnbound; // FLOW_PASS_DIGEST_MATCHES_JUDGED",
+    ),
+    (
         "checker_hex_unchecked",
         "if (!((Ch >= '0' && Ch <= '9') || (Ch >= 'a' && Ch <= 'f'))) { return Out; } // FLOW_CHECKER_HEX_ONLY",
         "// FLOW_CHECKER_HEX_ONLY",
