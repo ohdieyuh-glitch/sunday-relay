@@ -395,6 +395,7 @@ namespace WonderlandJuliusMissionFlow
 	struct FLiveEvent
 	{
 		std::int64_t Seq = 0;
+		/** Empty when the step has not started (the server sends null). */
 		std::string At;
 		/** "job", "step" or "phase". */
 		std::string Kind;
@@ -403,7 +404,9 @@ namespace WonderlandJuliusMissionFlow
 		std::string Name;
 		std::string Status;
 		std::string Conclusion;
-		/** phase only. */
+		/** phase only. "idle" or "ended" when the sample is a marker (then role..repairCycle are absent). "ended" is
+		 *  NOT completion: completion and the verdict come only from /result. */
+		std::string Marker;
 		std::string Role;
 		std::string TaskType;
 		std::string State;
@@ -426,6 +429,8 @@ namespace WonderlandJuliusMissionFlow
 		std::string WorkflowRunId;
 		std::vector<FLiveEvent> Events;
 		std::string Next;
+		/** The server did not know our cursor's epoch: this page restarts from seq 1. */
+		bool bReset = false;
 	};
 
 	/** Strict: a malformed field anywhere fails the whole read closed (no partial, no invented event). */

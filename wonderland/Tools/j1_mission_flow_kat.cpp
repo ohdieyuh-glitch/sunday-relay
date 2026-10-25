@@ -534,6 +534,35 @@ const ABSENT_PHASE = {
 		Expect(!ParseLiveEvents(LiveWlj, 404, Good).bParsed, "non-200 refused");
 		++LiveCases;
 
+		// Julius 2026-10-25 additions: null "at" for an unstarted step; reset:true restarts from seq 1; phase markers.
+		Expect(ParseLiveEvents(LiveWlj, 200, Swap(Good, "\"at\":\"2026-10-25T18:00:01Z\"", "\"at\":null")).bParsed, "unstarted step has null at");
+		Expect(!ParseLiveEvents(LiveWlj, 200, Swap(Good, ",\"at\":\"2026-10-25T18:00:01Z\"", "")).bParsed, "at is required");
+		++LiveCases;
+		FLiveFeed Reset;
+		Reset.Apply(Read);
+		Reset.Apply(ParseLiveEvents(LiveWlj, 200, LiveBody(std::string(LiveTop) + ",\"reset\":true",
+			Swap(LiveStep, "\"seq\":3", "\"seq\":1"))));
+		Expect(Reset.Events().size() == 1 && Reset.Events()[0].Seq == 1, "reset replaces the stream from seq 1");
+		Expect(!ParseLiveEvents(LiveWlj, 200, LiveBody(std::string(LiveTop) + ",\"reset\":1", LiveStep)).bParsed, "reset must be a bool");
+		++LiveCases;
+		const std::string Idle = "{\"seq\":9,\"at\":\"2026-10-25T18:01:00Z\",\"kind\":\"phase\",\"marker\":\"idle\",\"role\":null,"
+			"\"taskType\":null,\"state\":null,\"ordinal\":null,\"repairCycle\":null,\"sampled\":true}";
+		FLiveFeed Marked;
+		Marked.Apply(ParseLiveEvents(LiveWlj, 200, LiveBody(LiveTop, std::string(LivePhase) + "," + Idle)));
+		Expect(Marked.Events().size() == 2 && PanelHas(LivePanelFor(Marked, 0), "now: between tasks (idle)"), "idle marker is the now line");
+		FLiveFeed Ended;
+		Ended.Apply(ParseLiveEvents(LiveWlj, 200, LiveBody(LiveTop, Swap(Idle, "\"idle\"", "\"ended\""))));
+		const FLivePanel EndedPanel = LivePanelFor(Ended, 0);
+		Expect(PanelHas(EndedPanel, "stream ended (only the result says") && !PanelHas(EndedPanel, "complete"), "ended is not completion");
+		Expect(!ParseLiveEvents(LiveWlj, 200, LiveBody(LiveTop, Swap(Idle, "\"idle\"", "\"done\""))).bParsed, "unknown marker refused");
+		Expect(!ParseLiveEvents(LiveWlj, 200, LiveBody(LiveTop, Swap(Idle, "\"role\":null", "\"role\":\"coder\""))).bParsed, "marker with task fields refused");
+		Expect(!ParseLiveEvents(LiveWlj, 200, LiveBody(LiveTop, Swap(Idle, "\"sampled\":true", "\"sampled\":false"))).bParsed, "marker must be sampled");
+		Expect(ParseLiveEvents(LiveWlj, 200, LiveBody(LiveTop, Swap(LivePhase, ",\"sampled\"", ",\"marker\":null,\"sampled\""))).bParsed, "null marker is a task sample");
+		++LiveCases;
+		// The real folded step name from the workflow.
+		Expect(ParseLiveEvents(LiveWlj, 200, Swap(Good, "LIVE: run the first real Julius mission", "Preflight complete - stopping here (no confirm_live given)")).bParsed, "real folded step name");
+		++LiveCases;
+
 		// A different workflow run is never merged into the shown one.
 		FLiveFeed Swapped;
 		Swapped.Apply(Read);

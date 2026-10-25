@@ -1388,7 +1388,9 @@ namespace WonderlandJuliusMissionFlow
 			if (Node.Kind != EJsonKind::Object) { return Out; }
 			FLiveEvent Event;
 			if (!LiveInt(Field(Node, "seq"), 0, INT64_MAX, Event.Seq)) { return Out; }
-			if (!LivePlainText(Field(Node, "at"), 40, false, Event.At)) { return Out; }
+			const FJson* At = Field(Node, "at");
+			if (At != nullptr && At->Kind != EJsonKind::Null && !LivePlainText(At, 40, false, Event.At)) { return Out; }
+			if (At == nullptr) { return Out; }
 			const FJson* Kind = Field(Node, "kind");
 			if (IsExactString(Kind, "job") || IsExactString(Kind, "step"))
 			{
@@ -1402,6 +1404,22 @@ namespace WonderlandJuliusMissionFlow
 			else if (IsExactString(Kind, "phase"))
 			{
 				Event.Kind = "phase";
+				const FJson* Marker = Field(Node, "marker");
+				if (Marker != nullptr && Marker->Kind != EJsonKind::Null)
+				{
+					// A marker sample (idle between tasks, or the publisher ended) carries no task fields at all.
+					if (!IsExactString(Marker, "idle") && !IsExactString(Marker, "ended")) { return Out; } // FLOW_LIVE_MARKERS_ARE_CLOSED
+					Event.Marker = Marker->Text;
+					for (const char* Name : {"role", "taskType", "state", "ordinal", "repairCycle"})
+					{
+						const FJson* Rest = Field(Node, Name);
+						if (Rest != nullptr && Rest->Kind != EJsonKind::Null) { return Out; }
+					}
+					bool bMarkerSampled = false;
+					if (!LiveBool(Field(Node, "sampled"), bMarkerSampled) || !bMarkerSampled) { return Out; }
+					Read.Events.push_back(std::move(Event));
+					continue;
+				}
 				if (!LiveWord(Field(Node, "role"), Event.Role) || !LiveRole(Event.Role)) { return Out; } // FLOW_LIVE_ROLES_ARE_CLOSED
 				if (!LiveWord(Field(Node, "taskType"), Event.TaskType) || !LiveTaskType(Event.TaskType)) { return Out; }
 				if (!LiveWord(Field(Node, "state"), Event.State) || !LiveTaskState(Event.State)) { return Out; }
@@ -1415,6 +1433,8 @@ namespace WonderlandJuliusMissionFlow
 			else { return Out; }
 			Read.Events.push_back(std::move(Event));
 		}
+		const FJson* Reset = Field(Root, "reset");
+		if (Reset != nullptr && Reset->Kind != EJsonKind::Null && !LiveBool(Reset, Read.bReset)) { return Out; }
 		const FJson* Next = Field(Root, "next");
 		if (Next != nullptr && Next->Kind != EJsonKind::Null && !LivePlainText(Next, 64, true, Read.Next)) { return Out; }
 		Read.bParsed = true;
@@ -1427,6 +1447,13 @@ namespace WonderlandJuliusMissionFlow
 		if (!Workflow.empty() && !Read.WorkflowRunId.empty() && Read.WorkflowRunId != Workflow)
 		{
 			*this = FLiveFeed(); // a different workflow run is never merged into this one
+		}
+		if (Read.bReset)
+		{
+			// The server restarted the stream from seq 1 under a new epoch: replace, never append twice.
+			EventList.clear();
+			LastSeq = -1;
+			CursorNow.clear();
 		}
 		bHasRead = true;
 		SourceNow = Read.Source;
@@ -1495,6 +1522,13 @@ namespace WonderlandJuliusMissionFlow
 		for (auto It = Events.rbegin(); It != Events.rend(); ++It)
 		{
 			if (It->Kind != "phase") { continue; }
+			if (!It->Marker.empty())
+			{
+				Out.Lines.push_back(It->Marker == "idle" ? std::string(Out.bLive ? "now: between tasks (idle)" : "last sampled: between tasks (idle)")
+					: std::string("task progress stream ended (only the result says how the mission finished)"));
+				Out.Lines.push_back("phase history is sampled every ~10 s; short tasks may not appear");
+				break;
+			}
 			std::string Now = (Out.bLive ? "now: " : "last sampled: ") + It->Role + " / " + It->TaskType + " -- " + It->State;
 			if (It->RepairCycle > 0) { Now += " (repair cycle " + std::to_string(It->RepairCycle) + " of 3)"; }
 			Out.Lines.push_back(std::move(Now));
@@ -1506,7 +1540,11 @@ namespace WonderlandJuliusMissionFlow
 		{
 			const FLiveEvent& E = Events[I];
 			std::string Line;
-			if (E.Kind == "phase")
+			if (E.Kind == "phase" && !E.Marker.empty())
+			{
+				Line = "  sampled: " + E.Marker;
+			}
+			else if (E.Kind == "phase")
 			{
 				Line = "  sampled #" + std::to_string(E.Ordinal) + ": " + E.Role + " / " + E.TaskType + " -- " + E.State;
 				if (E.RepairCycle > 0) { Line += " (repair cycle " + std::to_string(E.RepairCycle) + " of 3)"; }

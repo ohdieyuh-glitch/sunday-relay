@@ -458,6 +458,17 @@ MUTATIONS = [
         'Out.Header += " -- connection to GitHub lost, reconnecting";',
         'Out.Header += "";',
     ),
+    (
+        "live_markers_open",
+        'if (!IsExactString(Marker, "idle") && !IsExactString(Marker, "ended")) { return Out; } // FLOW_LIVE_MARKERS_ARE_CLOSED',
+        "// FLOW_LIVE_MARKERS_ARE_CLOSED",
+    ),
+    (
+        "live_reset_appends",
+        "EventList.clear();
+			LastSeq = -1;",
+        "LastSeq = -1;",
+    ),
 ]
 
 
