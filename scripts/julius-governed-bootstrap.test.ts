@@ -244,12 +244,20 @@ describe('the bootstrap decision fails closed', () => {
     expect(problems({ founderPublicKeyPem: otherPem })).toMatch(/founder_anchor_mismatch/u);
   });
 
-  it('H1: the real tree ships without the founder-approval key file, so every founder check is founder_key_unpinned', async () => {
+  it('H1: the real tree pins exactly the founder\'s key, and an empty key is still founder_key_unpinned', async () => {
     const real = (await import(pathToFileURL(join(ROOT, 'scripts/julius-main-provenance-trust.mjs')).href)) as {
       FOUNDER_APPROVAL_KEY_PATH: string;
       founderApprovalProblem: (input: Record<string, unknown>) => string | null;
     };
-    expect(existsSync(join(ROOT, real.FOUNDER_APPROVAL_KEY_PATH))).toBe(false);
+    // The founder's public key, as openssl pkey -pubout wrote it: file sha256 cee2ca8c..., SPKI DER sha256
+    // f17a2a17..., the fingerprint the founder confirmed and set as JULIUS_FOUNDER_APPROVAL_KEY_SHA256.
+    const keyFile = join(ROOT, real.FOUNDER_APPROVAL_KEY_PATH);
+    expect(existsSync(keyFile)).toBe(true);
+    const bytes = readFileSync(keyFile);
+    expect(createHash('sha256').update(bytes).digest('hex')).toBe('cee2ca8c35ccb5c54206ad652fcfe45e09daca1c9f8c72e8ed7c3089eb474bcd');
+    const { createPublicKey } = await import('node:crypto');
+    const der = createPublicKey(bytes).export({ format: 'der', type: 'spki' });
+    expect(createHash('sha256').update(der).digest('hex')).toBe('f17a2a172fc0bdb45a4840f778e12be1794b80736385c9023e795d9a1d2480cc');
     expect(real.founderApprovalProblem({ text: signed.text, signatureB64: signed.founderSignature, pem: '', anchor: founderSpki }))
       .toMatch(/founder approval: founder_key_unpinned/u);
     // A valid founder signature under a key that is not pinned (no anchor for it) is refused.

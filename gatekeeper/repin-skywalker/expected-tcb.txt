@@ -1,5 +1,5 @@
 d1be6e15b19f0be375d300c9ae3530c32c59c22e072f3d26a6f5026e395b5815  .github/julius-landing/reviewer-ed25519.pub
-ABSENT----------------------------------------------------------  .github/julius-landing/founder-approval-ed25519.pub
+cee2ca8c35ccb5c54206ad652fcfe45e09daca1c9f8c72e8ed7c3089eb474bcd  .github/julius-landing/founder-approval-ed25519.pub
 a44538f37ac295ed953ca1015da7d53f969cf24f625e3b2397df78a5df4f0b27  .github/julius-landing/land-lib.mjs
 1e0ffa3c4e04c9e79f65b272b4fd17e1f7c9971213b2b2620b1b39b016c45a39  .github/julius-landing/land.mjs
 80757fa19d7b4b818c4234e8c86891f0971f44ecfdfd729a630e5fb356056921  .github/julius-landing/governed-land.mjs
