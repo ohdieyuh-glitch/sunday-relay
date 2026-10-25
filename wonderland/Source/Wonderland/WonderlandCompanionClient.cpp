@@ -70,7 +70,10 @@ void UWonderlandCompanionClient::RefreshMissionAgents(const FString& WljRunId, c
 	Issue(CompanionMissionRequest(Session->RelayOrigin(), Wlj, ToUtf8(ProjectId)),
 		[this, Wlj](int32 Status, const FString&, const TArray<uint8>& Body) {
 			FCompanionMissionView Mission;
-			ParseCompanionMission(Status, BytesView(Body), Wlj, Mission); // agents[] are read even if a v0.1 field fails
+			const ECompanionMissionParse Parse = ParseCompanionMission(Status, BytesView(Body), Wlj, Mission); // agents[] are read even if a v0.1 field fails
+			// One trace word per read: the HTTP status and the parser's verdict, never the body.
+			UE_LOG(LogTemp, Display, TEXT("WLCOMPANION mission read: http %d, parse %s, agents %d"), Status,
+				UTF8_TO_TCHAR(CompanionMissionParseName(Parse)), static_cast<int32>(Mission.Agents.size()));
 			if (Mission.AgentsParse == EAgentListParse::Ok) { Session->ApplyAgentSlots(Mission.Agents); }
 			// #447 traceId: kept as reported for THIS run only; an answer without one clears the last one (never reused).
 			MissionTraceWljRunId = FromUtf8(Wlj);
