@@ -78,10 +78,16 @@ export const TRUSTED_CHECKPOINT_BASE = '82fcb5ed0e75b1280d3b4a06f246387195cc77f8
 export const TRUSTED_CHECKPOINT_PR = 389;
 export const TRUSTED_CHECKPOINT_ACCEPT_RUN = '39335737220';
 
-/** Full SPKI SHA-256. Never compare a prefix of this. */
-export const PINNED_REVIEWER_SPKI_SHA256 = '7eacf984b77022f9c3719760052b9eaeab0c5fcabe8058050bdc999e365a845c';
+/**
+ * Full SPKI SHA-256. Never compare a prefix of this. Rotated 2026-10-25 from
+ * 7eacf984 (whose private key is not available to the independent review) to
+ * the independent-review key recorded in PR #452 comment 6395143765. The
+ * outgoing key did not sign the handover. The external anchor
+ * JULIUS_REVIEWER_KEY_SHA256 is the only out-of-band confirmation.
+ */
+export const PINNED_REVIEWER_SPKI_SHA256 = '12c9b1853c4c33322241273f386b0fd08fdefd08134c911dd4024c5bb5cdff13';
 /** The 32 raw ed25519 public-key bytes, hex. */
-export const PINNED_REVIEWER_RAW_KEY = '5797b5d6532f0859182e1969abbc75cca2a4faf89884416de22bf582eb1fd0f3';
+export const PINNED_REVIEWER_RAW_KEY = 'e033a345ed082b8126c8c6d9ad43cb54a4c854fe8c5423c2fc7ed475ee5461b5';
 /** The only commit that introduces the reviewer public key (#379). */
 export const REVIEWER_KEY_INTRODUCED_IN = 'e56b6bd9d6cd082af897df9bab8475c2323d342c';
 

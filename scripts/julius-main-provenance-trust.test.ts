@@ -64,6 +64,9 @@ ensureCommit(TRUSTED_CHECKPOINT_SHA, 2);
 ensureCommit(TRUSTED_CHECKPOINT_BASE, 1);
 ensureCommit('689d2be92c3158ba4a59883ed4f6cc02f700660b', 1);
 ensureCommit('f539cab2530b7733bd987068be676308440e04a5', 1);
+/** #453's head, which pinned the 7eacf984 key this branch rotates away from. */
+const PREVIOUS_PIN_HEAD = '7e945915a886deaee87de4a395947a36398e75bb';
+ensureCommit(PREVIOUS_PIN_HEAD, 1);
 const attacker = generateKeyPairSync('ed25519');
 const attackerPem = attacker.publicKey.export({ type: 'spki', format: 'pem' }).toString();
 
@@ -80,9 +83,15 @@ describe('the pinned reviewer key', () => {
     expect(exactFingerprintMatch(PIN.slice(0, 63), PIN)).toBe(false);
   });
 
-  it('matches the public key in the worktree; earlier commits still carry the previous key', () => {
+  it('is the rotated independent-review key 12c9b185', () => {
+    expect(PIN).toBe('12c9b1853c4c33322241273f386b0fd08fdefd08134c911dd4024c5bb5cdff13');
+    expect(PINNED_REVIEWER_RAW_KEY).toBe('e033a345ed082b8126c8c6d9ad43cb54a4c854fe8c5423c2fc7ed475ee5461b5');
+    expect(REAL_PEM).toBe('-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA4DOjRe0IK4EmyMbZrUPLVKTIVP6MVCPC/H7Ude5UYbU=\n-----END PUBLIC KEY-----\n');
+  });
+
+  it('matches the public key in the worktree; earlier commits, including the 7eacf984 repin, carry a key it refuses', () => {
     expect(reviewerKeyPinRefusal(REAL_PEM, PIN)).toBeNull();
-    for (const rev of [TRUSTED_CHECKPOINT_SHA, TRUSTED_CHECKPOINT_BASE, 'f539cab2530b7733bd987068be676308440e04a5', '689d2be92c3158ba4a59883ed4f6cc02f700660b']) {
+    for (const rev of [TRUSTED_CHECKPOINT_SHA, TRUSTED_CHECKPOINT_BASE, 'f539cab2530b7733bd987068be676308440e04a5', '689d2be92c3158ba4a59883ed4f6cc02f700660b', PREVIOUS_PIN_HEAD]) {
       const pem = git(['show', `${rev}:.github/julius-landing/reviewer-ed25519.pub`]);
       expect(reviewerKeyPinRefusal(pem, PIN)?.reason, rev).toMatch(/not the pinned reviewer key/u);
     }
@@ -146,7 +155,7 @@ describe('JULIUS-CHECKPOINT-V1', () => {
     expect(unsignedText).toContain('key-spki-sha256: b0b8e29b3efff5936dd51a54617ca8bda1b94e75557339821d7d00a98364d13a');
     expect(unsignedText).not.toBe(text);
     expect(unsignedText).not.toMatch(/signature/iu);
-    expect(parseCheckpointAttestation(unsignedText).problems.join('\n')).toMatch(/key-spki-sha256 is not the pinned reviewer key 7eacf984b77022f9c3719760052b9eaeab0c5fcabe8058050bdc999e365a845c/u);
+    expect(parseCheckpointAttestation(unsignedText).problems.join('\n')).toMatch(/key-spki-sha256 is not the pinned reviewer key 12c9b1853c4c33322241273f386b0fd08fdefd08134c911dd4024c5bb5cdff13/u);
     expect(parseCheckpointAttestation(text).problems).toEqual([]);
   });
 
@@ -398,7 +407,7 @@ describe('the checkpoint workflow and the working tree', () => {
     const checkpoint = '10aedd11643a1d717311b5824d54e863aa94d763';
     const livePath = join(ROOT, `.github/julius-landing/checkpoints/${checkpoint}.txt`);
     const live = parseCheckpointAttestation(readFileSync(livePath, 'utf8'));
-    expect(live.problems.join('\n')).toMatch(/key-spki-sha256 is not the pinned reviewer key 7eacf984b77022f9c3719760052b9eaeab0c5fcabe8058050bdc999e365a845c/u);
+    expect(live.problems.join('\n')).toMatch(/key-spki-sha256 is not the pinned reviewer key 12c9b1853c4c33322241273f386b0fd08fdefd08134c911dd4024c5bb5cdff13/u);
     expect(live.fields.checkpoint).toBe(checkpoint);
     const attested = live.fields.tcb.map((row) => row.path);
     const added = [

@@ -139,8 +139,8 @@ export function parseClearance(text) {
  * A test fails if the two copies drift. Full SPKI SHA-256 and the raw 32-byte key. A short prefix is not a match.
  * The same fingerprint must also be presented as JULIUS_REVIEWER_KEY_SHA256. A missing or different value fails closed.
  */
-export const PINNED_REVIEWER_SPKI_SHA256 = '7eacf984b77022f9c3719760052b9eaeab0c5fcabe8058050bdc999e365a845c';
-export const PINNED_REVIEWER_RAW_KEY = '5797b5d6532f0859182e1969abbc75cca2a4faf89884416de22bf582eb1fd0f3';
+export const PINNED_REVIEWER_SPKI_SHA256 = '12c9b1853c4c33322241273f386b0fd08fdefd08134c911dd4024c5bb5cdff13';
+export const PINNED_REVIEWER_RAW_KEY = 'e033a345ed082b8126c8c6d9ad43cb54a4c854fe8c5423c2fc7ed475ee5461b5';
 export const EXTERNAL_ANCHOR_VARIABLE = 'JULIUS_REVIEWER_KEY_SHA256';
 
 /** Full-length equality of the SPKI SHA-256 and the raw 32-byte key. An 8-hex prefix is not a match. */
