@@ -83,7 +83,13 @@ export function selectGradedAttempt(tasks, runs) {
   const runId = completed[0].run_id;
   const builds = tasks.filter((t) => t.run_id === runId && t.role === 'CODING_AGENT' && BUILD_TYPES.has(t.task_type));
   const byId = new Map(builds.map((t) => [t.task_id, t]));
-  const superseded = new Set(builds.filter((t) => t.task_type === 'repair:build' && t.parent_task_id !== '').map((t) => t.parent_task_id));
+  // The runtime's own rule (julius-repair-lineage.ts isJuliusRepairOf): a repair names its parent,
+  // keeps its role, and carries the planner's id `repair:<parent>:<round>:task`. A row without that
+  // shape supersedes nothing, so it cannot redirect what is graded.
+  const isRepairOf = (child, parent) => parent !== undefined && child.task_type === 'repair:build' && child.role === parent.role
+    && child.task_id.startsWith(`repair:${parent.task_id}:`) && /^[1-9]\d*$/u.test(child.task_id.slice(`repair:${parent.task_id}:`.length, -':task'.length))
+    && child.task_id.endsWith(':task');
+  const superseded = new Set(builds.filter((t) => isRepairOf(t, byId.get(t.parent_task_id))).map((t) => t.parent_task_id));
   const leaves = builds.filter((t) => t.state === 'SUCCEEDED' && !superseded.has(t.task_id));
   if (leaves.length === 0) return { ok: false, reason: 'no_completed_build' };
   if (leaves.length > 1) return { ok: false, reason: 'ambiguous_attempt', taskIds: leaves.map((t) => t.task_id) };
@@ -94,7 +100,7 @@ export function selectGradedAttempt(tasks, runs) {
     if (seen.has(cursor.task_id)) return { ok: false, reason: 'ambiguous_attempt' };
     seen.add(cursor.task_id);
     const parent = byId.get(cursor.parent_task_id);
-    if (parent === undefined) return { ok: false, reason: 'ambiguous_attempt' };
+    if (!isRepairOf(cursor, parent)) return { ok: false, reason: 'ambiguous_attempt' };
     cursor = parent;
   }
   if (cursor.task_type !== 'build' || cursor.parent_task_id !== '') return { ok: false, reason: 'ambiguous_attempt' };

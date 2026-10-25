@@ -134,8 +134,8 @@ describe('the graded attempt comes from the durable task and run rows only', () 
   const completedRun = [{ run_id: 'wlj_x', state: 'COMPLETED' }];
 
   it('a repaired build is superseded by its repair, and the repair is graded', () => {
-    expect(selectGradedAttempt([t('b1', 'build', 'SUCCEEDED'), t('r1', 'repair:build', 'SUCCEEDED', 'b1')], completedRun))
-      .toEqual({ ok: true, taskId: 'r1', taskType: 'repair:build', runId: 'wlj_x' });
+    expect(selectGradedAttempt([t('b1', 'build', 'SUCCEEDED'), t('repair:b1:1:task', 'repair:build', 'SUCCEEDED', 'b1')], completedRun))
+      .toEqual({ ok: true, taskId: 'repair:b1:1:task', taskType: 'repair:build', runId: 'wlj_x' });
   });
 
   it('two unsuperseded succeeded builds are ambiguous; the grader never picks one', () => {
@@ -144,7 +144,7 @@ describe('the graded attempt comes from the durable task and run rows only', () 
   });
 
   it('a failed repair leaves no completed build, and other roles never count', () => {
-    expect(selectGradedAttempt([t('b1', 'build', 'SUCCEEDED'), t('r1', 'repair:build', 'FAILED', 'b1'), t('p1', 'plan', 'SUCCEEDED', '', 'PROMPT_ARCHITECT')], completedRun))
+    expect(selectGradedAttempt([t('b1', 'build', 'SUCCEEDED'), t('repair:b1:1:task', 'repair:build', 'FAILED', 'b1'), t('p1', 'plan', 'SUCCEEDED', '', 'PROMPT_ARCHITECT')], completedRun))
       .toEqual({ ok: false, reason: 'no_completed_build' });
   });
 
@@ -154,13 +154,27 @@ describe('the graded attempt comes from the durable task and run rows only', () 
       .toMatchObject({ ok: false, reason: 'ambiguous_attempt' });
   });
 
+  it('a row without the planner\'s repair id, or of another role, supersedes nothing', () => {
+    // An impostor 'repair' cannot hide the real build: both stay leaves, so the grade is refused.
+    expect(selectGradedAttempt([t('b1', 'build', 'SUCCEEDED'), t('r1', 'repair:build', 'SUCCEEDED', 'b1')], completedRun))
+      .toMatchObject({ ok: false, reason: 'ambiguous_attempt' });
+    expect(selectGradedAttempt([t('b1', 'build', 'SUCCEEDED'), t('repair:b1:1:task', 'repair:build', 'SUCCEEDED', 'b1', 'INDEPENDENT_REVIEWER')], completedRun))
+      .toEqual({ ok: true, taskId: 'b1', taskType: 'build', runId: 'wlj_x' });
+    // Three rounds deep, each the planner's shape, grades the last.
+    expect(selectGradedAttempt([
+      t('b1', 'build', 'SUCCEEDED'), t('repair:b1:1:task', 'repair:build', 'SUCCEEDED', 'b1'),
+      t('repair:repair:b1:1:task:2:task', 'repair:build', 'SUCCEEDED', 'repair:b1:1:task'),
+      t('repair:repair:repair:b1:1:task:2:task:3:task', 'repair:build', 'SUCCEEDED', 'repair:repair:b1:1:task:2:task'),
+    ], completedRun)).toMatchObject({ ok: true, taskId: 'repair:repair:repair:b1:1:task:2:task:3:task' });
+  });
+
   it('a build of another run never counts', () => {
     expect(selectGradedAttempt([t('b9', 'build', 'SUCCEEDED', '', 'CODING_AGENT', 'wlj_other')], completedRun)).toEqual({ ok: false, reason: 'no_completed_build' });
   });
 
   it('a repair whose chain does not reach the run\'s first build is ambiguous', () => {
-    expect(selectGradedAttempt([t('r1', 'repair:build', 'SUCCEEDED', 'missing')], completedRun)).toMatchObject({ ok: false, reason: 'ambiguous_attempt' });
-    expect(selectGradedAttempt([t('b1', 'build', 'SUCCEEDED', 'p0'), t('r1', 'repair:build', 'SUCCEEDED', 'b1')], completedRun)).toMatchObject({ ok: false, reason: 'ambiguous_attempt' });
+    expect(selectGradedAttempt([t('repair:b1:1:task', 'repair:build', 'SUCCEEDED', 'missing')], completedRun)).toMatchObject({ ok: false, reason: 'ambiguous_attempt' });
+    expect(selectGradedAttempt([t('b1', 'build', 'SUCCEEDED', 'p0'), t('repair:b1:1:task', 'repair:build', 'SUCCEEDED', 'b1')], completedRun)).toMatchObject({ ok: false, reason: 'ambiguous_attempt' });
   });
 
   it('a run graded end to end records its run id and task', () => {
