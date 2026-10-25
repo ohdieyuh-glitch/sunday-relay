@@ -123,6 +123,23 @@ describe('resolveAdmissionStorePath', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('reads a Windows drive letter as a path only on Windows, and never a drive-relative one', () => {
+    expect(resolveAdmissionStorePath('C:admission.json', 'win32').ok).toBe(false);
+    expect(resolveAdmissionStorePath('C:\\no-such-dir-julius\\admission.json', 'linux').ok).toBe(false);
+    expect(resolveAdmissionStorePath('c:/no-such-dir-julius/admission.json', 'darwin').ok).toBe(false);
+    expect(resolveAdmissionStorePath('file:///C:/admission.json', 'win32').ok).toBe(false);
+    expect(resolveAdmissionStorePath('mailto:admission.json', 'win32').ok).toBe(false);
+    const dir = directory();
+    try {
+      const file = join(dir, 'admission.json');
+      const located = resolveAdmissionStorePath(file, process.platform);
+      // On Windows this is `C:\...`, the founder's J1 topology; elsewhere it is a POSIX path.
+      expect(located).toEqual({ ok: true, path: file });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('the admission file', () => {
@@ -330,6 +347,11 @@ describe('the admission file', () => {
         const nextRename = after.findIndex((item) => item.startsWith('rename '));
         const window = nextRename === -1 ? after : after.slice(0, nextRename);
         const opened = window.find((item) => item.startsWith(`open r ${dir} `) || item.startsWith(`open r ${dirname(file)} `));
+        if (process.platform === 'win32') {
+          // Windows cannot fsync a directory handle (EPERM); the write does not try.
+          expect(opened, fsLog.ops.slice(index).join('\n')).toBeUndefined();
+          continue;
+        }
         expect(opened, fsLog.ops.slice(index).join('\n')).toBeTruthy();
         const fd = opened?.match(/fd=(\d+)/)?.[1];
         expect(window.slice(window.indexOf(opened ?? '')), opened).toContain(`fsync ${fd}`);
