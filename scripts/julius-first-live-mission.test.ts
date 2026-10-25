@@ -3,7 +3,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { appendFileSync, chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve, sep } from 'node:path';
+import { delimiter, join, resolve, sep } from 'node:path';
 import { liveBillingPaths, liveExecutionScope, parseLiveMissionContract } from '../relay-bridge/julius-live-mission';
 import { EXECUTOR_SANDBOX_LIMITS, EXECUTOR_SANDBOX_POLICY } from '../relay-bridge/julius/executor-effects';
 import { LIVE_EVIDENCE_SUPERSEDED_LABEL, liveEvidenceLines } from '../relay-bridge/julius/live-evidence-lines';
@@ -3072,57 +3072,115 @@ describe('the trust gate runs before anything the candidate controls', () => {
     return at;
   };
   const TRUST_GATE = "'Gate: the code this job will run is reviewed, current and not rolled back'";
-  const verifierCheckout = (): string => {
-    const at = workflow.indexOf('path: .julius-trusted-verifier');
-    expect(at, 'the trusted verifier must be checked out separately').toBeGreaterThan(-1);
-    const start = workflow.lastIndexOf('- uses: actions/checkout', at);
-    return workflow.slice(start, workflow.indexOf('\n      - ', at));
-  };
+  const ADMISSION_TRUST_GATE = "'Gate: admission runs only reviewed, current, not rolled-back code'";
 
-  it('pins the verifier to a full, immutable commit sha', () => {
-    // A branch, a tag or an expression would let the thing being judged choose
-    // its own judge. Only 40 hex characters name one commit forever.
-    const checkout = verifierCheckout();
-    const ref = /\n\s+ref:\s*([^\s#]+)/u.exec(checkout)?.[1];
-    expect(ref, 'the verifier checkout must name a ref').toBeDefined();
-    expect(ref, 'a 40-hex commit, not a branch, tag or expression').toMatch(/^[0-9a-f]{40}$/u);
-    expect(checkout, 'no interpolation may reach the verifier ref').not.toMatch(/ref:\s*\$\{\{/u);
-  });
-
-  it('the verifier is a SEPARATE checkout from the candidate', () => {
-    // Two checkouts in paid-slot and in the paid job, and only the verifier
-    // carries a pinned ref and a path. spend-tag checks out the candidate once,
-    // with credentials persistence off, and does not check out a verifier: it
-    // locks the run id and does not judge the candidate.
-    // The J1 grade job checks out the candidate once more, to stage the pinned
-    // checker from git objects. It needs the paid job, so it runs only after that
-    // job's trust gate passed, and it persists no credential.
-    const checkouts = workflow.split('- uses: actions/checkout').length - 1;
-    expect(checkouts, 'two verifier pairs, the spend-tag candidate checkout, and the J1 grade job').toBe(6);
+  it('no frozen verifier remains: no pinned second checkout, and the legacy helper is not run', () => {
+    // The frozen verifier knew only merged-PR provenance and refused every governed main
+    // (run 40225881292: "no merged pull request records bacf68fb… as its merge result").
+    expect(workflow).not.toMatch(/f131098c/u);
+    expect(workflow).not.toContain('.julius-trusted-verifier');
+    expect(workflow).not.toContain('julius-live-preflight-gates.mjs');
+    // spend-tag, paid-slot, the paid job and the J1 grade job each check out the candidate once.
+    expect(workflow.split('- uses: actions/checkout').length - 1).toBe(4);
     const grade = workflow.slice(workflow.indexOf('\n  grade-inworld:\n'));
     expect(grade).toContain('needs: [first-live-mission]');
     expect(grade.split('- uses: actions/checkout').length - 1).toBe(1);
     expect(grade).toContain('persist-credentials: false');
-    const pinned = workflow.split('ref: f131098cc4e8f35d7231cf2e9693b83c05dab75c').length - 1;
-    expect(pinned, 'each job that judges the candidate checks out the pinned verifier exactly once').toBe(2);
-    expect(verifierCheckout()).toContain('path: .julius-trusted-verifier');
-    expect(verifierCheckout(), 'a token in the verifier checkout would ride into the container')
-      .toContain('persist-credentials: false');
   });
 
-  it('runs the gate from the verifier checkout, never from the candidate', () => {
-    const gate = stepScript(TRUST_GATE);
-    expect(gate, 'the helper must be the one in the pinned checkout')
-      .toContain('node .julius-trusted-verifier/scripts/julius-live-preflight-gates.mjs');
-    expect(gate, 'invoking the candidate copy would defeat the whole arrangement')
-      .not.toMatch(/node scripts\/julius-live-preflight-gates/u);
+  it('both gates run the attested trust chain, then provenance and monotonicity, on the full main checkout', () => {
+    for (const [job, gateName] of [['paid-slot', ADMISSION_TRUST_GATE], ['first-live-mission', TRUST_GATE]] as const) {
+      const text = workflow.slice(workflow.indexOf(`\n  ${job}:\n`));
+      const checkoutAt = text.indexOf('- uses: actions/checkout');
+      const checkout = text.slice(checkoutAt, text.indexOf('\n      - ', checkoutAt + 1));
+      expect(checkout, `${job}: the trust chain walks history`).toContain('fetch-depth: 0');
+      expect(checkout, `${job}: no token rides the checkout`).toContain('persist-credentials: false');
+      expect(checkout, `${job}: the checkout is this job's own commit`).not.toMatch(/\n\s+ref:/u);
+      const gate = stepScript(gateName);
+      const order = [
+        `[ "\${GITHUB_REF}" = 'refs/heads/main' ]`,
+        '[ "$(git rev-parse HEAD)" = "${GITHUB_SHA}" ]',
+        'frozen="$(gh api "repos/${GITHUB_REPOSITORY}/branches/main" --jq \'.commit.sha\')"',
+        '[ "$frozen" = "${GITHUB_SHA}" ]',
+        'node scripts/julius-main-provenance-trust.mjs --require-trusted-verifier',
+        'node scripts/julius-main-provenance.mjs "${GITHUB_REPOSITORY}" main',
+        '*" provenance=provenant main=${frozen} "*',
+        'node scripts/julius-main-monotonicity.mjs "${GITHUB_REPOSITORY}" main',
+        '*" monotonicity=monotonic main=${frozen} "*',
+        'final="$(gh api "repos/${GITHUB_REPOSITORY}/branches/main" --jq \'.commit.sha\')"',
+        '[ "$final" = "$frozen" ]',
+      ];
+      let at = -1;
+      for (const piece of order) {
+        const next = gate.indexOf(piece);
+        expect(next, `${job}: ${piece}`).toBeGreaterThan(at);
+        at = next;
+      }
+      const block = workflow.slice(stepAt(gateName), workflow.indexOf('\n      - ', stepAt(gateName) + 1));
+      for (const anchor of ['JULIUS_REVIEWER_KEY_SHA256: ${{ vars.JULIUS_REVIEWER_KEY_SHA256 }}', 'JULIUS_FOUNDER_APPROVAL_KEY_SHA256: ${{ vars.JULIUS_FOUNDER_APPROVAL_KEY_SHA256 }}', 'JULIUS_GOVERNED_LANDER_BOT_ID: ${{ vars.JULIUS_GOVERNED_LANDER_BOT_ID }}']) {
+        expect(block, `${job}: ${anchor}`).toContain(anchor);
+      }
+    }
   });
 
-  it('passes the branch, ref and this job\'s own commit explicitly', () => {
-    // The helper refuses to assume any of them. An ambient branch is exactly
-    // the assumption that lets a job verify one commit and execute another.
-    const gate = stepScript(TRUST_GATE);
-    expect(gate).toContain('"${GITHUB_REPOSITORY}" main "${GITHUB_REF}" "${GITHUB_SHA}"');
+  describe('the gate script, driven with stand-ins for gh, git and node', () => {
+    const MAIN = 'b'.repeat(40);
+    const run = (gateName: string, over: { ref?: string; head?: string; mains?: readonly string[]; trust?: number; provenance?: string; monotonicity?: string }) => {
+      const bin = mkdtempSync(join(tmpdir(), 'julius-trust-gate-'));
+      const mains = over.mains ?? [MAIN, MAIN];
+      writeFileSync(join(bin, 'mains'), `${mains.join('\n')}\n`);
+      writeFileSync(join(bin, 'gh'), '#!/usr/bin/env bash\nn=$(cat "$BIN/count" 2>/dev/null || echo 0); n=$((n+1)); echo "$n" > "$BIN/count"; sed -n "${n}p" "$BIN/mains"\n');
+      writeFileSync(join(bin, 'git'), `#!/usr/bin/env bash\necho '${over.head ?? MAIN}'\n`);
+      writeFileSync(join(bin, 'node'), [
+        '#!/usr/bin/env bash',
+        'case "$1" in',
+        `  scripts/julius-main-provenance-trust.mjs) echo 'the checkpoint attestation is not founder-approved: stand-in' >&2; exit ${over.trust ?? 0};;`,
+        `  scripts/julius-main-provenance.mjs) echo '${over.provenance ?? `repo=r branch=main source=github provenance=provenant main=${MAIN} tree=t pr=459`}';;`,
+        `  scripts/julius-main-monotonicity.mjs) echo '${over.monotonicity ?? `repo=r branch=main source=github monotonicity=monotonic main=${MAIN} accepted=69`}';;`,
+        'esac',
+        '',
+      ].join('\n'));
+      for (const tool of ['gh', 'git', 'node']) chmodSync(join(bin, tool), 0o755);
+      try {
+        const stdout = execFileSync('bash', ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', stepScript(gateName)], {
+          env: { ...process.env, PATH: `${bin}${delimiter}${process.env.PATH ?? ''}`, BIN: bin, GITHUB_REF: over.ref ?? 'refs/heads/main', GITHUB_SHA: MAIN, GITHUB_REPOSITORY: 'o/r' },
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        return { status: 0, stdout, stderr: '' };
+      } catch (error) {
+        const failed = error as { status?: number; stdout?: string; stderr?: string };
+        return { status: failed.status ?? 1, stdout: failed.stdout ?? '', stderr: failed.stderr ?? '' };
+      } finally {
+        rmSync(bin, { recursive: true, force: true });
+      }
+    };
+
+    for (const gateName of [TRUST_GATE, ADMISSION_TRUST_GATE]) {
+      it(`${gateName}: passes a governed main that verifies, and refuses each failure with its reason`, () => {
+        const ok = run(gateName, {});
+        expect(ok.status, ok.stderr).toBe(0);
+        expect(ok.stdout).toContain(`live_preflight=ok ref=refs/heads/main frozen_main=${MAIN} workflow_sha=${MAIN} provenance=provenant monotonicity=monotonic final_main=${MAIN}`);
+        for (const [label, over, reason] of [
+          ['another ref', { ref: 'refs/heads/feature' }, 'reason=the ref is not refs/heads/main'],
+          ['another checkout', { head: 'c'.repeat(40) }, "reason=the checkout is not this job's own commit"],
+          ['main is elsewhere', { mains: ['d'.repeat(40)] }, "reason=this job's commit is not the current main"],
+          ['no attestation / a tampered TCB', { trust: 1 }, 'reason=the attested trust chain from the signed checkpoint does not verify'],
+          ['not provenant', { provenance: `repo=r branch=main source=github provenance=unprovenanced main=${MAIN} tree=t` }, `reason=reviewed-main provenance is not provenant for ${MAIN}`],
+          ['provenant for another commit', { provenance: `repo=r branch=main source=github provenance=provenant main=${'e'.repeat(40)} tree=t` }, `reason=reviewed-main provenance is not provenant for ${MAIN}`],
+          ['rolled back', { monotonicity: `repo=r branch=main source=github monotonicity=rollback main=${MAIN} accepted=69` }, `reason=main is not monotonic at ${MAIN}`],
+          ['main moved during the gate', { mains: [MAIN, 'f'.repeat(40)] }, `reason=main moved to ${'f'.repeat(40)} while the gate ran`],
+        ] as const) {
+          const refused = run(gateName, over);
+          expect(refused.status, label).not.toBe(0);
+          expect(refused.stderr, label).toContain('live_preflight=blocked');
+          expect(refused.stderr, label).toContain(reason);
+          expect(refused.stdout, label).not.toContain('live_preflight=ok');
+        }
+        // The verifier's own reason reaches the log (julius-main-provenance-trust.test.ts pins those reasons).
+        expect(run(gateName, { trust: 1 }).stderr).toContain('the checkpoint attestation is not founder-approved: stand-in');
+      });
+    }
   });
 
   it('runs on EVERY dispatch, so a dry run cannot skip it', () => {
@@ -3199,10 +3257,12 @@ describe('the trust gate runs before anything the candidate controls', () => {
   });
 
   it('uses the workflow\'s own token, never a PAT or the coding worker', () => {
-    const gate = workflow.slice(stepAt(TRUST_GATE), workflow.indexOf('\n      - ', stepAt(TRUST_GATE) + 1));
-    expect(gate).toContain('GH_TOKEN: ${{ github.token }}');
-    expect(gate, 'a stored credential would be a second authority nobody reviewed')
-      .not.toMatch(/secrets\./u);
+    for (const gateName of [TRUST_GATE, ADMISSION_TRUST_GATE]) {
+      const gate = workflow.slice(stepAt(gateName), workflow.indexOf('\n      - ', stepAt(gateName) + 1));
+      expect(gate).toContain('GH_TOKEN: ${{ github.token }}');
+      expect(gate, 'a stored credential would be a second authority nobody reviewed')
+        .not.toMatch(/secrets\./u);
+    }
   });
 });
 

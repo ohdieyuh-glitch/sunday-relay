@@ -106,10 +106,13 @@ describe('admission holds nothing worth stealing, and runs only proven code', ()
     expect(slot, 'the wait is bounded below the hosted-job cap').toMatch(/timeout-minutes: 350/u);
   });
 
-  it('proves the checkout from the pinned verifier BEFORE any repository script runs', () => {
+  it('proves the checkout with the attested trust chain BEFORE any other repository script runs', () => {
     const gate = step(slot, ADMISSION_GATE);
-    expect(gate).toContain('node .julius-trusted-verifier/scripts/julius-live-preflight-gates.mjs');
-    expect(gate).toContain('"${GITHUB_REPOSITORY}" main "${GITHUB_REF}" "${GITHUB_SHA}"');
+    // The attested verifier on main's own checkout; the frozen pinned verifier is gone.
+    expect(gate).toContain('node scripts/julius-main-provenance-trust.mjs --require-trusted-verifier');
+    expect(gate).toContain('node scripts/julius-main-provenance.mjs "${GITHUB_REPOSITORY}" main');
+    expect(gate).toContain('node scripts/julius-main-monotonicity.mjs "${GITHUB_REPOSITORY}" main');
+    expect(gate).not.toContain('.julius-trusted-verifier');
     const gateAt = slot.indexOf(`- name: ${ADMISSION_GATE}`);
     const claimAt = slot.indexOf(`- name: ${CLAIM_GATE}`);
     const admissionAt = slot.indexOf(`- name: ${ADMISSION}`);
