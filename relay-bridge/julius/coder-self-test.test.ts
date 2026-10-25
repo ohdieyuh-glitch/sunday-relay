@@ -392,7 +392,7 @@ describe('createCoderSelfTest: the harness records, the cap binds, a diagnostic 
 const WS = '/data/relay-workspaces/prj/run-1';
 const clock = () => { let n = 0; return () => new Date(Date.UTC(2026, 9, 18, 12, 0, n++)).toISOString(); };
 const messages = [
-  { type: 'system', subtype: 'init', model: 'claude-sonnet-5-20260114', claude_code_version: '2.1.220', apiKeySource: 'ANTHROPIC_API_KEY', cwd: WS, tools: ['Read', 'Glob', 'Grep', 'Edit'] },
+  { type: 'system', subtype: 'init', model: 'claude-opus-5-5-20260114', claude_code_version: '2.1.220', apiKeySource: 'ANTHROPIC_API_KEY', cwd: WS, tools: ['Read', 'Glob', 'Grep', 'Edit'] },
   { type: 'result', subtype: 'success', is_error: false, result: 'done', num_turns: 2, duration_ms: 1200, total_cost_usd: 0.01, usage: { input_tokens: 500, output_tokens: 60 }, permission_denials: [] },
 ];
 const fakeHelpers = (): HostedSdkHelpers & { tools: unknown[]; servers: unknown[] } => {
@@ -412,7 +412,7 @@ describe('the runner offers the tool only when told to, and exactly one', () => 
   const optionsFor = async (extra: Record<string, unknown>) => {
     let seen: Record<string, unknown> = {};
     const fn: HostedQueryFn = (params) => { seen = params.options; return (async function* () { for (const m of messages) yield m; })(); };
-    await runHostedCodingAgent({ queryFn: fn, prompt: 'p', workspacePath: WS, apiKey: 'FAKETESTNOTREAL', requestedModel: 'claude-sonnet-5', now: clock(), ...extra });
+    await runHostedCodingAgent({ queryFn: fn, prompt: 'p', workspacePath: WS, apiKey: 'FAKETESTNOTREAL', requestedModel: 'claude-opus-5-5', now: clock(), ...extra });
     return seen;
   };
 
@@ -498,7 +498,7 @@ const DISPATCH = {
 describe('the Claude Code provider hands the tool to the runner and the charter to the prompt, only when a session carries one', () => {
   const seen: { input: Record<string, unknown> }[] = [];
   const provider = (over: Record<string, unknown> = {}) => createClaudeCodeCodingAgentProvider({
-    apiKey: 'FAKETESTNOTREAL', requestedModel: 'claude-sonnet-5',
+    apiKey: 'FAKETESTNOTREAL', requestedModel: 'claude-opus-5-5',
     queryLoader: async () => (() => (async function* () { /* never reached */ })()) as never,
     run: (async (input: Record<string, unknown>) => { seen.push({ input }); return { kind: 'refused', safeMessage: 'stop', reason: 'x', observation: null }; }) as never,
     ...over,

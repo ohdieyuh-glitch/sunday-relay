@@ -8,19 +8,26 @@
  * before a provider is contacted. A parity test holds the two copies equal.
  * This file does not import the script: the script runs its check on import.
  *
- * THE $60 PAIR CAP is the founder's bound on the initial qualifying mission
- * plus its one repeat: $30 and 3 repair cycles per run, and $60 of known
- * provider spend across those two runs. It applies only to the namespaces
- * whose grant is that founder limit. It does not apply to `julius-continuous-1`
- * (whose $60 figure is an allocator input, not this cap), the diagnostic
- * namespaces (whose grant is $100), or the learning-pair namespaces (whose
- * founder bound is $30 per arm and $120 across four arms).
+ * THE QUALIFYING PAIR's combined cap is the GitHub tag
+ * `refs/tags/julius-run-spent-<24 lowercase hex>`. A successful listing is
+ * the durable record (`durableRecord: 'PRESENT'`). An empty listing is zero
+ * prior spend. A failed listing is not zero. A tag that does not carry a
+ * positive reserved ceiling for this namespace is an unverified prior run,
+ * also not zero. The ref is created before the provider call and is not
+ * updated afterwards, so the figure on it is the reserved ceiling, not a
+ * provider invoice. This module never claims a provider balance was verified.
+ * Only a ledger whose `durableRecord` is `PRESENT` may be compared with
+ * `JULIUS_QUALIFYING_PAIR_CAP_USD_MICROS` ($60).
  *
- * Unknown is not zero. A prior run whose settlements are missing, estimated,
- * unsettled, or a subscription/`NOT_APPLICABLE` coder charge is not a verified
- * bill. The Coding Agent is API-billed: a subscription or not-applicable coder
- * settlement does not prove the dollars. An unreadable ledger is not an empty
- * one. This module never claims a provider balance was verified.
+ * The pair check applies only to `JULIUS_QUALIFYING_PAIR_NAMESPACES`. It does
+ * not apply to `julius-continuous-1` (whose $60 figure is an allocator input),
+ * the diagnostic namespaces (whose grant is $100), or the learning-pair
+ * namespaces (whose founder bound is $30 per arm and $120 across four arms).
+ * Those higher grants are unchanged and still need a founder ruling.
+ *
+ * A prior run whose settlements are missing, estimated, unsettled, or a
+ * subscription/`NOT_APPLICABLE` coder charge is not a verified bill. This
+ * module never claims a provider balance was verified.
  */
 
 import { juliusCostComponent } from './julius-cost-accounting';
@@ -49,17 +56,15 @@ export const JULIUS_NAMESPACE_CEILINGS: Readonly<Record<string, JuliusNamespaceC
   'julius-diag-output-safety-2': Object.freeze({ spendUsd: 100, repairCycles: 3 }),
   'julius-diag-audit-fixes-1': Object.freeze({ spendUsd: 100, repairCycles: 3 }),
   'julius-diag-digest-evidence-1': Object.freeze({ spendUsd: 100, repairCycles: 3 }),
-  /**
-   * The in-world mission's own grant: $30 and 3 repairs. The contract-check
-   * script does not list it yet (founder-governed). The parity test names that
-   * gap. It is not a second ceiling.
-   */
+  // J1, the in-world data mission: $30 and 3 repair cycles per run. The same
+  // grant as `julius-inworld-data-1` in the contract-check script (#441).
   'julius-inworld-data-1': Object.freeze({ spendUsd: 30, repairCycles: 3 }),
 });
 
 /**
  * Namespaces allowed one initial run and one repeat, together not above $60
- * of known provider spend.
+ * of known provider spend. J1 is listed here so its $60 is the combined cap
+ * across the initial run and the repeat, never a per-run figure.
  */
 export const JULIUS_QUALIFYING_PAIR_NAMESPACES: readonly string[] = Object.freeze([
   'julius-live-mission-5',
@@ -100,9 +105,19 @@ export interface JuliusPriorRunSpend {
   readonly spendVerified: boolean;
 }
 
+/**
+ * `PRESENT` is the durable cross-job record only. Anything else, including a
+ * field left off, is absent. A per-job database is never `PRESENT`.
+ */
+export type JuliusDurablePriorSpend = 'ABSENT' | 'PRESENT';
+
 export type JuliusSpendLedgerRead =
   | { readonly readable: false }
-  | { readonly readable: true; readonly priorRuns: readonly JuliusPriorRunSpend[] };
+  | {
+    readonly readable: true;
+    readonly priorRuns: readonly JuliusPriorRunSpend[];
+    readonly durableRecord?: JuliusDurablePriorSpend;
+  };
 
 export type JuliusSpendAuthorization =
   | {
@@ -170,9 +185,10 @@ export function summarizeJuliusPriorRunSpend(
 }
 
 /**
- * Refuse a live contract the namespace does not grant, and refuse a qualifying
- * pair whose combined known spend cannot be shown to sit inside $60.
- * Authorized output is the contract's own ceiling, never a raised default.
+ * Refuse a live contract the namespace does not grant. A qualifying-pair
+ * namespace is also refused when prior-spend facts are absent, unverified, or
+ * unreadable. Authorized output is the contract's own ceiling, never a raised
+ * default, and only when those facts are a durable record.
  */
 export function authorizeJuliusLiveSpend(input: {
   readonly namespace: string | null;
@@ -232,7 +248,16 @@ export function authorizeJuliusLiveSpend(input: {
     return {
       authorized: false,
       reasonCode: 'spend_ledger_unreadable',
-      safeMessage: 'The durable ledger of prior runs could not be read. The combined $60 cap is not treated as zero, and no provider balance was verified.',
+      safeMessage: 'Prior-spend facts could not be read. They are not treated as zero, and no provider balance was verified.',
+    };
+  }
+  // PRESENT is a successful julius-run-spent-* listing. This job's Postgres
+  // is not that record, so an empty local history stays absent, not a verified $0.
+  if (input.ledger.durableRecord !== 'PRESENT') {
+    return {
+      authorized: false,
+      reasonCode: 'qualifying_pair_spend_absent',
+      safeMessage: 'Prior-spend facts for this qualifying mission are absent. This job\'s database is not a durable record of earlier runs, so no combined cap is applied and the missing history is not treated as zero. The durable record is the julius-run-spent-<id> tag and ledger. No provider was contacted, and no provider balance was verified.',
     };
   }
   const priorRuns = input.ledger.priorRuns;
@@ -264,3 +289,16 @@ export function authorizeJuliusLiveSpend(input: {
   }
   return { authorized: true, spendCeilingUsdMicros, maxRepairRounds: input.repairCycles };
 }
+
+/**
+ * ONE SPENT TAG. The bytes and the parser live in `julius-spent-tag-record.ts`,
+ * which the spent-tag job's contract test pins as well. The message the cap
+ * counts is the four-line reservation, optionally followed by the workflow
+ * audit lines. `reservedUsdMicros` is the ceiling reserved before the
+ * provider call. It is not a provider invoice.
+ */
+export {
+  interpretJuliusSpentTags,
+  juliusSpentTagMessage,
+  type JuliusSpentTag,
+} from './julius-spent-tag-record';

@@ -1,9 +1,9 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
-  OCCUPANT_QUALIFICATION_STATUSES, ROLE_OCCUPANTS, juliusProviderQualification,
+  JULIUS_LIVE_REQUESTED_MODELS, OCCUPANT_QUALIFICATION_STATUSES, ROLE_OCCUPANTS, juliusProviderQualification,
 } from './index';
 
 /**
@@ -102,7 +102,22 @@ describe('every occupant declares how far it has been qualified', () => {
     const verified = ROLE_OCCUPANTS
       .filter((occupant) => occupant.qualification.status === 'VERIFIED')
       .map((occupant) => `${occupant.occupantId}@${occupant.qualification.qualifiedServedModels.join(',')}`);
-    expect(verified).toEqual(['hermes_local@grok-build-0.1']);
+    expect(verified).toEqual([`hermes_local@${JULIUS_LIVE_REQUESTED_MODELS.reviewer}`]);
+  });
+
+  /**
+   * REQUESTED PINS, HELD AGAINST THE WORKFLOW. A qualification does not move
+   * when the operator asks for a different model. The ask itself is this
+   * constant, and the hosted workflow is the only place that spends.
+   */
+  it('asks the hosted workflow for the three requested models', () => {
+    const workflow = readFileSync(join(REPO, '.github/workflows/julius-first-live-mission.yml'), 'utf8');
+    const pin = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+    expect(workflow).toMatch(new RegExp(`OPENAI_PROMPT_ARCHITECT_MODEL:\\s*${pin(JULIUS_LIVE_REQUESTED_MODELS.prompt_architect)}\\s`, 'u'));
+    expect(workflow).toMatch(new RegExp(`RELAY_HOSTED_CODING_MODEL:\\s*${pin(JULIUS_LIVE_REQUESTED_MODELS.coding_agent)}\\s`, 'u'));
+    expect(workflow).toMatch(new RegExp(`RELAY_HERMES_MODEL:\\s*${pin(JULIUS_LIVE_REQUESTED_MODELS.reviewer)}\\s`, 'u'));
+    expect(workflow).not.toMatch(/claude-fable-5/u);
+    expect(workflow).not.toMatch(/OPENAI_PROMPT_ARCHITECT_MODEL:\s*gpt-4o\b/u);
   });
 });
 
@@ -135,7 +150,7 @@ describe('a qualification belongs to a model, never to a vendor', () => {
   it('never raises an occupant above what it declares, whatever model is named', () => {
     for (const occupant of ROLE_OCCUPANTS) {
       if (occupant.qualification.status === 'VERIFIED') continue;
-      for (const model of ['grok-build-0.1', 'gpt-5.6-sol', 'claude-fable-5', 'anything']) {
+      for (const model of [...Object.values(JULIUS_LIVE_REQUESTED_MODELS), 'anything']) {
         expect(juliusProviderQualification(occupant, model),
           `${occupant.occupantId} must stay ${occupant.qualification.status}`)
           .toBe(occupant.qualification.status);

@@ -307,6 +307,7 @@ describe('F4: a refused re-run RETURNS 1 from the entrypoint, and reaches nothin
     const lines: string[] = [];
     const calls = { assemble: 0, drive: 0 };
     let driveInput: Record<string, unknown> | null = null;
+    let assembleInput: Record<string, unknown> | null = null;
     const supplied: Record<string, unknown> = {
       env,
       out: (line: string) => { lines.push(line); },
@@ -319,7 +320,6 @@ describe('F4: a refused re-run RETURNS 1 from the entrypoint, and reaches nothin
       researchClause: undefined,
       researchPolicyOf: () => null,
       observed: { probes: [] },
-      assembleLiveJuliusRuntime: () => { calls.assemble += 1; return { loop: {}, verification: {} }; },
       liveExecutionScope: () => null,
       liveResearchLines: () => [],
       researchReachSummary: () => null,
@@ -331,9 +331,11 @@ describe('F4: a refused re-run RETURNS 1 from the entrypoint, and reaches nothin
       liveStageDeadlineLine: () => '  stage deadline: faked',
       liveExecutionScopeLine: () => '  execution scope: faked',
       JULIUS_LIVE_RATE_LIMIT_BACKOFF,
-      // Computed before this slice, from the real spend gate. The slice only
-      // reads the ceiling it already authorized.
+      // `authorizeJuliusLiveSpend` (julius-live-mission.ts, the call beside
+      // `readJuliusPriorRunSpend`) runs before this slice. The slice reads
+      // that result when it assembles the runtime.
       spendAuthorization: { authorized: true, spendCeilingUsdMicros: 30_000_000, maxRepairRounds: 3 },
+      assembleLiveJuliusRuntime: (input: Record<string, unknown>) => { calls.assemble += 1; assembleInput = input; return { loop: {}, verification: {} }; },
       driveJuliusRunToTerminal: async (input: Record<string, unknown>) => { calls.drive += 1; driveInput = input; throw new Error(DRIVE_REACHED); },
     };
     const scope = new Proxy(supplied, {
@@ -345,13 +347,16 @@ describe('F4: a refused re-run RETURNS 1 from the entrypoint, and reaches nothin
         return target[name];
       },
     });
-    return { scope, looked, lines, calls, driveInput: () => driveInput };
+    return { scope, looked, lines, calls, driveInput: () => driveInput, assembleInput: () => assembleInput };
   }
 
   it('CONTROL: a first attempt under Actions goes on into the runtime and the drive (the fake drive stops it there)', async () => {
-    const { scope, lines, calls, driveInput } = scopeFor({ GITHUB_ACTIONS: 'true', GITHUB_RUN_ATTEMPT: '1' });
+    const { scope, lines, calls, driveInput, assembleInput } = scopeFor({ GITHUB_ACTIONS: 'true', GITHUB_RUN_ATTEMPT: '1' });
     await expect(afterBootstrap()(scope)).rejects.toThrow(DRIVE_REACHED);
     expect(calls).toEqual({ assemble: 1, drive: 1 });
+    expect(assembleInput(), 'the runtime receives the ceiling the spend gate already authorized').toMatchObject({
+      spendCeilingUsdMicros: 30_000_000, maxRepairRounds: 3,
+    });
     expect(lines[0]).toBe(`Run ${RUN} accepted in state READY; driving the Julius run loop.`);
     expect(lines.filter((line) => line.startsWith('RESULT:')), 'no RESULT before the drive').toEqual([]);
     expect(driveInput(), 'the drive is the live one: this run, the live rate-limit backoff').toMatchObject({

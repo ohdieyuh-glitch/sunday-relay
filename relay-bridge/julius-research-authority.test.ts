@@ -418,6 +418,11 @@ describe('D — the entrypoint actually hands both halves to the runtime', () =>
           // The bundle keeps `pg` external, so the child needs somewhere to
           // find it; everything else is deliberately absent.
           NODE_PATH: join(process.cwd(), 'node_modules'),
+          // A canonical admission id, so the refusal under test is the mistyped
+          // observation. The id is a fixture the client would have minted; this
+          // process does not invent one.
+          JULIUS_RUN_ID: 'wlj_01234567-89ab-4cde-8fab-0123456789ab',
+          JULIUS_SERVER_RUN_ID: 'wlj_01234567-89ab-4cde-8fab-0123456789ab',
           JULIUS_RESEARCH_OBSERVED_BACKENDS: 'relay_http_fetch:read_iten',
         },
         encoding: 'utf8',

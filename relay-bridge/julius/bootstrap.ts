@@ -37,6 +37,7 @@ import {
   type JuliusBootstrapRequest,
 } from '../../src/relay/integration/julius/julius-port';
 import { createHash } from 'node:crypto';
+import { parseJuliusAdmissionRunId } from '../../scripts/julius-admission-run-id.mjs';
 import { parseJuliusMissionActiveError } from '../../src/relay/persistence/julius-postgres';
 import { seedJuliusTaskContract, type JuliusMissionState, type JuliusTask, type JuliusTaskContract } from '../../src/relay/mission/julius';
 import type { JuliusKnowledgeCarryOutcome } from '../../src/relay/mission/julius/julius-claim-ledger';
@@ -75,16 +76,14 @@ export const planTaskId = (runId: string): string => `${runId}:plan`;
 export const buildTaskId = (runId: string): string => `${runId}:build`;
 
 /**
- * THE RUN A REQUEST NAMES, before anything is created: the contract's idempotency key, or, for an explicit rerun,
- * that key and the caller's rerun key (why, at the refusal of a keyless rerun below). One derivation: the bootstrap
- * names its run with it, and a registration computes every arm's run id with it before any arm runs.
+ * THE COMMAND THIS REQUEST IS, not the run. The contract's idempotency key, or, for an explicit rerun, that key and
+ * the caller's rerun key, so a retry of the same request is one command. The run row is the admitted `wlj_` id.
+ * Nothing here mints a `run:` id.
  */
 const juliusBootstrapIdentity = (request: Pick<JuliusBootstrapRequest, 'idempotencyKey' | 'rerunIntent' | 'rerunKey'>): string =>
   request.rerunIntent !== 'EXPLICIT'
     ? request.idempotencyKey
     : createHash('sha256').update(`${request.idempotencyKey}:rerun:${(request.rerunKey ?? '').trim()}`).digest('hex').slice(0, 24);
-export const juliusBootstrapRunId = (request: Pick<JuliusBootstrapRequest, 'idempotencyKey' | 'rerunIntent' | 'rerunKey'>): string =>
-  `run:${juliusBootstrapIdentity(request)}`;
 
 const REQUIRED_ROLES = ['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER'] as const;
 
@@ -116,6 +115,13 @@ export function createLiveJuliusBootstrapPort(deps: {
   readonly tenantId: string;
   readonly executionId: string;
   readonly now?: () => string;
+  /**
+   * THE RUN THE CALLER WAS ADMITTED ON. Required. Parsed here, and accepted
+   * only as a canonical `wlj_` id. A missing value, a malformed value, and a
+   * legacy `run:` id all refuse before any row is written. Nothing here mints
+   * a replacement.
+   */
+  readonly admittedRunId: string;
 }): JuliusBootstrapPort {
   const now = deps.now ?? (() => new Date().toISOString());
   const refuse = (reasonCode: string, safeMessage: string, retryable = false): JuliusBootstrapOutcome =>
@@ -165,7 +171,14 @@ export function createLiveJuliusBootstrapPort(deps: {
           + 'Send one stable token per intended rerun.');
       }
       const identity = juliusBootstrapIdentity(request);
-      const runId = `run:${identity}`;
+      const admitted = parseJuliusAdmissionRunId(deps.admittedRunId);
+      if (!admitted.ok || admitted.form !== 'wlj') {
+        return refuse(
+          admitted.ok ? 'admission_run_id_legacy_read_only' : admitted.reason,
+          'The live run was not admitted on a canonical wlj id, so no run was created.',
+        );
+      }
+      const runId = admitted.runId;
       const projectBrainRevision = Number.parseInt(request.projectBrain.revision, 10);
       try {
         await deps.seeds.ensureBase({

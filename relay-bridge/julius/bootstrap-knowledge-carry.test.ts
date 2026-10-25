@@ -55,6 +55,7 @@ const REQUEST = () => compileBootstrapRequest({
   requirements: ['Run the migration first.'], constraints: ['Touch only scripts/.'],
   acceptanceCriteria: [{ id: 'AC-1', text: 'The release script deploys after migrating.', blocking: true }],
   testCommand: 'npm test', workspacePath: '/workspace/carry',
+  limits: { spendUsd: 5, repairCycles: 1 },
 }, [
   { role: 'PROMPT_ARCHITECT', integrationId: 'a', adapterId: 'openai-architect-live', independenceGroup: 'openai', requiredCapabilities: ['plan'] },
   { role: 'CODING_AGENT', integrationId: 'b', adapterId: 'claude-agent-sdk-hosted-live', independenceGroup: 'anthropic', requiredCapabilities: ['implement'] },
@@ -64,7 +65,7 @@ const REQUEST = () => compileBootstrapRequest({
 describe('the bootstrap carries after the task graph, before READY, for a run that is still CREATED', () => {
   it('asks for exactly this run, its plan task, its mission and the bound — after both tasks exist, before the contract and the transitions', async () => {
     const fake = recorder();
-    const port = createLiveJuliusBootstrapPort({ runs: fake.runs as never, seeds: fake.seeds, knowledge: fake.knowledge, tenantId: 'tenant-carry', executionId: 'execution-carry' });
+    const port = createLiveJuliusBootstrapPort({ runs: fake.runs as never, seeds: fake.seeds, knowledge: fake.knowledge, tenantId: 'tenant-carry', executionId: 'execution-carry', admittedRunId: 'wlj_01234567-89ab-4cde-8fab-0123456789ab' });
     const outcome = await port.submit(REQUEST());
     expect(outcome.accepted).toBe(true);
     if (!outcome.accepted) throw new Error('unreachable');
@@ -84,7 +85,7 @@ describe('the bootstrap carries after the task graph, before READY, for a run th
 
   it('carries nothing on a run that already moved on — a replayed create always answers CREATED, so the store is asked', async () => {
     const fake = recorder({ state: 'EXECUTING' });
-    const port = createLiveJuliusBootstrapPort({ runs: fake.runs as never, seeds: fake.seeds, knowledge: fake.knowledge, tenantId: 'tenant-carry', executionId: 'execution-carry' });
+    const port = createLiveJuliusBootstrapPort({ runs: fake.runs as never, seeds: fake.seeds, knowledge: fake.knowledge, tenantId: 'tenant-carry', executionId: 'execution-carry', admittedRunId: 'wlj_01234567-89ab-4cde-8fab-0123456789ab' });
     await port.submit(REQUEST());
     expect(fake.calls).toContain('loadRun');
     expect(fake.calls, 'a running mission is never handed new inheritance mid-flight').not.toContain('carry');
@@ -93,7 +94,7 @@ describe('the bootstrap carries after the task graph, before READY, for a run th
   it('starts a mission whose carry was EMPTY or FAILED when nobody requires inheritance — the outcome is the store’s record, not a reason to stop', async () => {
     for (const carry of [OUTCOME({ outcome: 'EMPTY', ...NOTHING }), OUTCOME({ outcome: 'FAILED', ...NOTHING, reasonCode: 'carry_write_failed' })]) {
       const fake = recorder({ carry });
-      const port = createLiveJuliusBootstrapPort({ runs: fake.runs as never, seeds: fake.seeds, knowledge: fake.knowledge, tenantId: 'tenant-carry', executionId: 'execution-carry' });
+      const port = createLiveJuliusBootstrapPort({ runs: fake.runs as never, seeds: fake.seeds, knowledge: fake.knowledge, tenantId: 'tenant-carry', executionId: 'execution-carry', admittedRunId: 'wlj_01234567-89ab-4cde-8fab-0123456789ab' });
       const outcome = await port.submit(REQUEST());
       expect(outcome, carry.outcome).toMatchObject({ accepted: true, state: 'READY' });
       expect(fake.calls).toContain('carry');
@@ -102,7 +103,7 @@ describe('the bootstrap carries after the task graph, before READY, for a run th
 
   it('touches no knowledge and reads no state when no store is bound and nothing is required — every other caller is unchanged', async () => {
     const fake = recorder();
-    const port = createLiveJuliusBootstrapPort({ runs: fake.runs as never, seeds: fake.seeds, tenantId: 'tenant-carry', executionId: 'execution-carry' });
+    const port = createLiveJuliusBootstrapPort({ runs: fake.runs as never, seeds: fake.seeds, tenantId: 'tenant-carry', executionId: 'execution-carry', admittedRunId: 'wlj_01234567-89ab-4cde-8fab-0123456789ab' });
     expect(await port.submit(REQUEST())).toMatchObject({ accepted: true, state: 'READY' });
     expect(fake.calls).not.toContain('carry');
     expect(fake.calls).not.toContain('loadRun');
@@ -114,7 +115,7 @@ describe('a caller that REQUIRES inheritance (a registered arm WITH) is refused,
     const fake = recorder(carry === null ? {} : { carry });
     const port = createLiveJuliusBootstrapPort({
       runs: fake.runs as never, seeds: fake.seeds, ...(carry === null ? {} : { knowledge: fake.knowledge }),
-      carry: { required: true, ...pin }, tenantId: 'tenant-carry', executionId: 'execution-carry',
+      carry: { required: true, ...pin }, tenantId: 'tenant-carry', executionId: 'execution-carry', admittedRunId: 'wlj_01234567-89ab-4cde-8fab-0123456789ab',
     });
     return { outcome: await port.submit(REQUEST()), fake };
   };

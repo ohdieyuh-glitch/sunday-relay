@@ -406,6 +406,8 @@ export function resolveLiveWorkers(options: {
   const hermes = loadHermesConfig(options.env);
   const requested = {
     architectModel: architectConfig.model,
+    // The hosted workflow pins this to claude-opus-5-5. An absent value stays
+    // null: this composition does not substitute a model.
     codingModel: options.env[HOSTED_MODEL_ENV]?.trim() || null,
     reviewerProvider: hermes.provider ?? null,
     reviewerModel: hermes.model ?? null,
