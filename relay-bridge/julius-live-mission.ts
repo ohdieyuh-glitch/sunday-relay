@@ -48,6 +48,7 @@ import { hostedChildEnv, hostedChildEnvKeys } from './hosted-coding-agent/hosted
 import { observeCoderLogin, resolveCoderClaudeExecutable } from './hosted-coding-agent/hosted-login-probe';
 import { readFileSync } from 'node:fs';
 import { parseJuliusAdmissionRunId } from '../scripts/julius-admission-run-id.mjs';
+import { juliusMissionTraceId } from '../scripts/julius-mission-trace.mjs';
 import { createPublicKey, type KeyObject } from 'node:crypto';
 import { Pool } from 'pg';
 import { listenJuliusPool } from '../src/relay/persistence/julius-pg-held';
@@ -1128,6 +1129,7 @@ async function main(argv: readonly string[]): Promise<number> {
      */
     out(`RESULT: ${outcome.state}${outcome.stalled ? ' (stalled before terminal state)' : ''} after ${outcome.ticks} ticks`);
     out(`  run: ${submitted.runId}`);
+    out(`  mission trace: traceId=${juliusMissionTraceId(submitted.runId) ?? 'null'} spanId=null traceparent=null`);
     if (outcome.haltCause !== null) out(`  cause: ${outcome.haltCause}`);
     if (outcome.tickAccount !== null) out(liveTickAccountLine(outcome.tickAccount));
     for (const task of tasks) out(`  task ${task.taskId} [${task.role}/${task.taskType}] → ${task.state}`);

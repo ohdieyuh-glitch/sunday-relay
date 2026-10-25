@@ -254,6 +254,7 @@ describe('the kernel allowlist and the evidence dump', () => {
     // appended LAST, after the review-evidence columns, so every earlier column keeps its position
     expect(line.indexOf('AS review_evidence_test_output_omitted')).toBeLessThan(line.indexOf('AS effort_sent'));
     expect(line.indexOf('AS effort_sent')).toBeLessThan(line.indexOf('AS effort_echoed'));
-    expect(line).toMatch(/AS effort_echoed FROM relay_wonderland\.events e/u);
+    // the mission trace columns are appended after the effort columns, so neither moves
+    expect(line).toMatch(/AS effort_echoed,e\.payload->'facts'->>'diag_traceId' AS trace_id,e\.payload->'facts'->>'diag_spanId' AS span_id,e\.payload->'facts'->>'diag_traceparent' AS traceparent FROM relay_wonderland\.events e/u);
   });
 });

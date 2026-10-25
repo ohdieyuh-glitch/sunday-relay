@@ -3288,7 +3288,7 @@ describe('the budget dump explains what a mission was allowed to spend', () => {
 describe('every diagnostic the allowlist admits reaches the exported bundle', () => {
   /**
    * Keys the allowlist admits that the bundle deliberately does NOT export,
-   * each with the reason it is withheld. Empty today: every one of the 62 keys
+   * each with the reason it is withheld. Empty today: every admitted key
    * is a scalar identifier, count, flag or closed-vocabulary token, and none
    * carries model-authored text. Adding a key here is a decision to destroy it
    * with the database, so it costs a sentence.

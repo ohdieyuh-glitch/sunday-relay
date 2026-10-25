@@ -520,6 +520,7 @@ describe('one spent tag per admission run id, before any provider call', () => {
     expect(dry.status).toBe(0);
     expect(dry.output).toContain(`run_id=${WLJ}`);
     expect(dry.output).toContain(`concurrency_group=julius-paid-${WLJ_HEX}`);
+    expect(dry.output).toContain('trace_id=192b1fbb866790da0ba590b4a8f45144');
     expect(dry.curlLog).toBe('');
     const created = runTag({ JULIUS_RUN_ID: WLJ, CONFIRM_LIVE: 'RUN LIVE MISSION' });
     expect(created.status).toBe(0);
@@ -527,12 +528,16 @@ describe('one spent tag per admission run id, before any provider call', () => {
     expect(created.curlLog).toContain(`refs/tags/julius-run-spent-${WLJ_HEX}`);
     expect(created.curlLog).toContain(`run=${WLJ}`);
     expect(created.curlLog).toContain('reservedUsdMicros=5000000');
+    expect(created.curlLog).not.toContain('192b1fbb866790da0ba590b4a8f45144');
+    expect(created.curlLog).not.toContain('trace_id=');
     expect(created.output).not.toContain('github-token-placeholder');
     const legacy = runTag({ JULIUS_RUN_ID: `run:${HEX}`, CONFIRM_LIVE: 'RUN LIVE MISSION' });
     expect(legacy.status).toBe(0);
     expect(legacy.output).toContain(`concurrency_group=julius-paid-${HEX}`);
     expect(legacy.curlLog).toContain(`/git/ref/tags/julius-run-spent-${HEX}`);
     expect(legacy.curlLog).toContain(`run=run:${HEX}`);
+    expect(legacy.output).toContain('trace_id=null');
+    expect(legacy.curlLog).not.toContain('trace_id=');
   });
 
   it('a second dispatch of the same id creates no second tag', () => {
