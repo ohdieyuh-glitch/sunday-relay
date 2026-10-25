@@ -4,8 +4,8 @@
  *   node --experimental-strip-types src/relay/integration/wonderland-admission/operator-claim-cli.ts claim \
  *     --store <file> --wonderland-run <wlj_> --server-run <run:> --repo <owner/name> --lane <lane>
  *
- * Dry-run is the default: it claims, prints the exact `gh` command, and
- * spawns nothing. `--dispatch` also requires `--confirm 'RUN LIVE MISSION'`.
+ * Dry-run is the default: it prints the exact `gh` command, writes no claim
+ * record, and spawns nothing. `--dispatch` also requires `--confirm 'RUN LIVE MISSION'`.
  * Only that path spawns `gh` (a read of the spent tag, then the workflow
  * run). This process never reads a credential. The admission file is local.
  *
@@ -33,9 +33,9 @@ const USAGE = [
   'The admission file stays on this machine. This process reads no credential.',
   '',
   '  claim  --store <file> --wonderland-run <wlj_> --server-run <run:> --repo <owner/name> --lane <lane> [--workflow <yml>]',
-  '         Dry-run: claim, print the exact gh command, spawn nothing.',
+  '         Dry-run: print the exact gh command. Writes no claim record and spawns nothing.',
   '  claim  ... --dispatch --confirm \'RUN LIVE MISSION\'',
-  '         After the claim, gh reads the spent tag. If it is absent, gh runs the workflow once.',
+  '         gh reads the spent tag. If it is absent, the claim is reserved and gh runs the workflow once.',
   '  status --store <file> --wonderland-run <wlj_> --server-run <run:>',
   '         Print the claimed record, its run: id, and the spent-tag state. Spawns nothing.',
   '',
@@ -145,7 +145,7 @@ function emitClaim(io: OperatorClaimCliIo, result: ClaimResult): number {
     };
     if (!result.dispatchedWorkflow && result.command !== null) body.command = result.command;
     io.out(JSON.stringify(body));
-    if (result.claimed && !result.replayed && !result.dispatchedWorkflow && result.command !== null) io.out(result.command);
+    if (!result.replayed && !result.dispatchedWorkflow && result.command !== null) io.out(result.command);
     return 0;
   }
   const body: Record<string, unknown> = {

@@ -3,8 +3,10 @@
  *
  * Claims one admitted Wonderland pair. A new row is keyed on the client's
  * `wlj_` id for both sides. A legacy `run:` row is read only: it cannot be
- * claimed, dispatched, or spend-locked. admitted -> dispatched is a single
- * exclusive write.
+ * claimed, dispatched, or spend-locked. admitted -> dispatching is a single
+ * write under the store's write lock; dispatching -> dispatched is written
+ * only after the `gh workflow run` child this tool spawned exited 0 with no
+ * halt. The lock is released while `gh` runs, so the bridge keeps serving.
  * A second claim returns that record and does not dispatch again.
  * A held row whose awaiting-operator window has already elapsed is refused
  * before any claim is written and before `gh` is spawned. The server clock
@@ -12,8 +14,11 @@
  * request body, query, header, or CLI flag cannot. Once expiry is observed
  * it is stored on the operator journal and stays final.
  *
- * The default is a dry-run: after the claim it prints the exact `gh workflow
- * run` command and spawns nothing. `--dispatch` plus the exact confirmation
+ * The default is a dry-run: it prints the exact `gh workflow run` command,
+ * spawns nothing, and writes no claim record, so `/status` stays
+ * `awaiting_operator` and a later real dispatch still dispatches. The
+ * printed command carries `confirm_live` only when the operator passed
+ * `--confirm 'RUN LIVE MISSION'`. `--dispatch` plus the exact confirmation
  * `RUN LIVE MISSION` is the only path that spawns `gh`. That path first asks
  * `gh api` whether the spent tag exists. Present -> already_spent, and the
  * workflow is not started. A failed workflow spawn moves the record to
@@ -21,11 +26,12 @@
  * already_spent, and `SPENT_TAG_UNVERIFIED` is dispatch_failed. Neither
  * state is ever written back to admitted, and nothing here retries.
  *
- * `--dispatch` runs only when the checked-out workflow declares
- * `workflow_dispatch.inputs.server_run_id`. The value passed is the client's
- * `wlj_` id. The spent lock is `julius-run-spent-` plus 32 hex. A legacy
- * `run:` row keeps the 24-hex lock and is not claimed. YUJI adds the input
- * through the governed installer. This module does not edit the workflow.
+ * A claim runs only when the checked-out workflow declares
+ * `workflow_dispatch.inputs.run_id` (PR #459's input) and every other input
+ * the argv passes. The value passed as `run_id` is the client's `wlj_` id.
+ * The spent lock is `julius-run-spent-` plus 32 hex. A legacy `run:` row
+ * keeps the 24-hex lock and is not claimed. This module does not edit the
+ * workflow.
  */
 
 import {
@@ -54,21 +60,29 @@ import {
   readAdmissionDocument,
 } from './admission-file';
 
-/** The workflow input the paid run must gain before this tool will dispatch. */
-export const SERVER_RUN_ID_INPUT = 'server_run_id';
+/**
+ * The run id input of the paid workflow, as PR #459 declares it in
+ * `.github/workflows/julius-first-live-mission.yml`. The claim tool passes
+ * the client's `wlj_` id under this name.
+ */
+export const WORKFLOW_RUN_ID_INPUT = 'run_id';
+
+/** Every `workflow_dispatch` input `workflowDispatchArgs` can pass. */
+export const DISPATCH_INPUTS = ['mission', 'lane', 'dispatch_key', 'confirm_live', WORKFLOW_RUN_ID_INPUT] as const;
 
 /**
- * Paste under `workflow_dispatch.inputs` in julius-first-live-mission.yml.
- * The value this tool passes is the client's `wlj_` id. The git tag and the
- * concurrency group use the UUID with the dashes removed: 32 hex,
+ * What the refusal prints when the checked-out workflow lacks `run_id`. The
+ * input is PR #459's; this tool does not write the workflow. The git tag and
+ * the concurrency group use the UUID with the dashes removed: 32 hex,
  * `julius-run-spent-<32hex>` and `julius-paid-<32hex>`. A legacy `run:` row
- * keeps `julius-run-spent-<24hex>` and is not claimed from here. YUJI owns
- * the workflow. A re-dispatch halts with `RUN_ID_ALREADY_SPENT`. A spent tag
- * the workflow cannot verify halts with `SPENT_TAG_UNVERIFIED`.
+ * keeps `julius-run-spent-<24hex>` and is not claimed from here. A
+ * re-dispatch halts with `RUN_ID_ALREADY_SPENT`. A spent tag the workflow
+ * cannot verify halts with `SPENT_TAG_UNVERIFIED`.
  */
-export const SERVER_RUN_ID_INPUT_YAML = [
-  '      server_run_id:',
-  `        description: 'Wonderland run id matching ${WLJ_RUN_ID_PATTERN}. Before any paid call, create git tag julius-run-spent-<32hex> and concurrency group julius-paid-<32hex>. A legacy run keeps julius-run-spent-<24hex> and is not claimed. A re-dispatch halts with RUN_ID_ALREADY_SPENT. A spent tag that cannot be verified halts with SPENT_TAG_UNVERIFIED.'`,
+export const WORKFLOW_RUN_ID_INPUT_YAML = [
+  '# workflow_dispatch.inputs of julius-first-live-mission.yml must declare (PR #459):',
+  '      run_id:',
+  `        description: 'Canonical Julius run id matching ${WLJ_RUN_ID_PATTERN}. A paid dispatch creates julius-run-spent-<32hex> and concurrency group julius-paid-<32hex>. A legacy run keeps julius-run-spent-<24hex> and is not claimed. A re-dispatch halts with RUN_ID_ALREADY_SPENT. A spent tag that cannot be verified halts with SPENT_TAG_UNVERIFIED.'`,
   '        required: false',
   "        default: ''",
 ].join('\n');
@@ -94,6 +108,7 @@ export interface GhSpawner {
 
 export type OperatorViewState =
   | 'admitted'
+  | 'dispatching'
   | 'dispatched'
   | 'dispatch_failed'
   | 'already_spent'
@@ -201,6 +216,11 @@ export function workflowDispatchArgs(input: {
   readonly dispatchKey: string;
   readonly serverRunId: string;
   /**
+   * True only when the operator passed `--confirm 'RUN LIVE MISSION'`. Only
+   * then does the argv carry `confirm_live`.
+   */
+  readonly confirmLive?: boolean;
+  /**
    * Journal progress already loaded for this store. Checked before the
    * on-disk re-read so a note the caller has already seen cannot be skipped.
    */
@@ -221,8 +241,8 @@ export function workflowDispatchArgs(input: {
     '-f', `mission=${input.mission}`,
     '-f', `lane=${input.lane}`,
     '-f', `dispatch_key=${input.dispatchKey}`,
-    '-f', `confirm_live=${OPERATOR_DISPATCH_CONFIRMATION}`,
-    '-f', `${SERVER_RUN_ID_INPUT}=${input.serverRunId}`,
+    ...(input.confirmLive === true ? ['-f', `confirm_live=${OPERATOR_DISPATCH_CONFIRMATION}`] : []),
+    '-f', `${WORKFLOW_RUN_ID_INPUT}=${input.serverRunId}`,
   ];
 }
 
@@ -274,8 +294,14 @@ export function workflowDispatchInputNames(source: string): readonly string[] {
   return names;
 }
 
-export function workflowDeclaresServerRunId(source: string): boolean {
-  return workflowDispatchInputNames(source).includes(SERVER_RUN_ID_INPUT);
+export function workflowDeclaresRunIdInput(source: string): boolean {
+  return workflowDispatchInputNames(source).includes(WORKFLOW_RUN_ID_INPUT);
+}
+
+/** Inputs the dispatch argv would pass that the workflow does not declare. */
+export function undeclaredDispatchInputs(source: string): readonly string[] {
+  const declared = new Set(workflowDispatchInputNames(source));
+  return DISPATCH_INPUTS.filter((name) => !declared.has(name));
 }
 
 const HALT_ALREADY_SPENT = /\bRUN_ID_ALREADY_SPENT\b/;
@@ -334,9 +360,15 @@ export function createOperatorClaimTool(
   spawn: GhSpawner,
   clock: OperatorClaimClock = { nowIso: () => new Date().toISOString() },
 ): OperatorClaimTool {
+  // Claims from one tool run one after another, so a second claim in this
+  // process sees the first one's reservation before it reads the spent tag.
+  let claims: Promise<unknown> = Promise.resolve();
   return {
     claim(input) {
-      return file.exclusive((io) => Promise.resolve(claimInside(io, file.path, input, spawn, clock)));
+      const next = (): Promise<ClaimResult> => claimPhased(file, input, spawn, clock);
+      const run = claims.then(next, next);
+      claims = run.then(() => undefined, () => undefined);
+      return run;
     },
     status(wonderlandRunId, serverRunId) {
       return file.exclusive((io) => Promise.resolve(statusInside(io, file.path, wonderlandRunId, serverRunId, clock)));
@@ -353,123 +385,176 @@ export function openOperatorClaimTool(
   return clock === undefined ? createOperatorClaimTool(file, spawn) : createOperatorClaimTool(file, spawn, clock);
 }
 
-function claimInside(
-  io: AdmissionFileIo,
-  storePath: string,
+/**
+ * Each write lock is held for one read-check-write only, never across a `gh`
+ * child: (1) check, (2) read the spent tag without the lock, (3) re-check and
+ * write `dispatching` or `already_spent`, (4) spawn the workflow without the
+ * lock, (5) write the outcome. A stop between (3) and (5) leaves
+ * `dispatching`: whether the workflow started is unknown, and it is never
+ * reported as `dispatched` or retried.
+ */
+async function claimPhased(
+  file: AdmissionFile,
   input: ClaimInput,
   spawn: GhSpawner,
   clock: OperatorClaimClock,
-): ClaimResult {
+): Promise<ClaimResult> {
+  const checked = await file.exclusive((io) => Promise.resolve(checkClaim(io, file.path, input, clock)));
+  if (checked.kind === 'done') return checked.result;
+  const tag = interpretSpentTagResponse(spawn.run(spentTagApiArgs(input.repo, checked.admission.serverRunId)));
+  if (tag === 'unreadable') {
+    return fail(
+      'spent_tag_unreadable',
+      'The spent tag could not be read. The record was not claimed and nothing was dispatched.',
+      toView(checked.admission, null),
+    );
+  }
+  const reserved = await file.exclusive((io) => Promise.resolve(reserveClaim(io, file.path, input, clock, tag)));
+  if (reserved.kind === 'done') return reserved.result;
+  const ran = spawn.run(reserved.liveArgs);
+  return file.exclusive((io) => Promise.resolve(recordDispatchOutcome(io, input, reserved, ran)));
+}
+
+type Checked =
+  | { readonly kind: 'done'; readonly result: ClaimResult }
+  | { readonly kind: 'plan'; readonly admission: StoredAdmission; readonly nowIso: string; readonly command: string };
+
+interface Reservation {
+  readonly kind: 'reserved';
+  readonly admission: StoredAdmission;
+  readonly at: string;
+  readonly liveArgs: readonly string[];
+  readonly command: string;
+}
+
+type Reserved = { readonly kind: 'done'; readonly result: ClaimResult } | Reservation;
+
+function checkClaim(
+  io: AdmissionFileIo,
+  storePath: string,
+  input: ClaimInput,
+  clock: OperatorClaimClock,
+): Checked {
+  const done = (result: ClaimResult): Checked => ({ kind: 'done', result });
   const shape = validateShape(input);
-  if (shape !== null) return shape;
+  if (shape !== null) return done(shape);
   const nowIso = clock.nowIso();
-  if (!ISO.test(nowIso)) return fail('clock_invalid', 'The operator clock is not an ISO timestamp.', null);
+  if (!ISO.test(nowIso)) return done(fail('clock_invalid', 'The operator clock is not an ISO timestamp.', null));
   const document = io.read();
   const located = locate(document, input.wonderlandRunId, input.serverRunId);
-  if (located.kind === 'not_found') return fail('admission_not_found', 'No admitted record matches that pair.', null);
+  if (located.kind === 'not_found') return done(fail('admission_not_found', 'No admitted record matches that pair.', null));
   if (located.kind === 'server_run_mismatch') {
-    return fail('server_run_mismatch', 'The server run id does not match the admitted record.', null);
+    return done(fail('server_run_mismatch', 'The server run id does not match the admitted record.', null));
   }
   if (located.kind === 'wonderland_run_mismatch') {
-    return fail('wonderland_run_mismatch', 'The wlj_ run id does not match the admitted record.', null);
+    return done(fail('wonderland_run_mismatch', 'The wlj_ run id does not match the admitted record.', null));
   }
   if (located.admission === null) {
-    if (located.claim === null) return fail('admission_not_found', 'No admitted record matches that pair.', null);
+    if (located.claim === null) return done(fail('admission_not_found', 'No admitted record matches that pair.', null));
     const claimIdentity = identifyAdmissionRun(located.claim.wonderlandRunId, located.claim.serverRunId);
     if (claimIdentity.ok && claimIdentity.form === 'legacy') {
-      return fail('legacy_readonly', 'A legacy run: admission cannot be claimed, dispatched, or spend-locked.', null);
+      return done(fail('legacy_readonly', 'A legacy run: admission cannot be claimed, dispatched, or spend-locked.', null));
     }
-    return replay(viewFromClaim(located.claim));
+    return done(replay(viewFromClaim(located.claim)));
   }
   const admission = located.admission;
   if (isLegacyAdmission(admission)) {
-    return fail(
+    return done(fail(
       'legacy_readonly',
       'A legacy run: admission cannot be claimed, dispatched, or spend-locked.',
       toView(admission, located.claim),
-    );
+    ));
   }
-  if (sealedExpiry(storePath, document, admission.serverRunId) !== null) return expiredRefusal(admission);
-  if (located.claim !== null) return replay(toView(admission, located.claim));
+  if (sealedExpiry(storePath, document, admission.serverRunId) !== null) return done(expiredRefusal(admission));
+  if (located.claim !== null) return done(replay(toView(admission, located.claim)));
   if (admission.admissionState !== 'ADMISSION_HELD') {
-    return fail('not_admitted', `The record is ${admission.admissionState} and is not admitted.`, toView(admission, null));
+    return done(fail('not_admitted', `The record is ${admission.admissionState} and is not admitted.`, toView(admission, null)));
   }
-  if (sealedExpiry(storePath, document, admission.serverRunId) !== null) return expiredRefusal(admission);
   const heldPhase = projectUnclaimedHeldPhase(admission.receivedAt, Date.parse(nowIso));
   if (heldPhase.kind === 'operator_expired') {
     io.noteExpiry(admission.serverRunId, heldPhase.updatedAt);
-    return expiredRefusal(admission);
+    return done(expiredRefusal(admission));
   }
   if (heldPhase.kind !== 'awaiting_operator') {
-    return fail(
+    return done(fail(
       'admission_clock_unreadable',
       'The held-phase clock could not be read. The record was not claimed and nothing was dispatched.',
       toView(admission, null),
-    );
+    ));
   }
   if (admission.missionId === null || !MISSION_SLUG.test(admission.missionId)) {
-    return fail('mission_unset', 'The admitted record has no mission slug.', toView(admission, null));
+    return done(fail('mission_unset', 'The admitted record has no mission slug.', toView(admission, null)));
   }
   if (!PAID_SLOT_DISPATCH_KEY.test(admission.keyHash)) {
-    return fail('dispatch_key_invalid', 'The admitted dispatch key cannot be passed to the paid workflow.', toView(admission, null));
+    return done(fail('dispatch_key_invalid', 'The admitted dispatch key cannot be passed to the paid workflow.', toView(admission, null)));
   }
-  if (!workflowDeclaresServerRunId(input.workflowSource)) {
-    return fail(
-      'workflow_server_run_id_undeclared',
-      'The paid workflow does not declare input server_run_id. The record was not claimed.',
+  if (!workflowDeclaresRunIdInput(input.workflowSource)) {
+    return done(fail(
+      'workflow_run_id_input_missing',
+      'The paid workflow does not declare workflow_dispatch input run_id. Nothing was claimed or dispatched.',
       toView(admission, null),
-      SERVER_RUN_ID_INPUT_YAML,
-    );
+      WORKFLOW_RUN_ID_INPUT_YAML,
+    ));
   }
+  const undeclared = undeclaredDispatchInputs(input.workflowSource);
+  if (undeclared.length > 0) {
+    return done(fail(
+      'workflow_dispatch_input_missing',
+      `The paid workflow does not declare workflow_dispatch input ${undeclared.join(', ')}. Nothing was claimed or dispatched.`,
+      toView(admission, null),
+    ));
+  }
+  const confirmLive = input.confirmation === OPERATOR_DISPATCH_CONFIRMATION;
   const dispatchArgs = guardedDispatchArgs({
     repo: input.repo,
     mission: admission.missionId,
     lane: input.lane,
     dispatchKey: admission.keyHash,
     serverRunId: admission.serverRunId,
+    confirmLive,
     progress: document.progress,
     storePath,
   });
-  if (dispatchArgs === null) return expiredRefusal(admission);
+  if (dispatchArgs === null) return done(expiredRefusal(admission));
   const command = formatGhCommand(dispatchArgs);
   if (!input.dispatch) {
-    if (sealedExpiry(storePath, document, admission.serverRunId) !== null) return expiredRefusal(admission);
-    const event = baseEvent(admission, nowIso, {
-      state: 'dispatched',
-      spentTagState: 'unknown',
-      dispatchAttempted: false,
-      dispatchError: null,
-      halt: null,
-    });
-    io.write(appendClaim(document, event));
-    if (!claimWasRecorded(storePath, event)) return expiredRefusal(admission);
-    return {
+    // A dry run writes nothing. The pair stays admitted and claimable.
+    return done({
       ok: true,
-      claimed: true,
+      claimed: false,
       replayed: false,
-      record: toView(admission, event),
+      record: toView(admission, null),
       command,
       dispatchedWorkflow: false,
       requiredInput: null,
-    };
+    });
   }
-  if (input.confirmation !== OPERATOR_DISPATCH_CONFIRMATION) {
-    return fail(
+  if (!confirmLive) {
+    return done(fail(
       'dispatch_confirmation_required',
       'Dispatch requires the exact confirmation RUN LIVE MISSION. The record was not claimed.',
       toView(admission, null),
-    );
+    ));
   }
-  const tag = interpretSpentTagResponse(spawn.run(spentTagApiArgs(input.repo, admission.serverRunId)));
-  if (tag === 'unreadable') {
-    return fail(
-      'spent_tag_unreadable',
-      'The spent tag could not be read. The record was not claimed and nothing was dispatched.',
-      toView(admission, null),
-    );
+  return { kind: 'plan', admission, nowIso, command };
+}
+
+function reserveClaim(
+  io: AdmissionFileIo,
+  storePath: string,
+  input: ClaimInput,
+  clock: OperatorClaimClock,
+  tag: 'present' | 'absent',
+): Reserved {
+  // The record may have moved while the spent tag was read: check again.
+  const checked = checkClaim(io, storePath, input, clock);
+  if (checked.kind === 'done') return checked;
+  const { admission, nowIso, command } = checked;
+  const document = io.read();
+  if (sealedExpiry(storePath, document, admission.serverRunId) !== null) {
+    return { kind: 'done', result: expiredRefusal(admission) };
   }
   if (tag === 'present') {
-    if (sealedExpiry(storePath, document, admission.serverRunId) !== null) return expiredRefusal(admission);
     const event = baseEvent(admission, nowIso, {
       state: 'already_spent',
       spentTagState: 'present',
@@ -478,39 +563,56 @@ function claimInside(
       halt: 'RUN_ID_ALREADY_SPENT',
     });
     io.write(appendClaim(document, event));
-    if (!claimWasRecorded(storePath, event)) return expiredRefusal(admission);
-    return fail(
-      'RUN_ID_ALREADY_SPENT',
-      'The spent tag already exists. The record is already_spent. Nothing was dispatched.',
-      toView(admission, event),
-    );
+    if (!claimWasRecorded(storePath, event)) return { kind: 'done', result: expiredRefusal(admission) };
+    return {
+      kind: 'done',
+      result: fail(
+        'RUN_ID_ALREADY_SPENT',
+        'The spent tag already exists. The record is already_spent. Nothing was dispatched.',
+        toView(admission, event),
+      ),
+    };
   }
-  if (sealedExpiry(storePath, document, admission.serverRunId) !== null) return expiredRefusal(admission);
-  const reserved = baseEvent(admission, nowIso, {
-    state: 'dispatched',
+  const reservation = baseEvent(admission, nowIso, {
+    state: 'dispatching',
     spentTagState: 'absent',
     dispatchAttempted: false,
     dispatchError: null,
     halt: null,
   });
-  const claimedDoc = appendClaim(document, reserved);
-  io.write(claimedDoc);
-  if (!claimWasRecorded(storePath, reserved)) return expiredRefusal(admission);
+  io.write(appendClaim(document, reservation));
+  if (!claimWasRecorded(storePath, reservation)) return { kind: 'done', result: expiredRefusal(admission) };
   const liveArgs = guardedDispatchArgs({
     repo: input.repo,
-    mission: admission.missionId,
+    mission: admission.missionId ?? '',
     lane: input.lane,
     dispatchKey: admission.keyHash,
     serverRunId: admission.serverRunId,
-    progress: document.progress,
+    confirmLive: true,
+    progress: io.read().progress,
     storePath,
   });
-  if (liveArgs === null) return expiredRefusal(admission);
-  const ran = spawn.run(liveArgs);
+  if (liveArgs === null) return { kind: 'done', result: expiredRefusal(admission) };
+  return { kind: 'reserved', admission, at: nowIso, liveArgs, command };
+}
+
+/**
+ * The outcome of the one `gh workflow run` child. `dispatched` only for a
+ * zero exit with no halt. Every event keeps the reservation's timestamp, which
+ * was read before the child was spawned.
+ */
+function recordDispatchOutcome(
+  io: AdmissionFileIo,
+  input: ClaimInput,
+  reserved: Reservation,
+  ran: GhResult,
+): ClaimResult {
+  const { admission, at, command } = reserved;
+  const document = io.read();
   const halt = interpretWorkflowHalt(ran);
   const workflowRunId = learnWorkflowRunId(ran, input.repo);
   if (halt === 'RUN_ID_ALREADY_SPENT') {
-    const spent = baseEvent(admission, nowIso, {
+    const spent = baseEvent(admission, at, {
       state: 'already_spent',
       spentTagState: 'present',
       dispatchAttempted: true,
@@ -518,7 +620,7 @@ function claimInside(
       halt,
       workflowRunId,
     });
-    io.write(appendClaim(claimedDoc, spent));
+    io.write(appendClaim(document, spent));
     return fail(
       'RUN_ID_ALREADY_SPENT',
       'The workflow halted with RUN_ID_ALREADY_SPENT. The record is already_spent and will not be retried.',
@@ -527,7 +629,7 @@ function claimInside(
   }
   if (halt === 'SPENT_TAG_UNVERIFIED' || ran.code !== 0) {
     const unverified = halt === 'SPENT_TAG_UNVERIFIED';
-    const failed = baseEvent(admission, nowIso, {
+    const failed = baseEvent(admission, at, {
       state: 'dispatch_failed',
       spentTagState: unverified ? 'unknown' : 'absent',
       dispatchAttempted: true,
@@ -535,7 +637,7 @@ function claimInside(
       halt: unverified ? 'SPENT_TAG_UNVERIFIED' : null,
       workflowRunId,
     });
-    io.write(appendClaim(claimedDoc, failed));
+    io.write(appendClaim(document, failed));
     return fail(
       unverified ? 'SPENT_TAG_UNVERIFIED' : 'dispatch_failed',
       unverified
@@ -544,7 +646,7 @@ function claimInside(
       toView(admission, failed),
     );
   }
-  const attempted = baseEvent(admission, nowIso, {
+  const dispatched = baseEvent(admission, at, {
     state: 'dispatched',
     spentTagState: 'absent',
     dispatchAttempted: true,
@@ -552,12 +654,12 @@ function claimInside(
     halt: null,
     workflowRunId,
   });
-  io.write(appendClaim(claimedDoc, attempted));
+  io.write(appendClaim(document, dispatched));
   return {
     ok: true,
     claimed: true,
     replayed: false,
-    record: toView(admission, attempted),
+    record: toView(admission, dispatched),
     command,
     dispatchedWorkflow: true,
     requiredInput: null,
@@ -674,6 +776,7 @@ function guardedDispatchArgs(input: {
   readonly lane: string;
   readonly dispatchKey: string;
   readonly serverRunId: string;
+  readonly confirmLive: boolean;
   readonly progress: readonly StoredProgress[];
   readonly storePath: string;
 }): readonly string[] | null {
@@ -772,8 +875,12 @@ function appendClaim(document: OperatorDocument, event: ClaimEvent): OperatorDoc
   };
 }
 
+/**
+ * admitted -> dispatching (tag read absent) -> dispatched | dispatch_failed | already_spent,
+ * or admitted -> already_spent (tag read present). `dispatched` always carries
+ * dispatchAttempted: it is written only after the spawned child returned.
+ */
 function legalTransition(prior: ClaimEvent | null, event: ClaimEvent): boolean {
-  if (event.state !== 'dispatched' && event.state !== 'dispatch_failed' && event.state !== 'already_spent') return false;
   if (event.state === 'already_spent') {
     if (event.halt !== 'RUN_ID_ALREADY_SPENT' || event.dispatchError !== null || event.spentTagState !== 'present') {
       return false;
@@ -781,22 +888,21 @@ function legalTransition(prior: ClaimEvent | null, event: ClaimEvent): boolean {
   } else if (event.halt === 'RUN_ID_ALREADY_SPENT') {
     return false;
   }
-  if (event.state === 'dispatched' && (event.halt !== null || event.dispatchError !== null)) return false;
+  if ((event.state === 'dispatched' || event.state === 'dispatching') && (event.halt !== null || event.dispatchError !== null)) return false;
   if (event.halt === 'SPENT_TAG_UNVERIFIED' && event.state !== 'dispatch_failed') return false;
   if (prior === null) {
-    if (event.state === 'dispatch_failed') return false;
-    if (event.state === 'dispatched' && event.dispatchAttempted) return false;
+    if (event.state === 'dispatching') return !event.dispatchAttempted && event.spentTagState === 'absent';
     if (event.state === 'already_spent') return !event.dispatchAttempted;
-    return event.state === 'dispatched';
+    return false;
   }
-  if (prior.state !== 'dispatched' || prior.dispatchAttempted) return false;
-  if (event.state === 'already_spent') return event.dispatchAttempted;
+  if (prior.state !== 'dispatching') return false;
+  if (!event.dispatchAttempted) return false;
+  if (event.state === 'already_spent') return true;
   if (event.state === 'dispatch_failed') {
-    if (!event.dispatchAttempted) return false;
     if (event.halt === 'SPENT_TAG_UNVERIFIED') return event.dispatchError === 'SPENT_TAG_UNVERIFIED';
     return event.halt === null && event.dispatchError === 'gh_workflow_run_failed';
   }
-  return event.state === 'dispatched' && event.dispatchAttempted;
+  return event.state === 'dispatched';
 }
 
 function baseEvent(admission: StoredAdmission, at: string, fields: {

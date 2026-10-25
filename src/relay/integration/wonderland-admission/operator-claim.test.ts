@@ -9,7 +9,9 @@ import { createWonderlandAdmissionStore, type AdmissionRequest } from './admissi
 import { runOperatorClaimCli } from './operator-claim-cli';
 import {
   OPERATOR_DISPATCH_CONFIRMATION,
-  SERVER_RUN_ID_INPUT,
+  WORKFLOW_RUN_ID_INPUT,
+  DISPATCH_INPUTS,
+  undeclaredDispatchInputs,
   concurrencyGroupName,
   createOperatorClaimTool,
   formatGhCommand,
@@ -18,7 +20,7 @@ import {
   learnWorkflowRunId,
   spentTagApiArgs,
   spentTagName,
-  workflowDeclaresServerRunId,
+  workflowDeclaresRunIdInput,
   workflowDispatchArgs,
   workflowDispatchInputNames,
   type ClaimInput,
@@ -54,7 +56,7 @@ on:
         description: 'lane'
       dispatch_key:
         description: 'key'
-      server_run_id:
+      run_id:
         description: 'Julius bootstrap run id'
         required: false
         default: ''
@@ -172,22 +174,143 @@ function expectedCommand(): string {
   }));
 }
 
+/**
+ * Generated from the git object of PR #459's workflow, never hand-copied. The
+ * file names its source commit, blob id, and sha256, and how to regenerate it.
+ */
+const PR459_INPUTS = JSON.parse(readFileSync(join(__dirname, 'fixtures/pr459-workflow-dispatch-inputs.json'), 'utf8')) as {
+  readonly sourceCommit: string;
+  readonly sourceBlob: string;
+  readonly sourceSha256: string;
+  readonly workflowDispatchInputs: readonly string[];
+};
+
+/** A workflow that declares exactly the fixture's inputs, so a claim reads #459's surface. */
+function workflowFromFixture(names: readonly string[]): string {
+  return [
+    'name: fixture',
+    'on:',
+    '  workflow_dispatch:',
+    '    inputs:',
+    ...names.flatMap((name) => [`      ${name}:`, `        description: '${name}'`, '        required: false', "        default: ''"]),
+    'jobs: {}',
+    '',
+  ].join('\n');
+}
+
 describe('workflow inputs', () => {
-  it('the paid workflow has no server run id input', () => {
+  it('the fixture is PR #459\'s declared workflow_dispatch inputs, and it declares run_id, not server_run_id', () => {
+    expect(PR459_INPUTS.sourceCommit).toMatch(/^[0-9a-f]{40}$/);
+    expect(PR459_INPUTS.sourceBlob).toMatch(/^[0-9a-f]{40}$/);
+    expect(PR459_INPUTS.sourceSha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(PR459_INPUTS.workflowDispatchInputs).toContain(WORKFLOW_RUN_ID_INPUT);
+    expect(PR459_INPUTS.workflowDispatchInputs).not.toContain('server_run_id');
+    expect(WORKFLOW_RUN_ID_INPUT).toBe('run_id');
+    for (const name of DISPATCH_INPUTS) expect(PR459_INPUTS.workflowDispatchInputs, name).toContain(name);
+    expect(undeclaredDispatchInputs(workflowFromFixture(PR459_INPUTS.workflowDispatchInputs))).toEqual([]);
+  });
+
+  it('drift: the in-tree paid workflow either matches the #459 fixture or the claim refuses with no gh spawn', async () => {
     const source = readFileSync(join(__dirname, '../../../../.github/workflows/julius-first-live-mission.yml'), 'utf8');
-    expect(workflowDispatchInputNames(source)).toEqual([
-      'confirm_live',
-      'acknowledge_rerun',
-      'max_ticks',
-      'hermes_ref',
-      'mission',
-      'lane',
-      'subscription_smoke',
-      'dispatch_key',
-      'learning_without_run',
+    const names = workflowDispatchInputNames(source);
+    if (names.includes(WORKFLOW_RUN_ID_INPUT)) {
+      // #459 has landed in this tree: its inputs must be exactly the fixture's,
+      // so a later workflow change breaks this test, not the paid dispatch.
+      expect(names).toEqual(PR459_INPUTS.workflowDispatchInputs);
+      expect(undeclaredDispatchInputs(source)).toEqual([]);
+      return;
+    }
+    // #459 has not landed in this tree: the claim tool must refuse to dispatch.
+    await withStore(async (path) => {
+      await admit(path);
+      const fake = scripted(ABSENT, WORKFLOW_OK);
+      const claims = claimTool(path, fake.spawn);
+      for (const input of [
+        claimInput({ workflowSource: source }),
+        claimInput({ workflowSource: source, dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }),
+      ]) {
+        const refused = await claims.claim(input);
+        expect(refused.ok).toBe(false);
+        if (refused.ok) return;
+        expect(refused.kind).toBe('workflow_run_id_input_missing');
+        expect(refused.record?.state).toBe('admitted');
+      }
+      expect(fake.calls).toEqual([]);
+      expect(readAdmissionDocument(path).claims).toEqual([]);
+    });
+  });
+
+  it('the dispatch argv carries run_id, mission, lane, dispatch_key, and confirm_live only with the confirmation', async () => {
+    const base = { repo: REPO, mission: MISSION, lane: LANE, dispatchKey: KEY, serverRunId: SERVER };
+    expect(workflowDispatchArgs({ ...base, confirmLive: true })).toEqual([
+      'workflow', 'run', PAID_WORKFLOW_FILE,
+      '--repo', REPO, '--ref', 'main',
+      '-f', `mission=${MISSION}`,
+      '-f', `lane=${LANE}`,
+      '-f', `dispatch_key=${KEY}`,
+      '-f', `confirm_live=${OPERATOR_DISPATCH_CONFIRMATION}`,
+      '-f', `run_id=${SERVER}`,
     ]);
-    expect(workflowDeclaresServerRunId(source)).toBe(false);
-    expect(source).not.toContain(SERVER_RUN_ID_INPUT);
+    const unconfirmed = workflowDispatchArgs(base);
+    expect(unconfirmed.some((arg) => arg.startsWith('confirm_live='))).toBe(false);
+    expect(unconfirmed.some((arg) => arg.startsWith('server_run_id='))).toBe(false);
+    expect(unconfirmed).toContain(`run_id=${SERVER}`);
+    const workflow = workflowFromFixture(PR459_INPUTS.workflowDispatchInputs);
+    await withStore(async (path) => {
+      await admit(path);
+      const dry = await claimTool(path, { run() { throw new Error('spawned'); } }).claim(claimInput({ workflowSource: workflow }));
+      expect(dry.ok && dry.command).toBe(formatGhCommand(unconfirmed));
+      const dryConfirmed = await claimTool(path, { run() { throw new Error('spawned'); } }).claim(claimInput({
+        workflowSource: workflow,
+        confirmation: OPERATOR_DISPATCH_CONFIRMATION,
+      }));
+      expect(dryConfirmed.ok && dryConfirmed.command).toBe(formatGhCommand(workflowDispatchArgs({ ...base, confirmLive: true })));
+      const fake = scripted(ABSENT, WORKFLOW_OK);
+      const live = await claimTool(path, fake.spawn).claim(claimInput({
+        workflowSource: workflow,
+        dispatch: true,
+        confirmation: OPERATOR_DISPATCH_CONFIRMATION,
+      }));
+      expect(live.ok && live.dispatchedWorkflow).toBe(true);
+      expect(fake.calls[1]).toEqual(workflowDispatchArgs({ ...base, confirmLive: true }));
+    });
+  });
+
+  it('refuses to claim or dispatch when the workflow it reads lacks run_id, with no gh spawn', async () => {
+    const withoutRunId = workflowFromFixture(PR459_INPUTS.workflowDispatchInputs.filter((name) => name !== WORKFLOW_RUN_ID_INPUT));
+    const withServerRunId = workflowFromFixture([
+      ...PR459_INPUTS.workflowDispatchInputs.filter((name) => name !== WORKFLOW_RUN_ID_INPUT),
+      'server_run_id',
+    ]);
+    for (const workflowSource of [withoutRunId, withServerRunId, WORKFLOW_WITHOUT_INPUT]) {
+      await withStore(async (path) => {
+        await admit(path);
+        const fake = scripted(ABSENT, WORKFLOW_OK);
+        const refused = await claimTool(path, fake.spawn).claim(claimInput({
+          workflowSource,
+          dispatch: true,
+          confirmation: OPERATOR_DISPATCH_CONFIRMATION,
+        }));
+        expect(refused.ok).toBe(false);
+        if (refused.ok) return;
+        expect(refused.kind).toBe('workflow_run_id_input_missing');
+        expect(refused.requiredInput).toContain('      run_id:');
+        expect(fake.calls).toEqual([]);
+        expect(readAdmissionDocument(path).claims).toEqual([]);
+      });
+    }
+    await withStore(async (path) => {
+      await admit(path);
+      const fake = scripted(ABSENT, WORKFLOW_OK);
+      const noKey = workflowFromFixture(PR459_INPUTS.workflowDispatchInputs.filter((name) => name !== 'dispatch_key'));
+      const refused = await claimTool(path, fake.spawn).claim(claimInput({
+        workflowSource: noKey,
+        dispatch: true,
+        confirmation: OPERATOR_DISPATCH_CONFIRMATION,
+      }));
+      expect(refused.ok === false && refused.kind).toBe('workflow_dispatch_input_missing');
+      expect(fake.calls).toEqual([]);
+    });
   });
 
   it('a description that mentions the name is not a declaration', () => {
@@ -203,7 +326,7 @@ jobs:
       - run: echo server_run_id
 `;
     expect(workflowDispatchInputNames(decoy)).toEqual(['confirm_live']);
-    expect(workflowDeclaresServerRunId(WORKFLOW_WITH_INPUT)).toBe(true);
+    expect(workflowDeclaresRunIdInput(WORKFLOW_WITH_INPUT)).toBe(true);
   });
 });
 
@@ -232,7 +355,7 @@ describe('spent tag', () => {
       dispatchKey: KEY,
       serverRunId: SERVER,
     });
-    expect(command).toContain(`server_run_id=${SERVER}`);
+    expect(command).toContain(`run_id=${SERVER}`);
     expect(() => workflowDispatchArgs({
       repo: REPO, mission: MISSION, lane: LANE, dispatchKey: KEY, serverRunId: LEGACY_SERVER,
     })).toThrow('run_id_invalid');
@@ -308,7 +431,7 @@ describe('operator claim', () => {
         '-f', `lane=${LANE}`,
         '-f', `dispatch_key=${KEY}`,
         '-f', `confirm_live=${OPERATOR_DISPATCH_CONFIRMATION}`,
-        '-f', `server_run_id=${SERVER}`,
+        '-f', `run_id=${SERVER}`,
       ]);
     });
   });
@@ -377,16 +500,133 @@ describe('operator claim', () => {
       const claims = claimTool(path, {
         run() { throw new Error('spawned'); },
       });
+      const journalBefore = readAdmissionDocument(path);
       const result = await claims.claim(claimInput());
       expect(result.ok).toBe(true);
       if (!result.ok) return;
-      expect(result.claimed).toBe(true);
+      expect(result.claimed).toBe(false);
       expect(result.dispatchedWorkflow).toBe(false);
-      expect(result.record.state).toBe('dispatched');
-      expect(result.record.spentTagState).toBe('unknown');
+      expect(result.record.state).toBe('admitted');
+      expect(result.record.claimedAt).toBeNull();
       expect(result.record.dispatchAttempted).toBe(false);
       expect(result.command).toBe(expectedCommand());
       expect(result.command?.startsWith(`gh workflow run ${PAID_WORKFLOW_FILE} `)).toBe(true);
+      expect(readAdmissionDocument(path)).toEqual(journalBefore);
+      expect(readAdmissionDocument(path).claims).toEqual([]);
+      const status = await claims.status(RUN, SERVER);
+      expect(status.ok && status.record.state).toBe('admitted');
+      expect(status.ok && status.phase?.projection.state).toBe('awaiting_operator');
+    });
+  });
+
+  it('a real --dispatch after a dry run dispatches', async () => {
+    await withStore(async (path) => {
+      await admit(path);
+      const fake = scripted(ABSENT, WORKFLOW_OK);
+      const claims = claimTool(path, fake.spawn);
+      const dry = await claims.claim(claimInput());
+      expect(dry.ok && !dry.claimed && !dry.dispatchedWorkflow).toBe(true);
+      expect(fake.calls).toEqual([]);
+      const live = await claims.claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
+      expect(live.ok).toBe(true);
+      if (!live.ok) return;
+      expect(live.replayed).toBe(false);
+      expect(live.dispatchedWorkflow).toBe(true);
+      expect(live.record.state).toBe('dispatched');
+      expect(live.record.dispatchAttempted).toBe(true);
+      expect(fake.calls.map((args) => args[0])).toEqual(['api', 'workflow']);
+      expect(readAdmissionDocument(path).claims.map((event) => event.state)).toEqual(['dispatching', 'dispatched']);
+    });
+  });
+
+  it('dispatched is written only after the spawned workflow child returned, and no lock is held while it runs', async () => {
+    await withStore(async (path) => {
+      await admit(path);
+      const seen: { state: string | undefined; lock: boolean; status: string | false }[] = [];
+      const spawn: GhSpawner = {
+        run(args) {
+          if (args[0] === 'api') return ABSENT;
+          const saved = readAdmissionDocument(path);
+          seen.push({
+            state: saved.claims.at(-1)?.state,
+            lock: existsSync(`${path}.lock`),
+            status: (() => {
+              // A bridge writer can take the lock during the spawn.
+              recordAdmissionOwner(path, SERVER, 'founder');
+              return 'owner_written';
+            })(),
+          });
+          return WORKFLOW_OK;
+        },
+      };
+      const result = await claimTool(path, spawn).claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
+      expect(seen).toEqual([{ state: 'dispatching', lock: false, status: 'owner_written' }]);
+      expect(result.ok && result.record.state).toBe('dispatched');
+      const saved = readAdmissionDocument(path);
+      expect(saved.claims.map((event) => [event.state, event.dispatchAttempted])).toEqual([['dispatching', false], ['dispatched', true]]);
+      expect(saved.admissions[0]?.ownerPlayerId).toBe('founder');
+    });
+  });
+
+  it('a stop between the reservation and the outcome leaves dispatching: never reported dispatched, never re-spawned', async () => {
+    await withStore(async (path) => {
+      await admit(path);
+      const crashing = recorder((args) => {
+        if (args[0] === 'api') return ABSENT;
+        throw new Error('operator_process_killed');
+      });
+      await expect(claimTool(path, crashing.spawn).claim(claimInput({
+        dispatch: true,
+        confirmation: OPERATOR_DISPATCH_CONFIRMATION,
+      }))).rejects.toThrow('operator_process_killed');
+      const saved = readAdmissionDocument(path);
+      expect(saved.claims.map((event) => event.state)).toEqual(['dispatching']);
+      expect(saved.claims[0]?.dispatchAttempted).toBe(false);
+      const again = recorder(() => WORKFLOW_OK);
+      const claims = claimTool(path, again.spawn);
+      const replayed = await claims.claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
+      expect(replayed.ok && replayed.replayed && replayed.record.state).toBe('dispatching');
+      expect(again.calls).toEqual([]);
+      const status = await claims.status(RUN, SERVER);
+      expect(status.ok && status.record.state).toBe('dispatching');
+    });
+  });
+
+  it('a stored dispatched claim that never spawned (the old dry-run record) fails closed', async () => {
+    await withStore(async (path) => {
+      await admit(path);
+      writeFileSync(`${path}.operator.json`, `${JSON.stringify({
+        schemaVersion: 3,
+        revision: 1,
+        progress: [],
+        owners: {},
+        claims: [{
+          wonderlandRunId: RUN,
+          serverRunId: SERVER,
+          state: 'dispatched',
+          spentTag: `julius-run-spent-${HEX}`,
+          spentTagState: 'unknown',
+          at: WHEN,
+          dispatchAttempted: false,
+          dispatchError: null,
+          halt: null,
+          workflowRunId: null,
+        }],
+      })}\n`);
+      const before = readFileSync(`${path}.operator.json`, 'utf8');
+      try {
+        readAdmissionDocument(path);
+        throw new Error('read a dispatched claim that never spawned');
+      } catch (error) {
+        expect(isAdmissionFileClosed(error) && error.code).toBe('corrupt');
+      }
+      const fake = scripted(ABSENT, WORKFLOW_OK);
+      await expect(claimTool(path, fake.spawn).claim(claimInput({
+        dispatch: true,
+        confirmation: OPERATOR_DISPATCH_CONFIRMATION,
+      }))).rejects.toBeInstanceOf(AdmissionFileClosedError);
+      expect(fake.calls).toEqual([]);
+      expect(readFileSync(`${path}.operator.json`, 'utf8')).toBe(before);
     });
   });
 
@@ -408,7 +648,7 @@ describe('operator claim', () => {
       expect(again.record.state).toBe('dispatch_failed');
       expect(fake.calls.map((args) => args[0])).toEqual(['api', 'workflow']);
       const saved = readAdmissionDocument(path);
-      expect(saved.claims.map((event) => event.state)).toEqual(['dispatched', 'dispatch_failed']);
+      expect(saved.claims.map((event) => event.state)).toEqual(['dispatching', 'dispatch_failed']);
       expect(saved.claims.some((event) => (event.state as string) === 'admitted')).toBe(false);
       const rows = JSON.parse(readFileSync(path, 'utf8')) as { schemaVersion: number; claims?: unknown };
       expect(rows.schemaVersion).toBe(3);
@@ -442,7 +682,7 @@ describe('operator claim', () => {
       expect(again.ok && again.replayed && again.record.state).toBe('already_spent');
       expect(fake.calls.map((args) => args[0])).toEqual(['api', 'workflow']);
       const saved = readAdmissionDocument(path);
-      expect(saved.claims.map((event) => event.state)).toEqual(['dispatched', 'already_spent']);
+      expect(saved.claims.map((event) => event.state)).toEqual(['dispatching', 'already_spent']);
       expect(saved.claims.some((event) => (event.state as string) === 'admitted')).toBe(false);
       expect(JSON.parse(readFileSync(path, 'utf8'))).not.toHaveProperty('claims');
     });
@@ -532,9 +772,9 @@ describe('operator claim', () => {
     });
   });
 
-  it('fixture YAML with server_run_id dispatches, and fixture YAML without it refuses', async () => {
-    expect(workflowDeclaresServerRunId(WORKFLOW_WITH_INPUT)).toBe(true);
-    expect(workflowDeclaresServerRunId(WORKFLOW_WITHOUT_INPUT)).toBe(false);
+  it('fixture YAML with run_id dispatches, and fixture YAML without it refuses', async () => {
+    expect(workflowDeclaresRunIdInput(WORKFLOW_WITH_INPUT)).toBe(true);
+    expect(workflowDeclaresRunIdInput(WORKFLOW_WITHOUT_INPUT)).toBe(false);
     await withStore(async (path) => {
       await admit(path);
       const absent = scripted(ABSENT, WORKFLOW_OK);
@@ -546,7 +786,7 @@ describe('operator claim', () => {
       }));
       expect(refused.ok).toBe(false);
       if (refused.ok) return;
-      expect(refused.kind).toBe('workflow_server_run_id_undeclared');
+      expect(refused.kind).toBe('workflow_run_id_input_missing');
       expect(refused.record?.state).toBe('admitted');
       expect(absent.calls).toEqual([]);
       const present = scripted(ABSENT, WORKFLOW_OK);
@@ -558,14 +798,14 @@ describe('operator claim', () => {
       expect(allowed.ok && allowed.dispatchedWorkflow).toBe(true);
       if (!allowed.ok) return;
       expect(allowed.record.state).toBe('dispatched');
-      expect(present.calls[1]).toContain(`server_run_id=${SERVER}`);
+      expect(present.calls[1]).toContain(`run_id=${SERVER}`);
     });
   });
 
-  it('refuses --dispatch until the workflow declares server_run_id', async () => {
+  it('the run_id refusal prints what the workflow must declare', async () => {
     await withStore(async (path) => {
       await admit(path);
-      const source = readFileSync(join(__dirname, '../../../../.github/workflows/julius-first-live-mission.yml'), 'utf8');
+      const source = WORKFLOW_WITHOUT_INPUT;
       const fake = scripted(ABSENT, WORKFLOW_OK);
       const claims = claimTool(path, fake.spawn);
       const refused = await claims.claim(claimInput({
@@ -575,8 +815,9 @@ describe('operator claim', () => {
       }));
       expect(refused.ok).toBe(false);
       if (refused.ok) return;
-      expect(refused.kind).toBe('workflow_server_run_id_undeclared');
-      expect(refused.requiredInput).toContain('server_run_id:');
+      expect(refused.kind).toBe('workflow_run_id_input_missing');
+      expect(refused.requiredInput).toContain('      run_id:');
+      expect(refused.requiredInput).not.toContain('server_run_id');
       expect(refused.requiredInput).toContain('^wlj_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$');
       expect(refused.requiredInput).toContain('julius-run-spent-<32hex>');
       expect(refused.requiredInput).toContain('julius-paid-<32hex>');
@@ -588,7 +829,7 @@ describe('operator claim', () => {
       const dry = await claims.claim(claimInput({ workflowSource: source }));
       expect(dry.ok).toBe(false);
       if (dry.ok) return;
-      expect(dry.kind).toBe('workflow_server_run_id_undeclared');
+      expect(dry.kind).toBe('workflow_run_id_input_missing');
     });
   });
 
@@ -609,7 +850,7 @@ describe('operator claim', () => {
       const open = await claims.claim(claimInput());
       expect(open.ok).toBe(true);
       if (!open.ok) return;
-      expect(open.claimed).toBe(true);
+      expect(open.claimed).toBe(false);
       expect(open.dispatchedWorkflow).toBe(false);
       expect(fake.calls).toEqual([]);
       expect(readAdmissionDocument(path).progress.some((note) => note.cause === 'AWAITING_OPERATOR_EXPIRED')).toBe(false);
@@ -676,10 +917,8 @@ describe('operator claim', () => {
   it('the store survives a reload', async () => {
     await withStore(async (path) => {
       await admit(path);
-      const first = claimTool(path, {
-        run() { throw new Error('spawned'); },
-      });
-      const claimed = await first.claim(claimInput());
+      const first = claimTool(path, scripted(ABSENT, WORKFLOW_OK).spawn);
+      const claimed = await first.claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
       expect(claimed.ok && claimed.record.state).toBe('dispatched');
       const second = claimTool(path, {
         run() { throw new Error('spawned'); },
@@ -691,7 +930,7 @@ describe('operator claim', () => {
       expect(status.record.serverRunId).toBe(SERVER);
       expect(status.record.wonderlandRunId).toBe(RUN);
       expect(status.record.spentTag).toBe(`julius-run-spent-${HEX}`);
-      expect(status.record.spentTagState).toBe('unknown');
+      expect(status.record.spentTagState).toBe('absent');
       const reloaded = createWonderlandAdmissionStore({
         ledger: openAdmissionFile(path).ledger,
         dailyCap: 2,
@@ -941,7 +1180,7 @@ describe('operator claim cli', () => {
       expect(code).toBe(0);
       expect(out.at(-1)).toBe(expectedCommand());
       const body = JSON.parse(out[0] ?? '{}') as { state: string; spentTagState: string; serverRunId: string };
-      expect(body.state).toBe('dispatched');
+      expect(body.state).toBe('admitted');
       expect(body.spentTagState).toBe('unknown');
       expect(body.serverRunId).toBe(SERVER);
     });
@@ -986,7 +1225,7 @@ describe('operator claim cli', () => {
       });
       expect(code).toBe(0);
       expect(calls.map((args) => args[0])).toEqual(['api', 'workflow']);
-      expect(calls[1]).toContain(`server_run_id=${SERVER}`);
+      expect(calls[1]).toContain(`run_id=${SERVER}`);
     });
   });
 

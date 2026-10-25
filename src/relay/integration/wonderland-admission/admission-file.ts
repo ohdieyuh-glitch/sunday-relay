@@ -467,8 +467,13 @@ function parsePins(value: unknown): ReviewedModelPins {
  * row field. The journal uses the same atomic write, the same lock file, and
  * the same fail-closed errors. A held lock, a corrupt journal, or an unknown
  * schema version leaves both files as they are.
+ *
+ * `dispatching` is the claim tool's reservation, written before it spawns
+ * `gh workflow run`. It is not a dispatch: whether the workflow started is
+ * not known until the outcome (`dispatched`, `dispatch_failed`,
+ * `already_spent`) is written.
  */
-const CLAIM_STATES = ['dispatched', 'dispatch_failed', 'already_spent'] as const;
+const CLAIM_STATES = ['dispatching', 'dispatched', 'dispatch_failed', 'already_spent'] as const;
 const SPENT_TAG_STATES = ['unknown', 'present', 'absent'] as const;
 const WORKFLOW_HALTS = ['RUN_ID_ALREADY_SPENT', 'SPENT_TAG_UNVERIFIED'] as const;
 const DISPATCH_ERRORS = ['gh_workflow_run_failed', 'SPENT_TAG_UNVERIFIED'] as const;
@@ -976,6 +981,15 @@ function parseClaim(value: unknown, schemaVersion: OperatorJournal['schemaVersio
     throw new AdmissionFileClosedError('corrupt');
   }
   if (state === 'dispatched' && recordedHalt !== null) throw new AdmissionFileClosedError('corrupt');
+  // `dispatched` is written only after the spawned `gh workflow run` child
+  // returned. A `dispatched` claim that never spawned (the old dry-run
+  // record) is not trusted as a dispatch: it is corrupt, not silently read.
+  if (state === 'dispatched' && claim.dispatchAttempted !== true) throw new AdmissionFileClosedError('corrupt');
+  if (state === 'dispatching') {
+    if (claim.dispatchAttempted !== false || recordedHalt !== null || claim.spentTagState !== 'absent' || workflowRunId !== null) {
+      throw new AdmissionFileClosedError('corrupt');
+    }
+  }
   const dispatchError: DispatchError | null = state === 'dispatch_failed'
     ? (recordedHalt === 'SPENT_TAG_UNVERIFIED' ? 'SPENT_TAG_UNVERIFIED' : 'gh_workflow_run_failed')
     : null;
@@ -988,7 +1002,7 @@ function parseClaim(value: unknown, schemaVersion: OperatorJournal['schemaVersio
     at: claim.at,
     dispatchAttempted: claim.dispatchAttempted,
     dispatchError,
-    halt: state === 'dispatched' ? null : recordedHalt,
+    halt: state === 'dispatched' || state === 'dispatching' ? null : recordedHalt,
     workflowRunId,
   };
 }

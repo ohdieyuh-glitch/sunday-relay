@@ -231,7 +231,9 @@ export const AWAITING_OPERATOR_WINDOW_MS = GITHUB_HOSTED_JOB_CAP_MS;
  *   `INTERRUPTED`, `FAILED` (projected below)
  * - the held phase before the claim: `awaiting_operator`, until
  *   `AWAITING_OPERATOR_WINDOW_MS` after Accepted
- * - the operator claim: `dispatched`, `dispatch_failed`, `already_spent`
+ * - the operator claim: `dispatching` (its reservation, written before it
+ *   spawns `gh workflow run`; not a dispatch), then `dispatched` (only after
+ *   that child exited 0 with no halt), `dispatch_failed`, `already_spent`
  * - `status --watch`: only a member of this list other than `unknown`
  *
  * `unknown` is the route's answer when a stored token is outside this list.
@@ -244,6 +246,7 @@ export const WONDERLAND_STATUS_STATES = [
   'ledger_unwritten',
   'interrupted',
   'failed',
+  'dispatching',
   'dispatched',
   'dispatch_failed',
   'already_spent',

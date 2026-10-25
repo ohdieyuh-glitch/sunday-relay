@@ -165,7 +165,7 @@ describe('legacy schema v2 rows', () => {
         serverRunId: LEGACY,
         repo: 'founder/sunday-relay',
         lane: 'lab',
-        workflowSource: 'on:\n  workflow_dispatch:\n    inputs:\n      server_run_id:\n        default: \'\'\n',
+        workflowSource: 'on:\n  workflow_dispatch:\n    inputs:\n      run_id:\n        default: \'\'\n',
         dispatch: true,
         confirmation: 'RUN LIVE MISSION',
       });

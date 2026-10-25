@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import type { AdmissionState } from '../src/relay/integration/wonderland-admission/admission-store';
-import { noteAwaitingOperatorExpiry, readAdmissionDocument, type DispatchError, type OperatorClaimState, type WorkflowHalt } from '../src/relay/integration/wonderland-admission/admission-file';
+import { noteAwaitingOperatorExpiry, openAdmissionFile, readAdmissionDocument, type DispatchError, type OperatorClaimState, type WorkflowHalt } from '../src/relay/integration/wonderland-admission/admission-file';
 import {
   AWAITING_OPERATOR_WINDOW_MS,
   WONDERLAND_STATUS_CAUSES,
@@ -24,6 +24,7 @@ import {
   type WonderlandAdmissionRouteRequest,
 } from './wonderland-admission-route';
 import { classifyWonderlandDispatchPath, isWonderlandRoute } from './wonderland-routes';
+import { createOperatorClaimTool } from '../src/relay/integration/wonderland-admission/operator-claim';
 
 const RUN = 'wlj_0b7a1c2e-4f3d-4a6b-8c2d-3e4f5a6b7c8d';
 const KEY = '11111111-2222-4333-8444-555555555555';
@@ -377,6 +378,45 @@ describe('wonderland status', () => {
     }
   });
 
+  it('with the bridge up, an operator dry run leaves status awaiting_operator, and an unfinished dispatch is dispatching, never dispatched', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wlj-status-'));
+    const storePath = join(dir, 'admission.json');
+    const workflowSource = [
+      'on:', '  workflow_dispatch:', '    inputs:',
+      ...['confirm_live', 'mission', 'lane', 'dispatch_key', 'run_id'].map((name) => `      ${name}:\n        default: ''`),
+      '',
+    ].join('\n');
+    const input = {
+      wonderlandRunId: RUN, serverRunId: SERVER, repo: 'founder/sunday-relay', lane: 'lab', workflowSource,
+    };
+    const ports = service(storePath);
+    try {
+      const admitted = await handleWonderlandAdmissionRoute(admitRequest(), ports);
+      expect(admitted?.status).toBe(202);
+      const spawned: string[] = [];
+      const tool = createOperatorClaimTool(openAdmissionFile(storePath), {
+        run(args) {
+          spawned.push(args[0] ?? '');
+          if (args[0] === 'api') return { code: 1, stdout: 'HTTP/2.0 404 Not Found\n', stderr: '' };
+          throw new Error('operator_process_killed');
+        },
+      }, { nowIso: () => WHEN });
+      const dry = await tool.claim({ ...input, dispatch: false, confirmation: null });
+      expect(dry.ok && dry.claimed).toBe(false);
+      const afterDry = await handleWonderlandStatusRoute(statusRequest(SERVER), ports);
+      expect(afterDry?.body).toMatchObject({ state: 'awaiting_operator', dispatchedAt: null });
+      expect(readAdmissionDocument(storePath).claims).toEqual([]);
+      await expect(tool.claim({ ...input, dispatch: true, confirmation: 'RUN LIVE MISSION' })).rejects.toThrow('operator_process_killed');
+      expect(spawned).toEqual(['api', 'workflow']);
+      const unfinished = await handleWonderlandStatusRoute(statusRequest(SERVER), ports);
+      expect(unfinished?.status).toBe(200);
+      expect(unfinished?.body).toMatchObject({ state: 'dispatching', dispatchedAt: null, workflowRunId: null });
+    } finally {
+      ports.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('a different player, a malformed run id, and an unknown run id are one 404 and write nothing', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'wlj-status-'));
     const storePath = join(dir, 'admission.json');
@@ -464,6 +504,7 @@ describe('wonderland status', () => {
       FAILED: 'failed',
     };
     const claimStatus: Record<OperatorClaimState, WonderlandStatusState> = {
+      dispatching: 'dispatching',
       dispatched: 'dispatched',
       dispatch_failed: 'dispatch_failed',
       already_spent: 'already_spent',
@@ -617,6 +658,7 @@ function coverStatusState(state: WonderlandStatusState): WonderlandStatusState {
     case 'ledger_unwritten':
     case 'interrupted':
     case 'failed':
+    case 'dispatching':
     case 'dispatched':
     case 'dispatch_failed':
     case 'already_spent':

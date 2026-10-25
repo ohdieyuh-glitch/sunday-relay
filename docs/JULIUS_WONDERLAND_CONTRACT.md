@@ -270,20 +270,63 @@ A non-numeric schema version, extra document keys, duplicate rows, an unknown
 row key, or a `state` other than `ADMISSION_HELD` or `LEDGER_UNWRITTEN` is
 corrupt. Either refusal answers 503 and the bytes stay as they are.
 
-A write is a temp file in the same directory, an fsync of that file, a rename
-onto the store path, and an fsync of the directory. A lock file beside the
-store allows one writer. A held lock answers 503 and is left alone. The
-process never takes the lock when `JULIUS_WONDERLAND_ADMISSION` is not exactly
-`1`. It also never steals a lock. A lock whose recorded pid is another live
-process, or a pid that is no longer running, stays held. Pid reuse and
+A write is a temp file in the same directory (a random 96-bit suffix, not the
+pid), an fsync of that file, a rename onto the store path, and an fsync of
+the directory. Two lock files sit beside the store:
+
+- `<store>.lock` is the write lock. It is short-lived. Every writer, the
+  bridge and the operator claim tool alike, creates it exclusively, reads the
+  current bytes, writes, fsyncs, and deletes it. One writer at a time. A
+  writer that finds it held retries for at most `ADMISSION_LOCK_WAIT_MS`
+  (2000 ms) and then fails closed with `lock_held`: the bridge answers 503
+  `julius_dispatch_unavailable`, and the claim tool prints
+  `admission_file_lock_held` and dispatches nothing.
+- `<store>.bridge.lock` is held by the bridge for its lifetime, so two
+  bridges never serve one store. The claim tool never takes it.
+
+The process never takes either lock when `JULIUS_WONDERLAND_ADMISSION` is not
+exactly `1`. It never steals a lock. A lock whose recorded pid is another
+live process, or a pid that is no longer running, stays held. Pid reuse and
 containers make an automatic steal unsafe. A missing file is an empty ledger.
 
-A clean shutdown deletes the lock. A `SIGKILL`, or any exit that skips
-`close()`, leaves `<store>.lock` on disk. The next open then answers 503
+A clean shutdown deletes `<store>.bridge.lock`. A `SIGKILL`, or any exit
+that skips `close()`, leaves it on disk; a kill in the middle of a write can
+also leave `<store>.lock`. The next open then answers 503
 `julius_dispatch_unavailable` and does not admit. Recovery is a manual
-operator step, after the operator has confirmed that no admission process is
-still running: delete that lock file, and only that file. Do not delete or
-rewrite the admission document to clear the lock.
+operator step, after the operator has confirmed that no bridge and no claim
+tool is still running: delete the stale lock file, and only that file. Do not
+delete or rewrite the admission document or the operator journal to clear a
+lock.
+
+### Operator procedure: claiming with the bridge up
+
+The bridge stays running while the founder claims; the client keeps polling
+`/status` throughout. Within the 360-minute held window:
+
+1. `status`: `node --experimental-strip-types src/relay/integration/wonderland-admission/operator-claim-cli.ts status --store <store> --wonderland-run <wlj_> --server-run <wlj_>`
+   Spawns nothing and writes nothing (except the terminal expiry note once
+   the window has elapsed).
+2. Dry run (optional): `claim --store <store> --wonderland-run <wlj_> --server-run <wlj_> --repo <owner/name> --lane <lane>`.
+   It prints the exact `gh workflow run` command and **writes no claim
+   record**. `/status` keeps answering `awaiting_operator`. A dry run never
+   prevents a later real dispatch.
+3. Dispatch: the same command plus `--dispatch --confirm 'RUN LIVE MISSION'`.
+   The tool reads the spent tag (`gh api`), records `dispatching` under the
+   write lock, releases the lock, spawns `gh workflow run` once, and records
+   the outcome under the write lock: `dispatched` only when that spawn
+   exited 0 with no halt, else `dispatch_failed` or `already_spent`. The
+   lock is never held across a `gh` spawn, so the bridge keeps admitting and
+   answering `/status` during dispatch.
+4. If the claim tool prints `admission_file_lock_held`, a writer held the
+   lock for longer than 2000 ms. Nothing was recorded and nothing was
+   spawned (unless the record already says `dispatching`; see below). Run
+   `status` before trying again.
+
+A record left at `dispatching` means the tool stopped between its reservation
+and its outcome write, so whether `gh workflow run` started is unknown. It is
+not `dispatched`, it is not retried by the tool, and `/status` answers
+`dispatching`. The operator resolves it from the Actions run list for the
+`julius-paid-<32hex>` group and the spent tag, never by deleting the record.
 
 A process that shuts down and opens that same file replays the pair. The
 `serverRunId`, the state, the model pins, and the caps are the ones in the
@@ -298,8 +341,8 @@ Opening a schema version 2 file does not upgrade it.
 `dispatched` stays false on an admission row. The founder operator claim tool
 is the only writer of the dispatched transition. That transition, and later
 progress, are written to the operator journal beside the admission file
-(`<store>.operator.json`), with the same schema version, atomic write, lock,
-and fail-closed rule. The admission document stays `{ schemaVersion, rows }`.
+(`<store>.operator.json`), with the same schema version, atomic write, write
+lock, and fail-closed rule. The admission document stays `{ schemaVersion, rows }`.
 
 ## Status
 
@@ -353,6 +396,7 @@ export const WONDERLAND_STATUS_STATES = [
   'ledger_unwritten',
   'interrupted',
   'failed',
+  'dispatching',
   'dispatched',
   'dispatch_failed',
   'already_spent',
@@ -379,8 +423,10 @@ The admission store's `ADMISSION_HELD` is `held`. While that row is still
 waiting for the operator claim, and the awaiting-operator window has not
 elapsed, the status route spells it `awaiting_operator`. `RESERVED` is
 `reserved`. `LEDGER_UNWRITTEN` is `ledger_unwritten`. `INTERRUPTED` is
-`interrupted`. `FAILED` is `failed`. The operator claim writes `dispatched`,
-`dispatch_failed`, and `already_spent`, with a cause of `RUN_ID_ALREADY_SPENT`,
+`interrupted`. `FAILED` is `failed`. The operator claim writes `dispatching`
+(its reservation, written before it spawns `gh workflow run`; not a dispatch,
+and `dispatchedAt` stays `null`), then `dispatched` only after that child
+exited 0 with no halt, `dispatch_failed`, and `already_spent`, with a cause of `RUN_ID_ALREADY_SPENT`,
 `SPENT_TAG_UNVERIFIED`, or `gh_workflow_run_failed` when it has one.
 `status --watch` may write only a state from that list other than `unknown`,
 and only a cause from the cause list, and only through
@@ -427,7 +473,7 @@ refuses every write of `INTERRUPTED` or `FAILED`, the status spellings
 the only terminal outcomes are the ones the slot and the spent-tag path
 report: `dispatch_failed` and `already_spent`.
 
-`held`, `reserved`, `awaiting_operator`, and `dispatched` are not terminal.
+`held`, `reserved`, `awaiting_operator`, `dispatching`, and `dispatched` are not terminal.
 `unknown` is not terminal.
 
 A run is visible to the player recorded for that server run id in the operator
@@ -479,7 +525,7 @@ client calling a `relay-bridge` process on the same machine, at that process's
 configured listen port, with no proxy. That process must have
 `JULIUS_WONDERLAND_ADMISSION=1`, `JULIUS_WONDERLAND_MISSION` set to the
 reviewed slug, and `JULIUS_WONDERLAND_ADMISSION_STORE` set to a local absolute
-writable path. A clean shutdown releases the writer lock. A lock left behind
+writable path. A clean shutdown releases the bridge lock. A lock left behind
 by `SIGKILL` stays held until an operator deletes that lock file, as described
 above. A later process that opens the same file replays the admissions already
 there.
