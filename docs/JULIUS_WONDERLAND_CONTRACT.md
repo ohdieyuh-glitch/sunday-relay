@@ -316,7 +316,13 @@ The bridge stays running while the founder claims; the client keeps polling
    the outcome under the write lock: `dispatched` only when that spawn
    exited 0 with no halt, else `dispatch_failed` or `already_spent`. The
    lock is never held across a `gh` spawn, so the bridge keeps admitting and
-   answering `/status` during dispatch.
+   answering `/status` during dispatch. The argv is
+   `gh workflow run julius-first-live-mission.yml --repo <owner/name> --ref main -f mission=<slug> -f lane=<lane> -f dispatch_key=<key> -f 'confirm_live=RUN LIVE MISSION' -f run_id=<wlj_>`.
+   `confirm_live` is passed only with `--confirm 'RUN LIVE MISSION'`.
+   `run_id` is PR #459's input. While the checked-out workflow does not
+   declare `run_id` (or any other input above), the tool refuses with
+   `workflow_run_id_input_missing` (or `workflow_dispatch_input_missing`),
+   writes nothing, and spawns no `gh`.
 4. If the claim tool prints `admission_file_lock_held`, a writer held the
    lock for longer than 2000 ms. Nothing was recorded and nothing was
    spawned (unless the record already says `dispatching`; see below). Run

@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -52,6 +52,8 @@ function service(storePath: string) {
     verifyNativeSession: ({ token }) => {
       if (token === 'native-token') return { playerId: 'founder', projectId: PROJECT, sessionId: 'sess-1' };
       if (token === 'other-token') return { playerId: 'other-player', projectId: PROJECT, sessionId: 'sess-2' };
+      // The founder player, paired to a different project.
+      if (token === 'other-project-token') return { playerId: 'founder', projectId: 'project-2', sessionId: 'sess-3' };
       return null;
     },
     readWorkflowText: () => null,
@@ -374,6 +376,33 @@ describe('wonderland status', () => {
       }
       ports.close();
     } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('a founder session paired to another project is refused on dispatch and status, even when the query names the configured project', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wlj-status-'));
+    const storePath = join(dir, 'admission.json');
+    const ports = service(storePath);
+    try {
+      const refusal = {
+        status: 403,
+        body: { error: { kind: 'julius_dispatch_wrong_project', message: 'This session was not paired for that project.' } },
+      };
+      const elsewhere = { authorization: 'Relay-Session other-project-token' };
+      const dispatched = await handleWonderlandAdmissionRoute({ ...admitRequest(), ...elsewhere }, ports);
+      expect(dispatched).toEqual(refusal);
+      expect(existsSync(storePath)).toBe(false);
+      const admitted = await handleWonderlandAdmissionRoute(admitRequest(), ports);
+      expect(admitted?.status).toBe(202);
+      const before = readFileSync(storePath, 'utf8');
+      const status = await handleWonderlandStatusRoute(statusRequest(SERVER, elsewhere), ports);
+      expect(status).toEqual(refusal);
+      const own = await handleWonderlandStatusRoute(statusRequest(SERVER), ports);
+      expect(own?.status).toBe(200);
+      expect(readFileSync(storePath, 'utf8')).toBe(before);
+    } finally {
+      ports.close();
       rmSync(dir, { recursive: true, force: true });
     }
   });
