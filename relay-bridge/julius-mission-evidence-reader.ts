@@ -62,6 +62,12 @@ export interface JuliusMissionSpendTagEvidence {
   readonly workflowRunId: string;
   readonly workflowRunAttempt: string;
   readonly headSha: string;
+  /**
+   * When the matched Actions run was created: GitHub's `created_at`, ISO UTC,
+   * read off the run this reader matched to `workflowRunId`. The bridge needs it
+   * to show the operator's dispatch came first. A run without it is not completion.
+   */
+  readonly workflowRunCreatedAt: string;
 }
 
 /** Cap reading of one verified tag. Present only when this reader can supply it. */
@@ -199,6 +205,8 @@ export interface JuliusMissionWorkflowRun {
   readonly workflowRunId: string;
   readonly workflowRunAttempt: string;
   readonly headSha: string;
+  /** GitHub's `created_at` for this run attempt, ISO UTC. Null when the read did not carry it. */
+  readonly createdAt: string | null;
   readonly status: JuliusMissionWorkflowStatus;
   readonly conclusion: JuliusMissionWorkflowConclusion | null;
   readonly failedSteps: readonly string[];
@@ -217,6 +225,8 @@ export interface JuliusMissionGitHub {
 const NAMESPACE = /^[a-z][a-z0-9-]{2,48}$/u;
 const DIGITS = /^[1-9][0-9]{0,19}$/u;
 const SHA40 = /^[0-9a-f]{40}$/u;
+/** GitHub's created_at shape: second precision, Z. Anything else is not a time this reader trusts. */
+const CREATED_AT = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$/u;
 const MICROS = /^(?:0|[1-9][0-9]{0,15})$/u;
 const STAMP = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$/u;
 const REASON = /^[a-z0-9_:-]{1,80}$/u;
@@ -256,7 +266,8 @@ function bundleDigest(files: readonly JuliusMissionArchiveFile[]): string {
   return sha256([...files].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)).map((file) => `${file.path}\0${file.sha256}`).join('\n'));
 }
 
-function parseSpendTag(message: string, runId: string): JuliusMissionSpendTagEvidence | null {
+/** The tag message carries no run time; `workflowRunCreatedAt` is added from the matched run. */
+function parseSpendTag(message: string, runId: string): Omit<JuliusMissionSpendTagEvidence, 'workflowRunCreatedAt'> | null {
   const lines = message.split('\n');
   if (lines.at(-1) === '') lines.pop();
   if (lines.length !== 7 || lines[0] !== JULIUS_SPEND_TAG_SCHEMA) return null;
@@ -293,6 +304,8 @@ function parseSpendTag(message: string, runId: string): JuliusMissionSpendTagEvi
 function normalizeRun(value: JuliusMissionWorkflowRun | null): JuliusMissionWorkflowRun | null {
   if (value === null) return null;
   if (!DIGITS.test(value.workflowRunId) || !DIGITS.test(value.workflowRunAttempt) || !SHA40.test(value.headSha)) return null;
+  const createdAt = typeof value.createdAt === 'string' && CREATED_AT.test(value.createdAt) && !Number.isNaN(Date.parse(value.createdAt))
+    ? value.createdAt : null;
   if (!oneOf(value.status, JULIUS_MISSION_WORKFLOW_STATUSES)) return null;
   if (value.conclusion !== null && !oneOf(value.conclusion, JULIUS_MISSION_WORKFLOW_CONCLUSIONS)) return null;
   if (!Array.isArray(value.failedSteps) || !Array.isArray(value.artifacts)) return null;
@@ -323,6 +336,7 @@ function normalizeRun(value: JuliusMissionWorkflowRun | null): JuliusMissionWork
     workflowRunId: value.workflowRunId,
     workflowRunAttempt: value.workflowRunAttempt,
     headSha: value.headSha,
+    createdAt,
     status: value.status,
     conclusion: value.conclusion,
     failedSteps,
@@ -451,7 +465,7 @@ function runtimeAgrees(text: string | null, runId: string): boolean {
   return rows[0].state === 'COMPLETED';
 }
 
-function markerAgrees(artifact: JuliusMissionWorkflowArtifact | undefined, tag: JuliusMissionSpendTagEvidence): boolean {
+function markerAgrees(artifact: JuliusMissionWorkflowArtifact | undefined, tag: Omit<JuliusMissionSpendTagEvidence, 'workflowRunCreatedAt'>): boolean {
   if (artifact === undefined || artifact.name !== `${tag.namespace}-completed`) return false;
   const text = fileText(artifact, 'marker.txt');
   if (text === null) return false;
@@ -633,9 +647,12 @@ export function createJuliusMissionEvidenceReader(github: JuliusMissionGitHub): 
       if (!runtimeAgrees(fileText(evidence, 'runs.tsv'), derived.runId)) return null;
       const diagnosticRows = rowsForRun(fileText(evidence, 'worker-diagnostics.tsv'), derived.runId);
       const runsText = fileText(evidence, 'runs.tsv');
+      // The bridge binds the evidence to the operator's dispatch by the run's creation time.
+      // A run whose read carried none is not completion: unknown is not a time.
+      if (observed.createdAt === null) return null;
       const completion: JuliusMissionCompletionEvidence = {
         juliusFinalState: 'COMPLETED',
-        spendTag,
+        spendTag: { ...spendTag, workflowRunCreatedAt: observed.createdAt },
         // The admission step writes this run's seven-line reservation and does not
         // compute knownUsdMicros, unknownCostComponents, unverifiableApiSpend, or
         // spendVerified. cost-accounting.tsv is missionCost. The reservation is
