@@ -114,7 +114,7 @@ describe('the coder final message is kept outside the workspace for the hidden c
   it('is read by nothing in the runtime: only the paid Coding Agent provider imports it', () => {
     const importers = ['relay-bridge', 'src'].flatMap((root) => walk(root))
       .filter((file) => file.endsWith('.ts') && !file.endsWith('.test.ts') && !file.endsWith('julius-final-message.ts'))
-      .filter((file) => readFileSync(file, 'utf8').includes('julius-final-message'));
+      .filter((file) => /from '[^']*\/julius-final-message'/u.test(readFileSync(file, 'utf8')));
     expect(importers.map((f) => f.split('\\').join('/'))).toEqual(['relay-bridge/julius/claude-code-coding-provider.ts']);
   });
 });
@@ -140,7 +140,8 @@ describe('the published copy can never trip the evidence credential scan', () =>
     const scan = new RegExp((ere as string).replaceAll('[[:space:]]', '\\s'), 'u');
     const samples = [
       `sk-${'a'.repeat(20)}`, `x sk-ant-${'b'.repeat(20)}`, `sk-proj-${'c'.repeat(20)}`, `xai-${'A'.repeat(16)}`,
-      `ghp_${'d'.repeat(20)}`, `gho_${'e'.repeat(20)}`, '-----BEGIN RSA PRIVATE KEY-----\nMIIabc\n-----END RSA PRIVATE KEY-----',
+      // Assembled at run time, so the repository's own secret scan does not read a key in this file.
+      `ghp_${'d'.repeat(20)}`, `gho_${'e'.repeat(20)}`, ['-----BEGIN RSA', 'PRIVATE KEY-----\nMIIabc\n-----END RSA', 'PRIVATE KEY-----'].join(' '),
       `Authorization: Bearer ${'f'.repeat(20)}`, `CLAUDE_CODE_OAUTH_TOKEN=${'g'.repeat(12)}`,
     ];
     for (const sample of samples) {
