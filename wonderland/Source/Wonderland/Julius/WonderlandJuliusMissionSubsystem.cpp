@@ -1,6 +1,7 @@
 #include "WonderlandJuliusMissionSubsystem.h"
 
 #include "Wonderland/WonderlandJuliusMissionClient.h"
+#include "Wonderland/WonderlandJuliusMissionFlow.h"
 #include "Wonderland/WonderlandJuliusStream.h"
 #include "WonderlandJuliusRandomBytes.h"
 
@@ -148,6 +149,8 @@ struct UWonderlandJuliusMissionSubsystem::FHost
 	FJuliusJ1FileTrace Trace;
 	FJuliusJ1FileStore Store;
 	WonderlandJuliusMissionClient::FJuliusMissionSession Session;
+	/** The live /events stream of the current run (pure core: dedup by seq, cursor, server live/stale flags). */
+	WonderlandJuliusMissionFlow::FLiveFeed LiveFeed;
 
 	explicit FHost(const FString& SavedDir)
 		: Trace(SavedDir)
@@ -373,6 +376,7 @@ bool UWonderlandJuliusMissionSubsystem::HandleTick(float DeltaSeconds)
 	const WonderlandJuliusMissionClient::FTickOutcome Outcome = Host->Session.Tick();
 	if (Outcome.bSend) { (void)FJuliusJ1Transport::Send(*this, Outcome.Request); }
 	PollMissionReads();
+	PollLiveEvents();
 	return true;
 }
 
@@ -551,6 +555,130 @@ void UWonderlandJuliusMissionSubsystem::CompleteMissionRead(
 	MissionReadFailures = Status == 200 ? 0 : MissionReadFailures + 1;
 	Slot.Status = Status;
 	Slot.Body = Body;
+}
+
+void UWonderlandJuliusMissionSubsystem::PollLiveEvents()
+{
+	using namespace WonderlandJuliusMissionFlow;
+	if (Host == nullptr) { return; }
+	const FString RunId = ClientRunId();
+	if (RunId.IsEmpty()) { return; }
+	if (RunId != LiveRunId)
+	{
+		// A new attempt: the previous run's stream is never shown under this one.
+		LiveRunId = RunId;
+		Host->LiveFeed.Clear();
+		bLiveInFlight = false;
+		bLiveDrained = false;
+		NextLiveReadAtUtcMs = 0;
+		LastLiveOkUtcMs = 0;
+		LiveReadFailures = 0;
+	}
+	if (bLiveInFlight) { return; }
+	const FLiveFeed& Feed = Host->LiveFeed;
+	// The bound workflow run finished, GitHub was readable, and the last page brought nothing new: the stream is done.
+	if (Feed.Run() == ELiveRunStatus::Completed && !Feed.IsStale() && bLiveDrained) { return; }
+	// The wrapper's run is over and the bridge says nothing was ever dispatched: no stream will ever exist.
+	if (Host->Session.CanStartNewAttempt() && Feed.Source() == ELiveSource::None && Feed.Reason() == "not_dispatched") { return; }
+	const uint64 NowMs = Host->Clock.NowUtcMs();
+	if (NowMs < NextLiveReadAtUtcMs) { return; }
+	const uint64 Backoff = WonderlandJuliusMissionClient::LiveEventsPeriodMs << FMath::Min(LiveReadFailures, 4);
+	NextLiveReadAtUtcMs = NowMs + FMath::Min<uint64>(Backoff, 30000);
+	const WonderlandJuliusMissionClient::FCommandOutcome Outcome = Host->Session.LiveEventsRequest(Feed.Cursor());
+	if (!Outcome.bSent) { return; }
+	ClampHttpLogging();
+	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Http = FHttpModule::Get().CreateRequest();
+	Http->SetVerb(ToF(Outcome.Request.Method));
+	Http->SetURL(ToF(Outcome.Request.Url));
+	for (const std::pair<std::string, std::string>& Header : Outcome.Request.Headers)
+	{
+		Http->SetHeader(ToF(Header.first), ToF(Header.second));
+	}
+	Http->SetDelegateThreadPolicy(EHttpRequestDelegateThreadPolicy::CompleteOnGameThread);
+	const FString ForRunId = LiveRunId;
+	TWeakObjectPtr<UWonderlandJuliusMissionSubsystem> Weak(this);
+	Http->OnProcessRequestComplete().BindLambda(
+		[Weak, ForRunId](FHttpRequestPtr /*Request*/, FHttpResponsePtr Response, bool bConnected)
+		{
+			if (!Weak.IsValid()) { return; }
+			Weak->CompleteLiveRead(ForRunId, bConnected, Response);
+		});
+	bLiveInFlight = Http->ProcessRequest();
+}
+
+void UWonderlandJuliusMissionSubsystem::CompleteLiveRead(
+	const FString& ForRunId,
+	bool bConnected,
+	const TSharedPtr<IHttpResponse, ESPMode::ThreadSafe>& Response)
+{
+	using namespace WonderlandJuliusMissionFlow;
+	if (Host == nullptr || ForRunId != LiveRunId) { return; }
+	bLiveInFlight = false;
+	if (!bConnected || !Response.IsValid())
+	{
+		// A transport miss keeps what is shown; the panel says how long since the last good read.
+		++LiveReadFailures;
+		return;
+	}
+	const int32 Status = Response->GetResponseCode();
+	if (Status == 401)
+	{
+		DropAdoptedSession(TEXT("bridge answered 401 on a live events read"));
+		UGameInstance* Instance = GetGameInstance();
+		if (UWonderlandJuliusStreamSubsystem* Stream = Instance != nullptr ? Instance->GetSubsystem<UWonderlandJuliusStreamSubsystem>() : nullptr)
+		{
+			Stream->NoteSessionRefused();
+		}
+	}
+	const TArray<uint8>& Content = Response->GetContent();
+	FLiveRead Read;
+	if (Content.Num() <= MissionReadMaxBytes)
+	{
+		const std::string Body(reinterpret_cast<const char*>(Content.GetData()), static_cast<std::size_t>(Content.Num()));
+		Read = ParseLiveEvents(ToStd(ForRunId), Status, Body);
+	}
+	if (!Read.bParsed)
+	{
+		++LiveReadFailures;
+		UE_LOG(LogJuliusJ1, Display, TEXT("{\"event\":\"live_read_refused\",\"wlj_run_id\":\"%s\",\"status\":%d,\"bytes\":%d}"),
+			*ForRunId, Status, Content.Num());
+		return;
+	}
+	const std::size_t Before = Host->LiveFeed.Events().size();
+	const std::string BeforeWorkflow = Host->LiveFeed.WorkflowRunId();
+	Host->LiveFeed.Apply(Read);
+	const FLiveFeed& Feed = Host->LiveFeed;
+	const bool bNew = Feed.Events().size() != Before || Feed.WorkflowRunId() != BeforeWorkflow;
+	bLiveDrained = Read.Events.empty();
+	LiveReadFailures = 0;
+	LastLiveOkUtcMs = Host->Clock.NowUtcMs();
+	if (bNew || Read.bStale)
+	{
+		// Evidence line: which GitHub Actions run this client is reading, and what the server says about it.
+		const TCHAR* SourceName = Feed.Source() == ELiveSource::GithubActions ? TEXT("github_actions")
+			: Feed.Source() == ELiveSource::GithubActionsRecorded ? TEXT("github_actions_recorded") : TEXT("none");
+		UE_LOG(LogJuliusJ1, Display,
+			TEXT("{\"event\":\"live_read\",\"wlj_run_id\":\"%s\",\"workflow_run_id\":\"%s\",\"source\":\"%s\",\"live\":%s,\"stale\":%s,\"events_new\":%d,\"events_shown\":%d,\"cursor\":\"%s\"}"),
+			*ForRunId, *ToF(Feed.WorkflowRunId()), SourceName, Feed.IsLive() ? TEXT("true") : TEXT("false"),
+			Feed.IsStale() ? TEXT("true") : TEXT("false"), static_cast<int32>(Read.Events.size()),
+			static_cast<int32>(Feed.Events().size()), *ToF(Feed.Cursor()));
+	}
+}
+
+bool UWonderlandJuliusMissionSubsystem::LatestLivePanel(bool& bOutLive, FString& OutHeader, TArray<FString>& OutLines) const
+{
+	bOutLive = false;
+	OutHeader.Reset();
+	OutLines.Reset();
+	if (Host == nullptr || LiveRunId.IsEmpty() || LiveRunId != ClientRunId()) { return false; }
+	const uint64 NowMs = Host->Clock.NowUtcMs();
+	const uint64 Since = LastLiveOkUtcMs != 0 && NowMs > LastLiveOkUtcMs ? NowMs - LastLiveOkUtcMs : 0;
+	const WonderlandJuliusMissionFlow::FLivePanel Panel = WonderlandJuliusMissionFlow::LivePanelFor(Host->LiveFeed, Since);
+	if (!Panel.bShow) { return false; }
+	bOutLive = Panel.bLive;
+	OutHeader = ToF(Panel.Header);
+	for (const std::string& Line : Panel.Lines) { OutLines.Add(ToF(Line)); }
+	return true;
 }
 
 void UWonderlandJuliusMissionSubsystem::CompleteHttp(

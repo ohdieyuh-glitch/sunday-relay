@@ -807,7 +807,7 @@ int main()
 
 	{
 		FRig Rig(1);
-		Rig.Session.SetBaseUrl("http://example.com");
+		(void)Rig.Session.SetBaseUrl("http://example.com");
 		Expect(!Rig.Session.Dispatch("demo-mission", "").bSent, "public_endpoint_refused");
 		Expect(Rig.Random.Fills == 0, "public_endpoint_does_not_mint");
 		Expect(Rig.Session.SetBaseUrl("http://127.0.0.1:9"), "loopback_override_accepted");
@@ -1117,6 +1117,24 @@ int main()
 		Late.Session.OnStatusHttp(Http(200, BridgeStatusBody(Run, "dispatched", Server, When.c_str(), nullptr), false));
 		Expect(Late.Session.UiState() == EJuliusUiState::OperatorStarted, "restore_late_server_dispatch_wins");
 		Expect(Late.Trace.CountEvent(Run, "hold_window_expired") == 0, "restore_late_no_local_expiry_over_an_answer");
+	}
+
+	{
+		// LIVE RUN VIEW: /events under the current run, the paired project, and the bridge's cursor; nothing else.
+		FRig Rig(1);
+		Expect(!Rig.Session.LiveEventsRequest("").bSent, "live_events_need_a_run");
+		Expect(Rig.Session.Dispatch("demo-mission", "").bSent, "live_events_dispatch");
+		const std::string Run = Rig.Session.RunId();
+		const FCommandOutcome First = Rig.Session.LiveEventsRequest("");
+		Expect(First.bSent && First.Request.Method == "GET", "live_events_first_read");
+		Expect(Contains(First.Request.Url, "/relay-api/wonderland/julius/missions/" + Run + "/events?projectId=proj-1"), "live_events_route");
+		Expect(!Contains(First.Request.Url, "after="), "live_events_first_read_has_no_cursor");
+		const FCommandOutcome Next = Rig.Session.LiveEventsRequest("c7:abc");
+		Expect(Next.bSent && Contains(Next.Request.Url, "&after=c7%3Aabc"), "live_events_cursor_encoded");
+		Expect(!Rig.Session.LiveEventsRequest("c7 x").bSent, "live_events_cursor_with_space_refused");
+		Expect(!Rig.Session.LiveEventsRequest(std::string(65, 'a')).bSent, "live_events_cursor_too_long_refused");
+		(void)Rig.Session.SetBaseUrl("http://example.com");
+		Expect(!Rig.Session.LiveEventsRequest("").bSent, "live_events_loopback_only");
 	}
 
 	Expect(CheckJuliusModuleRootIncludes(), "julius_no_bare_module_root_include");

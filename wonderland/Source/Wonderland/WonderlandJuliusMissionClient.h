@@ -87,6 +87,10 @@ namespace WonderlandJuliusMissionClient
 	inline constexpr std::uint64_t HeartbeatPeriodMs = 5000;
 	inline constexpr std::uint64_t StatusPollPeriodMs = 5000;
 	inline constexpr std::uint64_t MissionReadPeriodMs = 5000;
+	/** GET {prefix}{wljRunId}/events?projectId=&after= (live run view): faster than the reads while a run executes. */
+	inline constexpr std::uint64_t LiveEventsPeriodMs = 3000;
+	/** The bridge's opaque resume cursor: printable ASCII without spaces, at most this many bytes. */
+	inline constexpr std::size_t LiveCursorMaxBytes = 64;
 	inline constexpr const char* UnmintedTraceName = "_unminted";
 
 	inline constexpr const char* LabelIdle = "no mission yet";
@@ -245,6 +249,11 @@ namespace WonderlandJuliusMissionClient
 		 * Sends nothing with no run id, no native session, or a non-loopback base. Mints nothing, writes no trace.
 		 */
 		FCommandOutcome MissionReadRequest(bool bProgress) const;
+		/**
+		 * GET of the mission's /events route (live run view) under the current wlj_ run id, resuming after Cursor
+		 * when it is not empty. Same refusals as MissionReadRequest, and a malformed cursor sends nothing.
+		 */
+		FCommandOutcome LiveEventsRequest(const std::string& Cursor) const;
 
 		void OnDispatchHttp(const FHttpResult& Http);
 		void OnStatusHttp(const FHttpResult& Http);

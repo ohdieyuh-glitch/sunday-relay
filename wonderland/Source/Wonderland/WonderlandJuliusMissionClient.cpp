@@ -1020,6 +1020,28 @@ namespace WonderlandJuliusMissionClient
 		return Outcome;
 	}
 
+	FCommandOutcome FJuliusMissionSession::LiveEventsRequest(const std::string& Cursor) const
+	{
+		FCommandOutcome Outcome;
+		if (Cursor.size() > LiveCursorMaxBytes) { Outcome.Detail = "live cursor is malformed"; return Outcome; }
+		for (const char Ch : Cursor)
+		{
+			if (Ch <= 0x20 || Ch > 0x7E) { Outcome.Detail = "live cursor is malformed"; return Outcome; }
+		}
+		Outcome = MissionReadRequest(false);
+		if (!Outcome.bSent) { return Outcome; }
+		Outcome.Request.Url = JoinBase(BaseUrl, MissionReadRelativePrefix);
+		Outcome.Request.Url += PercentEncode(CurrentRunId);
+		Outcome.Request.Url += "/events?projectId=";
+		Outcome.Request.Url += PercentEncode(ProjectId);
+		if (!Cursor.empty())
+		{
+			Outcome.Request.Url += "&after=";
+			Outcome.Request.Url += PercentEncode(Cursor);
+		}
+		return Outcome;
+	}
+
 	FCommandOutcome FJuliusMissionSession::SendOpenPair(bool bFromSchedule)
 	{
 		FCommandOutcome Outcome;

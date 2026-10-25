@@ -388,6 +388,76 @@ MUTATIONS = [
         "if (Step != EFlowStep::Watching) { return false; } // FLOW_START_AGAIN_ONLY_FROM_WATCHING",
         "// FLOW_START_AGAIN_ONLY_FROM_WATCHING",
     ),
+    (
+        'live_plain_text_unchecked',
+        'if (Ch < 0x20 || Ch > 0x7E) { return false; } // FLOW_LIVE_PLAIN_TEXT_ONLY',
+        '// FLOW_LIVE_PLAIN_TEXT_ONLY',
+    ),
+    (
+        'live_other_runs_events',
+        'if (!Run.bKnown || !SameText(Run.Text, WljRunId)) { return Out; } // FLOW_LIVE_OWN_RUN_ONLY',
+        '// FLOW_LIVE_OWN_RUN_ONLY',
+    ),
+    (
+        'live_from_unbound_source',
+        'if (Read.bLive && Read.Source != ELiveSource::GithubActions) { return Out; } // FLOW_LIVE_ONLY_FROM_A_BOUND_RUN',
+        '// FLOW_LIVE_ONLY_FROM_A_BOUND_RUN',
+    ),
+    (
+        'live_finished_run_live',
+        'if (Read.bLive && Read.Run == ELiveRunStatus::Completed) { return Out; } // a finished run is never live',
+        '// a finished run is never live',
+    ),
+    (
+        'live_without_workflow_run',
+        'if (Read.Source != ELiveSource::None && Read.WorkflowRunId.empty()) { return Out; } // FLOW_LIVE_NEEDS_A_REAL_RUN',
+        '// FLOW_LIVE_NEEDS_A_REAL_RUN',
+    ),
+    (
+        'live_roles_open',
+        'if (!LiveWord(Field(Node, "role"), Event.Role) || !LiveRole(Event.Role)) { return Out; } // FLOW_LIVE_ROLES_ARE_CLOSED',
+        'if (!LiveWord(Field(Node, "role"), Event.Role)) { return Out; } // FLOW_LIVE_ROLES_ARE_CLOSED',
+    ),
+    (
+        'live_task_types_open',
+        'Event.TaskType) || !LiveTaskType(Event.TaskType)) { return Out; }',
+        'Event.TaskType)) { return Out; }',
+    ),
+    (
+        'live_task_states_open',
+        'Event.State) || !LiveTaskState(Event.State)) { return Out; }',
+        'Event.State)) { return Out; }',
+    ),
+    (
+        'live_repair_cycle_unbounded',
+        'Event.RepairCycle)) { return Out; } // FLOW_LIVE_REPAIR_CYCLE_BOUND',
+        'Event.RepairCycle) && false) { return Out; } // FLOW_LIVE_REPAIR_CYCLE_BOUND',
+    ),
+    (
+        'live_phases_not_samples',
+        'if (!LiveBool(Field(Node, "sampled"), bSampled) || !bSampled) { return Out; } // FLOW_LIVE_PHASES_ARE_SAMPLES',
+        '// FLOW_LIVE_PHASES_ARE_SAMPLES',
+    ),
+    (
+        'live_resume_duplicates',
+        'if (Event.Seq <= LastSeq) { continue; } // FLOW_LIVE_RESUME_WITHOUT_DUPLICATES',
+        '// FLOW_LIVE_RESUME_WITHOUT_DUPLICATES',
+    ),
+    (
+        'live_runs_merged',
+        '*this = FLiveFeed(); // a different workflow run is never merged into this one',
+        '// a different workflow run is never merged into this one',
+    ),
+    (
+        'live_recorded_called_live',
+        'Out.Header = "RECORDED RUN, NOT LIVE" + RunRef; // FLOW_RECORDED_IS_NEVER_LIVE',
+        'Out.Header = "LIVE" + RunRef; // FLOW_RECORDED_IS_NEVER_LIVE',
+    ),
+    (
+        'live_stale_hidden',
+        'Out.Header += " -- connection to GitHub lost, reconnecting";',
+        'Out.Header += "";',
+    ),
 ]
 
 

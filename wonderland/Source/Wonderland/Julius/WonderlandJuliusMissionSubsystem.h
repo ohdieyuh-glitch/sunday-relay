@@ -91,6 +91,13 @@ public:
 	void CompleteMissionRead(bool bProgress, const FString& ForRunId, bool bConnected, const TSharedPtr<IHttpResponse, ESPMode::ThreadSafe>& Response);
 
 	/**
+	 * LIVE RUN VIEW (founder 2026-10-25): what the /events feed for the current wlj_ run says, already worded by the
+	 * flow core (header + lines). bOutLive is the SERVER's live flag. False when there is nothing to show yet.
+	 */
+	bool LatestLivePanel(bool& bOutLive, FString& OutHeader, TArray<FString>& OutLines) const;
+	void CompleteLiveRead(const FString& ForRunId, bool bConnected, const TSharedPtr<IHttpResponse, ESPMode::ThreadSafe>& Response);
+
+	/**
 	 * FORGE calls this when replicated mission state arrives. client_role=observer,
 	 * same wlj_ run id. Does not change the sender's UI and does not send.
 	 */
@@ -128,6 +135,12 @@ private:
 	uint64 NextMissionReadAtUtcMs = 0;
 	int32 MissionReadFailures = 0;
 	bool bFinalMissionReadSent = false;
+	FString LiveRunId;
+	bool bLiveInFlight = false;
+	bool bLiveDrained = false;
+	uint64 NextLiveReadAtUtcMs = 0;
+	uint64 LastLiveOkUtcMs = 0;
+	int32 LiveReadFailures = 0;
 	uint32 AdoptedTokenCrc = 0;
 	bool bAdoptedToken = false;
 	FString AdoptedProjectId;
@@ -141,6 +154,7 @@ private:
 	bool HandleTick(float DeltaSeconds);
 	void PollMissionReads();
 	void SendMissionRead(bool bProgress);
+	void PollLiveEvents();
 	void ApplyConfiguredEndpoint();
 	void NoteDetail(const FString& Detail) const;
 };

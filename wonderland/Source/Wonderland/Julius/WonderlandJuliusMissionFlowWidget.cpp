@@ -113,8 +113,12 @@ FString SWonderlandJuliusMissionFlow::QaDescribe() const
 		if (!Lines.IsEmpty()) { Lines += TEXT(" / "); }
 		Lines += MissionFlowUtf8(Line.c_str());
 	}
+	bool bLive = false;
+	FString LiveHeader;
+	TArray<FString> LiveLines;
+	if (Live != nullptr) { (void)Live->LatestLivePanel(bLive, LiveHeader, LiveLines); }
 	return FString::Printf(
-		TEXT("step=%d choice=%d confirm=%d progress=%d result=%d finished=%d verified=%d wlj=%s progress_line=\"%s\" result_line=\"%s\" result_lines=\"%s\""),
+		TEXT("step=%d choice=%d confirm=%d progress=%d result=%d finished=%d verified=%d wlj=%s progress_line=\"%s\" result_line=\"%s\" result_lines=\"%s\" live=%d live_header=\"%s\" live_lines=\"%s\""),
 		static_cast<int32>(View.Step),
 		View.bShowChoice ? 1 : 0,
 		View.bShowConfirm ? 1 : 0,
@@ -125,7 +129,10 @@ FString SWonderlandJuliusMissionFlow::QaDescribe() const
 		Live != nullptr ? *Live->ClientRunId() : TEXT(""),
 		*Progress,
 		*MissionFlowUtf8(View.Result.Line),
-		*Lines);
+		*Lines,
+		bLive ? 1 : 0,
+		*LiveHeader,
+		*FString::Join(LiveLines, TEXT(" / ")));
 }
 
 void SWonderlandJuliusMissionFlow::Tick(const FGeometry& AllottedGeometry, double InCurrentTime, float InDeltaTime)
@@ -294,6 +301,11 @@ void SWonderlandJuliusMissionFlow::Rebuild()
 	{
 		ProgressLine = WrapperLabel;
 	}
+	// LIVE RUN VIEW: worded by the flow core from the bridge's /events feed; LIVE only on the server's live flag.
+	bool bLiveRun = false;
+	FString LiveHeader;
+	TArray<FString> LiveLines;
+	const bool bShowLive = View.bShowProgress && Live != nullptr && Live->LatestLivePanel(bLiveRun, LiveHeader, LiveLines);
 	FString Reported;
 	for (const std::string& Line : View.Result.Lines)
 	{
@@ -312,7 +324,8 @@ void SWonderlandJuliusMissionFlow::Rebuild()
 		*MissionFlowUtf8(View.PaidOnDispatch),
 		View.Result.bShowsArtifact ? 1 : 0,
 		View.Result.bFinished ? 1 : 0,
-		*Reported) + TEXT("|") + Notice + (bCanStartAgain ? TEXT("|again") : TEXT(""));
+		*Reported) + TEXT("|") + Notice + (bCanStartAgain ? TEXT("|again") : TEXT(""))
+		+ (bShowLive ? FString::Printf(TEXT("|live%d|%s|%s"), bLiveRun ? 1 : 0, *LiveHeader, *FString::Join(LiveLines, TEXT("\n"))) : FString());
 	if (Key == ShownKey) { return; }
 	ShownKey = Key;
 
@@ -393,6 +406,33 @@ void SWonderlandJuliusMissionFlow::Rebuild()
 	{
 		AddText(TEXT("Progress"));
 		AddText(ProgressLine);
+	}
+
+	if (bShowLive)
+	{
+		// Red only for the server's LIVE; amber for anything else (recorded, finished, unavailable).
+		const FLinearColor Badge = bLiveRun ? FLinearColor(0.75f, 0.05f, 0.05f, 1.0f) : FLinearColor(0.55f, 0.38f, 0.02f, 1.0f);
+		Body->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 2.0f)
+		[
+			SNew(SBorder)
+			.BorderImage(FCoreStyle::Get().GetBrush(TEXT("GenericWhiteBox")))
+			.BorderBackgroundColor(Badge)
+			.ForegroundColor(FLinearColor::White)
+			.Padding(FMargin(8.0f, 4.0f))
+			[
+				SNew(STextBlock)
+				.Text(FText::FromString(LiveHeader))
+				.Font(FCoreStyle::GetDefaultFontStyle("Bold", 12))
+				.AutoWrapText(true)
+			]
+		];
+		for (const FString& Line : LiveLines)
+		{
+			Body->AddSlot().AutoHeight().Padding(0.0f, 1.0f)
+			[
+				SNew(STextBlock).Text(FText::FromString(Line)).Font(FCoreStyle::GetDefaultFontStyle("Mono", 9)).AutoWrapText(true)
+			];
+		}
 	}
 
 	if (View.bShowResult)

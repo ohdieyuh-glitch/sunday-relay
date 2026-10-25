@@ -398,6 +398,150 @@ const ABSENT_PHASE = {
 		Expect(!HasPrefix(Panel, "projectBrainRevision"), What);
 	}
 
+	// LIVE RUN EVENTS: contract with MAIN JULIUS (2026-10-25). LIVE is the server's fact; phases are samples.
+	int LiveCases = 0;
+	const char* const LiveWlj = "wlj_0f8fad5b-d9cb-469f-a165-70867728950e";
+
+	std::string LiveBody(const std::string& Top, const std::string& Events)
+	{
+		return std::string("{\"wljRunId\":\"") + LiveWlj + "\"," + Top + ",\"events\":[" + Events + "]}";
+	}
+
+	const char* const LiveTop =
+		"\"workflowRunId\":\"18733051234\",\"source\":\"github_actions\",\"reason\":null,\"live\":true,\"stale\":false,"
+		"\"mode\":\"paid\",\"runStatus\":\"in_progress\",\"runConclusion\":null,\"fetchedAt\":\"2026-10-25T18:00:00Z\",\"next\":\"c7\"";
+	const char* const LiveStep =
+		"{\"seq\":3,\"at\":\"2026-10-25T18:00:01Z\",\"kind\":\"step\",\"job\":\"Preflight, then the live mission\","
+		"\"name\":\"LIVE: run the first real Julius mission\",\"status\":\"in_progress\",\"conclusion\":null}";
+	const char* const LivePhase =
+		"{\"seq\":4,\"at\":\"2026-10-25T18:00:11Z\",\"kind\":\"phase\",\"role\":\"coder\",\"taskType\":\"repair_build\","
+		"\"state\":\"active\",\"ordinal\":5,\"repairCycle\":1,\"sampled\":true}";
+
+	bool PanelHas(const FLivePanel& Panel, const char* Piece)
+	{
+		if (Panel.Header.find(Piece) != std::string::npos) { return true; }
+		for (const std::string& Line : Panel.Lines)
+		{
+			if (Line.find(Piece) != std::string::npos) { return true; }
+		}
+		return false;
+	}
+
+	std::string Swap(std::string Text, const std::string& From, const std::string& To)
+	{
+		const std::size_t At = Text.find(From);
+		if (At != std::string::npos) { Text.replace(At, From.size(), To); }
+		return Text;
+	}
+
+	void LiveFixtures()
+	{
+		const std::string Good = LiveBody(LiveTop, std::string(LiveStep) + "," + LivePhase);
+		const FLiveRead Read = ParseLiveEvents(LiveWlj, 200, Good);
+		Expect(Read.bParsed && Read.bLive && !Read.bStale && Read.Mode == ELiveMode::Paid, "live paid read parses");
+		Expect(Read.Events.size() == 2 && Read.Events[1].RepairCycle == 1 && Read.Next == "c7", "live events and cursor");
+		++LiveCases;
+		FLiveFeed Feed;
+		Feed.Apply(Read);
+		const FLivePanel Panel = LivePanelFor(Feed, 0);
+		Expect(Panel.bShow && Panel.bLive && PanelHas(Panel, "LIVE -- the paid run is executing"), "live paid header");
+		Expect(PanelHas(Panel, "GitHub Actions run 18733051234"), "header names the bound run");
+		Expect(PanelHas(Panel, "now: coder / repair_build -- active (repair cycle 1 of 3)"), "now line from the latest sample");
+		Expect(PanelHas(Panel, "sampled every ~10 s"), "phases are labelled as samples");
+		Expect(PanelHas(Panel, "Preflight, then the live mission / LIVE: run the first real Julius mission: in_progress"), "real step names");
+		Expect(Feed.Cursor() == "c7", "cursor kept");
+		++LiveCases;
+
+		// Reconnect: the same events again plus one new one append once (no duplicate).
+		const std::string More = LiveBody(Swap(LiveTop, "\"c7\"", "\"c8\""), std::string(LivePhase) + ","
+			"{\"seq\":5,\"at\":\"2026-10-25T18:00:21Z\",\"kind\":\"phase\",\"role\":\"reviewer\",\"taskType\":\"review\","
+			"\"state\":\"active\",\"ordinal\":6,\"repairCycle\":0,\"sampled\":true}");
+		Feed.Apply(ParseLiveEvents(LiveWlj, 200, More));
+		Expect(Feed.Events().size() == 3 && Feed.Cursor() == "c8", "resume appends without duplicates");
+		Expect(PanelHas(LivePanelFor(Feed, 0), "now: reviewer / review -- active"), "now follows the newest sample");
+		++LiveCases;
+
+		// A failed read keeps what was shown; a long gap says so.
+		Feed.Apply(ParseLiveEvents(LiveWlj, 503, "{}"));
+		Expect(Feed.IsLive() && Feed.Events().size() == 3, "failed read changes nothing");
+		Expect(PanelHas(LivePanelFor(Feed, 25000), "no update for 25 s, reconnecting"), "client gap is shown");
+		++LiveCases;
+
+		FLiveFeed Stale;
+		Stale.Apply(ParseLiveEvents(LiveWlj, 200, LiveBody(Swap(LiveTop, "\"stale\":false", "\"stale\":true"), LiveStep)));
+		Expect(Stale.IsStale() && PanelHas(LivePanelFor(Stale, 0), "connection to GitHub lost, reconnecting"), "stale shown");
+		++LiveCases;
+
+		FLiveFeed Pre;
+		Pre.Apply(ParseLiveEvents(LiveWlj, 200, LiveBody(Swap(LiveTop, "\"mode\":\"paid\"", "\"mode\":\"preflight\""), LiveStep)));
+		Expect(PanelHas(LivePanelFor(Pre, 0), "LIVE -- PREFLIGHT (no paid calls)"), "preflight header");
+		++LiveCases;
+
+		// Recorded: never LIVE; a recorded body claiming live is refused whole.
+		const std::string RecTop = Swap(Swap(LiveTop, "\"github_actions\"", "\"github_actions_recorded\""), "\"live\":true", "\"live\":false");
+		FLiveFeed Rec;
+		Rec.Apply(ParseLiveEvents(LiveWlj, 200, LiveBody(RecTop, LiveStep)));
+		const FLivePanel RecPanel = LivePanelFor(Rec, 0);
+		Expect(RecPanel.bShow && !RecPanel.bLive && !Rec.IsLive() && PanelHas(RecPanel, "RECORDED RUN, NOT LIVE"), "recorded is labelled");
+		Expect(!ParseLiveEvents(LiveWlj, 200, LiveBody(Swap(LiveTop, "\"github_actions\"", "\"github_actions_recorded\""), LiveStep)).bParsed, "recorded+live refused");
+		++LiveCases;
+
+		// Finished run: not live, conclusion shown; completed+live refused.
+		const std::string DoneTop = Swap(Swap(Swap(LiveTop, "\"live\":true", "\"live\":false"), "\"in_progress\"", "\"completed\""), "\"runConclusion\":null", "\"runConclusion\":\"success\"");
+		FLiveFeed Done;
+		Done.Apply(ParseLiveEvents(LiveWlj, 200, LiveBody(DoneTop, LiveStep)));
+		Expect(!Done.IsLive() && PanelHas(LivePanelFor(Done, 0), "Run finished: success"), "finished header");
+		Expect(!ParseLiveEvents(LiveWlj, 200, LiveBody(Swap(LiveTop, "\"in_progress\"", "\"completed\""), LiveStep)).bParsed, "completed+live refused");
+		Expect(!PanelHas(LivePanelFor(Done, 0), "last sampled:"), "no phase line without phases");
+		++LiveCases;
+
+		const std::string NoneTop = "\"workflowRunId\":null,\"source\":\"none\",\"reason\":\"run_mismatch\",\"live\":false,"
+			"\"stale\":false,\"mode\":null,\"runStatus\":null,\"runConclusion\":null,\"fetchedAt\":\"x\",\"next\":null";
+		FLiveFeed NoRun;
+		NoRun.Apply(ParseLiveEvents(LiveWlj, 200, LiveBody(NoneTop, "")));
+		Expect(PanelHas(LivePanelFor(NoRun, 0), "Live view unavailable: run_mismatch"), "none says why");
+		FLiveFeed NotYet;
+		NotYet.Apply(ParseLiveEvents(LiveWlj, 200, LiveBody(Swap(NoneTop, "run_mismatch", "not_dispatched"), "")));
+		Expect(NotYet.HasRead() && !LivePanelFor(NotYet, 0).bShow, "not_dispatched adds nothing");
+		Expect(!ParseLiveEvents(LiveWlj, 200, LiveBody(Swap(NoneTop, "run_mismatch", "because"), "")).bParsed, "unknown reason refused");
+		Expect(!ParseLiveEvents(LiveWlj, 200, LiveBody(NoneTop, LiveStep)).bParsed, "none with events refused");
+		Expect(!ParseLiveEvents(LiveWlj, 200, LiveBody(Swap(NoneTop, "\"live\":false", "\"live\":true"), "")).bParsed, "none+live refused");
+		++LiveCases;
+
+		struct FBad { const char* From; const char* To; const char* What; };
+		const FBad Bad[] = {
+			{"\"sampled\":true", "\"sampled\":false", "unsampled phase"},
+			{",\"sampled\":true", "", "phase without sampled"},
+			{"\"repair_build\"", "\"rebuild\"", "unknown task type"},
+			{"\"state\":\"active\"", "\"state\":\"thinking\"", "unknown task state"},
+			{"\"coder\"", "\"grok\"", "unknown role"},
+			{"\"repairCycle\":1", "\"repairCycle\":4", "repair cycle above 3"},
+			{"\"kind\":\"step\"", "\"kind\":\"thought\"", "unknown kind"},
+			{"LIVE: run", "LIVE:\\u0007run", "control char in a name"},
+			{"\"status\":\"in_progress\",\"conclusion\"", "\"status\":\"running\",\"conclusion\"", "unknown step status"},
+			{"\"live\":true", "\"live\":\"yes\"", "live must be a bool"},
+			{"\"mode\":\"paid\"", "\"mode\":\"free\"", "unknown mode"},
+			{"\"18733051234\"", "\"18733x\"", "non-digit workflow id"},
+			{"\"workflowRunId\":\"18733051234\"", "\"workflowRunId\":null", "live without a run"},
+		};
+		for (const FBad& Case : Bad)
+		{
+			const std::string Mutated = Swap(Good, Case.From, Case.To);
+			Expect(Mutated != Good && !ParseLiveEvents(LiveWlj, 200, Mutated).bParsed, Case.What);
+			++LiveCases;
+		}
+		Expect(!ParseLiveEvents("wlj_11111111-2222-4333-8444-555555555555", 200, Good).bParsed, "another run's events refused");
+		Expect(!ParseLiveEvents(LiveWlj, 404, Good).bParsed, "non-200 refused");
+		++LiveCases;
+
+		// A different workflow run is never merged into the shown one.
+		FLiveFeed Swapped;
+		Swapped.Apply(Read);
+		Swapped.Apply(ParseLiveEvents(LiveWlj, 200, LiveBody(Swap(LiveTop, "18733051234", "18733059999"), LiveStep)));
+		Expect(Swapped.WorkflowRunId() == "18733059999" && Swapped.Events().size() == 1, "new workflow run resets the feed");
+		++LiveCases;
+	}
+
 	void PhaseFixtures()
 	{
 		Expect(std::strstr(VerbatimPhaseVectors, "stage: 'repair:build',\n  attempt: 2,") != nullptr, "verbatim coder phase");
@@ -1148,6 +1292,7 @@ int main()
 
 	BridgeRouteFixtures();
 	PhaseFixtures();
+	LiveFixtures();
 
 	if (Failures != 0)
 	{
@@ -1155,7 +1300,7 @@ int main()
 		return 1;
 	}
 	std::printf(
-		"J1 MISSION FLOW KAT PASS meanings=%d route=%d result=%d flow=%d windows=%d bridge=%d phases=%d\n",
-		Meanings, Routes, Results, FlowSteps, Windows, Bridge, PhaseCases);
+		"J1 MISSION FLOW KAT PASS meanings=%d route=%d result=%d flow=%d windows=%d bridge=%d phases=%d live=%d\n",
+		Meanings, Routes, Results, FlowSteps, Windows, Bridge, PhaseCases, LiveCases);
 	return 0;
 }

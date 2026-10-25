@@ -1273,4 +1273,252 @@ namespace WonderlandJuliusMissionFlow
 		Out.Progress = PanelForProgress(EMissionProgress::Waiting);
 		return Out;
 	}
+
+	namespace
+	{
+		/** Printable ASCII only, at most MaxLen bytes; anything else is refused (never echoed). */
+		bool LivePlainText(const FJson* Node, std::size_t MaxLen, bool bAllowEmpty, std::string& Out)
+		{
+			if (Node == nullptr || Node->Kind != EJsonKind::String) { return false; }
+			if (Node->Text.size() > MaxLen || (!bAllowEmpty && Node->Text.empty())) { return false; }
+			for (const char Ch : Node->Text)
+			{
+				if (Ch < 0x20 || Ch > 0x7E) { return false; } // FLOW_LIVE_PLAIN_TEXT_ONLY
+			}
+			Out = Node->Text;
+			return true;
+		}
+
+		/** A closed-vocabulary word: lowercase letters and '_', 1..32. */
+		bool LiveWord(const FJson* Node, std::string& Out)
+		{
+			if (Node == nullptr || Node->Kind != EJsonKind::String || Node->Text.empty() || Node->Text.size() > 32) { return false; }
+			for (const char Ch : Node->Text)
+			{
+				if (!((Ch >= 'a' && Ch <= 'z') || Ch == '_')) { return false; }
+			}
+			Out = Node->Text;
+			return true;
+		}
+
+		bool LiveBool(const FJson* Node, bool& Out)
+		{
+			if (Node == nullptr || Node->Kind != EJsonKind::Bool) { return false; }
+			Out = Node->bBool;
+			return true;
+		}
+
+		bool LiveInt(const FJson* Node, std::int64_t Min, std::int64_t Max, std::int64_t& Out)
+		{
+			if (Node == nullptr || Node->Kind != EJsonKind::Number || !Node->bInt || Node->Int < Min || Node->Int > Max) { return false; }
+			Out = Node->Int;
+			return true;
+		}
+
+		bool LiveStatusWord(const std::string& S) { return S == "queued" || S == "in_progress" || S == "completed"; }
+		bool LiveRole(const std::string& S) { return S == "architect" || S == "coder" || S == "reviewer"; }
+		bool LiveTaskType(const std::string& S)
+		{
+			return S == "plan" || S == "build" || S == "review" || S == "research" || S == "repair_plan" || S == "repair_build"
+				|| S == "repair_guidance" || S == "repair_rebuttal" || S == "repair_audit" || S == "other";
+		}
+		bool LiveTaskState(const std::string& S)
+		{
+			return S == "blocked" || S == "runnable" || S == "active" || S == "succeeded" || S == "failed" || S == "cancelled"
+				|| S == "skipped";
+		}
+		bool LiveReason(const std::string& S)
+		{
+			return S == "not_dispatched" || S == "run_unbound" || S == "run_mismatch" || S == "github_unreadable";
+		}
+	}
+
+	FLiveRead ParseLiveEvents(std::string_view WljRunId, int HttpStatus, std::string_view Json)
+	{
+		FLiveRead Out;
+		if (HttpStatus != 200 || !WonderlandJuliusMissionLogic::IsClientMintedRunId(WljRunId)) { return Out; }
+		FJson Root;
+		if (!ParseJson(Json, Root) || Root.Kind != EJsonKind::Object) { return Out; }
+		const FReportedString Run = ReadString(&Root, "wljRunId");
+		if (!Run.bKnown || !SameText(Run.Text, WljRunId)) { return Out; } // FLOW_LIVE_OWN_RUN_ONLY
+		FLiveRead Read;
+		const FJson* Source = Field(Root, "source");
+		if (IsExactString(Source, "github_actions")) { Read.Source = ELiveSource::GithubActions; }
+		else if (IsExactString(Source, "github_actions_recorded")) { Read.Source = ELiveSource::GithubActionsRecorded; }
+		else if (IsExactString(Source, "none")) { Read.Source = ELiveSource::None; }
+		else { return Out; }
+		if (!LiveBool(Field(Root, "live"), Read.bLive) || !LiveBool(Field(Root, "stale"), Read.bStale)) { return Out; }
+		// The server's live flag is only meaningful for a bound live source; a recorded run or "none" is never live.
+		if (Read.bLive && Read.Source != ELiveSource::GithubActions) { return Out; } // FLOW_LIVE_ONLY_FROM_A_BOUND_RUN
+		const FJson* Reason = Field(Root, "reason");
+		if (Read.Source == ELiveSource::None)
+		{
+			if (!LiveWord(Reason, Read.Reason) || !LiveReason(Read.Reason)) { return Out; }
+		}
+		else if (Reason != nullptr && Reason->Kind != EJsonKind::Null) { return Out; }
+		const FJson* Mode = Field(Root, "mode");
+		if (IsExactString(Mode, "paid")) { Read.Mode = ELiveMode::Paid; }
+		else if (IsExactString(Mode, "preflight")) { Read.Mode = ELiveMode::Preflight; }
+		else if (Mode != nullptr && Mode->Kind != EJsonKind::Null) { return Out; }
+		const FJson* Status = Field(Root, "runStatus");
+		if (Status != nullptr && Status->Kind == EJsonKind::String)
+		{
+			if (Status->Text == "queued") { Read.Run = ELiveRunStatus::Queued; }
+			else if (Status->Text == "in_progress") { Read.Run = ELiveRunStatus::InProgress; }
+			else if (Status->Text == "completed") { Read.Run = ELiveRunStatus::Completed; }
+			else { return Out; }
+		}
+		else if (Status == nullptr || Status->Kind != EJsonKind::Null) { return Out; }
+		if (Read.bLive && Read.Run == ELiveRunStatus::Completed) { return Out; } // a finished run is never live
+		const FJson* Conclusion = Field(Root, "runConclusion");
+		if (Conclusion != nullptr && Conclusion->Kind != EJsonKind::Null && !LiveWord(Conclusion, Read.RunConclusion)) { return Out; }
+		const FJson* Workflow = Field(Root, "workflowRunId");
+		if (Workflow != nullptr && Workflow->Kind == EJsonKind::String)
+		{
+			if (!Digits(Workflow->Text) || Workflow->Text.size() > 20) { return Out; }
+			Read.WorkflowRunId = Workflow->Text;
+		}
+		else if (Workflow == nullptr || Workflow->Kind != EJsonKind::Null) { return Out; }
+		if (Read.Source != ELiveSource::None && Read.WorkflowRunId.empty()) { return Out; } // FLOW_LIVE_NEEDS_A_REAL_RUN
+		const FJson* Events = Field(Root, "events");
+		if (Events == nullptr || Events->Kind != EJsonKind::Array || Events->Array.size() > 500) { return Out; }
+		if (Read.Source == ELiveSource::None && !Events->Array.empty()) { return Out; }
+		for (const FJson& Node : Events->Array)
+		{
+			if (Node.Kind != EJsonKind::Object) { return Out; }
+			FLiveEvent Event;
+			if (!LiveInt(Field(Node, "seq"), 0, INT64_MAX, Event.Seq)) { return Out; }
+			if (!LivePlainText(Field(Node, "at"), 40, false, Event.At)) { return Out; }
+			const FJson* Kind = Field(Node, "kind");
+			if (IsExactString(Kind, "job") || IsExactString(Kind, "step"))
+			{
+				Event.Kind = Kind->Text;
+				if (!LivePlainText(Field(Node, "job"), 120, false, Event.Job)) { return Out; }
+				if (!LivePlainText(Field(Node, "name"), 120, false, Event.Name)) { return Out; }
+				if (!LiveWord(Field(Node, "status"), Event.Status) || !LiveStatusWord(Event.Status)) { return Out; }
+				const FJson* EventConclusion = Field(Node, "conclusion");
+				if (EventConclusion != nullptr && EventConclusion->Kind != EJsonKind::Null && !LiveWord(EventConclusion, Event.Conclusion)) { return Out; }
+			}
+			else if (IsExactString(Kind, "phase"))
+			{
+				Event.Kind = "phase";
+				if (!LiveWord(Field(Node, "role"), Event.Role) || !LiveRole(Event.Role)) { return Out; } // FLOW_LIVE_ROLES_ARE_CLOSED
+				if (!LiveWord(Field(Node, "taskType"), Event.TaskType) || !LiveTaskType(Event.TaskType)) { return Out; }
+				if (!LiveWord(Field(Node, "state"), Event.State) || !LiveTaskState(Event.State)) { return Out; }
+				// Phase events are snapshots of the active task (a commit status, at most every 10 s): a short task can be
+				// missed between samples, so the server must say so and the panel never presents them as a complete log.
+				bool bSampled = false;
+				if (!LiveBool(Field(Node, "sampled"), bSampled) || !bSampled) { return Out; } // FLOW_LIVE_PHASES_ARE_SAMPLES
+				if (!LiveInt(Field(Node, "ordinal"), 0, 1000000, Event.Ordinal)) { return Out; }
+				if (!LiveInt(Field(Node, "repairCycle"), 0, 3, Event.RepairCycle)) { return Out; } // FLOW_LIVE_REPAIR_CYCLE_BOUND
+			}
+			else { return Out; }
+			Read.Events.push_back(std::move(Event));
+		}
+		const FJson* Next = Field(Root, "next");
+		if (Next != nullptr && Next->Kind != EJsonKind::Null && !LivePlainText(Next, 64, true, Read.Next)) { return Out; }
+		Read.bParsed = true;
+		return Read;
+	}
+
+	void FLiveFeed::Apply(const FLiveRead& Read)
+	{
+		if (!Read.bParsed) { return; } // a failed read keeps what was shown; it is not a new state
+		if (!Workflow.empty() && !Read.WorkflowRunId.empty() && Read.WorkflowRunId != Workflow)
+		{
+			*this = FLiveFeed(); // a different workflow run is never merged into this one
+		}
+		bHasRead = true;
+		SourceNow = Read.Source;
+		ReasonNow = Read.Reason;
+		bLiveNow = Read.bLive;
+		bStaleNow = Read.bStale;
+		ModeNow = Read.Mode;
+		RunNow = Read.Run;
+		Conclusion = Read.RunConclusion;
+		if (!Read.WorkflowRunId.empty()) { Workflow = Read.WorkflowRunId; }
+		for (const FLiveEvent& Event : Read.Events)
+		{
+			if (Event.Seq <= LastSeq) { continue; } // FLOW_LIVE_RESUME_WITHOUT_DUPLICATES
+			EventList.push_back(Event);
+			LastSeq = Event.Seq;
+		}
+		if (EventList.size() > MaxEvents)
+		{
+			EventList.erase(EventList.begin(), EventList.begin() + static_cast<std::ptrdiff_t>(EventList.size() - MaxEvents));
+		}
+		if (!Read.Next.empty()) { CursorNow = Read.Next; }
+	}
+
+	FLivePanel LivePanelFor(const FLiveFeed& Feed, std::uint64_t MsSinceLastRead)
+	{
+		FLivePanel Out;
+		if (!Feed.HasRead()) { return Out; }
+		if (Feed.Source() == ELiveSource::None)
+		{
+			// not_dispatched is already said by the progress line; anything else says plainly why there is no live view.
+			if (Feed.Reason() != "not_dispatched")
+			{
+				Out.bShow = true;
+				Out.Header = std::string("Live view unavailable: ") + Feed.Reason();
+			}
+			return Out;
+		}
+		if (Feed.WorkflowRunId().empty()) { return Out; }
+		Out.bShow = true;
+		Out.bLive = Feed.IsLive();
+		const std::string RunRef = " (GitHub Actions run " + Feed.WorkflowRunId() + ")";
+		if (Feed.Source() == ELiveSource::GithubActionsRecorded)
+		{
+			Out.Header = "RECORDED RUN, NOT LIVE" + RunRef; // FLOW_RECORDED_IS_NEVER_LIVE
+		}
+		else if (Out.bLive)
+		{
+			Out.Header = Feed.Mode() == ELiveMode::Preflight ? "LIVE -- PREFLIGHT (no paid calls)" + RunRef
+				: Feed.Mode() == ELiveMode::Paid ? "LIVE -- the paid run is executing" + RunRef
+				: "LIVE" + RunRef;
+		}
+		else
+		{
+			Out.Header = std::string("Run ") + (Feed.Run() == ELiveRunStatus::Completed ? "finished" : "not running")
+				+ (Feed.RunConclusion().empty() ? std::string() : ": " + Feed.RunConclusion()) + RunRef;
+		}
+		if (Feed.IsStale())
+		{
+			Out.Header += " -- connection to GitHub lost, reconnecting";
+		}
+		else if (Out.bLive && MsSinceLastRead > LiveNoReadAfterMs)
+		{
+			Out.Header += " -- no update for " + std::to_string(MsSinceLastRead / 1000) + " s, reconnecting";
+		}
+		const std::vector<FLiveEvent>& Events = Feed.Events();
+		for (auto It = Events.rbegin(); It != Events.rend(); ++It)
+		{
+			if (It->Kind != "phase") { continue; }
+			std::string Now = (Out.bLive ? "now: " : "last sampled: ") + It->Role + " / " + It->TaskType + " -- " + It->State;
+			if (It->RepairCycle > 0) { Now += " (repair cycle " + std::to_string(It->RepairCycle) + " of 3)"; }
+			Out.Lines.push_back(std::move(Now));
+			Out.Lines.push_back("phase history is sampled every ~10 s; short tasks may not appear");
+			break;
+		}
+		const std::size_t First = Events.size() > LivePanelLines ? Events.size() - LivePanelLines : 0;
+		for (std::size_t I = First; I < Events.size(); ++I)
+		{
+			const FLiveEvent& E = Events[I];
+			std::string Line;
+			if (E.Kind == "phase")
+			{
+				Line = "  sampled #" + std::to_string(E.Ordinal) + ": " + E.Role + " / " + E.TaskType + " -- " + E.State;
+				if (E.RepairCycle > 0) { Line += " (repair cycle " + std::to_string(E.RepairCycle) + " of 3)"; }
+			}
+			else
+			{
+				Line = E.Kind == "job" ? "job " + E.Name : "  " + E.Job + " / " + E.Name;
+				Line += ": " + E.Status;
+				if (!E.Conclusion.empty()) { Line += " (" + E.Conclusion + ")"; }
+			}
+			Out.Lines.push_back(std::move(Line));
+		}
+		return Out;
+	}
 }

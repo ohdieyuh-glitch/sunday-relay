@@ -379,4 +379,104 @@ namespace WonderlandJuliusMissionFlow
 		FResultPanel Result;
 		FResultRead RouteRead;
 	};
+
+	// ---------------------------------------------------------------------------------------------------------------
+	// LIVE RUN EVENTS (founder requirement 2026-10-25: watch the first paid J1 run live in Wonderland; contract agreed
+	// with MAIN JULIUS). BRIDGE GET /missions/{wlj}/events?projectId=&after= reads ONLY the GitHub Actions run bound to
+	// this admission's claim. Steps: the workflow's real job/step names. Phases: an allowlisted projection of the Julius
+	// task table (role, task type, state, ordinal, repair cycle) -- no text, no output, no model payload. Phase events are
+	// SAMPLES of the active task (commit status julius-live-progress, <= every 10 s), never a complete log. "live" and
+	// "stale" are the SERVER's facts; the client never derives them. Julius and the paid workflow are the authority.
+	// ---------------------------------------------------------------------------------------------------------------
+	enum class ELiveSource : std::uint8_t { Unknown, None, GithubActions, GithubActionsRecorded };
+	enum class ELiveRunStatus : std::uint8_t { Unknown, Queued, InProgress, Completed };
+	enum class ELiveMode : std::uint8_t { Unknown, Paid, Preflight };
+
+	struct FLiveEvent
+	{
+		std::int64_t Seq = 0;
+		std::string At;
+		/** "job", "step" or "phase". */
+		std::string Kind;
+		/** job/step only. */
+		std::string Job;
+		std::string Name;
+		std::string Status;
+		std::string Conclusion;
+		/** phase only. */
+		std::string Role;
+		std::string TaskType;
+		std::string State;
+		std::int64_t Ordinal = 0;
+		std::int64_t RepairCycle = 0;
+	};
+
+	struct FLiveRead
+	{
+		/** False for anything but a fully well-formed 200 body for THIS run: nothing from it is shown or kept. */
+		bool bParsed = false;
+		ELiveSource Source = ELiveSource::Unknown;
+		/** source "none" only: not_dispatched, run_unbound, run_mismatch or github_unreadable. */
+		std::string Reason;
+		bool bLive = false;
+		bool bStale = false;
+		ELiveMode Mode = ELiveMode::Unknown;
+		ELiveRunStatus Run = ELiveRunStatus::Unknown;
+		std::string RunConclusion;
+		std::string WorkflowRunId;
+		std::vector<FLiveEvent> Events;
+		std::string Next;
+	};
+
+	/** Strict: a malformed field anywhere fails the whole read closed (no partial, no invented event). */
+	FLiveRead ParseLiveEvents(std::string_view WljRunId, int HttpStatus, std::string_view Json);
+
+	/** One run's stream: events de-duplicated by seq, oldest first, capped; the cursor resumes after a reconnect. */
+	class FLiveFeed
+	{
+	public:
+		static constexpr std::size_t MaxEvents = 300;
+		void Apply(const FLiveRead& Read);
+		void Clear() { *this = FLiveFeed(); }
+		bool HasRead() const { return bHasRead; }
+		ELiveSource Source() const { return SourceNow; }
+		const std::string& Reason() const { return ReasonNow; }
+		/** The server's live flag from the last good read; never computed here. */
+		bool IsLive() const { return bHasRead && bLiveNow && SourceNow == ELiveSource::GithubActions; } // FLOW_LIVE_IS_THE_SERVERS
+		bool IsStale() const { return bStaleNow; }
+		ELiveMode Mode() const { return ModeNow; }
+		ELiveRunStatus Run() const { return RunNow; }
+		const std::string& RunConclusion() const { return Conclusion; }
+		const std::string& WorkflowRunId() const { return Workflow; }
+		const std::string& Cursor() const { return CursorNow; }
+		const std::vector<FLiveEvent>& Events() const { return EventList; }
+
+	private:
+		bool bHasRead = false;
+		ELiveSource SourceNow = ELiveSource::Unknown;
+		std::string ReasonNow;
+		bool bLiveNow = false;
+		bool bStaleNow = false;
+		ELiveMode ModeNow = ELiveMode::Unknown;
+		ELiveRunStatus RunNow = ELiveRunStatus::Unknown;
+		std::string Conclusion;
+		std::string Workflow;
+		std::string CursorNow;
+		std::int64_t LastSeq = -1;
+		std::vector<FLiveEvent> EventList;
+	};
+
+	struct FLivePanel
+	{
+		bool bShow = false;
+		bool bLive = false;
+		std::string Header;
+		std::vector<std::string> Lines;
+	};
+
+	/** Client-side: no successful read for this long while the server last said live. */
+	inline constexpr std::uint64_t LiveNoReadAfterMs = 20000;
+	inline constexpr std::size_t LivePanelLines = 12;
+	/** MsSinceLastRead: time since the last successful read (0 = just now). */
+	FLivePanel LivePanelFor(const FLiveFeed& Feed, std::uint64_t MsSinceLastRead);
 }
