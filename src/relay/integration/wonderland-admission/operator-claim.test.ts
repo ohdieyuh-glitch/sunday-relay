@@ -24,6 +24,8 @@ import {
   workflowDispatchArgs,
   workflowDispatchInputNames,
   githubDateFromResponse,
+  legalTransition,
+  spentTagWorkflowRunId,
   grantedLanes,
   LANE_GRANT_SOURCE,
   mainContentsArgs,
@@ -1619,6 +1621,49 @@ describe('the dispatch reads main and the lane grant before anything is written'
   });
 });
 
+describe('the pieces reconcile and the claim stand on', () => {
+  const event = (over: Record<string, unknown>) => ({
+    wonderlandRunId: RUN, serverRunId: SERVER, spentTag: `julius-run-spent-${HEX}`, at: WHEN,
+    state: 'dispatching', spentTagState: 'absent', dispatchAttempted: false, dispatchError: null, halt: null,
+    workflowRunId: null, githubDate: GITHUB_DATE, ...over,
+  }) as Parameters<typeof legalTransition>[1];
+
+  it('D4: an outcome must keep the reservation\'s GitHub clock', () => {
+    const reservation = event({});
+    expect(legalTransition(null, reservation)).toBe(true);
+    const dispatched = event({ state: 'dispatched', dispatchAttempted: true });
+    expect(legalTransition(reservation, dispatched)).toBe(true);
+    expect(legalTransition(reservation, event({ state: 'dispatched', dispatchAttempted: true, githubDate: '2026-10-23T17:18:06Z' }))).toBe(false);
+    expect(legalTransition(reservation, event({ state: 'dispatched', dispatchAttempted: true, githubDate: null }))).toBe(false);
+    const unspent = event({ state: 'dispatch_failed', dispatchAttempted: true, dispatchError: 'workflow_run_unspent' });
+    expect(legalTransition(reservation, unspent)).toBe(true);
+    expect(legalTransition(reservation, { ...unspent, githubDate: null })).toBe(false);
+    expect(legalTransition(null, unspent)).toBe(false);
+  });
+
+  it('R8/R9: a tag message with a repeated key or another schema line names no workflow run', () => {
+    const tag = (message: string): GhResult => ({ code: 0, stdout: `${JSON.stringify({ message })}\n`, stderr: '' });
+    const lines = ['julius-run-spent.v1', `run=${SERVER}`, 'workflow_run_id=36568129865', 'workflow_run_attempt=1'];
+    expect(spentTagWorkflowRunId(tag(`${lines.join('\n')}\n`), SERVER)).toBe('36568129865');
+    expect(spentTagWorkflowRunId(tag(`${[...lines, 'workflow_run_id=4242'].join('\n')}\n`), SERVER)).toBeNull();
+    expect(spentTagWorkflowRunId(tag(`${[...lines, `run=${SERVER}`].join('\n')}\n`), SERVER)).toBeNull();
+    for (const schema of ['julius-run-spent.v2', 'JULIUS-RUN-SPENT.V1', ' julius-run-spent.v1', '']) {
+      expect(spentTagWorkflowRunId(tag(`${[schema, ...lines.slice(1)].join('\n')}\n`), SERVER), schema).toBeNull();
+    }
+    expect(spentTagWorkflowRunId(tag(`${lines.join('\n')}\n`), OTHER_SERVER)).toBeNull();
+    expect(spentTagWorkflowRunId({ code: 1, stdout: '', stderr: '' }, SERVER)).toBeNull();
+  });
+
+  it('L3b: a lane listed twice, in the defaults or a mission\'s grant, is no grant', () => {
+    const excerpt = PR459_LANES.laneGrantExcerpt;
+    expect(parseLaneGrants(excerpt.replace("Object.freeze(['lab']);", "Object.freeze(['lab', 'lab']);"))).toBeNull();
+    expect(parseLaneGrants(excerpt.replace(
+      "Object.freeze(['qualification', 'qualification-repair'])",
+      "Object.freeze(['qualification', 'qualification'])",
+    ))).toBeNull();
+  });
+});
+
 describe('GitHub\'s clock is the dispatch time the bridge orders against', () => {
   it('reads one IMF-fixdate Date header that names a real instant', () => {
     expect(githubDateFromResponse(ABSENT)).toBe(GITHUB_DATE);
@@ -1764,7 +1809,9 @@ describe('reconcile moves a stuck dispatching record from GitHub evidence only',
     })}\n`,
     stderr: '',
   });
-  const runList = (rows: readonly { id: number; status: string; conclusion: string; key?: string; mode?: string }[]): GhResult => ({
+  const runList = (rows: readonly {
+    id: number; status: string; conclusion: string; key?: string; mode?: string; attempt?: number; branch?: string;
+  }[]): GhResult => ({
     code: 0,
     stdout: `${JSON.stringify(rows.map((row) => ({
       databaseId: row.id,
@@ -1772,6 +1819,8 @@ describe('reconcile moves a stuck dispatching record from GitHub evidence only',
       status: row.status,
       conclusion: row.conclusion,
       event: 'workflow_dispatch',
+      headBranch: row.branch ?? 'main',
+      attempt: row.attempt ?? 1,
     })))}\n`,
     stderr: '',
   });
@@ -1807,11 +1856,13 @@ describe('reconcile moves a stuck dispatching record from GitHub evidence only',
       if (!result.ok) return;
       expect(result.record.state).toBe('dispatched');
       expect(result.record.workflowRunId).toBe(RUN_ID);
+      // The runs are listed BEFORE the tag is read.
       expect(fake.calls).toEqual([
+        paidRunListArgs(REPO),
         spentTagApiArgs(REPO, SERVER),
         ['api', `repos/${REPO}/git/tags/${TAG_OBJECT}`],
-        paidRunListArgs(REPO),
       ]);
+      expect(paidRunListArgs(REPO)).toEqual(expect.arrayContaining(['--branch', 'main']));
       const claims = readAdmissionDocument(path).claims;
       expect(claims.map((event) => event.state)).toEqual(['dispatching', 'dispatched']);
       expect(claims[1]).toMatchObject({ at: reservation?.at, githubDate: GITHUB_DATE, dispatchAttempted: true, spentTagState: 'present', workflowRunId: RUN_ID });
@@ -1854,6 +1905,12 @@ describe('reconcile moves a stuck dispatching record from GitHub evidence only',
       ['another key\'s run', PRESENT_ANNOTATED, tagMessage(SERVER, RUN_ID), runList([{ id: Number(RUN_ID), status: 'completed', conclusion: 'success', key: 'b'.repeat(64) }]), 'reconcile_indeterminate'],
       ['tag message for another run', PRESENT_ANNOTATED, tagMessage(OTHER_SERVER, RUN_ID), runList([{ id: Number(RUN_ID), status: 'completed', conclusion: 'success' }]), 'spent_tag_unverified'],
       ['lightweight tag', PRESENT, null, runList([{ id: Number(RUN_ID), status: 'completed', conclusion: 'success' }]), 'spent_tag_unverified'],
+      // R12: the tag names another workflow run while the one run for the key failed: not unspent.
+      ['tag names another run, one run failed', PRESENT_ANNOTATED, tagMessage(SERVER, '4242'), runList([{ id: Number(RUN_ID), status: 'completed', conclusion: 'failure' }]), 'reconcile_indeterminate'],
+      // A Re-run keeps the id and raises the attempt: never this dispatch's outcome.
+      ['re-run attempt 2 failed, no tag', ABSENT, null, runList([{ id: Number(RUN_ID), status: 'completed', conclusion: 'failure', attempt: 2 }]), 'reconcile_indeterminate'],
+      ['re-run attempt 2 tagged', PRESENT_ANNOTATED, tagMessage(SERVER, RUN_ID), runList([{ id: Number(RUN_ID), status: 'completed', conclusion: 'success', attempt: 2 }]), 'reconcile_indeterminate'],
+      ['a run on another branch', ABSENT, null, runList([{ id: Number(RUN_ID), status: 'completed', conclusion: 'failure', branch: 'feature' }]), 'reconcile_indeterminate'],
       ['tag unreadable', { code: 1, stdout: '', stderr: 'temporary failure' }, null, runList([]), 'spent_tag_unreadable'],
       ['runs unreadable', ABSENT, null, { code: 1, stdout: '', stderr: 'boom' }, 'workflow_runs_unreadable'],
     ];
@@ -1898,6 +1955,61 @@ describe('reconcile moves a stuck dispatching record from GitHub evidence only',
       ]);
     });
   });
+
+  it('a run that tags between the run list and the tag read is not called unspent', async () => {
+    await withStore(async (path) => {
+      await stuck(path);
+      // Listed: completed, failed. By the tag read, the tag exists. The order makes that safe.
+      const fake = github(PRESENT_ANNOTATED, tagMessage(SERVER, RUN_ID), runList([{ id: Number(RUN_ID), status: 'completed', conclusion: 'failure' }]));
+      const result = await claimTool(path, fake.spawn).reconcile({ wonderlandRunId: RUN, serverRunId: SERVER, repo: REPO });
+      expect(result.ok && result.record.state).toBe('dispatched');
+      expect(ghKinds(fake.calls)[0]).toBe('run');
+    });
+  });
+
+  it('the evidence records each run\'s attempt', async () => {
+    await withStore(async (path) => {
+      await stuck(path);
+      const fake = github(ABSENT, null, runList([{ id: Number(RUN_ID), status: 'completed', conclusion: 'failure', attempt: 2 }]));
+      const result = await claimTool(path, fake.spawn).reconcile({ wonderlandRunId: RUN, serverRunId: SERVER, repo: REPO });
+      expect(result.evidence?.matchedRuns).toEqual([{ workflowRunId: RUN_ID, attempt: 2, status: 'completed', conclusion: 'failure' }]);
+    });
+  });
+
+  it('a run list without a usable attempt is unreadable, not a first attempt', async () => {
+    await withStore(async (path) => {
+      await stuck(path);
+      const rows = [{
+        databaseId: Number(RUN_ID), displayTitle: `julius mission=${MISSION} lane=${LANE} mode=paid key=${KEY}`,
+        status: 'completed', conclusion: 'failure', event: 'workflow_dispatch', headBranch: 'main',
+      }];
+      for (const attempt of [undefined, 0, '1', 1.5]) {
+        const listed = { code: 0, stdout: `${JSON.stringify(rows.map((row) => ({ ...row, attempt })))}\n`, stderr: '' };
+        const result = await claimTool(path, github(ABSENT, null, listed).spawn).reconcile({ wonderlandRunId: RUN, serverRunId: SERVER, repo: REPO });
+        expect(result.ok === false && result.kind, String(attempt)).toBe('workflow_runs_unreadable');
+      }
+    });
+  });
+
+  it('a held write lock: reconcile waits, then fails lock_held, reading and writing nothing', async () => {
+    await withStore(async (path) => {
+      await stuck(path);
+      const lock = admissionWriteLockPath(path);
+      const journal = readFileSync(`${path}.operator.json`, 'utf8');
+      writeFileSync(lock, JSON.stringify({ pid: 999_999, purpose: 'wonderland-admission' }), { flag: 'wx', mode: 0o600 });
+      try {
+        const fake = github(ABSENT, null, runList([{ id: Number(RUN_ID), status: 'completed', conclusion: 'failure' }]));
+        const started = Date.now();
+        await expect(claimTool(path, fake.spawn).reconcile({ wonderlandRunId: RUN, serverRunId: SERVER, repo: REPO }))
+          .rejects.toMatchObject({ code: 'lock_held' });
+        expect(Date.now() - started).toBeGreaterThanOrEqual(ADMISSION_LOCK_WAIT_MS - 50);
+        expect(fake.calls).toEqual([]);
+        expect(readFileSync(`${path}.operator.json`, 'utf8')).toBe(journal);
+      } finally {
+        unlinkSync(lock);
+      }
+    });
+  }, 30_000);
 
   it('refuses a pair that was never claimed and reads nothing for a settled one', async () => {
     await withStore(async (path) => {

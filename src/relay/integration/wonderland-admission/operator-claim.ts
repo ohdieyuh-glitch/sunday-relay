@@ -220,7 +220,13 @@ export interface ReconcileInput {
 export interface ReconcileEvidence {
   readonly spentTag: 'present' | 'absent';
   readonly tagWorkflowRunId: string | null;
-  readonly matchedRuns: readonly { readonly workflowRunId: string; readonly status: string; readonly conclusion: string | null }[];
+  readonly matchedRuns: readonly {
+    readonly workflowRunId: string;
+    /** GitHub's run attempt. A Re-run keeps the id and raises this; only attempt 1 is this dispatch. */
+    readonly attempt: number;
+    readonly status: string;
+    readonly conclusion: string | null;
+  }[];
 }
 
 export type ReconcileResult =
@@ -444,7 +450,7 @@ function laneList(text: string): OperatorLane[] | null {
   for (const item of text.split(',').map((part) => part.trim()).filter((part) => part !== '')) {
     const quoted = /^'([a-z-]+)'$/u.exec(item);
     const lane = quoted?.[1] ?? '';
-    if (!OPERATOR_LANES.includes(lane as OperatorLane)) return null;
+    if (!OPERATOR_LANES.includes(lane as OperatorLane) || lanes.includes(lane as OperatorLane)) return null;
     lanes.push(lane as OperatorLane);
   }
   return lanes.length === 0 ? null : lanes;
@@ -519,12 +525,12 @@ export function spentTagWorkflowRunId(result: GhResult, serverRunId: string): st
   return isStoredWorkflowRunId(id) ? id : null;
 }
 
-/** Paid runs of the workflow, newest first, as `gh run list` reports them. */
+/** Paid runs of the workflow on main, newest first, as `gh run list` reports them. */
 export function paidRunListArgs(repo: string): readonly string[] {
   return [
     'run', 'list', '--repo', repo, '--workflow', PAID_WORKFLOW_FILE,
-    '--event', 'workflow_dispatch', '--limit', '200',
-    '--json', 'databaseId,displayTitle,status,conclusion,event',
+    '--event', 'workflow_dispatch', '--branch', 'main', '--limit', '200',
+    '--json', 'databaseId,displayTitle,status,conclusion,event,headBranch,attempt',
   ];
 }
 
@@ -538,14 +544,17 @@ export function runsForDispatchKey(result: GhResult, dispatchKey: string): Recon
   const body = jsonBody(result.stdout);
   if (!Array.isArray(body)) return null;
   const suffix = ` mode=paid key=${dispatchKey}`;
-  const matched: { workflowRunId: string; status: string; conclusion: string | null }[] = [];
+  const matched: { workflowRunId: string; attempt: number; status: string; conclusion: string | null }[] = [];
   for (const row of body) {
     if (row === null || typeof row !== 'object' || Array.isArray(row)) return null;
-    const { databaseId, displayTitle, status, conclusion, event } = row as Record<string, unknown>;
+    const { databaseId, displayTitle, status, conclusion, event, headBranch, attempt } = row as Record<string, unknown>;
     if (typeof displayTitle !== 'string' || !displayTitle.endsWith(suffix) || event !== 'workflow_dispatch') continue;
+    // The claim dispatches `--ref main`. A run for the key on any other branch is not this dispatch.
+    if (headBranch !== 'main') continue;
     const id = typeof databaseId === 'number' && Number.isSafeInteger(databaseId) ? String(databaseId) : '';
     if (!isStoredWorkflowRunId(id) || typeof status !== 'string') return null;
-    matched.push({ workflowRunId: id, status, conclusion: typeof conclusion === 'string' && conclusion !== '' ? conclusion : null });
+    if (typeof attempt !== 'number' || !Number.isSafeInteger(attempt) || attempt < 1) return null;
+    matched.push({ workflowRunId: id, attempt, status, conclusion: typeof conclusion === 'string' && conclusion !== '' ? conclusion : null });
   }
   return matched;
 }
@@ -967,10 +976,17 @@ type ReconcileChecked =
 /**
  * `dispatching` -> `dispatched` or `dispatch_failed`, from GitHub alone:
  * - `dispatched` when the spent tag exists, its message names this run and a
- *   `workflow_run_id`, and that id is the one paid run named `key=<dispatch key>`;
- * - `dispatch_failed` (`workflow_run_unspent`) when no spent tag exists and
- *   the one paid run named for the key completed without success: the workflow
- *   ended before it spent the id.
+ *   `workflow_run_id`, and that id is the one paid run on main named
+ *   `key=<dispatch key>`, at attempt 1;
+ * - `dispatch_failed` (`workflow_run_unspent`) when that one run, at attempt 1,
+ *   had completed without success when the runs were listed, and the spent
+ *   tag was absent when read AFTER that listing: a run that already ended
+ *   cannot tag later, so the workflow ended before it spent the id.
+ * The runs are listed before the tag is read. Read the other way round, a
+ * run that tagged between the two reads would look unspent. A Re-run keeps
+ * the run id and raises its attempt; any attempt above 1 leaves the record
+ * `dispatching`, since #459 refuses a paid attempt above 1 and such a run is
+ * not this dispatch's.
  * Anything else (no run, two runs, a run still going, a tag naming another
  * run) leaves `dispatching` and says what GitHub showed. The outcome keeps the
  * reservation's timestamp and GitHub clock. Nothing is deleted or rewritten.
@@ -982,6 +998,10 @@ async function reconcilePhased(file: AdmissionFile, input: ReconcileInput, spawn
   const record = toView(admission, reservation);
   const refused = (kind: string, message: string, evidence: ReconcileEvidence | null): ReconcileResult =>
     ({ ok: false, kind, message, record, evidence });
+  const matchedRuns = runsForDispatchKey(spawn.run(paidRunListArgs(input.repo)), admission.keyHash);
+  if (matchedRuns === null) {
+    return refused('workflow_runs_unreadable', 'The paid workflow runs could not be listed. The record stays dispatching.', null);
+  }
   const tagRead = spawn.run(spentTagApiArgs(input.repo, admission.serverRunId));
   const tag = interpretSpentTagResponse(tagRead);
   if (tag === 'unreadable') return refused('spent_tag_unreadable', 'The spent tag could not be read. The record stays dispatching.', null);
@@ -995,42 +1015,39 @@ async function reconcilePhased(file: AdmissionFile, input: ReconcileInput, spawn
       return refused(
         'spent_tag_unverified',
         'The spent tag exists but its message does not name this run and a workflow run. The record stays dispatching.',
-        { spentTag: 'present', tagWorkflowRunId: null, matchedRuns: [] },
+        { spentTag: 'present', tagWorkflowRunId: null, matchedRuns },
       );
     }
   }
-  const matchedRuns = runsForDispatchKey(spawn.run(paidRunListArgs(input.repo)), admission.keyHash);
-  if (matchedRuns === null) {
-    return refused('workflow_runs_unreadable', 'The paid workflow runs could not be listed. The record stays dispatching.', null);
-  }
   const evidence: ReconcileEvidence = { spentTag: tag, tagWorkflowRunId, matchedRuns };
   const only = matchedRuns.length === 1 ? matchedRuns[0] ?? null : null;
+  const firstAttempt = only !== null && only.attempt === 1 ? only : null;
   let outcome: ClaimEvent | null = null;
-  if (tag === 'present' && only !== null && only.workflowRunId === tagWorkflowRunId) {
+  if (tag === 'present' && firstAttempt !== null && firstAttempt.workflowRunId === tagWorkflowRunId) {
     outcome = baseEvent(admission, reservation.at, {
       state: 'dispatched',
       spentTagState: 'present',
       dispatchAttempted: true,
       dispatchError: null,
       halt: null,
-      workflowRunId: only.workflowRunId,
+      workflowRunId: firstAttempt.workflowRunId,
       githubDate: reservation.githubDate,
     });
-  } else if (tag === 'absent' && only !== null && only.status === 'completed' && only.conclusion !== 'success') {
+  } else if (tag === 'absent' && firstAttempt !== null && firstAttempt.status === 'completed' && firstAttempt.conclusion !== 'success') {
     outcome = baseEvent(admission, reservation.at, {
       state: 'dispatch_failed',
       spentTagState: 'absent',
       dispatchAttempted: true,
       dispatchError: 'workflow_run_unspent',
       halt: null,
-      workflowRunId: only.workflowRunId,
+      workflowRunId: firstAttempt.workflowRunId,
       githubDate: reservation.githubDate,
     });
   }
   if (outcome === null) {
     return refused(
       'reconcile_indeterminate',
-      'GitHub does not show one paid run for this dispatch key that agrees with the spent tag. The record stays dispatching.',
+      'GitHub does not show one first-attempt paid run on main for this dispatch key that agrees with the spent tag. The record stays dispatching.',
       evidence,
     );
   }
@@ -1298,7 +1315,7 @@ function appendClaim(document: OperatorDocument, event: ClaimEvent): OperatorDoc
  * or admitted -> already_spent (tag read present). `dispatched` always carries
  * dispatchAttempted: it is written only after the spawned child returned.
  */
-function legalTransition(prior: ClaimEvent | null, event: ClaimEvent): boolean {
+export function legalTransition(prior: ClaimEvent | null, event: ClaimEvent): boolean {
   if (event.state === 'already_spent') {
     if (event.halt !== 'RUN_ID_ALREADY_SPENT' || event.dispatchError !== null || event.spentTagState !== 'present') {
       return false;
