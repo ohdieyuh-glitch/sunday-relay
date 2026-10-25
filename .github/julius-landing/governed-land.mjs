@@ -892,16 +892,45 @@ async function landQueue({ env, fetchImpl, readLocal, now, stdout, stderr, state
   const audits = [];
   const provenAncestors = new Set();
   const seenAudits = new Set();
+  /** Pull requests whose audit ref was missing but whose App-signed audit commit a nonce tag still names (H3). */
+  const recoveredAudits = new Map();
+  let nonceTagTargets = null;
+  /**
+   * H3. A run that moved main and then failed to create the audit ref left the
+   * landing proven only by its nonce tag, whose target is the App-signed audit
+   * commit. Read those targets once. A tag is attacker-creatable, so a target
+   * counts only through the same App identity and ancestry checks as the ref.
+   */
+  const auditFromNonceTags = async (pr) => {
+    if (nonceTagTargets === null) {
+      const rows = await paged(`/repos/${REPO}/git/matching-refs/tags/julius-landing-nonce-`);
+      nonceTagTargets = [...new Set(rows.map((row) => row?.object?.sha).filter((sha) => typeof sha === 'string' && /^[0-9a-f]{40}$/u.test(sha)))];
+    }
+    for (const sha of nonceTagTargets) {
+      const commit = await api(`/repos/${REPO}/commits/${sha}`);
+      const record = parseAuditRecord(commit?.commit?.message ?? '');
+      if (record?.pr === pr) return { sha, commit };
+    }
+    return null;
+  };
   const readAudit = async (pr) => {
     if (seenAudits.has(pr)) return;
     seenAudits.add(pr);
     const response = await readRaw(`/repos/${REPO}/git/ref/heads/julius-governed-audit/pr/${pr}`);
-    if (response.status === 404) return;
-    if (response.status !== 200 || typeof response.body?.object?.sha !== 'string') {
+    let sha;
+    let commit;
+    if (response.status === 404) {
+      const found = await auditFromNonceTags(pr);
+      if (found === null) return;
+      sha = found.sha;
+      commit = found.commit;
+    } else if (response.status !== 200 || typeof response.body?.object?.sha !== 'string') {
       throw new Error(`GET /repos/${REPO}/git/ref/heads/julius-governed-audit/pr/${pr} -> ${response.status}`);
+    } else {
+      sha = response.body.object.sha;
+      commit = await api(`/repos/${REPO}/commits/${sha}`);
     }
-    const sha = response.body.object.sha;
-    const commit = await api(`/repos/${REPO}/commits/${sha}`);
+    const fromTag = response.status === 404;
     const audit = {
       sha,
       message: commit?.commit?.message ?? '',
@@ -918,17 +947,21 @@ async function landQueue({ env, fetchImpl, readLocal, now, stdout, stderr, state
     })) return;
     const record = parseAuditRecord(audit.message);
     if (!record) return;
+    if (record.pr !== pr) return;
     const ancestor = record.method === 'squash' ? sha : (record.main !== 'pending' ? record.main : '');
     if (ancestor === '') return;
-    if (ancestor === mainShaNow) {
-      provenAncestors.add(ancestor);
-      return;
+    let proven = ancestor === mainShaNow;
+    if (!proven) {
+      const compared = await api(`/repos/${REPO}/compare/${ancestor}...${mainShaNow}`);
+      proven = compared?.status === 'ahead' || compared?.status === 'identical';
     }
-    const compared = await api(`/repos/${REPO}/compare/${ancestor}...${mainShaNow}`);
-    if (compared?.status === 'ahead' || compared?.status === 'identical') provenAncestors.add(ancestor);
+    if (!proven) return;
+    provenAncestors.add(ancestor);
+    if (fromTag) recoveredAudits.set(pr, sha);
   };
   try {
     for (const entry of entries) {
+      await readAudit(entry.pr);
       for (const dep of entry.depends) await readAudit(dep);
     }
   } catch (error) {
@@ -944,12 +977,52 @@ async function landQueue({ env, fetchImpl, readLocal, now, stdout, stderr, state
   };
   let refused = false;
   let finalizeFailed = false;
+  let ambiguous = false;
   const walked = [];
   const landed = new Set(landedOnMain);
+  // H3: re-create every audit ref a nonce tag proved missing. The landing itself is
+  // already on main; only the record is restored, at the same App-signed commit.
+  if (recoveredAudits.size > 0) {
+    if (!live) {
+      for (const [pr, sha] of recoveredAudits) note(`DRY RUN: would re-create refs/heads/julius-governed-audit/pr/${pr} at ${sha}`);
+    } else {
+      let recoveryWrite = null;
+      try {
+        recoveryWrite = apiWith(await mintWriteToken(governedWritePermissions([])));
+      } catch (error) {
+        note(`the audit ref recovery token could not be minted: ${error instanceof Error ? error.message : 'unknown'}`);
+        finalizeFailed = true;
+      }
+      for (const [pr, sha] of recoveryWrite === null ? [] : recoveredAudits) {
+        const placed = await ensureAuditRef(`refs/heads/julius-governed-audit/pr/${pr}`, sha, {
+          create: (ref, commitSha) => recoveryWrite('/repos/ohdieyuh-glitch/sunday-relay/git/refs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ref, sha: commitSha }),
+          }),
+          read: async (ref) => {
+            const body = await api(`/repos/${REPO}/git/ref/${ref.slice('refs/'.length)}`);
+            return typeof body?.object?.sha === 'string' ? body.object.sha : '';
+          },
+        });
+        if (placed.ok) note(`recovered refs/heads/julius-governed-audit/pr/${pr} at ${sha}`);
+        else {
+          note(`landed, audit finalize failed: pull request ${pr}: ${placed.problem}`);
+          finalizeFailed = true;
+        }
+      }
+    }
+  }
   for (let index = 0; index < entries.length; index += 1) {
     const entry = entries[index];
     const missing = entry.depends.filter((id) => !landed.has(id));
     let decision;
+    if (landed.has(entry.pr)) {
+      // Already proven on main by an App-signed audit commit. Never landed twice.
+      note(`pull request ${entry.pr} is already on main`);
+      walked.push({ pr: entry.pr, ok: true, problems: [] });
+      continue;
+    }
     if (missing.length > 0) {
       decision = { ok: false, problems: [`dependency not on main: ${missing.join(', ')}`] };
     } else {
@@ -1167,7 +1240,9 @@ async function landQueue({ env, fetchImpl, readLocal, now, stdout, stderr, state
               await apiWrite('/repos/ohdieyuh-glitch/sunday-relay/git/refs', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ref: `refs/tags/julius-landing-nonce-${decision.fields.nonce}`, sha }),
+                // The tag names the App-signed audit commit (the landing for a squash, the
+                // side record for a fast-forward), so a later run can recover a lost audit ref.
+                body: JSON.stringify({ ref: `refs/tags/julius-landing-nonce-${decision.fields.nonce}`, sha: auditSha }),
               });
             } catch (error) {
               decision = { ok: false, problems: [`the nonce tag could not be created; main was not moved: ${error instanceof Error ? error.message : 'unknown'}`] };
@@ -1182,13 +1257,30 @@ async function landQueue({ env, fetchImpl, readLocal, now, stdout, stderr, state
               });
               updateAccepted = true;
             } catch (error) {
-              decision = { ok: false, problems: [`the ref update was refused; no retry and no force: ${error instanceof Error ? error.message : 'unknown'}`] };
+              // H3. Only a clean 4xx (not 408 or 429) means GitHub refused and main did not
+              // move. Anything else may have been applied with its answer lost: re-read main.
+              const status = Number(error?.status);
+              const clean = Number.isInteger(status) && status >= 400 && status < 500 && status !== 408 && status !== 429;
+              let tip = null;
+              try { tip = (await api('/repos/ohdieyuh-glitch/sunday-relay/git/ref/heads/main')).object.sha; } catch { tip = null; }
+              const why = error instanceof Error ? error.message : 'unknown';
+              if (tip === sha) {
+                note(`LANDED (the PATCH response was lost: ${why})`);
+                updateAccepted = true;
+              } else if (clean && tip === base) {
+                decision = { ok: false, problems: [`the ref update was refused; no retry and no force: ${why}`] };
+              } else {
+                ambiguous = true;
+                decision = { ok: false, ambiguous: true, problems: [`ALERT: the ref update of main is in doubt (${why}); main is ${tip ?? 'unreadable'}, not ${sha} and ${clean ? '' : 'possibly '}not ${base}. No retry, no force; the clearance is spent. Check main before signing anything new.`] };
+              }
             }
           }
           if (decision.ok) {
-            const after = (await api('/repos/ohdieyuh-glitch/sunday-relay/git/ref/heads/main')).object.sha;
+            let after = null;
+            try { after = (await api('/repos/ohdieyuh-glitch/sunday-relay/git/ref/heads/main')).object.sha; } catch { after = null; }
             if (after !== sha) {
-              decision = { ok: false, problems: [`main is ${after} after the update, not ${sha}`] };
+              ambiguous = true;
+              decision = { ok: false, ambiguous: true, problems: [`ALERT: main is ${after ?? 'unreadable'} after the update, not ${sha}`] };
             } else {
               moved = true;
               const auditRef = `refs/heads/julius-governed-audit/pr/${decision.record.pr}`;
@@ -1233,16 +1325,22 @@ async function landQueue({ env, fetchImpl, readLocal, now, stdout, stderr, state
         }
       }
       } catch (error) {
+        let confirmed = false;
         if (!moved && updateAccepted && typeof landedSha === 'string') {
           try {
             const after = (await api('/repos/ohdieyuh-glitch/sunday-relay/git/ref/heads/main')).object.sha;
             if (after === landedSha) moved = true;
-          } catch { /* unconfirmed: this stays a refusal */ }
+            confirmed = true;
+          } catch { confirmed = false; }
         }
         if (moved) {
           note('landed, audit finalize failed');
           finalizeFailed = true;
           decision = { ok: true, problems: [] };
+        } else if (updateAccepted) {
+          // GitHub accepted the update and main could not be confirmed either way.
+          ambiguous = true;
+          decision = { ok: false, ambiguous: true, problems: [`ALERT: the update of main was accepted and ${confirmed ? 'main is not the landing' : 'main could not be re-read'}: ${error instanceof Error ? error.message : 'unknown'}`] };
         } else {
           const why = phase === 'write' ? 'the landing stopped before main moved' : 'the pull request could not be read';
           decision = { ok: false, problems: [`${why}: ${error instanceof Error ? error.message : 'unknown'}`] };
@@ -1256,6 +1354,10 @@ async function landQueue({ env, fetchImpl, readLocal, now, stdout, stderr, state
     }
     refused = true;
     note(`refused pull request ${entry.pr}: ${(decision.problems ?? []).join('; ')}`);
+    if (decision.ambiguous === true) {
+      note('stopped: the state of main is in doubt');
+      break;
+    }
     const blocksLater = entries.slice(index + 1).some((later) => later.depends.includes(entry.pr));
     if (blocksLater) {
       note(`stopped: a later queue entry depends on pull request ${entry.pr}`);
@@ -1263,8 +1365,13 @@ async function landQueue({ env, fetchImpl, readLocal, now, stdout, stderr, state
     }
   }
   if (entries.length === 0) note('the governed queue is empty');
-  if (finalizeFailed && !refused) state.exitCode = 0;
-  if (refused) state.exitCode = 1;
+  // H3 exit contract, as the historical lander: 0 landed or nothing to do, 1 refused
+  // (main did not move), 2 the state of main is in doubt, 3 landed but the audit
+  // record could not be finalized (a later run re-creates it from the nonce tag).
+  if (ambiguous) state.exitCode = 2;
+  else if (finalizeFailed) state.exitCode = 3;
+  else if (refused) state.exitCode = 1;
+  else state.exitCode = 0;
   return walked;
 }
 

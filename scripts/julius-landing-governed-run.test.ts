@@ -115,13 +115,15 @@ export type Scenario = {
   auditRef?: 'ok' | 'fail';
   comment?: 'ok' | 'fail';
   environment?: 'ok' | 'env-missing' | 'env-open' | 'env-extra';
+  nonceTags?: { ref: string; object: { sha: string } }[];
+  main?: string;
   override?: (call: Call, state: { main: string }) => Route | undefined;
 };
 
 /** A fake GitHub. Every route the lander may call is listed; anything else is 599. */
 export function fakeGithub(scenario: Scenario) {
   const calls: Call[] = [];
-  const state = { main: B };
+  const state = { main: scenario.main ?? B };
   const pr = {
     number: 7,
     state: 'open',
@@ -167,6 +169,7 @@ export function fakeGithub(scenario: Scenario) {
     if (method === 'GET' && at(`/commits/${H}/status?per_page=100`)) return { status: 200, body: { total_count: 0, statuses: [] } };
     if (method === 'GET' && at(`/git/ref/tags/julius-landing-nonce-${NONCE}`)) return { status: 404 };
     if (method === 'GET' && path.startsWith(`/repos/${REPO}/git/ref/heads/julius-governed-audit/pr/`)) return { status: 404 };
+    if (method === 'GET' && at('/git/matching-refs/tags/julius-landing-nonce-?per_page=100&page=1')) return { status: 200, body: scenario.nonceTags ?? [] };
     if (method === 'GET' && at('/installation')) return { status: 200, body: { id: 174890170 } };
     if (method === 'POST' && path === '/app/installations/174890170/access_tokens') return { status: 201, body: { token: 'ghs_write_token' } };
     if (method === 'POST' && at('/git/commits')) {
@@ -385,5 +388,72 @@ describe('H2: the governed-landing environment must deploy from main only before
     expect(firstKey).toBeGreaterThan(check);
     expect(workflow.slice(workflow.lastIndexOf('- name:', check), check)).toContain('GH_TOKEN: ${{ github.token }}');
     expect(workflow).toMatch(/^permissions:\n  contents: read\n  statuses: read\n  actions: read\n/mu);
+  });
+});
+
+describe('H3: an ambiguous ref update is not a clean refusal, and a lost audit record is recovered', () => {
+  const text = () => clearanceText(governedOptional, seenDigest([botComment]));
+  const comments = () => [botComment, reviewerComment(delivery(text()))];
+  const auditRefs = (calls: { method: string; path: string; body: unknown }[]) => calls.filter((call) => call.method === 'POST' && String((call.body as { ref?: string })?.ref ?? '').startsWith('refs/heads/julius-governed-audit/'));
+
+  it('a timed-out PATCH that did move main is a landing, not a refusal', async () => {
+    const result = await run({ issueComments: comments(), patch: 'timeout-moved' });
+    expect(result.exitCode, result.text).toBe(0);
+    expect(result.text).toMatch(/LANDED \(the PATCH response was lost/u);
+    expect(auditRefs(result.calls)).toHaveLength(1);
+  });
+
+  it('a timed-out PATCH with main unmoved or unreadable is exit 2, with no audit ref and no retry', async () => {
+    for (const patch of ['timeout-unmoved', 'timeout-unreadable'] as const) {
+      const result = await run({ issueComments: comments(), patch });
+      expect(result.exitCode, `${patch}: ${result.text}`).toBe(2);
+      expect(result.text).toMatch(/ALERT/u);
+      expect(auditRefs(result.calls)).toEqual([]);
+      expect(result.calls.filter((call) => call.method === 'PATCH' && call.path.endsWith('/git/refs/heads/main'))).toHaveLength(1);
+    }
+  });
+
+  it('a clean 4xx from the PATCH with main unmoved is an ordinary refusal, exit 1', async () => {
+    const result = await run({ issueComments: comments(), patch: 'conflict' });
+    expect(result.exitCode).toBe(1);
+    expect(result.text).toMatch(/the ref update was refused; no retry and no force/u);
+  });
+
+  it('landed but the audit ref or the comment failed is exit 3, not 0', async () => {
+    const ref = await run({ issueComments: comments(), auditRef: 'fail' });
+    expect(ref.state.main).toBe(S);
+    expect(ref.exitCode, ref.text).toBe(3);
+    expect(ref.text).toMatch(/landed, audit finalize failed/u);
+    const comment = await run({ issueComments: comments(), comment: 'fail' });
+    expect(comment.exitCode).toBe(3);
+  });
+
+  it('the nonce tag names the App-signed landing commit, so a later run re-creates the lost audit ref and does not land again', async () => {
+    const first = await run({ issueComments: comments(), auditRef: 'fail' });
+    const tag = first.calls.find((call) => call.method === 'POST' && String((call.body as { ref?: string })?.ref).startsWith('refs/tags/julius-landing-nonce-'));
+    expect((tag?.body as { sha?: string })?.sha).toBe(S);
+    const landingMessage = String((first.calls.find((call) => call.method === 'POST' && call.path.endsWith('/git/commits'))?.body as { message?: string })?.message);
+    const who = { name: BOT_LOGIN, email: `${BOT}+${BOT_LOGIN}@users.noreply.github.com` };
+    const landedCommit = { sha: S, parents: [{ sha: B }], committer: { id: Number(BOT) }, commit: { tree: { sha: T }, message: landingMessage, author: who, committer: who, verification: { verified: true, reason: 'valid' } } };
+    const later = await run({
+      main: S,
+      issueComments: comments(),
+      nonceTags: [{ ref: `refs/tags/julius-landing-nonce-${NONCE}`, object: { sha: S } }],
+      override: (call) => (call.method === 'GET' && call.path === `/repos/${REPO}/commits/${S}` ? { status: 200, body: landedCommit } : undefined),
+    }, { GITHUB_SHA: S, GITHUB_WORKFLOW_SHA: S });
+    expect(later.exitCode, later.text).toBe(0);
+    expect(later.text).toMatch(/recovered refs\/heads\/julius-governed-audit\/pr\/7 at 5{40}/u);
+    expect(later.text).toMatch(/pull request 7 is already on main/u);
+    expect(auditRefs(later.calls).map((call) => call.body)).toEqual([{ ref: 'refs/heads/julius-governed-audit/pr/7', sha: S }]);
+    expect(later.calls.some((call) => call.method === 'PATCH' && call.path.endsWith('/git/refs/heads/main'))).toBe(false);
+    // A tag whose target is not App-signed recovers nothing.
+    const forged = await run({
+      main: S,
+      issueComments: comments(),
+      nonceTags: [{ ref: `refs/tags/julius-landing-nonce-${NONCE}`, object: { sha: S } }],
+      override: (call) => (call.method === 'GET' && call.path === `/repos/${REPO}/commits/${S}` ? { status: 200, body: { ...landedCommit, committer: { id: 1 } } } : undefined),
+    }, { GITHUB_SHA: S, GITHUB_WORKFLOW_SHA: S });
+    expect(auditRefs(forged.calls)).toEqual([]);
+    expect(forged.text).not.toMatch(/already on main/u);
   });
 });
