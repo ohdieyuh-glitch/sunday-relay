@@ -257,3 +257,35 @@ describe('the graded chain starts at the run\'s first build', () => {
       .toMatchObject({ ok: true, taskId: 'repair:b1:1:task' });
   });
 });
+
+describe('the paid workflow hands off, publishes and deletes the final message safely', () => {
+  const workflow = readFileSync(join('.github', 'workflows', 'julius-first-live-mission.yml'), 'utf8');
+  const job = (name: string): string => {
+    const start = workflow.indexOf(`\n  ${name}:\n`);
+    const rest = workflow.slice(start + 1);
+    const next = rest.slice(1).search(/\n {2}[a-z][a-z0-9-]*:\n/u);
+    return next === -1 ? rest : rest.slice(0, next + 1);
+  };
+
+  it('the final-message directory is a fresh mktemp, never a fixed path', () => {
+    expect(workflow).toContain('dir=$(mktemp -d "$RUNNER_TEMP/julius-final-message.XXXXXX")');
+    expect(workflow).toContain('JULIUS_FINAL_MESSAGE_DIR: ${{ steps.final_message_dir.outputs.dir }}');
+    expect(workflow).not.toContain('/tmp/julius-final-message');
+  });
+
+  it('a raw final message in the evidence removes the bundle before failing, so nothing is uploaded', () => {
+    const at = workflow.indexOf("find julius-live-evidence -name '*.raw.txt'");
+    expect(at).toBeGreaterThan(-1);
+    expect(workflow.slice(at, at + 260)).toMatch(/rm -rf julius-live-evidence[\s\S]*exit 1/u);
+  });
+
+  it('the grade job only reads; the delete job alone may write actions, and checks out nothing', () => {
+    expect(job('grade-inworld')).toMatch(/permissions:\n {6}contents: read\n {4}steps:/u);
+    expect(job('grade-inworld')).not.toMatch(/^ {6}actions: write$/mu);
+    expect(job('grade-inworld')).not.toMatch(/secrets\.|environment:/u);
+    const remove = job('delete-final-message');
+    expect(remove).toMatch(/permissions:\n {6}actions: write\n {4}steps:/u);
+    expect(remove).not.toContain('actions/checkout');
+    expect(remove).not.toMatch(/secrets\./u);
+  });
+});

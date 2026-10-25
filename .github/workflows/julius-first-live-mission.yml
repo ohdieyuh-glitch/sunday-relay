@@ -1385,6 +1385,18 @@ jobs:
       # fail-closed property visible at the one place it must never be lost —
       # an `always()` or `!cancelled()` added to a paid step would read as an
       # obvious mistake instead of a subtle one — and the contract test pins it.
+      # THE J1 FINAL-MESSAGE DIRECTORY. A fresh mktemp -d (mode 0700) under RUNNER_TEMP, outside the
+      # coder's workspace and unpredictable, made before the paid step so nothing can be planted in it.
+      # The writer refuses a symlink, another owner, or a directory others may write.
+      - name: 'J1: make the final-message directory'
+        id: final_message_dir
+        if: success() && inputs.mission == 'julius-inworld-data-1' && inputs.confirm_live == 'RUN LIVE MISSION'
+        run: |
+          set -euo pipefail
+          dir=$(mktemp -d "$RUNNER_TEMP/julius-final-message.XXXXXX")
+          chmod 700 "$dir"
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+
       - name: 'LIVE: run the first real Julius mission'
         id: live_mission
         if: success() && inputs.confirm_live == 'RUN LIVE MISSION' && steps.coder_auth.outcome == 'success' && steps.provider_readiness.outcome == 'success'
@@ -1411,7 +1423,7 @@ jobs:
           # J1 ONLY: the coder's final message is kept here, outside the workspace,
           # for the hidden checker (relay-bridge/julius/julius-final-message.ts).
           # Empty for every other mission, so nothing is written for them.
-          JULIUS_FINAL_MESSAGE_DIR: ${{ inputs.mission == 'julius-inworld-data-1' && '/tmp/julius-final-message' || '' }}
+          JULIUS_FINAL_MESSAGE_DIR: ${{ steps.final_message_dir.outputs.dir }}
         run: |
           set -uo pipefail
           # The bundle was built in an earlier step and is invoked directly,
@@ -1432,11 +1444,13 @@ jobs:
       # message uploads nothing, and the grade job reports it as missing.
       - name: 'J1: hand the final message to the grade job'
         if: always() && inputs.mission == 'julius-inworld-data-1' && inputs.confirm_live == 'RUN LIVE MISSION'
+        env:
+          FINAL_MESSAGE_DIR: ${{ steps.final_message_dir.outputs.dir }}
         run: |
           set -uo pipefail
           mkdir -p j1-final-message
-          if [ -d /tmp/julius-final-message ]; then
-            find /tmp/julius-final-message -maxdepth 1 -type f \( -name '*.raw.txt' -o -name '*.manifest.json' \) -exec cp {} j1-final-message/ \;
+          if [ -n "$FINAL_MESSAGE_DIR" ] && [ -d "$FINAL_MESSAGE_DIR" ] && [ ! -L "$FINAL_MESSAGE_DIR" ]; then
+            find "$FINAL_MESSAGE_DIR" -maxdepth 1 -type f \( -name '*.raw.txt' -o -name '*.manifest.json' \) -exec cp {} j1-final-message/ \;
           fi
           ls -1 j1-final-message | sed 's/^/j1_final_message_file=/'
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -1705,14 +1719,19 @@ jobs:
       # text went to the grade job above; it is never part of this evidence.
       - name: 'J1: publish the redacted final message'
         if: always() && inputs.mission == 'julius-inworld-data-1'
+        env:
+          FINAL_MESSAGE_DIR: ${{ steps.final_message_dir.outputs.dir }}
         run: |
           set -uo pipefail
-          if [ -d /tmp/julius-final-message ] && [ -d julius-live-evidence ]; then
+          if [ -n "$FINAL_MESSAGE_DIR" ] && [ -d "$FINAL_MESSAGE_DIR" ] && [ ! -L "$FINAL_MESSAGE_DIR" ] && [ -d julius-live-evidence ]; then
             mkdir -p julius-live-evidence/final-message
-            find /tmp/julius-final-message -maxdepth 1 -type f -name '*.redacted.json' -exec cp {} julius-live-evidence/final-message/ \;
+            find "$FINAL_MESSAGE_DIR" -maxdepth 1 -type f -name '*.redacted.json' -exec cp {} julius-live-evidence/final-message/ \;
           fi
+          # A raw final message is never evidence. If one is here, nothing is published: the
+          # bundle is removed (as the credential scan does) and the step fails.
           if find julius-live-evidence -name '*.raw.txt' 2>/dev/null | grep -q .; then
-            echo 'final_message_raw_in_evidence: refused' >&2; exit 1
+            rm -rf julius-live-evidence
+            echo 'final_message_raw_in_evidence: refused, evidence removed' >&2; exit 1
           fi
 
       - name: Refuse to publish evidence that contains credential material
@@ -1873,7 +1892,7 @@ jobs:
           sudo rm -rf /tmp/julius-executor 2>/dev/null || true
           sudo umount /tmp/julius-workspace/tenant/ws 2>/dev/null || true
           sudo rm -rf /tmp/julius-workspace 2>/dev/null || true
-          rm -rf /tmp/julius-final-message 2>/dev/null || true
+          rm -rf "$RUNNER_TEMP"/julius-final-message.* 2>/dev/null || true
           echo 'cleanup complete'
 
   # THE HIDDEN CHECKER, IN A JOB OF ITS OWN. A fresh runner with no provider
@@ -1891,8 +1910,6 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
-      # Only to delete the one-day final-message artifact once it is graded.
-      actions: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -1937,8 +1954,19 @@ jobs:
           path: julius-inworld-verdict
           if-no-files-found: ignore
           retention-days: 90
+
+  # THE GRADED FINAL MESSAGE IS DELETED BY A JOB THAT DOES NOTHING ELSE. `actions: write` is
+  # granted here and only here; it checks out nothing and runs nothing from the repository.
+  delete-final-message:
+    name: 'J1: delete the graded final message'
+    needs: [first-live-mission, grade-inworld]
+    if: ${{ always() && needs.first-live-mission.outputs.final_message_artifact_id != '' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
       - name: 'J1: delete the graded final message'
-        if: always() && needs.first-live-mission.outputs.final_message_artifact_id != ''
         env:
           GH_TOKEN: ${{ github.token }}
           ARTIFACT_ID: ${{ needs.first-live-mission.outputs.final_message_artifact_id }}
