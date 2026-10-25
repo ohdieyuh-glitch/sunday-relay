@@ -300,6 +300,185 @@ bool UWonderlandJuliusMissionSubsystem::DispatchMission(const FString& MissionId
 	return FJuliusJ1Transport::Send(*this, Outcome.Request);
 }
 
+namespace
+{
+	FString StartRecordPath()
+	{
+		return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("SaveGames/JuliusJ1/start.v1"));
+	}
+
+	const TCHAR* StartRecordWord(uint8 Record)
+	{
+		switch (Record)
+		{
+		case 1: return TEXT("sending");
+		case 2: return TEXT("started");
+		case 3: return TEXT("refused");
+		case 4: return TEXT("not_started");
+		default: return TEXT("none");
+		}
+	}
+}
+
+void UWonderlandJuliusMissionSubsystem::SyncStartRecord()
+{
+	const FString RunId = ClientRunId();
+	if (RunId == StartRunId) { return; }
+	// A different run (or the first look after a restart): the record is the saved one only if it names THIS run.
+	StartRunId = RunId;
+	StartKey.Reset();
+	StartWorkflowRunId.Reset();
+	StartMessage.Reset();
+	StartRecord = 0;
+	TArray<FString> Lines;
+	if (RunId.IsEmpty() || !FFileHelper::LoadFileToStringArray(Lines, *StartRecordPath()) || Lines.Num() < 5 || Lines[0] != TEXT("WJ1START 1")) { return; }
+	FString Run, Key, State, Workflow;
+	for (const FString& Line : Lines)
+	{
+		if (Line.StartsWith(TEXT("run "))) { Run = Line.Mid(4); }
+		else if (Line.StartsWith(TEXT("key "))) { Key = Line.Mid(4); }
+		else if (Line.StartsWith(TEXT("state "))) { State = Line.Mid(6); }
+		else if (Line.StartsWith(TEXT("workflow "))) { Workflow = Line.Mid(9); }
+	}
+	if (Run != RunId) { return; }
+	StartKey = Key;
+	StartWorkflowRunId = Workflow;
+	// A start that was in flight when the client stopped is NOT assumed sent or unsent: it stays "sending" (never
+	// re-offered); /status and /events say what happened.
+	StartRecord = State == TEXT("sending") ? 1 : State == TEXT("started") ? 2 : State == TEXT("refused") ? 3 : State == TEXT("not_started") ? 4 : 0;
+	if (StartRecord == 2) { StartMessage = FString::Printf(TEXT("Started: GitHub Actions run %s."), *StartWorkflowRunId); }
+}
+
+void UWonderlandJuliusMissionSubsystem::SaveStartRecord() const
+{
+	const FString Text = FString::Printf(TEXT("WJ1START 1\nrun %s\nkey %s\nstate %s\nworkflow %s\n"),
+		*StartRunId, *StartKey, StartRecordWord(StartRecord), *StartWorkflowRunId);
+	FFileHelper::SaveStringToFile(Text, *StartRecordPath());
+}
+
+bool UWonderlandJuliusMissionSubsystem::IsStartOffered() const
+{
+	if (Host == nullptr) { return false; }
+	const_cast<UWonderlandJuliusMissionSubsystem*>(this)->SyncStartRecord();
+	const bool bHasWorkflow = !StartWorkflowRunId.IsEmpty() || !Host->LiveFeed.WorkflowRunId().empty();
+	return WonderlandJuliusMissionFlow::StartGateFor(ToStd(UiStateToken()), HasNativeSession(), bHasWorkflow,
+		static_cast<WonderlandJuliusMissionFlow::EStartRecord>(StartRecord), false, std::string_view()).bOffer;
+}
+
+bool UWonderlandJuliusMissionSubsystem::HasStartedRun() const
+{
+	const_cast<UWonderlandJuliusMissionSubsystem*>(this)->SyncStartRecord();
+	return StartRecord == 2 && !StartRunId.IsEmpty() && StartRunId == ClientRunId();
+}
+
+bool UWonderlandJuliusMissionSubsystem::StartPaidMission(const FString& Typed)
+{
+	using namespace WonderlandJuliusMissionFlow;
+	if (Host == nullptr) { return false; }
+	ApplyConfiguredEndpoint();
+	SyncStartRecord();
+	const bool bHasWorkflow = !StartWorkflowRunId.IsEmpty() || !Host->LiveFeed.WorkflowRunId().empty();
+	const std::string TypedStd = ToStd(Typed);
+	const FStartGate Gate = StartGateFor(ToStd(UiStateToken()), HasNativeSession(), bHasWorkflow, static_cast<EStartRecord>(StartRecord), true, TypedStd);
+	if (!Gate.bSend)
+	{
+		StartMessage = FString::Printf(TEXT("Not started: %s."), UTF8_TO_TCHAR(Gate.Why));
+		return false;
+	}
+	if (StartKey.IsEmpty())
+	{
+		std::string Minted;
+		if (!Host->Session.MintStartKey(Minted)) { StartMessage = TEXT("Not started: no secure random source."); return false; }
+		StartKey = ToF(Minted);
+	}
+	const WonderlandJuliusMissionClient::FCommandOutcome Outcome = Host->Session.StartRequest(TypedStd, ToStd(StartKey));
+	if (!Outcome.bSent)
+	{
+		StartMessage = FString::Printf(TEXT("Not started: %s."), *ToF(Outcome.Detail));
+		return false;
+	}
+	// Recorded BEFORE it leaves: a crash after this line can never lead to a second, different start.
+	StartRecord = 1;
+	SaveStartRecord();
+	StartMessage = TEXT("Starting the paid mission... (the bridge is claiming and dispatching; this can take 5-15 s)");
+	UE_LOG(LogJuliusJ1, Display, TEXT("{\"event\":\"start_requested\",\"wlj_run_id\":\"%s\"}"), *StartRunId);
+	ClampHttpLogging();
+	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Http = FHttpModule::Get().CreateRequest();
+	Http->SetVerb(ToF(Outcome.Request.Method));
+	Http->SetURL(ToF(Outcome.Request.Url));
+	for (const std::pair<std::string, std::string>& Header : Outcome.Request.Headers)
+	{
+		Http->SetHeader(ToF(Header.first), ToF(Header.second));
+	}
+	TArray<uint8> Content;
+	Content.Append(reinterpret_cast<const uint8*>(Outcome.Request.Body.data()), static_cast<int32>(Outcome.Request.Body.size()));
+	Http->SetContent(Content);
+	Http->SetTimeout(150.0f); // the bridge runs gh 4-5 times synchronously (MAIN JULIUS: allow >= 150 s)
+	Http->SetDelegateThreadPolicy(EHttpRequestDelegateThreadPolicy::CompleteOnGameThread);
+	const FString ForRunId = StartRunId;
+	TWeakObjectPtr<UWonderlandJuliusMissionSubsystem> Weak(this);
+	Http->OnProcessRequestComplete().BindLambda(
+		[Weak, ForRunId](FHttpRequestPtr /*Request*/, FHttpResponsePtr Response, bool bConnected)
+		{
+			if (!Weak.IsValid()) { return; }
+			Weak->CompleteStart(ForRunId, bConnected, Response);
+		});
+	return Http->ProcessRequest();
+}
+
+void UWonderlandJuliusMissionSubsystem::CompleteStart(
+	const FString& ForRunId,
+	bool bConnected,
+	const TSharedPtr<IHttpResponse, ESPMode::ThreadSafe>& Response)
+{
+	using namespace WonderlandJuliusMissionFlow;
+	if (ForRunId != StartRunId) { return; }
+	const int32 Status = bConnected && Response.IsValid() ? Response->GetResponseCode() : 0;
+	std::string Body;
+	if (bConnected && Response.IsValid() && Response->GetContent().Num() <= MissionReadMaxBytes)
+	{
+		const TArray<uint8>& Content = Response->GetContent();
+		Body.assign(reinterpret_cast<const char*>(Content.GetData()), static_cast<std::size_t>(Content.Num()));
+	}
+	if (Status == 401)
+	{
+		DropAdoptedSession(TEXT("bridge answered 401 on a start"));
+		UGameInstance* Instance = GetGameInstance();
+		if (UWonderlandJuliusStreamSubsystem* Stream = Instance != nullptr ? Instance->GetSubsystem<UWonderlandJuliusStreamSubsystem>() : nullptr)
+		{
+			Stream->NoteSessionRefused();
+		}
+	}
+	const FStartAnswer Answer = ParseStartAnswer(ToStd(ForRunId), Status, Body);
+	switch (Answer.Outcome)
+	{
+	case EStartOutcome::Accepted:
+		StartRecord = 2;
+		StartWorkflowRunId = ToF(Answer.WorkflowRunId);
+		StartMessage = StartWorkflowRunId.IsEmpty()
+			? FString::Printf(TEXT("Started%s: the GitHub Actions run id is pending; watching the run."), Answer.bReplayed ? TEXT(" (already started)") : TEXT(""))
+			: FString::Printf(TEXT("Started%s: GitHub Actions run %s."), Answer.bReplayed ? TEXT(" (already started)") : TEXT(""), *StartWorkflowRunId);
+		break;
+	case EStartOutcome::Refused:
+		StartRecord = 3;
+		StartMessage = FString::Printf(TEXT("The bridge refused the start (%s). Nothing was dispatched by this client."), *ToF(Answer.ErrorKind));
+		break;
+	case EStartOutcome::Retryable:
+		StartRecord = 4;
+		StartMessage = FString::Printf(TEXT("Not started yet (bridge %s). You may press Start again; it re-sends the same authorisation."),
+			Status == 0 ? TEXT("unreachable") : *FString::FromInt(Status));
+		break;
+	default:
+		// Not understood: the start may or may not have happened, so it is never offered again; /status decides.
+		StartRecord = 1;
+		StartMessage = FString::Printf(TEXT("The bridge's answer was not understood (HTTP %d). Watching the run's status instead."), Status);
+		break;
+	}
+	SaveStartRecord();
+	UE_LOG(LogJuliusJ1, Display, TEXT("{\"event\":\"start_answer\",\"wlj_run_id\":\"%s\",\"http_status\":%d,\"record\":\"%s\",\"workflow_run_id\":\"%s\",\"error_kind\":\"%s\"}"),
+		*ForRunId, Status, StartRecordWord(StartRecord), *StartWorkflowRunId, *ToF(Answer.ErrorKind));
+}
+
 bool UWonderlandJuliusMissionSubsystem::ResendOpenPair()
 {
 	if (Host == nullptr) { return false; }

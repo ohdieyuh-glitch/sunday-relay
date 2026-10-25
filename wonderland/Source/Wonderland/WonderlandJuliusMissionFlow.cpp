@@ -1608,4 +1608,83 @@ namespace WonderlandJuliusMissionFlow
 		}
 		return Out;
 	}
+
+	bool StartConfirmTextOk(std::string_view Typed)
+	{
+		return Typed == StartConfirmPhrase; // FLOW_START_CONFIRM_EXACT
+	}
+
+	FStartAnswer ParseStartAnswer(std::string_view WljRunId, int HttpStatus, std::string_view Json)
+	{
+		// Contract (MAIN JULIUS, 2026-10-25): 202 = this request made the one dispatch; 200 + replayed:true = the admission
+		// was already dispatching/dispatched (any key, any repeat); 409 = claim refused (retry:false); 400 = request
+		// refused; 401 = session (re-pair, nothing dispatched); 503 / transport = nothing dispatched, a resend is allowed.
+		FStartAnswer Out;
+		if (HttpStatus == 0 || HttpStatus == 401 || HttpStatus == 502 || HttpStatus == 503 || HttpStatus == 504)
+		{
+			Out.Outcome = EStartOutcome::Retryable; // FLOW_START_RETRY_ONLY_TRANSIENT
+			return Out;
+		}
+		FJson Root;
+		if (!ParseJson(Json, Root) || Root.Kind != EJsonKind::Object) { return Out; }
+		if (HttpStatus == 202 || HttpStatus == 200)
+		{
+			const FReportedString Run = ReadString(&Root, "wljRunId");
+			if (!Run.bKnown || !SameText(Run.Text, WljRunId)) { return Out; } // FLOW_START_OWN_RUN_ONLY
+			const FJson* State = Field(Root, "state");
+			if (!IsExactString(State, "dispatched") && !IsExactString(State, "dispatching")) { return Out; }
+			const FJson* WorkflowNode = Field(Root, "workflowRunId");
+			if (WorkflowNode != nullptr && WorkflowNode->Kind == EJsonKind::String)
+			{
+				if (WorkflowNode->Text.empty() || WorkflowNode->Text.size() > 20 || !Digits(WorkflowNode->Text)) { return Out; }
+				Out.WorkflowRunId = WorkflowNode->Text; // null = dispatched, run id pending: /status supplies it
+			}
+			else if (WorkflowNode == nullptr || WorkflowNode->Kind != EJsonKind::Null) { return Out; }
+			const FJson* Replayed = Field(Root, "replayed");
+			if (Replayed != nullptr && Replayed->Kind != EJsonKind::Bool) { return Out; }
+			Out.bReplayed = Replayed != nullptr && Replayed->bBool;
+			if ((HttpStatus == 200) != Out.bReplayed) { return Out; } // 202 made it; 200 is only ever a replay
+			Out.State = State->Text;
+			Out.Outcome = EStartOutcome::Accepted;
+			return Out;
+		}
+		const FJson* Error = Field(Root, "error");
+		std::string Kind;
+		if (Error != nullptr && Error->Kind == EJsonKind::Object)
+		{
+			const FJson* KindNode = Field(*Error, "kind");
+			if (KindNode != nullptr && KindNode->Kind == EJsonKind::String && !KindNode->Text.empty() && KindNode->Text.size() <= 64)
+			{
+				for (const char Ch : KindNode->Text)
+				{
+					if (!((Ch >= 'a' && Ch <= 'z') || (Ch >= '0' && Ch <= '9') || Ch == '_')) { return Out; }
+				}
+				Kind = KindNode->Text;
+			}
+		}
+		if (Kind.empty()) { return Out; }
+		Out.ErrorKind = Kind;
+		if (HttpStatus >= 400 && HttpStatus < 500) { Out.Outcome = EStartOutcome::Refused; }
+		return Out;
+	}
+
+	FStartGate StartGateFor(std::string_view WrapperToken, bool bHasSession, bool bHasWorkflowRun, EStartRecord Record,
+		bool bExplicitClick, std::string_view Typed)
+	{
+		FStartGate Out;
+		if (WrapperToken != "admitted_waiting") { Out.Why = "the run is not waiting for the operator"; return Out; } // FLOW_START_ONLY_WHILE_AWAITING
+		if (bHasWorkflowRun) { Out.Why = "this run already has a GitHub Actions run"; return Out; } // FLOW_START_NEVER_AFTER_DISPATCH
+		if (Record == EStartRecord::Sending || Record == EStartRecord::Started || Record == EStartRecord::Refused)
+		{
+			Out.Why = "this run was already started or refused";
+			return Out; // FLOW_START_RECORDED_ONCE
+		}
+		if (!bHasSession) { Out.Why = "not paired"; return Out; }
+		Out.bOffer = true;
+		if (!bExplicitClick) { Out.Why = "waiting for the founder"; return Out; } // FLOW_START_ONLY_ON_CLICK
+		if (!StartConfirmTextOk(Typed)) { Out.Why = "type RUN LIVE MISSION exactly"; return Out; }
+		Out.bSend = true;
+		Out.Why = "send";
+		return Out;
+	}
 }

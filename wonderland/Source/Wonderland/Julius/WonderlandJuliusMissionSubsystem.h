@@ -62,6 +62,21 @@ public:
 
 	/** True when a request was handed to HTTP. A refusal mints nothing. */
 	bool DispatchMission(const FString& MissionId, const FString& PairId);
+
+	/**
+	 * IN-WONDERLAND START (founder P0 2026-10-25). The Start control is offered only for this player's admitted run that
+	 * is still waiting for the operator (WonderlandJuliusMissionFlow::StartGateFor). StartPaidMission is called ONLY from
+	 * the founder's click with the typed phrase; it sends the authorisation to the bridge, which performs the governed
+	 * claim and dispatch. One start key per run, persisted with the start record, so nothing ever starts twice.
+	 */
+	bool IsStartOffered() const;
+	bool StartPaidMission(const FString& Typed);
+	/** True once the bridge accepted (or already had) a start for the current run. */
+	bool HasStartedRun() const;
+	FString StartedWorkflowRunId() const { return StartWorkflowRunId; }
+	/** One line for the terminal: what happened to the start, or empty. */
+	FString StartStatusLine() const { return StartMessage; }
+	void CompleteStart(const FString& ForRunId, bool bConnected, const TSharedPtr<IHttpResponse, ESPMode::ThreadSafe>& Response);
 	bool ResendOpenPair();
 
 	/** One JSON object, no newline. Includes server_run_id. No token, no key. */
@@ -142,6 +157,14 @@ private:
 	uint64 LastLiveOkUtcMs = 0;
 	int32 LiveReadFailures = 0;
 	FString LiveRefusedSavedFor;
+	/** The persisted start record (SaveGames/JuliusJ1/start.v1) of StartRunId; record 0..4 = EStartRecord. */
+	FString StartRunId;
+	FString StartKey;
+	FString StartWorkflowRunId;
+	FString StartMessage;
+	uint8 StartRecord = 0;
+	void SyncStartRecord();
+	void SaveStartRecord() const;
 	bool bLoggedNotConnected = false;
 	int32 LiveLastHttpStatus = 0;
 	uint32 AdoptedTokenCrc = 0;

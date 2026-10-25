@@ -478,6 +478,36 @@ MUTATIONS = [
         "ParseJson(Json, Root, LiveMaxEventsPerPage, LiveJsonNodeLimit)",
         "ParseJson(Json, Root)",
     ),
+    (
+        "start_without_click",
+        "if (!bExplicitClick) { Out.Why = \"waiting for the founder\"; return Out; } // FLOW_START_ONLY_ON_CLICK",
+        "// FLOW_START_ONLY_ON_CLICK",
+    ),
+    (
+        "start_after_dispatch",
+        "if (bHasWorkflowRun) { Out.Why = \"this run already has a GitHub Actions run\"; return Out; } // FLOW_START_NEVER_AFTER_DISPATCH",
+        "// FLOW_START_NEVER_AFTER_DISPATCH",
+    ),
+    (
+        "start_recorded_twice",
+        "Out.Why = \"this run was already started or refused\";\n\t\t\treturn Out; // FLOW_START_RECORDED_ONCE",
+        "Out.Why = \"this run was already started or refused\"; // FLOW_START_RECORDED_ONCE",
+    ),
+    (
+        "start_while_not_awaiting",
+        "if (WrapperToken != \"admitted_waiting\") { Out.Why = \"the run is not waiting for the operator\"; return Out; } // FLOW_START_ONLY_WHILE_AWAITING",
+        "// FLOW_START_ONLY_WHILE_AWAITING",
+    ),
+    (
+        "start_confirm_loose",
+        "return Typed == StartConfirmPhrase; // FLOW_START_CONFIRM_EXACT",
+        "return !Typed.empty(); // FLOW_START_CONFIRM_EXACT",
+    ),
+    (
+        "start_other_runs_answer",
+        "if (!Run.bKnown || !SameText(Run.Text, WljRunId)) { return Out; } // FLOW_START_OWN_RUN_ONLY",
+        "// FLOW_START_OWN_RUN_ONLY",
+    ),
 ]
 
 

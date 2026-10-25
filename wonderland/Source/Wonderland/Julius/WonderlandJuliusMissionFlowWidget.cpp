@@ -5,6 +5,7 @@
 
 #include "Styling/CoreStyle.h"
 #include "Widgets/Input/SButton.h"
+#include "Widgets/Input/SEditableTextBox.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/SBoxPanel.h"
@@ -61,6 +62,49 @@ void SWonderlandJuliusMissionFlow::Construct(const FArguments& InArgs)
 				[
 					SAssignNew(Body, SVerticalBox)
 				]
+				// IN-WONDERLAND START (founder P0 2026-10-25): built ONCE, shown only while the start is offered.
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
+				[
+					SNew(SBorder)
+					.Visibility_Lambda([this]() { const UWonderlandJuliusMissionSubsystem* Live = Session.Get(); return Live != nullptr && Live->IsStartOffered() ? EVisibility::Visible : EVisibility::Collapsed; })
+					.BorderImage(FCoreStyle::Get().GetBrush(TEXT("GenericWhiteBox")))
+					.BorderBackgroundColor(FLinearColor(0.35f, 0.04f, 0.04f, 0.92f))
+					.Padding(FMargin(12.0f, 10.0f))
+					[
+						SNew(SVerticalBox)
+						+ SVerticalBox::Slot().AutoHeight()
+						[
+							SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Bold", 13))
+							.Text(FText::FromString(TEXT("START THE PAID MISSION")))
+						]
+						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 4.0f)
+						[
+							SNew(STextBlock).AutoWrapText(true)
+							.Text(FText::FromString(TEXT("Mission julius-inworld-data-1, lane lab. This starts the real paid Julius run: at most $30 of provider spend and up to 3 repair cycles, enforced by the bridge and the paid workflow. It runs once for this admission. Type RUN LIVE MISSION, then press Start.")))
+						]
+						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f)
+						[
+							SAssignNew(StartConfirmBox, SEditableTextBox)
+							.HintText(FText::FromString(TEXT("RUN LIVE MISSION")))
+							.OnTextChanged_Lambda([this](const FText& Text) { StartTyped = Text.ToString(); })
+						]
+						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left)
+						[
+							SNew(SButton)
+							.IsEnabled_Lambda([this]() { return WonderlandJuliusMissionFlow::StartConfirmTextOk(TCHAR_TO_UTF8(*StartTyped)); })
+							.OnClicked(this, &SWonderlandJuliusMissionFlow::StartPaidMission)
+							[
+								SNew(STextBlock).Text(FText::FromString(TEXT("Start")))
+							]
+						]
+					]
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).AutoWrapText(true)
+					.Visibility_Lambda([this]() { const UWonderlandJuliusMissionSubsystem* Live = Session.Get(); return Live != nullptr && !Live->StartStatusLine().IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
+					.Text_Lambda([this]() { const UWonderlandJuliusMissionSubsystem* Live = Session.Get(); return FText::FromString(Live != nullptr ? Live->StartStatusLine() : FString()); })
+				]
 				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 12.0f, 0.0f, 0.0f)
 				[
 					SNew(SButton)
@@ -94,6 +138,28 @@ bool SWonderlandJuliusMissionFlow::QaPick(const FString& MissionId)
 	return Flow.View().bShowConfirm;
 }
 
+bool SWonderlandJuliusMissionFlow::QaStart(const FString& Typed)
+{
+	PullMissionReads();
+	PullWrapper();
+	const UWonderlandJuliusMissionSubsystem* Live = Session.Get();
+	if (Live == nullptr || !Live->IsStartOffered()) { return false; }
+	StartTyped = Typed;
+	if (StartConfirmBox.IsValid()) { StartConfirmBox->SetText(FText::FromString(Typed)); }
+	StartPaidMission();
+	return true;
+}
+
+FReply SWonderlandJuliusMissionFlow::StartPaidMission()
+{
+	UWonderlandJuliusMissionSubsystem* Live = Session.Get();
+	if (Live != nullptr) { (void)Live->StartPaidMission(StartTyped); }
+	StartTyped.Reset();
+	if (StartConfirmBox.IsValid()) { StartConfirmBox->SetText(FText::GetEmpty()); }
+	Rebuild();
+	return FReply::Handled();
+}
+
 bool SWonderlandJuliusMissionFlow::QaConfirm()
 {
 	if (!Flow.View().bShowConfirm) { return false; }
@@ -118,7 +184,9 @@ FString SWonderlandJuliusMissionFlow::QaDescribe() const
 	TArray<FString> LiveLines;
 	if (Live != nullptr) { (void)Live->LatestLivePanel(bLive, LiveHeader, LiveLines); }
 	return FString::Printf(
-		TEXT("julius=%s step=%d choice=%d confirm=%d progress=%d result=%d finished=%d verified=%d wlj=%s progress_line=\"%s\" result_line=\"%s\" result_lines=\"%s\" live=%d live_header=\"%s\" live_lines=\"%s\""),
+		TEXT("start_offered=%d start=\"%s\" julius=%s step=%d choice=%d confirm=%d progress=%d result=%d finished=%d verified=%d wlj=%s progress_line=\"%s\" result_line=\"%s\" result_lines=\"%s\" live=%d live_header=\"%s\" live_lines=\"%s\""),
+		Live != nullptr && Live->IsStartOffered() ? 1 : 0,
+		Live != nullptr ? *Live->StartStatusLine() : TEXT(""),
 		Live == nullptr ? TEXT("none") : Live->HasNativeSession() ? TEXT("connected") : TEXT("not_connected"),
 		static_cast<int32>(View.Step),
 		View.bShowChoice ? 1 : 0,
@@ -142,6 +210,17 @@ void SWonderlandJuliusMissionFlow::Tick(const FGeometry& AllottedGeometry, doubl
 	PullMissionReads();
 	PullWrapper();
 	Rebuild();
+	// IN-WONDERLAND START: once the bridge accepted the start, the terminal steps aside (once per run) and the run is
+	// watched in the world (the HUD's LIVE card). Reopening K shows the full terminal again.
+	if (const UWonderlandJuliusMissionSubsystem* Live = Session.Get())
+	{
+		const FString Run = Live->ClientRunId();
+		if (!Run.IsEmpty() && Live->HasStartedRun() && ClosedAfterStartFor != Run)
+		{
+			ClosedAfterStartFor = Run;
+			OnRequestClose.ExecuteIfBound();
+		}
+	}
 }
 
 void SWonderlandJuliusMissionFlow::PullMissionReads()

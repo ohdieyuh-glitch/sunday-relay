@@ -1020,6 +1020,41 @@ namespace WonderlandJuliusMissionClient
 		return Outcome;
 	}
 
+	bool FJuliusMissionSession::MintStartKey(std::string& OutKey)
+	{
+		std::uint8_t Bytes[16] = {};
+		if (!Random.Fill(Bytes)) { return false; }
+		OutKey = WonderlandJuliusMissionLogic::FormatUuidV4FromBytes(Bytes);
+		return WonderlandJuliusMissionLogic::IsCanonicalUuidV4(OutKey);
+	}
+
+	FCommandOutcome FJuliusMissionSession::StartRequest(std::string_view Confirm, const std::string& StartKey)
+	{
+		FCommandOutcome Outcome;
+		if (Confirm != "RUN LIVE MISSION") { Outcome.Detail = "the confirmation phrase was not typed exactly"; return Outcome; } // CLIENT_START_CONFIRM_EXACT
+		if (!WonderlandJuliusMissionLogic::IsCanonicalUuidV4(StartKey)) { Outcome.Detail = "start key is malformed"; return Outcome; }
+		Outcome = MissionReadRequest(false); // the same run, session and loopback refusals as every read
+		if (!Outcome.bSent) { return Outcome; }
+		std::uint8_t TriggerBytes[16] = {};
+		if (!Random.Fill(TriggerBytes)) { Outcome = FCommandOutcome(); Outcome.Detail = LabelRandomUnavailable; return Outcome; }
+		Outcome.Request.Method = "POST";
+		Outcome.Request.Url = JoinBase(BaseUrl, MissionReadRelativePrefix);
+		Outcome.Request.Url += PercentEncode(CurrentRunId);
+		Outcome.Request.Url += "/start?projectId=";
+		Outcome.Request.Url += PercentEncode(ProjectId);
+		Outcome.Request.Headers.emplace_back("Content-Type", "application/json");
+		Outcome.Request.Headers.emplace_back("x-relay-idempotency-key", StartKey);
+		std::string Body = "{\"wljRunId\":";
+		Body += JsonString(CurrentRunId);
+		Body += ",\"confirm\":\"RUN LIVE MISSION\",\"clientTriggerId\":";
+		Body += JsonString(HexOf(TriggerBytes, 16));
+		Body += ",\"clientUiActionUtc\":";
+		Body += JsonString(FormatIso8601UtcMs(Clock.NowUtcMs()));
+		Body.push_back('}');
+		Outcome.Request.Body = std::move(Body);
+		return Outcome;
+	}
+
 	FCommandOutcome FJuliusMissionSession::LiveEventsRequest(const std::string& Cursor) const
 	{
 		FCommandOutcome Outcome;

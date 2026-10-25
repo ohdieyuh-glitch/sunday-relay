@@ -254,6 +254,17 @@ namespace WonderlandJuliusMissionClient
 		 * when it is not empty. Same refusals as MissionReadRequest, and a malformed cursor sends nothing.
 		 */
 		FCommandOutcome LiveEventsRequest(const std::string& Cursor) const;
+		/**
+		 * IN-WONDERLAND START. A fresh canonical UUIDv4 from the platform crypto source for the START idempotency key
+		 * (one per admitted run; the caller persists it and re-uses it for any resend). False when no random is available.
+		 */
+		bool MintStartKey(std::string& OutKey);
+		/**
+		 * POST {prefix}{wljRunId}/start?projectId= with the founder's typed confirmation and the run's start key. Refuses
+		 * (sends nothing) without a run, a session, a loopback base, a canonical start key, or the exact confirm phrase.
+		 * The body carries no lane, budget, repo or ref: those are the server's.
+		 */
+		FCommandOutcome StartRequest(std::string_view Confirm, const std::string& StartKey);
 		/** True when a well-formed native session token is held (nothing about its validity on the bridge). */
 		bool HasSessionToken() const { return !SessionToken.empty() && SessionToken.find_first_of(" \r\n\t") == std::string::npos; }
 

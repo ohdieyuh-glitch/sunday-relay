@@ -5861,6 +5861,16 @@ namespace WonderlandJuliusMissionQa
 		if (!Panel.IsValid()) { Ar.Log(TEXT("wl.Julius.J1.Panel.Confirm: open the terminal first")); return; }
 		Ar.Log(Panel->QaConfirm() ? TEXT("confirm pressed") : TEXT("confirm not on screen"));
 	}
+
+	/** QA door for the in-world START: the same handler as the Start button (typed phrase + click). Dev sessions only. */
+	void Start(const TArray<FString>& Args, UWorld* World, FOutputDevice& Ar)
+	{
+		if (!DeveloperDoor(TEXT("wl.Julius.J1.Panel.Start"), Ar)) { return; }
+		UWonderlandUiSubsystem* Self = Ui(World);
+		const TSharedPtr<SWonderlandJuliusMissionFlow> Panel = Self != nullptr ? Self->GetJuliusMissionPanel() : nullptr;
+		if (!Panel.IsValid()) { Ar.Log(TEXT("wl.Julius.J1.Panel.Start: open the terminal first")); return; }
+		Ar.Log(Panel->QaStart(FString::Join(Args, TEXT(" "))) ? TEXT("start pressed") : TEXT("start not offered"));
+	}
 #endif
 
 	void Describe(const TArray<FString>& Args, UWorld* World, FOutputDevice& Ar)
@@ -5961,6 +5971,9 @@ namespace WonderlandJuliusMissionQa
 	FAutoConsoleCommandWithWorldArgsAndOutputDevice GConfirm(TEXT("wl.Julius.J1.Panel.Confirm"),
 		TEXT("Press Confirm on the J1 paid-mission screen: the same dispatch as the button (admission only; BRIDGE holds it)."),
 		FConsoleCommandWithWorldArgsAndOutputDeviceDelegate::CreateStatic(&Confirm));
+	FAutoConsoleCommandWithWorldArgsAndOutputDevice GStart(TEXT("wl.Julius.J1.Panel.Start"),
+		TEXT("Type the phrase and press Start on the J1 terminal: the same in-world start as the button (the bridge claims and dispatches)."),
+		FConsoleCommandWithWorldArgsAndOutputDeviceDelegate::CreateStatic(&Start));
 #endif
 	FAutoConsoleCommandWithWorldArgsAndOutputDevice GDescribe(TEXT("wl.Julius.J1.Panel.Describe"),
 		TEXT("Log one WLJ1PANEL line: step, progress and result as the panel shows them."),
@@ -6395,6 +6408,27 @@ void UWonderlandUiSubsystem::RefreshChrome()
 	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI chrome rebuilt for a colour change"));
 }
 
+bool UWonderlandUiSubsystem::JuliusLiveCard(FString& OutText, bool& bOutLive) const
+{
+	OutText.Reset();
+	bOutLive = false;
+	if (Open != EOverlay::None) { return false; }
+	const APlayerController* Controller = BoundController.Get();
+	UGameInstance* Instance = Controller != nullptr ? Controller->GetGameInstance() : nullptr;
+	const UWonderlandJuliusMissionSubsystem* J1 = Instance != nullptr ? Instance->GetSubsystem<UWonderlandJuliusMissionSubsystem>() : nullptr;
+	if (J1 == nullptr) { return false; }
+	FString Header;
+	TArray<FString> Lines;
+	const bool bPanel = J1->LatestLivePanel(bOutLive, Header, Lines);
+	if (!bOutLive && !J1->HasStartedRun()) { return false; }
+	OutText = FString::Printf(TEXT("JULIUS MISSION  %s"), *J1->ClientRunId());
+	if (!J1->StartedWorkflowRunId().IsEmpty()) { OutText += FString::Printf(TEXT("\nGitHub Actions run %s"), *J1->StartedWorkflowRunId()); }
+	OutText += TEXT("\n") + (bPanel ? Header : FString(TEXT("Started: waiting for the first live update...")));
+	for (int32 Index = 0; Index < Lines.Num() && Index < 6; ++Index) { OutText += TEXT("\n") + Lines[Index]; }
+	if (bPanel && !bOutLive) { OutText += TEXT("\nPress K for the result and the grade."); }
+	return true;
+}
+
 void UWonderlandUiSubsystem::MountHudFurniture()
 {
 	ULocalPlayer* LocalPlayer = GetLocalPlayer<ULocalPlayer>();
@@ -6509,6 +6543,32 @@ void UWonderlandUiSubsystem::MountHudFurniture()
 						.Font(WonderlandUi::Mono(9))
 						.ShadowOffset(FVector2D(1.0f, 1.0f)).ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.9f))
 						.ColorAndOpacity(WonderlandUi::Gold())
+					]
+				]
+			]
+			// THE JULIUS LIVE CARD (founder P0 2026-10-25): after the founder starts the paid mission in the terminal, the
+			// terminal steps aside and the run is watched HERE, in the world: the exact wlj_, the server's LIVE flag, what runs
+			// now and how far it is. Same wording as the terminal (the flow core); never shown for an unstarted run.
+			+ SConstraintCanvas::Slot()
+			.Anchors(FAnchors(0.0f, 0.0f, 0.0f, 0.0f))
+			.Alignment(FVector2D(0.0, 0.0))
+			.AutoSize(true)
+			.Offset(FMargin(24.0f, 170.0f, 0.0f, 0.0f))
+			[
+				SNew(SBox)
+				.MaxDesiredWidth(560.0f)
+				.Visibility_Lambda([WeakThis]() { FString Text; bool bLive = false; return WeakThis.IsValid() && WeakThis->JuliusLiveCard(Text, bLive) ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+				[
+					SNew(SBorder)
+					.BorderImage(FCoreStyle::Get().GetBrush(TEXT("GenericWhiteBox")))
+					.BorderBackgroundColor_Lambda([WeakThis]() { FString Text; bool bLive = false; if (WeakThis.IsValid()) { WeakThis->JuliusLiveCard(Text, bLive); } return FSlateColor(bLive ? FLinearColor(0.45f, 0.03f, 0.03f, 0.88f) : FLinearColor(0.03f, 0.04f, 0.08f, 0.88f)); })
+					.Padding(FMargin(14.0f, 10.0f))
+					[
+						SNew(STextBlock)
+						.AutoWrapText(true)
+						.Font(WonderlandUi::Sans(11, false, 220))
+						.ColorAndOpacity(FLinearColor::White)
+						.Text_Lambda([WeakThis]() { FString Text; bool bLive = false; if (WeakThis.IsValid()) { WeakThis->JuliusLiveCard(Text, bLive); } return FText::FromString(Text); })
 					]
 				]
 			]

@@ -926,6 +926,8 @@ private:
 	void ToggleOverlay(EOverlay Which);
 	void HandleNavigate(EWonderlandNavTarget Target);
 	void MountHudFurniture();
+	/** The in-world Julius LIVE card's text; false when there is nothing started or live to show. */
+	bool JuliusLiveCard(FString& OutText, bool& bOutLive) const;
 	void UnmountHudFurniture();
 
 	/**

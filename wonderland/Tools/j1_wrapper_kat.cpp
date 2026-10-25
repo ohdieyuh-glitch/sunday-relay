@@ -1167,6 +1167,33 @@ int main()
 		Expect(!Rig.Session.LiveEventsRequest("").bSent, "live_events_loopback_only");
 	}
 
+	{
+		// IN-WONDERLAND START: the request carries only the authorisation; nothing about spend or dispatch targets.
+		FRig Rig(3);
+		std::string Key;
+		Expect(Rig.Session.Dispatch("demo-mission", "").bSent, "start_dispatch");
+		const std::string Run = Rig.Session.RunId();
+		Expect(Rig.Session.MintStartKey(Key) && IsCanonicalUuidV4(Key), "start_key_is_uuidv4");
+		Expect(!Rig.Session.StartRequest("run live mission", Key).bSent, "start_needs_exact_phrase");
+		Expect(!Rig.Session.StartRequest("RUN LIVE MISSION", "not-a-uuid").bSent, "start_needs_canonical_key");
+		const FCommandOutcome Start = Rig.Session.StartRequest("RUN LIVE MISSION", Key);
+		Expect(Start.bSent && Start.Request.Method == "POST", "start_is_a_post");
+		Expect(Contains(Start.Request.Url, "/relay-api/wonderland/julius/missions/" + Run + "/start?projectId=proj-1"), "start_route");
+		Expect(Contains(Start.Request.Body, "\"confirm\":\"RUN LIVE MISSION\"") && Contains(Start.Request.Body, "\"wljRunId\":\"" + Run + "\""), "start_body_binding");
+		for (const char* Forbidden : {"lane", "budget", "repo", "\"ref\"", "mission_id", "missionId", "usd", "cycles"})
+		{
+			Expect(!Contains(Start.Request.Body, Forbidden), "start_body_has_no_spend_or_target_fields");
+		}
+		bool bKeyHeader = false;
+		for (const auto& Header : Start.Request.Headers) { if (Header.first == "x-relay-idempotency-key" && Header.second == Key) { bKeyHeader = true; } }
+		Expect(bKeyHeader, "start_key_header");
+		Rig.Session.SetNativeSessionToken("");
+		Expect(!Rig.Session.StartRequest("RUN LIVE MISSION", Key).bSent, "start_needs_a_session");
+		Rig.Session.SetNativeSessionToken("SECRET_TOKEN_VALUE");
+		(void)Rig.Session.SetBaseUrl("http://example.com");
+		Expect(!Rig.Session.StartRequest("RUN LIVE MISSION", Key).bSent, "start_loopback_only");
+	}
+
 	Expect(CheckJuliusModuleRootIncludes(), "julius_no_bare_module_root_include");
 	Expect(CheckPlatformCryptoTypesInclude(), "platform_crypto_result_includes_types");
 

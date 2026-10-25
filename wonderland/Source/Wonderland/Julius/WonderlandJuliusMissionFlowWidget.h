@@ -35,6 +35,8 @@ public:
 	 */
 	bool QaPick(const FString& MissionId);
 	bool QaConfirm();
+	/** QA door for the in-world START: types Typed into the confirm box and presses Start (false when not offered). */
+	bool QaStart(const FString& Typed);
 	/** One line: step, progress line, result line. For the QA log, never the token. */
 	FString QaDescribe() const;
 
@@ -63,6 +65,8 @@ private:
 	FReply ConfirmMission();
 	FReply ReturnToChoice();
 	FReply StartAgain();
+	/** IN-WONDERLAND START: the founder's click. Sends only through UWonderlandJuliusMissionSubsystem::StartPaidMission. */
+	FReply StartPaidMission();
 
 	TWeakObjectPtr<UWonderlandJuliusMissionSubsystem> Session;
 	FSimpleDelegate OnRequestClose;
@@ -74,4 +78,9 @@ private:
 	FString PulledReadKey;
 	FString Notice;
 	bool bNoticeUntilPaired = false;
+	/** Built once (outside the rebuilt Body) so typing is never interrupted by a refresh. */
+	TSharedPtr<class SEditableTextBox> StartConfirmBox;
+	FString StartTyped;
+	/** The run whose accepted start already closed the terminal once (reopening K later does not close it again). */
+	FString ClosedAfterStartFor;
 };

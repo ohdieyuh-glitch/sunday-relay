@@ -488,4 +488,57 @@ namespace WonderlandJuliusMissionFlow
 	inline constexpr std::size_t LivePanelLines = 8;
 	/** MsSinceLastRead: time since the last successful read (0 = just now). */
 	FLivePanel LivePanelFor(const FLiveFeed& Feed, std::uint64_t MsSinceLastRead);
+
+	// ---------------------------------------------------------------------------------------------------------------
+	// IN-WONDERLAND START (founder P0, 2026-10-25): the founder starts the admitted paid mission from the Julius Mission
+	// Terminal. The client sends ONLY an authorisation (POST .../missions/{wlj}/start, the founder's typed confirmation,
+	// a one-per-run idempotency key); the bridge and the paid workflow perform the governed claim and dispatch. The
+	// client never holds GitHub or provider credentials and never chooses lane, budget, repo or ref.
+	// ---------------------------------------------------------------------------------------------------------------
+	inline constexpr const char* StartConfirmPhrase = "RUN LIVE MISSION";
+	/** Exactly the phrase, as typed (no trimming, no case folding): the same words the CLI's --confirm takes. */
+	bool StartConfirmTextOk(std::string_view Typed);
+
+	enum class EStartOutcome : std::uint8_t
+	{
+		/** Not a well-formed answer for this run: nothing is believed; the button stays (same key on a resend). */
+		Malformed,
+		/** 202 (made the dispatch) or 200 replayed (already dispatching/dispatched): bind; WorkflowRunId may be pending. */
+		Accepted,
+		/** 400 / 409 / 403 / 404: shown as is; never resent. */
+		Refused,
+		/** 401 / 503 / transport: nothing dispatched; a resend (same key) is allowed only on the founder's click. */
+		Retryable,
+	};
+
+	struct FStartAnswer
+	{
+		EStartOutcome Outcome = EStartOutcome::Malformed;
+		std::string WorkflowRunId;
+		std::string State;
+		std::string ErrorKind;
+		bool bReplayed = false;
+	};
+
+	FStartAnswer ParseStartAnswer(std::string_view WljRunId, int HttpStatus, std::string_view Json);
+
+	/** What the client has recorded (and persisted) about starting the current admitted run. */
+	enum class EStartRecord : std::uint8_t { None, Sending, Started, Refused, NotStarted };
+
+	struct FStartGate
+	{
+		/** The Start control is shown. */
+		bool bOffer = false;
+		/** This call may send the start request now. */
+		bool bSend = false;
+		const char* Why = "";
+	};
+
+	/**
+	 * THE ONE START DECISION. Offered only for an admitted run still waiting for the operator, with a paired session, no
+	 * bound workflow run and no recorded start (a transient NotStarted may be retried, by the same key). Sent only from an
+	 * explicit founder click with the exact typed phrase: never from open, poll, reconnect or restore.
+	 */
+	FStartGate StartGateFor(std::string_view WrapperToken, bool bHasSession, bool bHasWorkflowRun, EStartRecord Record,
+		bool bExplicitClick, std::string_view Typed);
 }

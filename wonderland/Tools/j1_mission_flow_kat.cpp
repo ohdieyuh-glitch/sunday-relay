@@ -639,6 +639,61 @@ const ABSENT_PHASE = {
 		++LiveCases;
 	}
 
+	// IN-WONDERLAND START (founder P0 2026-10-25; REVIEW criteria 1, 4, 5): the one gate and the strict answer.
+	int StartCases = 0;
+	void StartFixtures()
+	{
+		using R = EStartRecord;
+		const char* const Ok = "RUN LIVE MISSION";
+		FStartGate G = StartGateFor("admitted_waiting", true, false, R::None, false, Ok);
+		Expect(G.bOffer && !G.bSend, "start offered but never sent without the founder's click");
+		Expect(!StartGateFor("admitted_waiting", true, false, R::None, false, "").bSend, "no start on open/poll/restore");
+		Expect(StartGateFor("admitted_waiting", true, false, R::None, true, Ok).bSend, "click + exact phrase sends");
+		Expect(!StartGateFor("admitted_waiting", true, false, R::None, true, "run live mission").bSend, "phrase is exact (case)");
+		Expect(!StartGateFor("admitted_waiting", true, false, R::None, true, "RUN LIVE MISSION ").bSend, "phrase is exact (space)");
+		Expect(!StartGateFor("admitted_waiting", true, false, R::None, true, "").bSend, "empty phrase never sends");
+		++StartCases;
+		for (const char* Token : {"operator_started", "running", "dispatching", "completed", "failed", "not_started", "idle", "dispatch_unconfirmed"})
+		{
+			const FStartGate Never = StartGateFor(Token, true, false, R::None, true, Ok);
+			Expect(!Never.bOffer && !Never.bSend, Token);
+		}
+		++StartCases;
+		const FStartGate Bound = StartGateFor("admitted_waiting", true, true, R::None, true, Ok);
+		Expect(!Bound.bOffer && !Bound.bSend, "never start a run that already has a GitHub Actions run");
+		for (const R Record : {R::Sending, R::Started, R::Refused})
+		{
+			const FStartGate Once = StartGateFor("admitted_waiting", true, false, Record, true, Ok);
+			Expect(!Once.bOffer && !Once.bSend, "a recorded start (sending/started/refused) is never offered again");
+		}
+		Expect(StartGateFor("admitted_waiting", true, false, R::NotStarted, true, Ok).bSend, "a transient not-started may be re-sent on a click");
+		Expect(!StartGateFor("admitted_waiting", false, false, R::None, true, Ok).bOffer, "no start without a paired session");
+		++StartCases;
+
+		const char* const W = "wlj_0f8fad5b-d9cb-469f-a165-70867728950e";
+		const std::string Made = std::string("{\"wljRunId\":\"") + W + "\",\"state\":\"dispatched\",\"workflowRunId\":\"40242149156\",\"dispatchedAt\":\"2026-10-25T22:50:08.473Z\",\"replayed\":false}";
+		FStartAnswer A = ParseStartAnswer(W, 202, Made);
+		Expect(A.Outcome == EStartOutcome::Accepted && A.WorkflowRunId == "40242149156" && !A.bReplayed, "202 made the dispatch");
+		A = ParseStartAnswer(W, 200, Swap(Made, "\"replayed\":false", "\"replayed\":true"));
+		Expect(A.Outcome == EStartOutcome::Accepted && A.bReplayed, "200 replayed binds, never re-dispatches");
+		A = ParseStartAnswer(W, 200, Swap(Swap(Swap(Made, "\"replayed\":false", "\"replayed\":true"), "\"dispatched\"", "\"dispatching\""), "\"40242149156\"", "null"));
+		Expect(A.Outcome == EStartOutcome::Accepted && A.WorkflowRunId.empty() && A.State == "dispatching", "dispatching with a pending run id binds");
+		Expect(ParseStartAnswer(W, 200, Made).Outcome == EStartOutcome::Malformed, "200 must be a replay");
+		Expect(ParseStartAnswer(W, 202, Swap(Made, "\"replayed\":false", "\"replayed\":true")).Outcome == EStartOutcome::Malformed, "202 is never a replay");
+		Expect(ParseStartAnswer("wlj_11111111-2222-4333-8444-555555555555", 202, Made).Outcome == EStartOutcome::Malformed, "another run's answer is refused");
+		Expect(ParseStartAnswer(W, 202, Swap(Made, "\"dispatched\"", "\"queued\"")).Outcome == EStartOutcome::Malformed, "unknown state refused");
+		Expect(ParseStartAnswer(W, 202, Swap(Made, "\"40242149156\"", "\"4024x\"")).Outcome == EStartOutcome::Malformed, "non-digit run id refused");
+		++StartCases;
+		Expect(ParseStartAnswer(W, 409, "{\"error\":{\"kind\":\"already_spent\",\"message\":\"x\"},\"retry\":false}").Outcome == EStartOutcome::Refused, "409 claim refused");
+		Expect(ParseStartAnswer(W, 400, "{\"error\":{\"kind\":\"julius_start_confirmation_required\",\"message\":\"x\"}}").Outcome == EStartOutcome::Refused, "400 refused");
+		Expect(ParseStartAnswer(W, 404, "{\"error\":{\"kind\":\"not_found\",\"message\":\"x\"}}").Outcome == EStartOutcome::Refused, "404 refused");
+		Expect(ParseStartAnswer(W, 503, "{\"error\":{\"kind\":\"julius_start_unavailable\"}}").Outcome == EStartOutcome::Retryable, "503 nothing dispatched");
+		Expect(ParseStartAnswer(W, 0, "").Outcome == EStartOutcome::Retryable, "transport nothing dispatched");
+		Expect(ParseStartAnswer(W, 401, "").Outcome == EStartOutcome::Retryable, "401 re-pair");
+		Expect(ParseStartAnswer(W, 409, "{}").Outcome == EStartOutcome::Malformed, "a refusal without a kind is not understood");
+		++StartCases;
+	}
+
 	void PhaseFixtures()
 	{
 		Expect(std::strstr(VerbatimPhaseVectors, "stage: 'repair:build',\n  attempt: 2,") != nullptr, "verbatim coder phase");
@@ -1390,6 +1445,7 @@ int main()
 	BridgeRouteFixtures();
 	PhaseFixtures();
 	LiveFixtures();
+	StartFixtures();
 
 	if (Failures != 0)
 	{
@@ -1397,7 +1453,7 @@ int main()
 		return 1;
 	}
 	std::printf(
-		"J1 MISSION FLOW KAT PASS meanings=%d route=%d result=%d flow=%d windows=%d bridge=%d phases=%d live=%d\n",
-		Meanings, Routes, Results, FlowSteps, Windows, Bridge, PhaseCases, LiveCases);
+		"J1 MISSION FLOW KAT PASS meanings=%d route=%d result=%d flow=%d windows=%d bridge=%d phases=%d live=%d start=%d\n",
+		Meanings, Routes, Results, FlowSteps, Windows, Bridge, PhaseCases, LiveCases, StartCases);
 	return 0;
 }
