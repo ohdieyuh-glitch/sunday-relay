@@ -511,7 +511,9 @@ describe('admission path exclusion is exact', () => {
     expect(isWonderlandRoute(WONDERLAND_ADMISSION_PATH)).toBe(false);
     expect(isWonderlandAdmissionRoute(WONDERLAND_ADMISSION_PATH)).toBe(true);
     const exact = classifyWonderlandDispatchPath(WONDERLAND_ADMISSION_PATH, WONDERLAND_ADMISSION_PATH);
-    expect(exact).toEqual({ catchAllPath: null, exactAdmission: true, exactStatus: false });
+    expect(exact).toEqual({
+      catchAllPath: null, exactAdmission: true, exactStatus: false, exactMissionResult: false, exactMissionProgress: false, exactCompanion: false,
+    });
   });
 
   it('a query on the admission pathname is admission', () => {
@@ -522,6 +524,9 @@ describe('admission path exclusion is exact', () => {
       catchAllPath: null,
       exactAdmission: true,
       exactStatus: false,
+      exactMissionResult: false,
+      exactMissionProgress: false,
+      exactCompanion: false,
     });
   });
 
