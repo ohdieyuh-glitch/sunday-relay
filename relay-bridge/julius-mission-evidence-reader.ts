@@ -653,7 +653,7 @@ export function createJuliusMissionEvidenceReader(github: JuliusMissionGitHub): 
         ...checkerVerdictFrom(
           fileText(observed.artifacts.find((artifact) => artifact.name === VERDICT_ARTIFACT), 'checker-verdict.txt'),
           derived.runId,
-          (taskId, contextId) => publishedFinalMessageSha256(fileText(evidence, `${taskId.replace(/:/gu, '_')}.${contextId.replace(/:/gu, '_')}.redacted.json`), taskId, contextId, derived.runId),
+          (taskId, contextId) => publishedFinalMessageSha256(fileText(evidence, `${createHash('sha256').update(`${taskId}\n${contextId}`, 'utf8').digest('hex')}.redacted.json`), taskId, contextId, derived.runId),
         ),
       };
       return completion;

@@ -38,7 +38,10 @@ describe('the coder final message is kept outside the workspace for the hidden c
     const { workspace, out } = layout();
     const result = write({ directory: out, workspacePath: workspace, finalText: `  ${DOC}\n` });
     expect(result).toMatchObject({ written: true, manifest: { taskId: TASK, contextId: CONTEXT, runId: 'wlj_x', trimmedSha256: sha256(DOC), trimmedUtf8Bytes: DOC.length } });
-    expect(STEM).toBe('task_build-1.context_7');
+    expect(STEM).toBe(sha256(`task:build-1\ncontext:7`));
+    // Spelling `:` as `_` once made these two pairs one file; the stem keeps them apart.
+    expect(juliusFinalMessageStem('a:b', 'c')).not.toBe(juliusFinalMessageStem('a_b', 'c'));
+    expect(juliusFinalMessageStem('a', 'b.c')).not.toBe(juliusFinalMessageStem('a.b', 'c'));
     expect(readdirSync(out).sort()).toEqual([`${STEM}.manifest.json`, `${STEM}.raw.txt`, `${STEM}.redacted.json`]);
     expect(readFileSync(join(out, `${STEM}.raw.txt`), 'utf8')).toBe(DOC);
     const redacted = JSON.parse(readFileSync(join(out, `${STEM}.redacted.json`), 'utf8')) as Record<string, unknown>;
@@ -84,6 +87,22 @@ describe('the coder final message is kept outside the workspace for the hidden c
     const link = join(root, 'link');
     try { symlinkSync(join(root, 'final-message'), link, 'junction'); } catch { return; }
     expect(write({ directory: link, workspacePath: workspace })).toEqual({ written: false, reason: 'directory_unusable' });
+  });
+
+  it('refuses a symlinked directory on every platform, and never follows it to write', () => {
+    // Injected, so it runs where the platform cannot make a symlink. The real lstat path is the junction case above.
+    const { workspace, out } = layout();
+    let writes = 0;
+    const fs = {
+      inspectDirectory: () => ({ isDirectory: true, isSymlink: true, mode: 0o40700, uid: 1000 }),
+      realpath: (p: string) => p,
+      writeExclusive: () => { writes += 1; },
+    };
+    expect(write({ directory: out, workspacePath: workspace, uid: 1000, fs })).toEqual({ written: false, reason: 'directory_unusable' });
+    // lstat reports a symlink as not a directory; that is refused too.
+    expect(write({ directory: out, workspacePath: workspace, uid: 1000, fs: { ...fs, inspectDirectory: () => ({ isDirectory: false, isSymlink: true, mode: 0o120777, uid: 1000 }) } }))
+      .toEqual({ written: false, reason: 'directory_unusable' });
+    expect(writes).toBe(0);
   });
 
   it('refuses a directory another user owns or others may write', () => {

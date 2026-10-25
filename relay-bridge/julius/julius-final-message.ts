@@ -65,9 +65,14 @@ export function redactForEvidence(text: string): string {
   return out;
 }
 
-/** The file stem for a task and dispatch context: ids with `:` spelled `_`, joined by `.`. */
+/**
+ * The file stem for a task and dispatch context: the sha256 of `taskId`, a newline and
+ * `contextId`. A newline is in neither id, so two different pairs never share a stem (spelling
+ * `:` as `_` made `a:b` and `a_b` one file). Fixed length, so no filename limit is reached. The
+ * manifest still names both ids. The grader and the evidence reader compute the same stem.
+ */
 export function juliusFinalMessageStem(taskId: string, contextId: string): string {
-  return `${taskId.replace(/:/gu, '_')}.${contextId.replace(/:/gu, '_')}`;
+  return createHash('sha256').update(`${taskId}\n${contextId}`, 'utf8').digest('hex');
 }
 
 export interface JuliusFinalMessageManifest {

@@ -568,14 +568,14 @@ describe('the hidden checker verdict is read from the grade job only', () => {
     const runs = `run_id\tmission_id\tstate\tcard_revision\n${WLJ}\tmission:julius-continuous-1\tCOMPLETED\t7\n(1 row)\n`;
     const files = [
       { path: 'live-mission.evidence.txt', text: RESULT }, { path: 'runs.tsv', text: runs },
-      { path: 'final-message/task_build-1.context_9.redacted.json', text: redactedRecord() },
+      { path: `final-message/${createHash('sha256').update(`task:build-1\ncontext:9`, 'utf8').digest('hex')}.redacted.json`, text: redactedRecord() },
     ];
     const graded = withProof(files);
     const withVerdict = { ...graded, artifacts: [...graded.artifacts, { name: 'julius-inworld-verdict', files: [{ path: 'checker-verdict.txt', text: verdictFile('FAIL') }] }] };
     const failed = await createJuliusMissionEvidenceReader(github(tagMessage(WLJ), withVerdict)).read(WLJ) as { checkerVerdict: string } | null;
     expect(failed?.checkerVerdict).toBe('FAIL');
 
-    const tampered = withProof([...files.slice(0, 2), { path: 'final-message/task_build-1.context_9.redacted.json', text: redactedRecord('e'.repeat(64)) }]);
+    const tampered = withProof([...files.slice(0, 2), { path: `final-message/${createHash('sha256').update(`task:build-1\ncontext:9`, 'utf8').digest('hex')}.redacted.json`, text: redactedRecord('e'.repeat(64)) }]);
     const tamperedWithVerdict = { ...tampered, artifacts: [...tampered.artifacts, { name: 'julius-inworld-verdict', files: [{ path: 'checker-verdict.txt', text: verdictFile('PASS') }] }] };
     const mismatch = await createJuliusMissionEvidenceReader(github(tagMessage(WLJ), tamperedWithVerdict)).read(WLJ) as { checkerVerdict: string } | null;
     expect(mismatch?.checkerVerdict).toBe('NOT_RUN');

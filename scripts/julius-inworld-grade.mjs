@@ -203,7 +203,8 @@ export function gradeInworld(opts) {
   if (diagnostics === null) return { exit: 0, verdict: { ...withTask, verdict: 'NOT_RUN', reason: 'evidence_unreadable' } };
   const record = selectKeptMessage(diagnostics, attempt);
   if (!record.ok) return { exit: record.reason === 'final_message_missing' ? 3 : 0, verdict: { ...withTask, verdict: 'NOT_RUN', reason: record.reason } };
-  const stem = `${attempt.taskId.replace(/:/gu, '_')}.${record.contextId.replace(/:/gu, '_')}`;
+  // relay-bridge/julius/julius-final-message.ts juliusFinalMessageStem: sha256 of task, newline, context.
+  const stem = createHash('sha256').update(`${attempt.taskId}\n${record.contextId}`, 'utf8').digest('hex');
   const rawPath = join(opts.finalMessage, `${stem}.raw.txt`);
   const manifestPath = join(opts.finalMessage, `${stem}.manifest.json`);
   const withRecord = { ...withTask, contextId: record.contextId, recordedSha256: record.sha256 };

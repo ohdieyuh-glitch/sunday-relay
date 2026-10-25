@@ -30,7 +30,7 @@ const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 
 const CONTEXT = 'context:9';
-const STEM = 'task_build-1.context_9';
+const STEM = createHash('sha256').update(`task:build-1\ncontext:9`, 'utf8').digest('hex');
 const DIAG_HEADER = 'run_id\tsequence\ttask_id\trole\tstage\tfinal_message_sha256\tfinal_message_context_id\tfinal_message_write';
 const diagRow = (sha: string, context = CONTEXT, task = 'task:build-1') => `wlj_x\t7\t${task}\tCODING_AGENT\tbuild\t${sha}\t${context}\t`;
 
