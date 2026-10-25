@@ -306,10 +306,17 @@ describe('queue, record, and workflow', () => {
     expect(continued.results.map((row) => row.ok)).toEqual([false, true, true]);
   });
 
-  it('parses the shipped queue as empty and writes the landing record', () => {
+  it('parses the shipped queue (seeded at the bootstrap) and writes the landing record', () => {
     const shipped = realGoverned.parseGovernedQueue(readFileSync(join(LANDING, 'governed-queue.txt'), 'utf8'));
     expect(shipped.problems).toEqual([]);
-    expect(shipped.entries).toEqual([]);
+    // Seeded in the bootstrap target, because adding a line later is itself a governed change and the lander
+    // lands only what the queue on main already lists.
+    expect(shipped.entries).toEqual([
+      { pr: 459, depends: [] },
+      { pr: 407, depends: [] },
+      { pr: 447, depends: [407] },
+      { pr: 448, depends: [407] },
+    ]);
     expect(realGoverned.parseGovernedQueue('7\n7 depends: -\n').problems.join('\n')).toMatch(/listed twice/u);
     expect(realGoverned.parseGovernedQueue('9 depends: 8,7\n').problems.join('\n')).toMatch(/numerically sorted/u);
     const record = realGoverned.formatLandingRecord({
