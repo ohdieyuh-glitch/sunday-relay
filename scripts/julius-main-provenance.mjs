@@ -17,7 +17,12 @@
  *
  * WHAT IT REFUSES TO USE. No timestamps, no branch-name conventions, no "the
  * most recent approval", no ancestry in place of identity. Every input is an
- * immutable git object id or an authenticated GitHub record.
+ * immutable git object id or an authenticated GitHub record. A git author name,
+ * a git author email, and the GitHub login derived from that email
+ * (`commit.author.login`) are not authenticated records: GitHub fills that
+ * login by matching the email, and anyone can set both. They never authorize.
+ * A missing authenticated identity, or a disagreement with those untrusted
+ * fields, fails closed.
  *
  * WHAT IT DOES NOT PROVE. This is a statement about ONE commit, not about the
  * branch's history. A branch reset to an earlier commit that was itself
@@ -41,6 +46,32 @@ import {
   collectPages,
   evaluateReviewCurrency,
 } from './julius-review-currency.mjs';
+import {
+  EXTERNAL_ANCHOR_VARIABLE,
+  FIRST_PARENT_WALK_CAP,
+  FOUNDER_ANCHOR_VARIABLE,
+  FOUNDER_APPROVAL_KEY_PATH,
+  founderApprovalProblem,
+  GOVERNED_LANDER_BOT_VARIABLE,
+  TRUSTED_CHECKPOINT_SHA,
+  TRUSTED_COMPUTING_BASE,
+  annotateChainLandings,
+  landingIdentityProblem,
+  commitIdentityFields,
+  firstParentWalkCapReason,
+  applyTrustChain,
+  attestedCheckpointFloor,
+  evaluateTrustChain,
+  readCheckpointAttestation,
+  reviewerKeyPinRefusal,
+  governedAuditBranchProblem,
+} from './julius-main-provenance-trust.mjs';
+
+const externalAnchorOf = (input) => (
+  input && Object.prototype.hasOwnProperty.call(input, 'externalReviewerKeySha256')
+    ? input.externalReviewerKeySha256
+    : process.env[EXTERNAL_ANCHOR_VARIABLE]
+);
 
 export { NON_ATTESTING_IDENTITIES, REVIEW_AUTHORITY_LOGINS };
 
@@ -56,6 +87,28 @@ export { NON_ATTESTING_IDENTITIES, REVIEW_AUTHORITY_LOGINS };
  */
 export const WORKER_AUTHOR_LOGINS = NON_ATTESTING_IDENTITIES;
 
+/**
+ * THE CODING WORKER'S GITHUB APP.
+ *
+ * `julius-worker[bot]` is the account GitHub records when App 4838349
+ * authenticates. The id is the App id, not the bot user id, and not something
+ * derived from an email.
+ */
+export const WORKER_APP_ID = 4838349;
+
+/**
+ * SOURCES THAT ARE AUTHENTICATED COMMIT IDENTITY.
+ *
+ * `pull-opener` is `pull.user` on the pull request the clearance names: the
+ * account that opened it. `app-installation` is that same App, and it has to
+ * carry `appId === WORKER_APP_ID`. `verified-signature` is a signature GitHub
+ * has already verified, with the signer login taken from that verification,
+ * never from the author email. `review-author` is an authenticated review
+ * actor and is intentionally absent here: a review author is not the author
+ * of the commit.
+ */
+export const AUTHENTICATED_COMMIT_SOURCES = Object.freeze(['pull-opener', 'app-installation', 'verified-signature']);
+
 /** The only verdicts. Anything not `provenant` blocks. */
 export const PROVENANCE_VERDICTS = Object.freeze(['provenant', 'unprovenanced', 'indeterminate']);
 
@@ -69,7 +122,7 @@ const verdict = (name, reason, extra = {}) => ({ verdict: name, reason, ...extra
 /**
  * A SECOND, INDEPENDENT WAY FOR A MAIN TIP TO BE PROVENANT: the Independent Reviewer signed it.
  *
- * The autonomous lander (github-actions[bot]) lands a commit whose MESSAGE carries the reviewer's ed25519
+ * The autonomous lander (julius-lander[bot]) lands a commit whose MESSAGE carries the reviewer's ed25519
  * clearance and signature. Such a commit is not the merge result of any pull request, so the founder-approval
  * path above cannot see it. This path answers the same question from different facts: is the tree that main carries,
  * on the base it was built on, exactly what the reviewer signed for, and was it authored by the coding worker?
@@ -98,6 +151,7 @@ export const LANDING_BEGIN = '-----BEGIN JULIUS LANDING-----';
 export const LANDING_END = '-----END JULIUS LANDING-----';
 const LANDING_REPO = 'ohdieyuh-glitch/sunday-relay';
 const CLEARANCE_KEYS = ['pr', 'head', 'tree', 'base', 'kind', 'bot-comments-sha256', 'governed-exceptions', 'nonce', 'by', 'issued', 'expires'];
+const CLEARANCE_OPTIONAL_KEYS = ['protected-paths', 'landing-method', 'binds-draft', 'depends', 'comments-digest'];
 const EXCEPTION_ELIGIBLE = ['relay-bridge/julius/role-effort.test.ts', 'scripts/julius-live-contract-check.mjs'];
 const CANONICAL_BASE64 = /^[A-Za-z0-9+/]+={0,2}$/u;
 const isCanonicalBase64 = (text) => typeof text === 'string' && CANONICAL_BASE64.test(text)
@@ -120,7 +174,7 @@ export function extractLandingBlock(message) {
   const begin = lines.indexOf(LANDING_BEGIN);
   const end = lines.indexOf(LANDING_END);
   if (begin < 0 || end < 0) return bad('a landing marker is not alone on its line');
-  if (end !== begin + 5) return bad('the landing block must hold exactly four lines between its markers');
+  if (end !== begin + 5 && end !== begin + 6) return bad('the landing block must hold four lines between its markers, or five with founder-signature-b64 last');
   const after = lines.slice(end + 1);
   if (!(after.length === 0 || (after.length === 1 && after[0] === ''))) return bad('text follows the landing block');
   const expect = [['v', /^1$/u], ['clearance-nonce', /^[0-9a-f]{32}$/u], ['clearance-b64', CANONICAL_BASE64], ['signature-b64', CANONICAL_BASE64]];
@@ -135,7 +189,15 @@ export function extractLandingBlock(message) {
     values[key] = value;
   }
   if (!isCanonicalBase64(values['clearance-b64']) || !isCanonicalBase64(values['signature-b64'])) return bad('a base64 payload is not canonical');
-  return { state: 'ok', nonce: values['clearance-nonce'], clearanceB64: values['clearance-b64'], signatureB64: values['signature-b64'] };
+  let founderSignatureB64;
+  if (end === begin + 6) {
+    const line = lines[begin + 5];
+    const prefix = 'founder-signature-b64: ';
+    if (!line.startsWith(prefix)) return bad(`line 5 of the landing block must start with "${prefix}"`);
+    founderSignatureB64 = line.slice(prefix.length);
+    if (!isCanonicalBase64(founderSignatureB64) || Buffer.from(founderSignatureB64, 'base64').length !== 64) return bad('the founder-signature-b64 value is malformed');
+  }
+  return { state: 'ok', nonce: values['clearance-nonce'], clearanceB64: values['clearance-b64'], signatureB64: values['signature-b64'], founderSignatureB64 };
 }
 
 /** The clearance text rules, restated here on purpose: this file imports nothing from the lander it is a check on. */
@@ -154,7 +216,24 @@ export function parseSignedClearance(text, queriedRepo) {
     if (!line.startsWith(prefix)) problems.push(`line ${3 + i} must start with "${prefix}"`);
     else fields[key] = line.slice(prefix.length);
   });
-  if (lines.length !== 2 + CLEARANCE_KEYS.length + 1 || lines[lines.length - 1] !== '') problems.push('exactly one trailing newline and no extra lines');
+  let cursor = 0;
+  let index = 2 + CLEARANCE_KEYS.length;
+  while (index < lines.length - 1) {
+    const line = lines[index];
+    let matched = -1;
+    for (let keyIndex = cursor; keyIndex < CLEARANCE_OPTIONAL_KEYS.length; keyIndex += 1) {
+      if (line.startsWith(`${CLEARANCE_OPTIONAL_KEYS[keyIndex]}: `)) {
+        matched = keyIndex;
+        break;
+      }
+    }
+    if (matched < 0) break;
+    const key = CLEARANCE_OPTIONAL_KEYS[matched];
+    fields[key] = line.slice(key.length + 2);
+    cursor = matched + 1;
+    index += 1;
+  }
+  if (lines.length === 0 || lines[lines.length - 1] !== '' || index !== lines.length - 1) problems.push('exactly one trailing newline and no extra lines');
   for (const key of ['head', 'tree', 'base']) if (fields[key] !== undefined && !isSha(fields[key])) problems.push(`${key} must be a full 40-hex sha`);
   if (fields.pr !== undefined && !/^[1-9][0-9]{0,6}$/u.test(fields.pr)) problems.push('pr must be a positive integer');
   if (fields.kind !== undefined && !['CLEARED', 'CLEARED-TREE'].includes(fields.kind)) problems.push('kind must be CLEARED or CLEARED-TREE');
@@ -163,6 +242,27 @@ export function parseSignedClearance(text, queriedRepo) {
     const list = value === '-' ? [] : value.split(',');
     if (value !== '-' && (list.some((f) => !EXCEPTION_ELIGIBLE.includes(f)) || new Set(list).size !== list.length || [...list].sort().join(',') !== value)) {
       problems.push('governed-exceptions must be "-" or a sorted comma list of eligible files');
+    }
+  }
+  if (fields['protected-paths'] !== undefined) {
+    const value = fields['protected-paths'];
+    const list = value === '-' ? [] : value.split(',');
+    const safe = (path) => path !== '' && !path.includes('..') && !path.startsWith('/') && !/[*?[\]{}\s]/u.test(path) && /^[A-Za-z0-9._@/-]+$/u.test(path);
+    if (value !== '-' && (list.some((path) => !safe(path)) || new Set(list).size !== list.length || [...list].sort().join(',') !== value)) {
+      problems.push('protected-paths must be "-" or a sorted comma-separated path list');
+    }
+  }
+  if (fields['landing-method'] !== undefined && !['squash', 'fast-forward'].includes(fields['landing-method'])) {
+    problems.push('landing-method must be squash or fast-forward');
+  }
+  if (fields['binds-draft'] !== undefined && fields['binds-draft'] !== 'yes') problems.push('binds-draft must be yes');
+  if (fields['comments-digest'] !== undefined && fields['comments-digest'] !== 'excludes-delivery') problems.push('comments-digest must be excludes-delivery');
+  if (fields.depends !== undefined) {
+    const value = fields.depends;
+    const parts = value === '-' ? [] : value.split(',');
+    const ids = parts.map((part) => (/^[1-9][0-9]{0,6}$/u.test(part) ? Number(part) : Number.NaN));
+    if (value !== '-' && (ids.some((id) => !Number.isInteger(id)) || new Set(parts).size !== parts.length || [...ids].sort((a, b) => a - b).join(',') !== value)) {
+      problems.push('depends must be "-" or a numerically sorted comma-separated list of pull request numbers');
     }
   }
   if (fields.nonce !== undefined && !/^[0-9a-f]{32}$/u.test(fields.nonce)) problems.push('nonce must be 32 hex characters');
@@ -211,15 +311,78 @@ export function readReviewerKey(pem) {
  * A reviewer-signed tip can reach this gate WITHOUT the lander: there is no branch protection, so a hand-pushed commit that
  * carries a genuine signed block is exactly as good as a landed one, unless the gate itself refuses what the lander would
  * have refused. These two constants are a deliberate COPY of the lander's HARD_FORBIDDEN_PATH and EXCEPTION_ELIGIBLE (this
- * file imports nothing from the lander it checks); a drift test keeps the copies equal. Founder-governed paths (workflows, the
- * landing system and its key, this gate, approver files, migrations, package manifests...) are never provenant through a
- * signature alone. The two exception-eligible files may change only when the SIGNED clearance names them exactly.
+ * file imports nothing from the lander it checks); a drift test keeps the copies equal. A hard-forbidden path is
+ * provenant only when the signed clearance's protected-paths lists that exact path. A historical clearance with no
+ * protected-paths line lists nothing, so those paths stay refused. The two exception-eligible files may change only
+ * when the SIGNED clearance names them in governed-exceptions.
  */
-const SIGNED_LANDING_HARD_FORBIDDEN = /^(\.github\/workflows\/|\.github\/julius-landing\/|\.github\/julius-mission-pins\.txt$|\.github\/julius-approvers\.json$|\.github\/CODEOWNERS$|CODEOWNERS$|docs\/CODEOWNERS$|CLAUDE\.md$|package\.json$|package-lock\.json$|scripts\/julius-approval-gates\.mjs$|scripts\/julius-live-evidence\.mjs$|scripts\/julius-main-provenance|scripts\/julius-review-currency|scripts\/julius-main-monotonicity|scripts\/julius-paid-slot|scripts\/julius-subscription-check|scripts\/julius-live-preflight-gates|scripts\/julius-accept|scripts\/relay-repository-boundary|scripts\/export-julius-harness|scripts\/relay-parity-gate|scripts\/wonderland-beta-gate|scripts\/julius-live-preflight-identity|scripts\/julius-derive-scoped-credentials|scripts\/julius-ci-callers|scripts\/ci-test-accounting|scripts\/julius-paid-dispatch|scripts\/julius-paid-run-archive|\.github\/julius-mission-pins\.sh$|\.github\/julius-executor-entrypoint\.sh$|scripts\/julius-docker-executor\.sh$|scripts\/julius-executor-ready\.mjs$|scripts\/julius-reviewer-isolation|scripts\/julius-reviewer-deadline\.mjs$|scripts\/julius-live-preflight\.ts$|scripts\/julius-usage-limit\.mjs$|\.github\/julius-learning-store\.sh$|\.github\/julius-phase\.sh$|\.github\/wait-for-executor\.sh$|\.github\/julius-live-|\.github\/actions\/|\.github\/julius-mission-slice\/|\.github\/julius-learning-registrations\/|scripts\/julius-landing|\.github\/julius-live-evidence-dump\.sh$|.*\bmigrations?\/)/iu;
+const SIGNED_LANDING_HARD_FORBIDDEN = /^(\.github\/workflows\/|\.github\/julius-landing\/|\.github\/julius-mission-pins\.txt$|\.github\/julius-approvers\.json$|\.github\/CODEOWNERS$|CODEOWNERS$|docs\/CODEOWNERS$|CLAUDE\.md$|package\.json$|package-lock\.json$|scripts\/julius-approval-gates\.mjs$|scripts\/julius-live-evidence\.mjs$|scripts\/julius-main-provenance|scripts\/julius-review-currency|scripts\/julius-main-monotonicity|scripts\/julius-paid-slot|scripts\/julius-subscription-check|scripts\/julius-live-preflight-gates|scripts\/julius-accept|scripts\/relay-repository-boundary|scripts\/export-julius-harness|scripts\/relay-parity-gate|scripts\/wonderland-beta-gate|scripts\/julius-live-preflight-identity|scripts\/julius-derive-scoped-credentials|scripts\/julius-ci-callers|scripts\/ci-test-accounting|scripts\/julius-paid-dispatch|scripts\/julius-paid-run-archive|\.github\/julius-mission-pins\.sh$|\.github\/julius-executor-entrypoint\.sh$|scripts\/julius-docker-executor\.sh$|scripts\/julius-executor-ready\.mjs$|scripts\/julius-reviewer-isolation|scripts\/julius-reviewer-deadline\.mjs$|scripts\/julius-live-preflight\.ts$|scripts\/julius-usage-limit\.mjs$|\.github\/julius-learning-store\.sh$|\.github\/julius-phase\.sh$|\.github\/wait-for-executor\.sh$|\.github\/julius-live-|\.github\/actions\/|\.github\/julius-mission-slice\/|\.github\/julius-learning-registrations\/|scripts\/julius-landing|scripts\/julius-governed-bootstrap|\.github\/julius-live-evidence-dump\.sh$|.*\bmigrations?\/)/iu;
 const SIGNED_LANDING_EXCEPTION_ELIGIBLE = ['relay-bridge/julius/role-effort.test.ts', 'scripts/julius-live-contract-check.mjs'];
 export const SIGNED_LANDING_GOVERNED = Object.freeze({ HARD_FORBIDDEN: SIGNED_LANDING_HARD_FORBIDDEN, EXCEPTION_ELIGIBLE: SIGNED_LANDING_EXCEPTION_ELIGIBLE });
 
 const signedVerdict = (name, reason, extra = {}) => ({ state: 'decided', result: verdict(name, reason, { via: 'signed-landing', ...extra }) });
+
+/**
+ * WHO AUTHORED THE CLEARED HEAD, FROM AN AUTHENTICATED RECORD ONLY.
+ *
+ * Returns a refusal reason, or `null` when the head was authenticated as the
+ * coding worker. Git author name, git author email, and the login GitHub
+ * derived from that email cannot satisfy this. When those untrusted fields are
+ * present they must agree with the authenticated login; a disagreement or a
+ * missing authenticated record refuses.
+ *
+ * @param {unknown} head
+ * @returns {string | null}
+ */
+function clearedHeadIdentityProblem(head) {
+  const auth = head?.authenticatedAuthor;
+  if (auth === null || typeof auth !== 'object' || Array.isArray(auth)) {
+    return 'the cleared head has no authenticated GitHub identity; git author name, email, and the email-derived login are not identity and are not the coding worker';
+  }
+  const login = auth.login;
+  const source = auth.source;
+  if (typeof login !== 'string' || login === '' || typeof source !== 'string' || !AUTHENTICATED_COMMIT_SOURCES.includes(source)) {
+    return 'the cleared head authenticated identity is missing or is not from an authenticated GitHub source, so it is not the coding worker';
+  }
+  if (auth.accountType !== 'Bot') {
+    return `the authenticated account type is ${typeof auth.accountType === 'string' && auth.accountType !== '' ? auth.accountType : 'missing'}, not a GitHub App, so it is not the coding worker`;
+  }
+  if (auth.appId !== undefined && auth.appId !== WORKER_APP_ID) {
+    return `the App installation id is ${String(auth.appId)}, not ${WORKER_APP_ID}, so it is not the coding worker`;
+  }
+  if (source === 'app-installation' && auth.appId !== WORKER_APP_ID) {
+    return `the App installation id is missing, not ${WORKER_APP_ID}, so it is not the coding worker`;
+  }
+  if (source === 'verified-signature' && auth.signatureVerified !== true) {
+    return 'the cleared head has no verified signature, so its signer is not the coding worker';
+  }
+  if (!WORKER_AUTHOR_LOGINS.includes(login)) {
+    return `the cleared head was authenticated as ${login} via ${source}, not the coding worker`;
+  }
+  const verification = head.verification;
+  if (verification != null && typeof verification === 'object' && !Array.isArray(verification)) {
+    const reason = verification.reason;
+    if (reason !== undefined && reason !== 'unsigned' && verification.verified !== true) {
+      return `the cleared head signature does not verify (${typeof reason === 'string' && reason !== '' ? reason : 'unreadable'}), so it is not the coding worker`;
+    }
+    if (verification.verified === true) {
+      const signer = verification.signerLogin;
+      if (typeof signer !== 'string' || signer === '' || signer !== login) {
+        return `the verified signature signer is ${typeof signer === 'string' && signer !== '' ? signer : 'missing'}, not the authenticated identity ${login}, so it is not the coding worker`;
+      }
+    }
+  }
+  if (typeof head.emailDerivedLogin === 'string' && head.emailDerivedLogin !== login) {
+    return `the email-derived commit author ${head.emailDerivedLogin} does not match the authenticated identity ${login}; that login is not identity and the mismatch is not the coding worker`;
+  }
+  if (typeof head.gitAuthorName === 'string' && head.gitAuthorName !== '' && head.gitAuthorName !== login) {
+    return `the git author name does not match the authenticated identity ${login}; a free-text name is not identity and the mismatch is not the coding worker`;
+  }
+  if (typeof head.authorLogin === 'string' && head.authorLogin !== login) {
+    return `a supplied author login ${head.authorLogin} does not match the authenticated identity ${login}, so it is not the coding worker`;
+  }
+  return null;
+}
 
 /**
  * @returns {{state:'absent'} | {state:'decided', result: object}}
@@ -230,7 +393,10 @@ const signedVerdict = (name, reason, extra = {}) => ({ state: 'decided', result:
  * @param {unknown} input.tipReviewerKeyPem  The same file read AT THE TIP: must be byte-identical to the parent's.
  * @param {unknown} input.changedPaths       Every path (and previous path) the tip changes against its parent.
  * @param {unknown} input.changedPathsComplete Strictly true: the list was read completely (fewer than 300 files, exactly one commit ahead).
- * @param {unknown} input.headCommit         `{ sha, authorLogin, treeSha }` of the commit the clearance names as `head`.
+ * @param {unknown} input.headCommit         The commit the clearance names as `head`: `{ sha, treeSha, authenticatedAuthor, emailDerivedLogin?, gitAuthorName?, gitAuthorEmail?, verification? }`.
+ *                                            `authenticatedAuthor` is `{ login, source, accountType, appId?, signatureVerified? }` from a GitHub-authenticated
+ *                                            record. `emailDerivedLogin` (`commit.author.login`), `gitAuthorName` and `gitAuthorEmail` are untrusted and are
+ *                                            read only to refuse a mismatch. A legacy `authorLogin` string is the same untrusted login and is not sufficient.
  */
 export function evaluateSignedLanding(input, tip) {
   const block = extractLandingBlock(input?.mainCommitMessage);
@@ -274,7 +440,12 @@ export function evaluateSignedLanding(input, tip) {
   } catch {
     return signedVerdict('indeterminate', 'the landing signature could not be checked', base);
   }
-  if (signatureOk !== true) return signedVerdict('unprovenanced', 'the landing signature does not verify against the reviewer key committed at the parent', base);
+  if (signatureOk !== true) {
+    // An unpinned key is refused because it is not the trust root, including when the signature was made by that key.
+    const pin = reviewerKeyPinRefusal(input?.reviewerKeyPem, externalAnchorOf(input));
+    if (pin?.verdict === 'unprovenanced') return signedVerdict('unprovenanced', pin.reason, base);
+    return signedVerdict('unprovenanced', 'the landing signature does not verify against the reviewer key committed at the parent', base);
+  }
 
   // WHAT WAS SIGNED must be what main carries, on the base it was built on.
   if (clearance.tree !== mainTreeSha) {
@@ -290,9 +461,14 @@ export function evaluateSignedLanding(input, tip) {
   if (head.treeSha !== clearance.tree) {
     return signedVerdict('unprovenanced', `the cleared head ${head.sha} carries tree ${head.treeSha}, not the signed tree ${clearance.tree}`, base);
   }
-  if (!WORKER_AUTHOR_LOGINS.includes(head?.authorLogin)) {
-    return signedVerdict('unprovenanced',
-      `the cleared head was authored by ${typeof head?.authorLogin === 'string' ? head.authorLogin : 'an unreadable identity'}, not the coding worker`, base);
+  // A governed landing names its method inside the signed clearance. Historical
+  // clearances do not, and those heads are still the coding worker's, which
+  // only an authenticated GitHub record can establish (#397). A governed
+  // landing's identity is the governed App committer, checked below.
+  const governedMethod = clearance['landing-method'] === 'squash' || clearance['landing-method'] === 'fast-forward';
+  if (!governedMethod) {
+    const identityProblem = clearedHeadIdentityProblem(head);
+    if (identityProblem !== null) return signedVerdict('unprovenanced', identityProblem, base);
   }
   // WHAT THE TIP CHANGES AGAINST ITS PARENT (d4b): read completely, or the answer is indeterminate.
   const changed = input?.changedPaths;
@@ -300,14 +476,147 @@ export function evaluateSignedLanding(input, tip) {
     return signedVerdict('indeterminate', 'the paths the signed tip changes against its parent could not be read completely', base);
   }
   const exceptions = clearance['governed-exceptions'] === '-' ? [] : clearance['governed-exceptions'].split(',');
-  const governed = changed.filter((path) => SIGNED_LANDING_HARD_FORBIDDEN.test(path)
+  const protectedPaths = clearance['protected-paths'] === undefined || clearance['protected-paths'] === '-' ? [] : clearance['protected-paths'].split(',');
+  const governed = changed.filter((path) => (SIGNED_LANDING_HARD_FORBIDDEN.test(path) && !protectedPaths.includes(path))
     || (SIGNED_LANDING_EXCEPTION_ELIGIBLE.some((file) => file.toLowerCase() === path.toLowerCase()) && !exceptions.includes(path)));
   if (governed.length > 0) {
     return signedVerdict('unprovenanced', `a signed landing may not change founder-governed paths: ${governed.slice(0, 5).join(', ')}`, base);
   }
+  const unusedProtected = protectedPaths.filter((path) => !changed.includes(path));
+  if (unusedProtected.length > 0) {
+    return signedVerdict('unprovenanced', `the signed clearance lists protected paths this landing does not change: ${unusedProtected.slice(0, 5).join(', ')}`, base);
+  }
+  // L6: a protected-paths entry needs the App and the founder, as in the governed lander.
+  const needsLander = protectedPaths.length > 0 || changed.some((path) => SIGNED_LANDING_HARD_FORBIDDEN.test(path) || TRUSTED_COMPUTING_BASE.includes(path));
+  if (needsLander) {
+    // `landingIdentity` is commitIdentityFields of the tip's REST commit: App bot author, web-flow signer, verified and valid.
+    const identity = landingIdentityProblem({
+      ...(input?.landingIdentity && typeof input.landingIdentity === 'object' ? input.landingIdentity : {}),
+      verificationReadProblem: input?.verificationReadProblem,
+      botId: input?.governedLanderBotId ?? process.env[GOVERNED_LANDER_BOT_VARIABLE],
+    });
+    if (identity) return signedVerdict('unprovenanced', identity, base);
+    // H1: the governed App and the reviewer signature are not enough for these
+    // paths. The founder-approval key, read at the parent, must have signed the
+    // same clearance bytes; the signature travels in the landing block.
+    const founder = founderApprovalProblem({
+      text: clearanceText,
+      signatureB64: block.founderSignatureB64 ?? '',
+      pem: input?.founderKeyPem,
+      anchor: input && Object.prototype.hasOwnProperty.call(input, 'externalFounderKeySha256') ? input.externalFounderKeySha256 : process.env[FOUNDER_ANCHOR_VARIABLE],
+    });
+    if (founder) return signedVerdict('unprovenanced', founder, base);
+  }
+  const success = { ...base, prNumber: Number(clearance.pr), reviewedHeadSha: clearance.head, approvedBy: [clearance.by] };
+  const pin = reviewerKeyPinRefusal(input?.reviewerKeyPem, externalAnchorOf(input));
+  if (pin) return signedVerdict(pin.verdict, pin.reason, success);
   return signedVerdict('provenant',
     `main ${mainSha} carries tree ${mainTreeSha} on base ${parentSha}, signed by the Independent Reviewer for pull request #${clearance.pr} (head ${clearance.head})`,
-    { ...base, prNumber: Number(clearance.pr), reviewedHeadSha: clearance.head, approvedBy: [clearance.by] });
+    success);
+}
+
+async function withTrustChain(single, source) {
+  if (single?.verdict !== 'provenant') return single;
+  let commits = source?.chainCommits;
+  // Every ancestor landing is verified on its own, at that commit's committer
+  // time. The tip's flag is kept only when that commit carries no landing block,
+  // because evaluateSignedLanding already judged it. A block on the tip is
+  // judged again here. The verifier's clock is not the clearance window.
+  if (Array.isArray(commits) && commits.length > 0) {
+    const anchor = source && Object.prototype.hasOwnProperty.call(source, 'externalReviewerKeySha256')
+      ? source.externalReviewerKeySha256
+      : process.env[EXTERNAL_ANCHOR_VARIABLE];
+    commits = await annotateChainLandings(commits, {
+      pem: source?.reviewerKeyPem,
+      anchor,
+      founderPem: source?.founderKeyPem,
+      founderAnchor: process.env[FOUNDER_ANCHOR_VARIABLE],
+      now: typeof source?.now === 'number' ? source.now : Date.now(),
+    });
+    const last = commits.length - 1;
+    const tipMessage = commits[last]?.message;
+    const tipHasBlock = typeof tipMessage === 'string' && tipMessage.includes('BEGIN JULIUS LANDING');
+    if (single.via === 'signed-landing' && !tipHasBlock) {
+      commits = commits.map((commit, index) => (index === last ? { ...commit, signedLanding: true } : commit));
+    }
+  }
+  const chain = evaluateTrustChain({
+    tipSha: single.mainSha,
+    tipTree: single.mainTreeSha,
+    commits,
+    attestationText: source?.attestationText ?? process.env.JULIUS_CHECKPOINT_ATTESTATIONS,
+    signatureB64: source?.attestationSignatureB64 ?? process.env.JULIUS_CHECKPOINT_ATTESTATION_SIGNATURE,
+    reviewerKeyPem: source?.reviewerKeyPem,
+    externalAnchor: source && Object.prototype.hasOwnProperty.call(source, 'externalReviewerKeySha256')
+      ? source.externalReviewerKeySha256
+      : process.env[EXTERNAL_ANCHOR_VARIABLE],
+    now: source?.now,
+  });
+  return applyTrustChain(single, chain);
+}
+
+/**
+ * Every page of a commit's file list, or a refusal.
+ * A response longer than the requested page is the server's whole list only
+ * when it is under the 300-file ceiling. A full page asks for the next one.
+ * A walk that never sees a short page fails closed.
+ */
+export function pagedCommitFiles(fetchPage, { perPage = 100, maxPages = 30 } = {}) {
+  const rows = [];
+  for (let page = 1; page <= maxPages; page += 1) {
+    const commit = fetchPage(page, perPage);
+    if (!commit || typeof commit !== 'object' || !Array.isArray(commit.files)) {
+      throw new Error('a commit file page was not a list');
+    }
+    if (page === 1 && commit.files.length > perPage) {
+      if (commit.files.length >= 300) throw new Error('the commit file list is incomplete');
+      return commit.files;
+    }
+    rows.push(...commit.files);
+    if (commit.files.length < perPage) return rows;
+  }
+  throw new Error(`pagination did not finish within ${maxPages} pages`);
+}
+
+function pathsFromFiles(files) {
+  return files.flatMap((file) => [file?.filename, file?.previous_filename].filter((path) => typeof path === 'string'));
+}
+
+export function readFirstParentChain(gh, repo, tipSha, floorSha = TRUSTED_CHECKPOINT_SHA) {
+  if (tipSha === floorSha) return [];
+  const reversed = [];
+  let sha = tipSha;
+  let steps = 0;
+  for (let i = 0; i < FIRST_PARENT_WALK_CAP && typeof sha === 'string' && sha !== floorSha; i += 1) {
+    steps += 1;
+    const commit = gh(`repos/${repo}/commits/${sha}`);
+    let files = null;
+    try {
+      files = pagedCommitFiles((page, perPage) => (
+        page === 1 ? commit : gh(`repos/${repo}/commits/${sha}?per_page=${perPage}&page=${page}`)
+      ));
+    } catch (error) {
+      if (error instanceof Error && /incomplete|did not finish/u.test(error.message)) throw error;
+      files = null;
+    }
+    const committerDate = commit?.commit?.committer?.date;
+    const committerTime = typeof committerDate === 'string' ? Date.parse(committerDate) : Number.NaN;
+    reversed.push({
+      sha: commit?.sha,
+      tree: commit?.commit?.tree?.sha,
+      paths: Array.isArray(files) ? pathsFromFiles(files) : undefined,
+      message: commit?.commit?.message,
+      parent: commit?.parents?.[0]?.sha,
+      parentCount: Array.isArray(commit?.parents) ? commit.parents.length : undefined,
+      committerTime: Number.isFinite(committerTime) ? committerTime : undefined,
+      ...commitIdentityFields(commit),
+    });
+    const parent = commit?.parents?.[0]?.sha;
+    if (parent === floorSha) return reversed.reverse();
+    sha = parent;
+  }
+  if (steps >= FIRST_PARENT_WALK_CAP && sha !== floorSha) throw new Error(firstParentWalkCapReason(floorSha));
+  return null;
 }
 
 /**
@@ -331,7 +640,7 @@ export function evaluateSignedLanding(input, tip) {
  * @param {unknown} [input.tipReviewerKeyPem] The key file read at the tip itself (must equal the parent's).
  * @param {unknown} [input.changedPaths] Paths the tip changes against its parent (signed landings are refused on governed paths).
  * @param {unknown} [input.changedPathsComplete] Strictly true when that list is complete.
- * @param {unknown} [input.headCommit] `{ sha, authorLogin, treeSha }` of the commit the clearance names.
+ * @param {unknown} [input.headCommit] The cleared head, including `authenticatedAuthor` (see `evaluateSignedLanding`). Git author name, email and `commit.author.login` are not this.
  */
 export function evaluateMainProvenance(input) {
   const branch = typeof input?.branch === 'string' && input.branch !== '' ? input.branch : 'main';
@@ -417,6 +726,10 @@ export function evaluateMainProvenance(input) {
    * founder approved this diff" a statement about THIS branch. It is a fact on
    * the pull request record, not an inference.
    */
+  const auditRef = governedAuditBranchProblem(pull?.headRef) ?? governedAuditBranchProblem(pull?.baseRef);
+  if (auditRef) {
+    return verdict('unprovenanced', auditRef, { mainSha, mainTreeSha: input.mainTreeSha, parentSha, prNumber: pull?.number });
+  }
   if (pull?.baseRef !== branch) {
     return verdict('unprovenanced',
       `the landed candidate was reviewed against ${typeof pull?.baseRef === 'string' ? pull.baseRef : 'an unreadable branch'}, not ${branch}`,
@@ -586,7 +899,8 @@ async function main(argv) {
   if (typeof evidencePath === 'string') {
     let evaluated;
     try {
-      evaluated = evaluateMainProvenance({ ...(await fromEvidenceFile(evidencePath)), branch, repo }); // v3.5b S-3: the command line's repository, never the file's
+      const evidence = await fromEvidenceFile(evidencePath);
+      evaluated = await withTrustChain(evaluateMainProvenance({ ...evidence, branch, repo }), evidence); // v3.5b S-3: the command line's repository, never the file's
     } catch (error) {
       process.stderr.write(`main_provenance_indeterminate: ${error instanceof Error ? error.message : 'evidence unreadable'}\n`);
       return 1;
@@ -618,6 +932,18 @@ async function main(argv) {
     let reviewerKeyPem;
     let reviewerKeyAtSha;
     let tipReviewerKeyPem;
+    let founderKeyPem;
+    /** A governed file at a ref, or undefined. A missing founder key fails closed inside founderApprovalProblem. */
+    const pemAt = (path, ref) => {
+      try {
+        const file = gh(`repos/${repo}/contents/${path}?ref=${ref}`);
+        return file?.type === 'file' && file?.encoding === 'base64' && typeof file?.content === 'string'
+          ? Buffer.from(file.content, 'base64').toString('utf8')
+          : undefined;
+      } catch {
+        return undefined;
+      }
+    };
     let changedPaths;
     let changedPathsComplete;
     let headCommit;
@@ -629,6 +955,7 @@ async function main(argv) {
         reviewerKeyPem = Buffer.from(keyFile.content, 'base64').toString('utf8');
         reviewerKeyAtSha = parentOfTip;
       }
+      founderKeyPem = pemAt(FOUNDER_APPROVAL_KEY_PATH, parentOfTip);
       const tipKeyFile = gh(`repos/${repo}/contents/.github/julius-landing/reviewer-ed25519.pub?ref=${mainSha}`);
       if (tipKeyFile?.type === 'file' && tipKeyFile?.encoding === 'base64' && typeof tipKeyFile?.content === 'string') {
         tipReviewerKeyPem = Buffer.from(tipKeyFile.content, 'base64').toString('utf8');
@@ -639,18 +966,47 @@ async function main(argv) {
         changedPaths = comparison.files.flatMap((file) => [file?.filename, file?.previous_filename].filter((path) => typeof path === 'string'));
         changedPathsComplete = true;
       }
-      const signedHead = parseSignedClearance(Buffer.from(landingBlock.clearanceB64, 'base64').toString('utf8'), repo).fields.head;
+      const signedFields = parseSignedClearance(Buffer.from(landingBlock.clearanceB64, 'base64').toString('utf8'), repo).fields;
+      const signedHead = signedFields.head;
       if (isSha(signedHead)) {
+        // `commit.author.login` is the account GitHub associated by email. It is recorded only so a
+        // disagreement with the authenticated opener can refuse. It is never copied into `authenticatedAuthor`.
         const commit = gh(`repos/${repo}/commits/${signedHead}`);
-        headCommit = { sha: commit?.sha, authorLogin: commit?.author?.login, treeSha: commit?.commit?.tree?.sha };
+        const signedPr = signedFields.pr;
+        const pull = /^[1-9][0-9]{0,6}$/u.test(signedPr ?? '') ? gh(`repos/${repo}/pulls/${signedPr}`) : undefined;
+        const opener = pull?.user;
+        const headIsThisPull = pull?.head?.sha === signedHead && typeof opener?.login === 'string' && opener.login !== '';
+        const verification = commit?.commit?.verification;
+        const appId = Number.isInteger(opener?.appId) ? opener.appId : (Number.isInteger(pull?.appId) ? pull.appId : undefined);
+        headCommit = {
+          sha: commit?.sha,
+          treeSha: commit?.commit?.tree?.sha,
+          authenticatedAuthor: headIsThisPull ? {
+            login: opener.login,
+            source: 'pull-opener',
+            accountType: opener.type,
+            ...(appId !== undefined ? { appId } : {}),
+          } : undefined,
+          emailDerivedLogin: typeof commit?.author?.login === 'string' ? commit.author.login : null,
+          gitAuthorName: typeof commit?.commit?.author?.name === 'string' ? commit.commit.author.name : null,
+          gitAuthorEmail: typeof commit?.commit?.author?.email === 'string' ? commit.commit.author.email : null,
+          verification: verification != null && typeof verification === 'object' ? {
+            verified: verification.verified === true,
+            reason: verification.reason,
+            signerLogin: typeof verification.signerLogin === 'string' ? verification.signerLogin
+              : (typeof verification.signer?.login === 'string' ? verification.signer.login : undefined),
+          } : undefined,
+        };
       }
     }
     const pullRequests = ghAll(`repos/${repo}/commits/${mainSha}/pulls`).map((pull) => ({
       number: pull?.number,
       merged: typeof pull?.merged_at === 'string',
       mergeCommitSha: pull?.merge_commit_sha,
+      // Authenticated opener (`pull.user.login`). Not `commit.author.login`, which GitHub derives from the author email.
       authorLogin: pull?.user?.login,
       headSha: pull?.head?.sha,
+      headRef: pull?.head?.ref,
       baseRef: pull?.base?.ref,
     }));
     const landed = pullRequests.find((pull) => pull.merged && pull.mergeCommitSha === mainSha);
@@ -708,7 +1064,44 @@ async function main(argv) {
       changedPaths,
       changedPathsComplete,
       headCommit,
+      founderKeyPem,
+      landingIdentity: commitIdentityFields(mainCommit),
+      governedLanderBotId: process.env[GOVERNED_LANDER_BOT_VARIABLE],
     });
+    let chainCommits;
+    let chainProblem = null;
+    const attested = attestedCheckpointFloor(process.cwd());
+    const floor = attested ?? TRUSTED_CHECKPOINT_SHA;
+    try {
+      chainCommits = readFirstParentChain(gh, repo, mainSha, floor);
+      if (chainCommits === null) chainProblem = 'the first-parent chain does not reach the trusted checkpoint';
+    } catch (error) {
+      chainProblem = error instanceof Error && /stopped after 30 commits|incomplete|did not finish/u.test(error.message)
+        ? error.message
+        : 'the trust chain from the trusted checkpoint could not be read';
+    }
+    if (result.verdict === 'provenant' && chainProblem) {
+      result = { ...result, verdict: 'unprovenanced', reason: chainProblem };
+    } else if (!chainProblem) {
+      let chainKeyPem = reviewerKeyPem;
+      try {
+        const keyFile = gh(`repos/${repo}/contents/.github/julius-landing/reviewer-ed25519.pub?ref=${floor}`);
+        if (keyFile?.type === 'file' && keyFile?.encoding === 'base64' && typeof keyFile?.content === 'string') {
+          chainKeyPem = Buffer.from(keyFile.content, 'base64').toString('utf8');
+        }
+      } catch {
+        // A missing checkpoint key fails closed inside the chain pin.
+      }
+      const disk = attested ? readCheckpointAttestation(process.cwd()) : null;
+      result = await withTrustChain(result, {
+        chainCommits,
+        reviewerKeyPem: chainKeyPem,
+        founderKeyPem: pemAt(FOUNDER_APPROVAL_KEY_PATH, floor),
+        attestationText: disk?.text,
+        attestationSignatureB64: disk?.signatureB64 ?? undefined,
+        now: attested ? Date.now() : undefined,
+      });
+    }
   } catch (error) {
     // Unreadable metadata is not a passing gate.
     process.stderr.write(`main_provenance_indeterminate: ${error instanceof Error ? error.message : 'metadata unavailable'}\n`);

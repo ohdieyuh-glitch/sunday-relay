@@ -1,0 +1,98 @@
+# Land a cleared pull request, including one that touches founder-governed paths,
+# as the dedicated governed-landing App. The workflow token only checks the tree
+# out. A read-only App token is minted after the trusted verifier passes. The
+# lander mints its own write token for this repository only, and requests
+# workflows:write only when both the reviewer and the founder-approval
+# signatures verified and the
+# clearance names a .github/workflows path. This job refuses unless the run is
+# main and this file is the copy on that same commit. The private key is held
+# by the governed-landing environment, which must allow deployment from main
+# only. Nothing here force-pushes.
+
+name: Julius governed land
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: 'Pull request number. Empty processes the governed queue.'
+        required: false
+        default: ''
+      dry_run:
+        description: 'Leave "true" to decide and write nothing. The exact string "false" lands. A schedule run is live.'
+        required: false
+        default: 'true'
+  schedule:
+    - cron: '17 * * * *'
+
+permissions:
+  contents: read
+  statuses: read
+  actions: read
+
+concurrency:
+  group: julius-governed-land
+  cancel-in-progress: false
+
+jobs:
+  land:
+    name: Land a governed pull request
+    if: "github.ref == 'refs/heads/main' && github.workflow_ref == 'ohdieyuh-glitch/sunday-relay/.github/workflows/julius-governed-land.yml@refs/heads/main' && github.workflow_sha == github.sha"
+    environment: governed-landing
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+
+      - name: Require the checkpoint verifier
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JULIUS_REVIEWER_KEY_SHA256: ${{ vars.JULIUS_REVIEWER_KEY_SHA256 }}
+          JULIUS_FOUNDER_APPROVAL_KEY_SHA256: ${{ vars.JULIUS_FOUNDER_APPROVAL_KEY_SHA256 }}
+          JULIUS_GOVERNED_LANDER_BOT_ID: ${{ vars.JULIUS_GOVERNED_LANDER_BOT_ID }}
+        run: node scripts/julius-main-provenance-trust.mjs --require-trusted-verifier
+
+      # H2 (after the trusted verifier, F5e): refuse before any step can read the App private key unless the
+      # governed-landing environment deploys from main only. GitHub creates a
+      # referenced environment with no branch policy, which would expose the key.
+      - name: Require the governed-landing environment to deploy from main only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/julius-landing/governed-land.mjs --require-environment
+
+      - name: Mint the read-only lander app token
+        id: lander
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ vars.JULIUS_GOVERNED_LANDER_APP_ID }}
+          private-key: ${{ secrets.JULIUS_GOVERNED_LANDER_PRIVATE_KEY }}
+          repositories: sunday-relay
+          permission-contents: read
+          permission-pull-requests: read
+          permission-checks: read
+          permission-actions: read
+          permission-metadata: read
+          permission-statuses: read
+
+      - name: Land the queue
+        env:
+          JULIUS_GOVERNED_LANDER_TOKEN: ${{ steps.lander.outputs.token }}
+          JULIUS_GOVERNED_LANDER_APP_ID: ${{ vars.JULIUS_GOVERNED_LANDER_APP_ID }}
+          JULIUS_GOVERNED_LANDER_BOT_ID: ${{ vars.JULIUS_GOVERNED_LANDER_BOT_ID }}
+          JULIUS_GOVERNED_LANDER_PRIVATE_KEY: ${{ secrets.JULIUS_GOVERNED_LANDER_PRIVATE_KEY }}
+          JULIUS_REVIEWER_KEY_SHA256: ${{ vars.JULIUS_REVIEWER_KEY_SHA256 }}
+          JULIUS_FOUNDER_APPROVAL_KEY_SHA256: ${{ vars.JULIUS_FOUNDER_APPROVAL_KEY_SHA256 }}
+          PR: ${{ inputs.pr }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_REF: ${{ github.ref }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: node .github/julius-landing/governed-land.mjs

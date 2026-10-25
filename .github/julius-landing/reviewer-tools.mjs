@@ -4,8 +4,10 @@
 //                                                                                reviewer chose, mode 600; prints ONLY the public key PEM to commit.
 //   node reviewer-tools.mjs digest  <pr>                                         prints the bot-comments digest of the live PR (needs GH_TOKEN) for the clearance text.
 //   node reviewer-tools.mjs sign    <private-key-path> <pr> <head> <tree> <base> <CLEARED|CLEARED-TREE> <bot-digest> <hours<=24> [--exceptions a,b] [--passphrase-env NAME]
-//                                                                                prints the clearance text and its signature as base64 (two labelled blocks) for the dispatcher.
-import { createPrivateKey, generateKeyPairSync, randomBytes, sign } from 'node:crypto';
+//        [--protected-paths a,b] [--landing-method squash|fast-forward] [--binds-draft yes] [--depends 1,2] [--comments-digest excludes-delivery]
+//                                                                                prints CLEARANCE_B64, CLEARANCE_SHA256 (of the exact signed bytes, for the founder's
+//                                                                                off-device signature), SIGNATURE_B64 and the clearance text.
+import { createHash, createPrivateKey, generateKeyPairSync, randomBytes, sign } from 'node:crypto';
 import { chmodSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { PER_PAGE, REPO, botCommentsDigest, readAllPages } from './land-lib.mjs';
 
@@ -42,10 +44,21 @@ if (command === 'keygen') {
   const issued = new Date(); issued.setMilliseconds(0);
   const expires = new Date(issued.getTime() + h * 3600_000);
   const iso = (d) => d.toISOString().replace('.000Z', 'Z');
-  const text = ['JULIUS-CLEARANCE-V1', `repo: ${REPO}`, `pr: ${pr}`, `head: ${head}`, `tree: ${tree}`, `base: ${base}`, `kind: ${kind}`, `bot-comments-sha256: ${digest}`, `governed-exceptions: ${exceptions}`, `nonce: ${randomBytes(16).toString('hex')}`, 'by: INDEPENDENT_REVIEW', `issued: ${iso(issued)}`, `expires: ${iso(expires)}`, ''].join('\n');
+  // Optional signed lines of a governed clearance, in the parser's order. Each is omitted unless its flag is given.
+  const optional = [
+    ['protected-paths', flag('--protected-paths')],
+    ['landing-method', flag('--landing-method')],
+    ['binds-draft', flag('--binds-draft')],
+    ['depends', flag('--depends')],
+    ['comments-digest', flag('--comments-digest')],
+  ].filter(([, value]) => value !== undefined).map(([name, value]) => `${name}: ${value}`);
+  const text = ['JULIUS-CLEARANCE-V1', `repo: ${REPO}`, `pr: ${pr}`, `head: ${head}`, `tree: ${tree}`, `base: ${base}`, `kind: ${kind}`, `bot-comments-sha256: ${digest}`, `governed-exceptions: ${exceptions}`, `nonce: ${randomBytes(16).toString('hex')}`, 'by: INDEPENDENT_REVIEW', `issued: ${iso(issued)}`, `expires: ${iso(expires)}`, ...optional, ''].join('\n');
   const key = createPrivateKey({ key: readFileSync(path), ...(passphrase() ? { passphrase: passphrase() } : {}) });
   const signature = sign(null, Buffer.from(text, 'utf8'), key).toString('base64');
+  // The founder signs these exact bytes off-device: CLEARANCE_B64 decodes to them, and CLEARANCE_SHA256 lets the
+  // founder confirm the decoded bytes before signing. Pure Ed25519, no transformation, LF line ends.
   console.log('CLEARANCE_B64=' + Buffer.from(text, 'utf8').toString('base64'));
+  console.log('CLEARANCE_SHA256=' + createHash('sha256').update(text, 'utf8').digest('hex'));
   console.log('SIGNATURE_B64=' + signature);
   console.log('--- clearance text (for the mailbox record) ---\n' + text);
 } else {
