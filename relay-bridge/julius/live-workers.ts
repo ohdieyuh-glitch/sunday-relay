@@ -1130,9 +1130,9 @@ export function createLiveArchitectAdapter(input: {
          * is the provider refusing THIS request unprocessed. The refusal ends the
          * DISPATCH, and the dispatch may already have bought something: a
          * correction call follows a billed answer that failed validation
-         * (`attempts`), and the SDK retries once on its own, so a 429 can follow
-         * a first try that timed out after the provider had worked on it. Neither
-         * is visible from the error. After the handoff, a failure that cannot say
+         * (`attempts`), so a 429 can follow a call that was already billed. (The
+         * SDK's own re-send is now off, `GPT_ARCHITECT_SDK_MAX_RETRIES = 0`, #43.)
+         * That is not visible from the error. After the handoff, a failure that cannot say
          * nothing ran keeps its hold as unknown spend (the coordinator's `end`).
          */
         switch (outcome.failureClass) {
@@ -1143,6 +1143,9 @@ export function createLiveArchitectAdapter(input: {
             throw new JuliusDispatchError('RATE_LIMIT', true, 'Prompt Architect provider rate limit reached.', outcome.failureClass, failed);
           case 'timeout':
           case 'network_disconnected':
+            // Retryable as a CLASS only. Raised after the handoff, so the
+            // coordinator never retries it: the call may have been answered and
+            // billed (HANDED_TIMEOUT_OUTCOME_UNKNOWN, #43).
             throw new JuliusDispatchError('TIMEOUT', true, 'Prompt Architect provider timed out.', outcome.failureClass, failed);
           case 'model_unavailable':
             throw new JuliusDispatchError('PROVIDER_UNAVAILABLE', false, 'Prompt Architect model is unavailable.', outcome.failureClass, failed);
@@ -2455,8 +2458,12 @@ export function createLiveHermesReviewerAdapter(input: {
          * that timed out or a service that was full. The rest of Julius already
          * knows this: the Prompt Architect and the Coding Agent both raise
          * TIMEOUT retryable, and only the reviewer treated its own timeout as
-         * final. Nothing paid for is discarded by retrying one: a timeout and a
-         * 503 produced no verdict to throw away.
+         * final. A 503 produced no verdict to throw away. A TIMEOUT is NOT known
+         * to have produced none: the review may have run and been billed, so
+         * `retryable` here classifies the error and does not license a second
+         * ask. The coordinator ends a TIMEOUT that was handed as
+         * HANDED_TIMEOUT_OUTCOME_UNKNOWN and never retries it (#43), and every
+         * review dispatch is handed.
          *
          * The refusals stay final, and are held there twice — `retryable: false`
          * here, and `decideJuliusContinuation` refusing AUTH_CONFIGURATION and

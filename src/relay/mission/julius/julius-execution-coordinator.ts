@@ -352,6 +352,62 @@ export type JuliusExecutionOutcome={readonly status:'COMPLETED';readonly workerI
   * dispatch must not confuse with an empty one.
   */
  readonly implementation?:unknown;
+ /**
+  * WHY A RETRYABLE ERROR ENDED THE TASK INSTEAD. Present only on a FAILED
+  * outcome the coordinator refused to retry because the provider may already
+  * have processed, answered and charged it (see {@link juliusHandedOutcomeUnknown}).
+  * The pipeline reads it so it does not reroute the same work to another
+  * worker either: a reroute is a second paid dispatch as surely as a retry.
+  */
+ readonly reasonCode?:JuliusHandedOutcomeUnknownCause;
+};
+
+/**
+ * A RETRYABLE FAILURE AFTER THE HANDOFF IS AN UNKNOWN OUTCOME, NOT A TRANSIENT ONE (#43).
+ *
+ * The handoff is the same boundary recovery reads for a crash (#310): the
+ * `worker.dispatched` row this coordinator writes, lease-fenced, on the line
+ * before it calls the worker (`handed`). Once it is written the request may
+ * have reached the provider. A failure observed after that point says only
+ * that no usable answer came back, not that none was produced or charged, so
+ * retrying it could buy a second paid answer, which the founder's rule forbids
+ * ("no duplicate provider execution"). The attempt fails on a named cause and
+ * is never retried, the sibling of recovery's HANDED_OUTCOME_UNKNOWN, and its
+ * hold closes as unknown spend: never released and never $0.
+ *
+ * THE DEFAULT IS OUTCOME UNKNOWN (the founder: "only permit retry when there
+ * is positive evidence that no provider execution occurred"). After the
+ * handoff, a retryable failure is retried ONLY on that evidence:
+ *
+ *  - RATE_LIMIT whose boundary attests `runtimeStarted: false`. That is the
+ *    provider's own pre-processing rejection: an HTTP 429 that
+ *    `normalizeProviderError` read off the provider's response
+ *    (`REFUSED_UNPROCESSED`), or a Coding Agent that observed the provider's 429
+ *    before its runtime ever started a session. Nothing was processed, so
+ *    nothing can have been bought.
+ *
+ * Everything else retryable becomes OUTCOME UNKNOWN, never retried, with a
+ * named cause on `task.failed` (`reasonCode`, the `reason_code` column of the
+ * evidence dump's failures.tsv):
+ *  - TIMEOUT, from any site, whatever it attests: HANDED_TIMEOUT_OUTCOME_UNKNOWN.
+ *    A timeout is never proof the provider did not execute.
+ *  - Any other (a RATE_LIMIT nothing attests, PROVIDER_UNAVAILABLE for a 5xx, a
+ *    reset, a stream cut, a process that died mid-session, whatever it
+ *    attests): HANDED_FAILURE_OUTCOME_UNKNOWN. A dropped connection or a server
+ *    error alone cannot establish that nothing ran.
+ *
+ * Non-retryable failures are untouched: they were never retried. Everything
+ * before the handoff is untouched: nothing was sent, so a timeout there is
+ * retried as before.
+ */
+export const JULIUS_HANDED_TIMEOUT_OUTCOME_UNKNOWN='HANDED_TIMEOUT_OUTCOME_UNKNOWN';
+export const JULIUS_HANDED_FAILURE_OUTCOME_UNKNOWN='HANDED_FAILURE_OUTCOME_UNKNOWN';
+export type JuliusHandedOutcomeUnknownCause=typeof JULIUS_HANDED_TIMEOUT_OUTCOME_UNKNOWN|typeof JULIUS_HANDED_FAILURE_OUTCOME_UNKNOWN;
+/** Positive evidence that the provider processed nothing: its own 429, attested unprocessed. */
+const provenUnprocessed=(failure:JuliusDispatchError):boolean=>failure.code==='RATE_LIMIT'&&failure.diagnostics?.runtimeStarted===false;
+export const juliusHandedOutcomeUnknown=(failure:JuliusDispatchError,handed:boolean):JuliusHandedOutcomeUnknownCause|null=>{
+ if(!handed||!failure.retryable||provenUnprocessed(failure))return null;
+ return failure.code==='TIMEOUT'?JULIUS_HANDED_TIMEOUT_OUTCOME_UNKNOWN:JULIUS_HANDED_FAILURE_OUTCOME_UNKNOWN;
 };
 
 /**
@@ -704,7 +760,9 @@ export class JuliusExecutionCoordinator {
      * A timed-out attempt therefore keeps its hold, and a retry after a timeout
      * meets a tighter budget. That is the truthful direction.
      */
-    const startedOrUnsaid=answered!==null||failure.diagnostics?.runtimeStarted===true||(handed&&failure.diagnostics?.runtimeStarted!==false);
+    // A HANDED OUTCOME-UNKNOWN IS UNKNOWN WHATEVER ITS DIAGNOSTICS SAY, so its hold is never freed.
+    const outcomeUnknown=juliusHandedOutcomeUnknown(failure,handed);
+    const startedOrUnsaid=outcomeUnknown!==null||answered!==null||failure.diagnostics?.runtimeStarted===true||(handed&&failure.diagnostics?.runtimeStarted!==false);
     if(reservationId!==null)await this.bookkeeping(()=>this.ports.release({claim:request.claim,reservationId,reason:failure.code,usdMicros:billed,spendUnknown:billed===null&&startedOrUnsaid,...settlementProvenance(answered,failure.diagnostics)}));
     /* The class travels with the code on BOTH endings. A retry that is later
      * abandoned and a failure taken at once must leave the same diagnosis
@@ -713,9 +771,13 @@ export class JuliusExecutionCoordinator {
     /* WHAT THE FAILED ATTEMPT CHANGED travels on both endings too: a retry is
      * exactly where an unrecorded change set becomes the next attempt's. */
     const carriedImplementation=failure.implementation===undefined?{}:{implementation:failure.implementation};
-    if(failure.retryable&&request.policy.automaticRetry){await this.bookkeeping(()=>this.event(request,'retry.scheduled',{code:failure.code,errorRetryable:true,failureClass:failure.failureClass,...withMissionTrace(request,failure.diagnostics)}));return{status:'RETRY',code:failure.code,failureClass:failure.failureClass,...carriedDiagnostics(failure),...carriedImplementation};}
-    await this.bookkeeping(()=>this.event(request,'task.failed',{code:failure.code,errorRetryable:failure.retryable,failureClass:failure.failureClass,...haltingReason(failure.failureClass),...withMissionTrace(request,failure.diagnostics)}));
-    return{status:'FAILED',code:failure.code,failureClass:failure.failureClass,...carriedDiagnostics(failure),...carriedImplementation};
+    /* THE ERROR MAY BE RETRYABLE; A HANDED OUTCOME-UNKNOWN IS STILL NEVER RETRIED.
+     * `errorRetryable` keeps describing the error, as the pipeline's own
+     * declined-retry row does, and `reasonCode` says which rule ended it. */
+    if(failure.retryable&&outcomeUnknown===null&&request.policy.automaticRetry){await this.bookkeeping(()=>this.event(request,'retry.scheduled',{code:failure.code,errorRetryable:true,failureClass:failure.failureClass,...withMissionTrace(request,failure.diagnostics)}));return{status:'RETRY',code:failure.code,failureClass:failure.failureClass,...carriedDiagnostics(failure),...carriedImplementation};}
+    const unknownReason=outcomeUnknown===null?{}:{reasonCode:outcomeUnknown};
+    await this.bookkeeping(()=>this.event(request,'task.failed',{code:failure.code,errorRetryable:failure.retryable,failureClass:failure.failureClass,...haltingReason(failure.failureClass),...unknownReason,...withMissionTrace(request,failure.diagnostics)}));
+    return{status:'FAILED',code:failure.code,failureClass:failure.failureClass,...carriedDiagnostics(failure),...carriedImplementation,...unknownReason};
    }catch(error){
     throw new JuliusPersistenceUnavailable(!handed?'persist_before_dispatch':answered===null?'persist_during_dispatch':'persist_after_answer',handed,juliusStoreErrorClass(error));
    }

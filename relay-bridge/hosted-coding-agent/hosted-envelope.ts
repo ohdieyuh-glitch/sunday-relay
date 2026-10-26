@@ -132,6 +132,14 @@ export function hostedLimitsForAllocation(usdMicros: number, base: HostedLimits 
  *     reach another one. These are the two slots the workflow's subscription smoke
  *     pins, so the smoke qualifies the environment the Coding Agent runs in. They
  *     select a model and carry no credential (`ANTHROPIC_CREDENTIAL_ENV_NAMES`).
+ *
+ * NO API RE-SEND INSIDE THE CLI (#43), always: `CLAUDE_CODE_MAX_RETRIES=0`.
+ * Claude Code 2.1.286 (the `claude.exe` bundled by Agent SDK 0.3.286) retries a
+ * failed API request on its own: 10 times by default (300 under
+ * `CLAUDE_CODE_RETRY_WATCHDOG`), on `x-should-retry: true`, 408, 409, 429 or any
+ * 5xx. None of those proves the first request went unprocessed, so each re-send
+ * could buy a second paid turn before Julius sees anything. The CLI honours any
+ * value >= 0 (its retry budget reads `CLAUDE_CODE_MAX_RETRIES`), so 0 turns the re-send off.
  */
 export function hostedChildEnv(input: {
   apiKey: string;
@@ -179,6 +187,8 @@ export function hostedChildEnv(input: {
     TERM: 'dumb',
     // No fallback model and no automatic downgrade; see above.
     CLAUDE_CODE_NO_MODEL_FALLBACK: '1',
+    // No re-send of a failed API request by the CLI itself; see above.
+    CLAUDE_CODE_MAX_RETRIES: HOSTED_CHILD_MAX_RETRIES,
   };
   if (typeof input.model === 'string' && input.model !== '') {
     for (const name of HOSTED_CHILD_MODEL_PIN_KEYS) env[name] = input.model;
@@ -193,8 +203,11 @@ export function hostedChildEnv(input: {
  * test. The model pins are added on top when a model is requested.
  */
 export const HOSTED_CHILD_ENV_KEYS: readonly string[] = Object.freeze([
-  'ANTHROPIC_API_KEY', 'PATH', 'HOME', 'CI', 'NO_COLOR', 'TERM', 'CLAUDE_CODE_NO_MODEL_FALLBACK',
+  'ANTHROPIC_API_KEY', 'PATH', 'HOME', 'CI', 'NO_COLOR', 'TERM', 'CLAUDE_CODE_NO_MODEL_FALLBACK', 'CLAUDE_CODE_MAX_RETRIES',
 ]);
+
+/** The Claude Code CLI's own API retry budget for the coder: none (#43). */
+export const HOSTED_CHILD_MAX_RETRIES = '0';
 
 /**
  * The housekeeping-model slots the child pins to the requested model whenever one

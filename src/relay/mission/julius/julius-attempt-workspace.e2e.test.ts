@@ -78,8 +78,13 @@ const implementation = (input: Parameters<typeof attemptRecord>[0] & { readonly 
 
 const SUCCEEDS = (record: ReturnType<typeof implementation>): Step =>
   ({ kind: 'succeed', evidence: TEST_PASSED, implementation: { ...record, attemptOutcome: 'SUCCEEDED' } });
+/* THE SUBJECT IS THE WORKSPACE, NOT THE RETRY RULE. Since #43 a handed attempt
+ * is retried only on positive evidence that the provider processed nothing (its
+ * own 429, attested `runtimeStarted: false`); anything else is OUTCOME UNKNOWN
+ * and never retried. So these cases reach their second attempt the one way left,
+ * and the record stands for whatever the workspace held when it failed. */
 const FAILS = (record: ReturnType<typeof implementation>): Step =>
-  ({ kind: 'fail', code: 'RATE_LIMIT', runtimeStarted: true, implementation: { ...record, attemptOutcome: 'FAILED' } });
+  ({ kind: 'fail', code: 'RATE_LIMIT', runtimeStarted: false, implementation: { ...record, attemptOutcome: 'FAILED' } });
 
 const build = (coder: readonly Step[], store?: JuliusHarness['store'], secondBuild = false): JuliusHarness => {
   const harness = createJuliusHarness({

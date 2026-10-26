@@ -1855,6 +1855,12 @@ export async function runClaimedTask(
      * (`advanceRun`).
      */
     if (juliusRunHaltingFailureClass(outcome.failureClass) !== null) break;
+    /**
+     * NOR IS A HANDED OUTCOME-UNKNOWN. The provider may already have answered and
+     * charged, so another worker asked the same work is a second paid answer:
+     * the duplicate the coordinator just refused to retry, by another route.
+     */
+    if (outcome.status === 'FAILED' && outcome.reasonCode !== undefined) break;
     const selected = deps.router.eligibleWorkerIds({
       role, taskType: claim.taskType, capability: request.capability,
       policy: request.policy, excludedWorkerIds: tried,

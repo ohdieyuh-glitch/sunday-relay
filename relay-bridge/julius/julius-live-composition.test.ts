@@ -929,22 +929,23 @@ describe('a full mission drive with Julius in control', () => {
      * and third asks reach the same wall with the same packet — three paid
      * cuts instead of one, and no more information.
      *
-     * The coordinator still writes ONE `retry.scheduled`: its job is to
-     * classify the ERROR, and a timeout genuinely is retryable. Whether the run
-     * carries on is `decideJuliusContinuation`'s, and it declines — the same
-     * division that already let a SUPERVISED run stop on a retryable error. The
-     * terminal `task.failed` below is the authority on what actually happened.
+     * AND NO RETRY IS EVEN SCHEDULED (#43). The review was handed, and a
+     * timeout is never proof the provider did not run it: it may have answered
+     * and billed. So the coordinator ends it itself as OUTCOME UNKNOWN, before
+     * the review ceiling is ever consulted. Its `task.failed` is the one ending
+     * row, and it carries the worker's telemetry.
      */
-    const scheduled = memory.events().filter((event) => event.type === 'retry.scheduled');
+    expect(memory.events().filter((event) => event.type === 'retry.scheduled'), 'never scheduled').toEqual([]);
+    const scheduled = memory.events().filter((event) => event.type === 'task.failed' && event.taskId === 'plan-1:review');
     expect(scheduled).toHaveLength(1);
     expect(fakes.log.order.filter((step) => step === 'reviewer')).toHaveLength(1);
     for (const event of scheduled) {
       const facts = event.facts as Record<string, unknown>;
-      // TIMEOUT STAYS RETRYABLE. It describes an answer that did not arrive,
-      // not one that arrived wrong, and nothing paid for is thrown away.
+      // The ERROR is still classified retryable; the handed attempt is not retried.
       expect(facts.code).toBe('TIMEOUT');
       expect(facts.errorRetryable).toBe(true);
       expect(facts.failureClass).toBe('review_timeout');
+      expect(facts.reasonCode).toBe('HANDED_TIMEOUT_OUTCOME_UNKNOWN');
     }
 
     /**
@@ -970,7 +971,7 @@ describe('a full mission drive with Julius in control', () => {
     const failed = memory.events().filter((event) => event.type === 'task.failed')
       .find((event) => event.taskId === 'plan-1:review')!;
     const facts = failed.facts as Record<string, unknown>;
-    expect(facts.reasonCode, 'and the run says WHY it stopped asking').toBe('RETRY_ATTEMPTS_EXHAUSTED');
+    expect(facts.reasonCode, 'and the run says WHY it stopped asking').toBe('HANDED_TIMEOUT_OUTCOME_UNKNOWN');
     expect(facts.code).toBe('TIMEOUT');
 
     /**
@@ -1039,7 +1040,7 @@ describe('a full mission drive with Julius in control', () => {
     expect(fakes.log.order.filter((step) => step === 'reviewer')).toHaveLength(1);
     const failed = memory.events().filter((event) => event.type === 'task.failed')
       .find((event) => event.taskId === 'plan-1:review')!;
-    expect((failed.facts as Record<string, unknown>).reasonCode).toBe('RETRY_ATTEMPTS_EXHAUSTED');
+    expect((failed.facts as Record<string, unknown>).reasonCode).toBe('HANDED_TIMEOUT_OUTCOME_UNKNOWN');
   });
 
   it('no review is ever asked a question that mentions the timeout', async () => {
@@ -1061,7 +1062,7 @@ describe('a full mission drive with Julius in control', () => {
     }
   });
 
-  it('a reviewer the ENGINE timed out early is asked once more inside the same dispatch, and the mission completes', async () => {
+  it('a reviewer the ENGINE timed out early is asked ONCE: OUTCOME UNKNOWN, never re-asked (#43)', async () => {
     /**
      * THE MEASURED CASE, END TO END. Paid run 34529874100 (Mission 5):
      * `build:review` attempt 1 died after 94 200 ms on the engine's own 90 s
@@ -1074,22 +1075,20 @@ describe('a full mission drive with Julius in control', () => {
      * classification is the production one, and then waits out the real
      * policy backoff, which is why this case carries its own timeout.
      */
+    /* #43: THE RE-ASK IS GONE. The engine's request timeout came after the
+     * request was sent, so the review may have run and billed: asking again
+     * could buy it twice. One engine call, and the task ends OUTCOME UNKNOWN. */
     const { memory, outcome, fakes } = await driveLiveMission(['approved'], undefined, undefined, undefined, undefined, 1);
-    expect(outcome.state).toBe('COMPLETED');
-    // Three asks for two dispatches: the plan review asked twice inside ONE dispatch, the build review once.
-    expect(fakes.log.order.filter((step) => step === 'reviewer')).toHaveLength(3);
-    // The pipeline never saw a failure: no retry was scheduled, nothing failed.
+    expect(outcome.state, 'a review that never answered is not a completion').toBe('FAILED');
+    expect(fakes.log.order.filter((step) => step === 'reviewer'), 'exactly one engine call').toHaveLength(1);
     expect(memory.events().filter((event) => event.type === 'retry.scheduled')).toHaveLength(0);
-    expect(memory.events().filter((event) => event.type === 'task.failed')).toHaveLength(0);
-    expect(memory.taskRow('plan-1:review')?.state).toBe('SUCCEEDED');
-    // The durable row says both: two calls, and the shape that bought the second.
-    const rows = memory.events()
-      .filter((event) => event.taskId === 'plan-1:review')
-      .map((event) => event.facts as Record<string, unknown>)
-      .filter((facts) => facts.diag_reviewAttempts !== undefined);
-    expect(rows.length, 'the dispatch row carries the reviewer diagnostics').toBeGreaterThanOrEqual(1);
-    expect(rows.map((facts) => facts.diag_reviewAttempts)).toContain(2);
-    expect(rows.map((facts) => facts.diag_reviewReaskShape)).toContain('review_timeout');
+    expect(memory.taskRow('plan-1:review')?.state).toBe('FAILED');
+    expect(memory.taskRow('build-1')?.state, 'and the build is never released').toBe('BLOCKED');
+    const failed = memory.events().filter((event) => event.type === 'task.failed' && event.taskId === 'plan-1:review')
+      .map((event) => event.facts as Record<string, unknown>);
+    expect(failed).toHaveLength(1);
+    expect(failed[0]).toMatchObject({ code: 'TIMEOUT', failureClass: 'review_timeout', reasonCode: 'HANDED_TIMEOUT_OUTCOME_UNKNOWN', diag_reviewAttempts: 1 });
+    expect(failed[0]!.diag_reviewReaskShape ?? null).toBeNull();
     // And neither packet carried Relay's telemetry about the first ask.
     for (const packet of fakes.packets) {
       const rendered = JSON.stringify(packet).toLowerCase();
@@ -2239,10 +2238,15 @@ describe('the first paid attempt, reproduced: a failing Prompt Architect', () =>
    * widening a core return type, which is its own change; this test holds the
    * half that works so a later repair can be measured against it.
    */
-  it('carries the diagnostics on each scheduled retry', async () => {
+  it('carries the diagnostics on the ending of a rate limit it cannot retry (#43)', async () => {
+    // The Prompt Architect never attests that nothing ran (a 429 can follow a
+    // billed first try inside the SDK's own retry), so its rate limit after the
+    // handoff is OUTCOME UNKNOWN: no retry, and the ending row carries the facts.
     const { failures } = await failedRun('rate_limited');
-    const scheduled = failures.filter((event) => event.type === 'retry.scheduled');
-    expect(scheduled.length, 'a retryable class must schedule at least one retry').toBeGreaterThan(0);
+    expect(failures.filter((event) => event.type === 'retry.scheduled'), 'never retried').toEqual([]);
+    const scheduled = failures.filter((event) => event.type === 'task.failed');
+    expect(scheduled).toHaveLength(1);
+    expect(scheduled[0]!.facts.reasonCode).toBe('HANDED_FAILURE_OUTCOME_UNKNOWN');
     for (const event of scheduled) {
       expect(event.facts.diag_maxOutputTokens, 'every scheduled retry says what ceiling it ran under').toBe(4_000);
       expect(event.facts.diag_requestedModel).not.toBeUndefined();
@@ -2374,7 +2378,7 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
       .catch((error: unknown) => error as { code: string; retryable: boolean; failureClass: string | null; diagnostics?: Record<string, unknown> });
   };
 
-  it('a review the service timed out is a TIMEOUT that may be re-asked, never a process exit', async () => {
+  it('a review the service timed out is a TIMEOUT, never a process exit', async () => {
     // The finding this closes: `status: "timed_out"` fell through to
     // `review_process_exit` and reached Julius as WORKER_EXECUTION_FAILURE,
     // defeating the durable diagnosis on the shape it names most plainly.
@@ -2382,21 +2386,21 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
     expect(failure.failureClass, 'the shape is the durable record').toBe('review_timeout');
     expect(failure.failureClass).not.toBe('review_process_exit');
     expect(failure.code).toBe('TIMEOUT');
-    // The architect and the coder both raise TIMEOUT retryable; a reviewer that
-    // never answered has produced no paid verdict to throw away by re-asking.
-    expect(failure.retryable, 'an answer that did not arrive may be asked for again').toBe(true);
+    // Retryable as a CLASS. Since #43 a handed TIMEOUT is never re-asked: the
+    // coordinator ends it OUTCOME UNKNOWN.
+    expect(failure.retryable, 'the class is retryable; the handed attempt is not retried').toBe(true);
   });
 
-  it('a service with no capacity is service-side and clears itself, so it is retryable', async () => {
+  it('a service with no capacity is classified retryable, and is asked exactly ONCE (#43: a 503 after send is ambiguous)', async () => {
     for (const kind of ['capacity_exhausted', 'shutting_down']) {
       const failure = await failureFrom(() => Promise.resolve(jsonRes({ failureKind: kind }, 503)));
       expect(failure.failureClass, kind).toBe('review_service_unavailable');
       expect(failure.code).toBe('PROVIDER_UNAVAILABLE');
       expect(failure.retryable, 'capacity clears as runs finish; a drain ends when the deploy lands').toBe(true);
-      // A service still full after the one bounded re-ask is the same failure,
-      // and the record says two calls were bought and why.
-      expect(failure.diagnostics?.reviewAttempts, kind).toBe(2);
-      expect(failure.diagnostics?.reviewReaskShape, kind).toBe('review_service_unavailable');
+      // No re-ask: the shape cannot tell a pre-processing 429 from a 503 after
+      // send, so one call is bought, and the coordinator ends it OUTCOME UNKNOWN.
+      expect(failure.diagnostics?.reviewAttempts, kind).toBe(1);
+      expect(failure.diagnostics?.reviewReaskShape ?? null, kind).toBeNull();
     }
   });
 
@@ -2639,8 +2643,9 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
       const failure = await resultFrom(timesOutTwice)
         .then(() => { throw new Error('the dispatch was expected to fail'); })
         .catch((error: unknown) => error as { failureClass?: string | null; diagnostics?: Record<string, unknown> });
-      expect(failure.diagnostics?.reviewAttempts, 'an early timeout is re-asked exactly once, never more').toBe(2);
-      expect(failure.diagnostics?.reviewReaskShape).toBe('review_timeout');
+      // #43: never re-asked either. A timeout is never proof the review did not run.
+      expect(failure.diagnostics?.reviewAttempts, 'a timeout is asked exactly once').toBe(1);
+      expect(failure.diagnostics?.reviewReaskShape ?? null).toBeNull();
       expect(failure.failureClass).toBe('review_timeout');
     }
     // A 503 USED TO BE ON THAT LIST, on the reasoning that it was "already
@@ -2654,8 +2659,8 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
     const failure = await resultFrom(stillFull)
       .then(() => { throw new Error('the dispatch was expected to fail'); })
       .catch((error: unknown) => error as { diagnostics?: Record<string, unknown> });
-    expect(failure.diagnostics?.reviewAttempts, 'capacity is re-asked exactly once, never more').toBe(2);
-    expect(failure.diagnostics?.reviewReaskShape).toBe('review_service_unavailable');
+    expect(failure.diagnostics?.reviewAttempts, 'capacity is asked exactly once (#43)').toBe(1);
+    expect(failure.diagnostics?.reviewReaskShape ?? null).toBeNull();
   });
 });
 

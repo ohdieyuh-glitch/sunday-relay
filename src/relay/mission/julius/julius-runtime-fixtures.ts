@@ -323,13 +323,22 @@ export function scriptedAdapter(
         ? scripted.decide(options.packetFor?.(input) ?? null)
         : scripted;
       if (step.kind === 'fail') {
+        /* A SCRIPTED RATE LIMIT IS A 429: the provider refused the request
+         * unprocessed, and says so (`runtimeStarted: false`), as
+         * `normalizeProviderError` attests a real one. Without that attestation
+         * a retryable failure after the handoff is an unknown outcome and is
+         * never retried (#43), so a script that means "the provider answered
+         * nothing" must say it. A case about a 429 that DID follow processed
+         * work passes `runtimeStarted: true`, or a cost. */
+        const runtimeStarted = step.runtimeStarted
+          ?? (step.code === 'RATE_LIMIT' && step.costUsdMicros === undefined ? false : undefined);
         throw new JuliusDispatchError(
           step.code, step.code === 'RATE_LIMIT' || step.code === 'TIMEOUT', step.message ?? 'Scripted provider failure.', step.failureClass,
-          step.costUsdMicros === undefined && step.runtimeStarted === undefined
+          step.costUsdMicros === undefined && runtimeStarted === undefined
             ? undefined
             : {
               ...(step.costUsdMicros === undefined ? {} : { costUsdMicros: step.costUsdMicros }),
-              ...(step.runtimeStarted === undefined ? {} : { runtimeStarted: step.runtimeStarted }),
+              ...(runtimeStarted === undefined ? {} : { runtimeStarted }),
             },
           step.implementation,
         );

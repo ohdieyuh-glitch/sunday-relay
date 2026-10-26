@@ -367,7 +367,8 @@ suite('the failure-recovery and repair-loop drills, run for real', () => {
       { encoding: 'utf8', timeout: 300_000, env: { ...process.env, DATABASE_URL: url } });
 
     expect(stdout).toContain('JULIUS FAILURE RECOVERY VERIFIED');
-    expect(stdout, 'the transient failure must be classified retryable by the runtime').toContain('TIMEOUT/true');
+    expect(stdout, 'the transient failure must be classified retryable by the runtime').toContain('RATE_LIMIT/true');
+    expect(stdout, 'a handed timeout is OUTCOME UNKNOWN and never retried (#43)').toContain('TIMEOUT/HANDED_TIMEOUT_OUTCOME_UNKNOWN');
     expect(stdout, 'and the permanent one must not be').toContain('AUTH_CONFIGURATION/false');
     expect(stdout).not.toContain('[FAIL]');
 

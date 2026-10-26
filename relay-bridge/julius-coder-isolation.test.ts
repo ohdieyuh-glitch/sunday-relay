@@ -20,7 +20,7 @@ import { juliusHostedToolAuthority, type HostedHookOutput } from './hosted-codin
 const CANARY = 'canary_isolation_ZZ9_x7Q2m4k8w1';
 
 /** The names the hosted runner puts in the SDK child in Anthropic API mode (`hostedChildEnv`). HOME stays: the runner sets it. The J1 adapter allow-list does not. */
-const CHILD_ENV_ALLOWED = ['ANTHROPIC_API_KEY', 'PATH', 'HOME', 'CI', 'NO_COLOR', 'TERM', 'CLAUDE_CODE_NO_MODEL_FALLBACK', 'ANTHROPIC_DEFAULT_HAIKU_MODEL', 'ANTHROPIC_SMALL_FAST_MODEL'];
+const CHILD_ENV_ALLOWED = ['ANTHROPIC_API_KEY', 'PATH', 'HOME', 'CI', 'NO_COLOR', 'TERM', 'CLAUDE_CODE_NO_MODEL_FALLBACK', 'CLAUDE_CODE_MAX_RETRIES', 'ANTHROPIC_DEFAULT_HAIKU_MODEL', 'ANTHROPIC_SMALL_FAST_MODEL'];
 
 describe('2b(a) the coder child env is an EXPLICIT allow-list, through the REAL runner path', () => {
   it('parent canaries (key-like and not key-like) never reach the SDK child env; only the allow-listed names do', async () => {

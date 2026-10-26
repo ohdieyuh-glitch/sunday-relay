@@ -418,7 +418,19 @@ export const REVIEW_TRANSIENT_REASK_BACKOFF_MS = 5_000;
  * review in the window is asked again — which is exactly the case the paid
  * record shows.
  */
-export const REVIEW_TRANSIENT_REASK_SHAPES: ReadonlySet<string> = new Set(['review_service_unavailable', 'review_timeout']);
+/*
+ * NOW EMPTY (#43, the founder: "only permit retry when there is positive
+ * evidence that no provider execution occurred"). Neither shape is that
+ * evidence. `review_timeout` is the engine's request timeout AFTER the request
+ * was sent: the review may have run and billed. `review_service_unavailable`
+ * is "a 429 or a 503", and nothing in the shape separates the provider's
+ * pre-processing 429 from a 503 after send. So a re-ask could buy a second paid
+ * review. Each now ends the dispatch, and the coordinator records it as
+ * OUTCOME UNKNOWN (HANDED_TIMEOUT_OUTCOME_UNKNOWN / HANDED_FAILURE_OUTCOME_UNKNOWN).
+ * The paid record above is why the re-ask existed. It is kept as history, not
+ * as a licence.
+ */
+export const REVIEW_TRANSIENT_REASK_SHAPES: ReadonlySet<string> = new Set<string>();
 
 export type ReviewerReaskRefusal = 'CONSUMED_UNKNOWN' | 'INSUFFICIENT_REMAINING';
 

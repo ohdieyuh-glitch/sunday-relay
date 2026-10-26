@@ -116,6 +116,9 @@ const DISPOSITIONS: Readonly<Record<JuliusCodingAgentFailure, JuliusCodingAgentF
   CREDIT_UNAVAILABLE: { code: 'PROVIDER_UNAVAILABLE', retryable: false, operatorAction: true },
   AUTHENTICATION: { code: 'AUTH_CONFIGURATION', retryable: false, operatorAction: true },
   LAUNCH_FAILED: { code: 'AUTH_CONFIGURATION', retryable: false, operatorAction: true },
+  // Retryable as a CLASS only: a session that timed out after the handoff may
+  // have run and billed, so the coordinator never retries it
+  // (HANDED_TIMEOUT_OUTCOME_UNKNOWN, #43).
   TIMEOUT: { code: 'TIMEOUT', retryable: true, operatorAction: false },
   CANCELLED: { code: 'CANCELLED', retryable: false, operatorAction: false },
   INTERRUPTED: { code: 'PROVIDER_UNAVAILABLE', retryable: true, operatorAction: false },

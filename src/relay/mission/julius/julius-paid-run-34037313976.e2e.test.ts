@@ -302,7 +302,7 @@ describe('the repairs hold their own edges', () => {
   const USD = 1_000_000;
   const MISSION_2 = juliusAllocationPolicy({ ceilingUsdMicros: 20 * USD, authorizedRepairRounds: 3 });
 
-  it('an attempt that BILLED before it failed is charged, so the retry cannot be granted that money twice', async () => {
+  it('an attempt that BILLED before it timed out is charged, and is never retried: a second answer would be bought (#43)', async () => {
     const harness = build({
       reviewer: [REVIEW_ACCEPT, REVIEW_ACCEPT],
       coder: [{ kind: 'fail', code: 'TIMEOUT', costUsdMicros: 4_900_000 }, BUILD_OK],
@@ -316,7 +316,12 @@ describe('the repairs hold their own edges', () => {
     const settled = harness.store.events().filter((event) => event.type === 'budget.settled');
     expect(settled.some((event) => event.facts.usdMicros === 4_900_000 && event.facts.reason === 'TIMEOUT')).toBe(true);
     expect(harness.budget.remainingUsdMicros()).toBeLessThanOrEqual(20 * USD - 4_900_000);
-    expect(harness.adapters.get(CODER.adapterId)!.dispatches, 'the retry did run').toHaveLength(2);
+    // HANDED, THEN TIMED OUT: the provider may have answered, so asking again
+    // could buy a second paid answer. One dispatch, and the task ends on the cause.
+    expect(harness.adapters.get(CODER.adapterId)!.dispatches, 'never dispatched a second time').toHaveLength(1);
+    expect(harness.store.events().filter((event) => event.type === 'retry.scheduled')).toEqual([]);
+    const ended = harness.store.events().filter((event) => event.type === 'task.failed' && event.facts.code === 'TIMEOUT');
+    expect(ended.map((event) => event.facts.reasonCode)).toEqual(['HANDED_TIMEOUT_OUTCOME_UNKNOWN']);
   });
 
   it('a completed dispatch whose runtime reported NO cost keeps its reservation: Unknown is not zero', async () => {

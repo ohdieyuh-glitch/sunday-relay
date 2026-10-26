@@ -21,11 +21,18 @@
  * and would also retry an authentication failure forever, spending an attempt
  * per round on a credential that will never work.
  *
- *   RUN A — the architect's first dispatch fails TIMEOUT. The task must go back
+ *   RUN A — the architect's first dispatch is refused by the provider's own 429,
+ *   attested unprocessed: the one failure after the handoff that proves nothing
+ *   ran (#43; a TIMEOUT there is OUTCOME UNKNOWN and never retried). The task must go back
  *   to RUNNABLE with a next attempt time rather than FAILED, exactly one
  *   attempt must be spent, the second dispatch must succeed, and the mission
  *   must reach COMPLETED. A retry that never retries and a retry that loops are
  *   both failures here.
+ *
+ *   RUN C — the architect's first dispatch is HANDED and then TIMES OUT (#43).
+ *   A timeout is never proof the provider did not run, so it must NOT be
+ *   retried: exactly one dispatch, the task FAILED on
+ *   HANDED_TIMEOUT_OUTCOME_UNKNOWN, and the run FAILED.
  *
  *   RUN B — the architect's dispatch fails AUTH_CONFIGURATION, which is
  *   permanent. NO retry may be scheduled, the task must reach FAILED, and the
@@ -76,6 +83,7 @@ const MISSION = 'mission:failure-drill';
 /** Two runs: the transient failure that recovers, and the permanent one that must not. */
 const TRANSIENT = 'run:failure-drill-transient';
 const PERMANENT = 'run:failure-drill-permanent';
+const HANDED_TIMEOUT_RUN = 'run:failure-drill-handed-timeout';
 
 const architect = worker({
   workerId: 'architect', role: 'PROMPT_ARCHITECT', providerId: 'drill', adapterId: 'architect-adapter',
@@ -93,10 +101,12 @@ const reviewer = worker({
 const PLAN_OK: ScriptedOutcome = { kind: 'succeed', evidence: [{ type: 'ARTIFACT', status: 'PASSED', safeSummary: 'Validated architect plan stored for this run.' }] };
 const BUILD_OK: ScriptedOutcome = { kind: 'succeed', evidence: [{ type: 'TEST', status: 'PASSED', safeSummary: 'node --test: exit 0.' }] };
 const REVIEW_OK: ScriptedOutcome = { kind: 'succeed', evidence: [{ type: 'REVIEW_FINDING', status: 'PASSED', safeSummary: 'Independent review approved the change.' }] };
-/** Transient: the provider took too long. The runtime's own classifier decides it is retryable. */
-const TIMEOUT: ScriptedOutcome = { kind: 'fail', code: 'TIMEOUT' };
+/** Transient, and PROVEN unprocessed: the provider refused the request with its own 429. */
+const RATE_LIMITED: ScriptedOutcome = { kind: 'fail', code: 'RATE_LIMIT', runtimeStarted: false };
 /** Permanent: the credential is wrong, and it will be just as wrong next time. */
 const AUTH: ScriptedOutcome = { kind: 'fail', code: 'AUTH_CONFIGURATION' };
+/** Ambiguous: handed, then timed out. The provider may have answered and billed (#43). */
+const HANDED_TIMEOUT: ScriptedOutcome = { kind: 'fail', code: 'TIMEOUT', runtimeStarted: true };
 
 const task = (over: Partial<JuliusTask> & { taskId: string }): JuliusTask => ({
   missionId: MISSION, parentTaskId: null, dependencyIds: [], requiredEvidenceTypes: [],
@@ -173,7 +183,7 @@ async function orchestrate(pool: Pool, outDir: string, repoRoot: string): Promis
     infrastructure: INFRASTRUCTURE, transcriptFile: TRANSCRIPT_FILE,
   });
 
-  record.say(`${DRILL_NAME} DRILL (one real PostgreSQL, a transient failure and a permanent one, no provider call)`);
+  record.say(`${DRILL_NAME} DRILL (one real PostgreSQL, a transient failure, a permanent one and a handed timeout, no provider call)`);
   record.say('');
 
   /**
@@ -184,7 +194,7 @@ async function orchestrate(pool: Pool, outDir: string, repoRoot: string): Promis
    * drill whose transcript can describe a step it did not exercise is not
    * testimony.
    */
-  const foreign = await foreignJuliusRuns(scalar, [TRANSIENT, PERMANENT]);
+  const foreign = await foreignJuliusRuns(scalar, [TRANSIENT, PERMANENT, HANDED_TIMEOUT_RUN]);
   if (foreign > 0) {
     record.step('the drill was given a throwaway database, holding no Julius run but its own', false,
       `${foreign} run(s) here are not this drill's; a drill writes only where nothing else lives`);
@@ -192,7 +202,7 @@ async function orchestrate(pool: Pool, outDir: string, repoRoot: string): Promis
     return 8;
   }
   const prior = await scalar(
-    `SELECT count(*) FROM relay_wonderland.julius_runs WHERE run_id IN ($1,$2)`, [TRANSIENT, PERMANENT]).catch(() => '0');
+    `SELECT count(*) FROM relay_wonderland.julius_runs WHERE run_id IN ($1,$2,$3)`, [TRANSIENT, PERMANENT, HANDED_TIMEOUT_RUN]).catch(() => '0');
   if (prior !== '0' && prior !== null) {
     record.step('the drill was given a database that does not already hold its runs', false,
       "its runs are already recorded here; a drill must not read another run's evidence as its own");
@@ -202,22 +212,22 @@ async function orchestrate(pool: Pool, outDir: string, repoRoot: string): Promis
   await new TransactionalWonderlandDatabase(pool).migrate();
 
   /* ------------------------------------- RUN A: transient, and it must recover */
-  record.say('RUN A — the architect times out once, and the runtime is expected to try again');
-  const a = await driveRun(pool, TRANSIENT, [TIMEOUT, PLAN_OK, PLAN_OK]);
+  record.say('RUN A — the architect is rate limited once, unprocessed, and the runtime is expected to try again');
+  const a = await driveRun(pool, TRANSIENT, [RATE_LIMITED, PLAN_OK, PLAN_OK]);
 
   const scheduled = await scalar(
     `SELECT e.payload->'facts'->>'code'||'/'||COALESCE(e.payload->'facts'->>'errorRetryable','?')
        FROM relay_wonderland.events e
       WHERE e.event_type='julius.retry.scheduled' AND e.payload->>'taskId'=$1 ORDER BY e.occurred_at LIMIT 1`, [a.plan]);
-  record.step('the runtime classified the timeout as retryable and scheduled a retry',
-    scheduled === 'TIMEOUT/true', String(scheduled));
+  record.step('the runtime classified the rate limit as retryable and scheduled a retry',
+    scheduled === 'RATE_LIMIT/true', String(scheduled));
 
   const failedTerminally = await scalar(
     `SELECT count(*) FROM relay_wonderland.events WHERE event_type='julius.task.failed' AND payload->>'taskId'=$1`, [a.plan]);
   record.step('and did NOT end the task — a retry is a hand-back, not a failure',
     failedTerminally === '0', `${failedTerminally} terminal failure event(s)`);
 
-  record.step('the architect was dispatched exactly twice: the timeout, then the retry',
+  record.step('the architect was dispatched exactly twice: the rate limit, then the retry',
     a.dispatches === 2, `${a.dispatches} dispatch(es)`);
 
   const attempt = await scalar(`SELECT attempt FROM relay_wonderland.julius_tasks WHERE task_id=$1`, [a.plan]);
@@ -254,9 +264,32 @@ async function orchestrate(pool: Pool, outDir: string, repoRoot: string): Promis
   record.step('and the run ended FAILED rather than hanging',
     b.outcome.state === 'FAILED', `${b.outcome.state} after ${b.outcome.ticks} tick(s)`);
 
+  /* ------------- RUN C: handed, then timed out, and it must NOT be retried (#43) */
+  record.say('');
+  record.say('RUN C — the architect is handed the work and times out: OUTCOME UNKNOWN, never retried');
+  const c = await driveRun(pool, HANDED_TIMEOUT_RUN, [HANDED_TIMEOUT, PLAN_OK, PLAN_OK]);
+
+  const handedRetries = await scalar(
+    `SELECT count(*) FROM relay_wonderland.events WHERE event_type='julius.retry.scheduled' AND payload->>'taskId'=$1`, [c.plan]);
+  record.step('NO retry was scheduled for a handed timeout — a second ask could buy a second paid answer',
+    handedRetries === '0', `${handedRetries} retry event(s)`);
+  const handoffs = await scalar(
+    `SELECT count(*) FROM relay_wonderland.events WHERE event_type='julius.worker.dispatched' AND payload->>'taskId'=$1`, [c.plan]);
+  record.step('the attempt WAS handed (one worker.dispatched), and the architect was dispatched exactly once',
+    handoffs === '1' && c.dispatches === 1, `${handoffs} handoff(s), ${c.dispatches} dispatch(es)`);
+  const handedCause = await scalar(
+    `SELECT e.payload->'facts'->>'code'||'/'||COALESCE(e.payload->'facts'->>'reasonCode','?')
+       FROM relay_wonderland.events e
+      WHERE e.event_type='julius.task.failed' AND e.payload->>'taskId'=$1 ORDER BY e.occurred_at LIMIT 1`, [c.plan]);
+  record.step('the durable record names the cause: OUTCOME UNKNOWN, not a transient',
+    handedCause === 'TIMEOUT/HANDED_TIMEOUT_OUTCOME_UNKNOWN', String(handedCause));
+  const cState = await scalar(`SELECT state FROM relay_wonderland.julius_tasks WHERE task_id=$1`, [c.plan]);
+  record.step('the task reached FAILED and the run ended FAILED',
+    cState === 'FAILED' && c.outcome.state === 'FAILED', `task ${String(cState)}, run ${c.outcome.state}`);
+
   /* -------------------------------------------- and it cost nothing to prove */
-  const audit = await auditProviders(scalar, [TRANSIENT, PERMANENT]);
-  record.step('every dispatch in BOTH runs went to the drill’s fake provider — and there WERE dispatches to check',
+  const audit = await auditProviders(scalar, [TRANSIENT, PERMANENT, HANDED_TIMEOUT_RUN]);
+  record.step('every dispatch in ALL THREE runs went to the drill’s fake provider — and there WERE dispatches to check',
     audit.dispatches > 0 && audit.providers === 'drill', `${audit.dispatches} dispatch(es), providers: ${audit.providers}`);
 
   const verified = record.seal(DRILL_NAME);

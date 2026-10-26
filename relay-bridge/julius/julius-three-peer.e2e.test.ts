@@ -145,7 +145,11 @@ type ProviderName = 'claude-code' | 'codex-shaped' | 'generic';
 const PROVIDERS: readonly ProviderName[] = ['claude-code', 'codex-shaped', 'generic'];
 
 /** The failures a provider reports, in order, on its repair dispatches — each in its own vocabulary. */
-type InjectedFailure = 'RATE_LIMITED' | 'CREDIT_UNAVAILABLE';
+type InjectedFailure = 'RATE_LIMITED' | 'CREDIT_UNAVAILABLE'
+  /* #43: the generic provider's other session failures, and a 429 the provider
+   * returned BEFORE any session started (the one positive evidence of no execution). */
+  | 'TIMEOUT' | 'PROCESS_EXIT' | 'INTERRUPTED' | 'PROVIDER_UNAVAILABLE' | 'RATE_LIMITED_BEFORE_START';
+const RATE_LIMITS: readonly InjectedFailure[] = ['RATE_LIMITED', 'RATE_LIMITED_BEFORE_START'];
 
 /** A provider behind the port, shaped like the named one, answering each dispatch from `lines`. */
 function providerFor(
@@ -164,14 +168,14 @@ function providerFor(
       // What the hosted runtime really says: an API error after the session started.
       kind: 'refused', refusalCode: 'coder_provider_error_after_init', safeMessage: 'The hosted run failed after it started.',
       observation: {
-        initSeen: true, sessionId: 'sess', actualModel: 'claude-x', runtimeVersion: 't', apiKeySource: 'env', reportedCwd: input.workspacePath,
+        initSeen: failing !== 'RATE_LIMITED_BEFORE_START', sessionId: 'sess', actualModel: 'claude-x', runtimeVersion: 't', apiKeySource: 'env', reportedCwd: input.workspacePath,
         reportedTools: ['Read', 'Edit'], toolTargets: [], toolsUsed: [], toolInvocations: 1, permissionDenials: 0, numTurns: 1, durationMs: 1,
         usage: { inputTokens: 100, outputTokens: 0, totalCostUsd: 0.01, source: 'runtime_reported' },
         streamUsage: { messages: 1, abortedMessages: 1, inputTokens: 100, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 },
         // The one turn produced nothing, so no model served it; the result names the model with zero output.
         turnModels: [], resultModelUsage: [{ model: 'claude-x', canonicalModel: null, inputTokens: 100, outputTokens: 0 }],
         resultSubtype: 'error_during_execution', isError: true, thinkingBlocksOmitted: 0, unknownMessageCount: 0,
-        finalText: failing === 'RATE_LIMITED'
+        finalText: RATE_LIMITS.includes(failing)
           ? 'API Error: 429 {"type":"rate_limit_error"}'
           : 'API Error: 400 {"message":"Your credit balance is too low to access the Anthropic API."}',
       },
@@ -200,7 +204,7 @@ function providerFor(
       renderPrompt: (request) => renderJuliusCodingAgentPrompt(request, JULIUS_CODING_AGENT_CHARTER),
       // Codex-shaped: no turn count and no tool count, so both are UNKNOWN — never zero.
       respond: (_prompt, request) => (failing !== null
-        ? { status: 'failed', error: { code: failing === 'RATE_LIMITED' ? 'rate_limit_exceeded' : 'insufficient_quota' }, usage: { input_tokens: 100, output_tokens: 0 } }
+        ? { status: 'failed', error: { code: RATE_LIMITS.includes(failing) ? 'rate_limit_exceeded' : 'insufficient_quota' }, usage: { input_tokens: 100, output_tokens: 0 } }
         : { status: 'completed', output_text: textFor(request), model: 'codex-x', usage: { input_tokens: 900, output_tokens: 300, cost_usd: 0.05 } }),
     });
   } else {
@@ -210,7 +214,8 @@ function providerFor(
       async execute(request) {
         if (failing !== null) {
           return {
-            kind: 'failed', failure: failing, runtimeStarted: true, costUsdMicros: null,
+            kind: 'failed', failure: failing === 'RATE_LIMITED_BEFORE_START' ? 'RATE_LIMITED' : failing,
+            runtimeStarted: failing !== 'RATE_LIMITED_BEFORE_START', costUsdMicros: null,
             safeMessage: 'The generic coding provider failed.', providerFailureClass: null, diagnostics: {},
           };
         }
@@ -535,29 +540,53 @@ describe('P31 — effort parity is observed, never enforced, and unknown stays u
 /* ------------------------------------------------------------------ P32 */
 
 describe('P32 — a provider failure during a repair fabricates nothing, whichever Coding Agent reports it', () => {
-  it.each(PROVIDERS)('%s: a rate limit on the repair is retried, the failed attempt leaves no evidence, and the mission ends as if it never happened', async (name) => {
-    const honest = await driveMission(name);
+  /*
+   * A RATE LIMIT AFTER THE SESSION STARTED IS AN UNKNOWN OUTCOME (#43). Each of
+   * the three providers reports the 429 from inside a session that had already
+   * run (Claude Code's init was seen, the Codex-shaped task reported usage, the
+   * generic one says so), so the provider may already have done, edited and
+   * billed work. Retrying could buy it twice. Only a 429 attested before
+   * anything ran is positive evidence of no execution, and only that is retried.
+   */
+  it.each(PROVIDERS)('%s: a rate limit inside a started repair session is OUTCOME UNKNOWN: one dispatch, never retried, no evidence', async (name) => {
     const drive = await driveMission(name, { repairFailures: ['RATE_LIMITED'] });
 
+    expect(drive.outcome.state).not.toBe('COMPLETED');
+    expect(ofType(drive, 'retry.scheduled').filter((entry) => entry.taskId === REPAIR), 'never retried').toEqual([]);
+    expect(drive.provider.requests.filter((request) => request.identity.taskId === REPAIR), 'exactly one provider call').toHaveLength(1);
+    const failed = ofType(drive, 'task.failed').filter((entry) => entry.taskId === REPAIR);
+    expect(failed).toHaveLength(1);
+    expect(failed[0]!.facts).toMatchObject({ code: 'RATE_LIMIT', reasonCode: 'HANDED_FAILURE_OUTCOME_UNKNOWN', diag_codingAgentFailure: 'RATE_LIMITED' });
+    expect((await drive.memory.evidenceForRun(RUN, PROJECT)).filter((row) => row.taskId === REPAIR)).toEqual([]);
+    expect((await drive.memory.tasksForRun(RUN, PROJECT)).find((row) => row.taskId === REPAIR)!.state).toBe('FAILED');
+  });
+
+  /* EVERY OTHER RETRYABLE SESSION FAILURE OF THE CODING AGENT, after the handoff:
+   * a timeout, a process that died, an interrupted stream, a provider outage. Each
+   * says only that no usable answer came back, never that nothing ran. */
+  it.each([
+    ['TIMEOUT', 'TIMEOUT', 'HANDED_TIMEOUT_OUTCOME_UNKNOWN'],
+    ['PROCESS_EXIT', 'PROVIDER_UNAVAILABLE', 'HANDED_FAILURE_OUTCOME_UNKNOWN'],
+    ['INTERRUPTED', 'PROVIDER_UNAVAILABLE', 'HANDED_FAILURE_OUTCOME_UNKNOWN'],
+    ['PROVIDER_UNAVAILABLE', 'PROVIDER_UNAVAILABLE', 'HANDED_FAILURE_OUTCOME_UNKNOWN'],
+  ] as const)('generic: %s inside a started repair session is OUTCOME UNKNOWN, one provider call', async (injected, code, cause) => {
+    const drive = await driveMission('generic', { repairFailures: [injected] });
+    expect(drive.provider.requests.filter((request) => request.identity.taskId === REPAIR), 'exactly one provider call').toHaveLength(1);
+    expect(ofType(drive, 'retry.scheduled').filter((entry) => entry.taskId === REPAIR)).toEqual([]);
+    const failed = ofType(drive, 'task.failed').filter((entry) => entry.taskId === REPAIR);
+    expect(failed.map((entry) => [entry.facts.code, entry.facts.reasonCode])).toEqual([[code, cause]]);
+    expect((await drive.memory.tasksForRun(RUN, PROJECT)).find((row) => row.taskId === REPAIR)!.state).toBe('FAILED');
+  });
+
+  /* THE POSITIVE EVIDENCE, AND THE ONLY RETRY LEFT: the provider's own 429 before
+   * any session started. Claude Code saw no init (no session, so no model call);
+   * the generic provider says its runtime never started. Nothing was processed. */
+  it.each(['claude-code', 'generic'] as const)('%s: a 429 before the session started is retried, and the mission completes', async (name) => {
+    const drive = await driveMission(name, { repairFailures: ['RATE_LIMITED_BEFORE_START'] });
     expect(drive.outcome.state).toBe('COMPLETED');
     const retried = ofType(drive, 'retry.scheduled').filter((entry) => entry.taskId === REPAIR);
-    expect(retried).toHaveLength(1);
-    expect(retried[0]!.facts).toMatchObject({ code: 'RATE_LIMIT', errorRetryable: true, diag_codingAgentFailure: 'RATE_LIMITED' });
-    // Two dispatches of the repair; evidence from one.
+    expect(retried.map((entry) => [entry.facts.code, entry.facts.diag_runtimeStarted])).toEqual([['RATE_LIMIT', false]]);
     expect(drive.provider.requests.filter((request) => request.identity.taskId === REPAIR)).toHaveLength(2);
-    const repairEvidence = (await drive.memory.evidenceForRun(RUN, PROJECT)).filter((row) => row.taskId === REPAIR);
-    expect(repairEvidence.map((row) => row.type).sort()).toEqual(['DIFF', 'TEST']);
-    // Julius names evidence by the lease that produced it: the retried attempt's, never the first's.
-    const claims = ofType(drive, 'task.claimed').filter((entry) => entry.taskId === REPAIR);
-    const lastLease = Number(claims.at(-1)!.facts.leaseGeneration);
-    expect(lastLease, 'the retry ran under a new lease').toBeGreaterThan(Number(claims[0]!.facts.leaseGeneration));
-    expect(repairEvidence.map((row) => row.evidenceId).sort()).toEqual([`${REPAIR}:${String(lastLease)}:0`, `${REPAIR}:${String(lastLease)}:1`]);
-    // Nothing was addressed on the strength of the failed attempt.
-    const retriedAt = retried[0]!.sequence;
-    const addressedAt = firstAt(drive, (entry) => entry.type === 'finding.transitioned' && entry.facts.move === 'REPAIR_SUCCEEDED');
-    expect(addressedAt).toBeGreaterThan(retriedAt);
-    const decisionsOf = async (run: Drive) => (await run.memory.decisionsForRun(RUN, PROJECT)).map((row) => `${row.taskId}:${row.action}`);
-    expect(await decisionsOf(drive)).toEqual(await decisionsOf(honest));
   });
 
   it.each(PROVIDERS)('%s: credit exhaustion on the repair needs an operator — no success, no evidence, no review, no resolution, no completion', async (name) => {
