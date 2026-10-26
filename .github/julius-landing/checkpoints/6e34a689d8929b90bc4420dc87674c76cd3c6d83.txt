@@ -1,13 +1,13 @@
 JULIUS-CHECKPOINT-V1
 repo: ohdieyuh-glitch/sunday-relay
 prior: 2528ac5c0f0d4303051123a7592ef18e3552ba74
-checkpoint: 66b344d48d1f5fde8b200e0a41a1edd2605e8be4
+checkpoint: 6e34a689d8929b90bc4420dc87674c76cd3c6d83
 key-spki-sha256: 12c9b1853c4c33322241273f386b0fd08fdefd08134c911dd4024c5bb5cdff13
-nonce: 50af211aa9b434baae657fd1137e904e
-issued: 2026-10-26T03:32:00Z
-expires: 2027-01-23T03:32:00Z
+nonce: 16cefd9b6203722a9ac181af282f4edc
+issued: 2026-10-26T04:22:00Z
+expires: 2027-01-23T04:22:00Z
 by: INDEPENDENT_REVIEW
-count: 51
+count: 54
 1.sha: 3f20fc1ace7b157d4ff2673959c98998564ef43b
 1.tree: 75a61ea2721429a4c7f0849ecc6fffec9e8f6e7f
 1.basis: PR #392. The founder's exact-head APPROVED review at 5936fde4 (same tree), and Kaisin INDEPENDENT_REVIEW records ce9963 and 08a19b. These are unsigned, self-registered reviewer records, NOT Skywalker's review. The basis is carried verbatim from docs/provenance/checkpoint-2528ac5c-f539cab2.unsigned.txt and was not re-reviewed by the independent review session.
@@ -161,6 +161,15 @@ count: 51
 51.sha: 66b344d48d1f5fde8b200e0a41a1edd2605e8be4
 51.tree: a2aa2f43c1737e45b393a50f7d4cc0521739b46b
 51.basis: PR #475: the governed queue gains four lines, 471, 472, 473 and 474 (and their pinned test entries). Reviewed by the independent review session at this exact commit on main 73a4aa3f: two files, eight added lines, no other path.
+52.sha: 3b8c26ceb1612898f2368467a77dfade2d65c214
+52.tree: e1e1b186e1b69c5387432c0082008d525657d27b
+52.basis: Installer commit of the dual-signed checkpoint attestation for 66b344d4 (the batched queue bootstrap for #471-#474 the founder ran; App-authored, single parent 66b344d4, checkpoint directory only).
+53.sha: 95dde7b1ed6190824ee41f1488dea2f5c6a2404e
+53.tree: d0b92667356373996a30370bede2e80c694acbcd
+53.basis: PR #471 (/events execution and interrupted), landed by the governed lander: an exact-head INDEPENDENT_REVIEW clearance at c1f82bfe whose functional diff is byte-identical to the reviewed a01a2ce1; audit ref julius-governed-audit/pr/471.
+54.sha: 6e34a689d8929b90bc4420dc87674c76cd3c6d83
+54.tree: e047cf94133232938821e90f0ab844e6bdd79606
+54.basis: PR #480: the governed queue gains two lines, 478 and 479 (and their pinned test entries). Reviewed by the independent review session at this exact commit on main 95dde7b1: two files, four added lines, no other path.
 tcb-count: 20
 tcb.1.path: .github/julius-landing/reviewer-ed25519.pub
 tcb.1.sha256: d1be6e15b19f0be375d300c9ae3530c32c59c22e072f3d26a6f5026e395b5815
@@ -173,7 +182,7 @@ tcb.4.sha256: 1e0ffa3c4e04c9e79f65b272b4fd17e1f7c9971213b2b2620b1b39b016c45a39
 tcb.5.path: .github/julius-landing/governed-land.mjs
 tcb.5.sha256: 1e605b744581ee6690e598746cbfd5d5cb54880a675b8455f668ee6b2b067dc9
 tcb.6.path: .github/julius-landing/governed-queue.txt
-tcb.6.sha256: ff0ff021ed8d1d41162870d25ab592e62de15c0e638fa2e6cb76e3a6feea58e2
+tcb.6.sha256: 8b74466ed872e41dae3c38556ef5ea5f85773b6b5f56c3d702352ed41da2aa9f
 tcb.7.path: .github/julius-landing/main-ruleset.json
 tcb.7.sha256: 186d7ad0c64266f221e58abc69454fc240ef8328af171054e4c4facb50a45df8
 tcb.8.path: .github/julius-landing/reviewer-tools.mjs
