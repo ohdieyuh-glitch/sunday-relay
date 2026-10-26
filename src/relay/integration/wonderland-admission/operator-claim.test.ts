@@ -1,3 +1,4 @@
+import { execFile } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -14,6 +15,7 @@ import {
   undeclaredDispatchInputs,
   concurrencyGroupName,
   createOperatorClaimTool,
+  ghResultFromExecFile,
   formatGhCommand,
   interpretSpentTagResponse,
   interpretWorkflowHalt,
@@ -162,7 +164,7 @@ const CONTENTS = `repos/${REPO}/contents/`;
 function servingMain(spawn: GhSpawner, main: MainFiles = {}): GhSpawner {
   const pick = (key: keyof MainFiles, fallback: string): string | null => (key in main ? main[key] ?? null : fallback);
   return {
-    run(args) {
+    async run(args) {
       const target = args.find((arg) => arg.startsWith(CONTENTS));
       if (args[0] !== 'api' || target === undefined) return spawn.run(args);
       const path = target.slice(CONTENTS.length).replace(/\?ref=main$/u, '');
@@ -178,11 +180,11 @@ function servingMain(spawn: GhSpawner, main: MainFiles = {}): GhSpawner {
 
 function recorder(behavior: (args: readonly string[]) => GhResult, main: MainFiles = {}): { spawn: GhSpawner; calls: string[][] } {
   const calls: string[][] = [];
-  const served = servingMain({ run: (args) => behavior(args) }, main);
+  const served = servingMain({ run: async (args) => behavior(args) }, main);
   return {
     calls,
     spawn: {
-      run(args) {
+      async run(args) {
         const copy = [...args];
         calls.push(copy);
         return served.run(copy);
@@ -613,7 +615,7 @@ describe('operator claim', () => {
       await admit(path);
       const seen: { state: string | undefined; lock: boolean; status: string | false }[] = [];
       const spawn: GhSpawner = servingMain({
-        run(args) {
+        async run(args) {
           if (args[0] === 'api') return ABSENT;
           const saved = readAdmissionDocument(path);
           seen.push({
@@ -698,6 +700,48 @@ describe('operator claim', () => {
       expect(readFileSync(`${path}.operator.json`, 'utf8')).toBe(before);
     });
   });
+
+  it('F1: a killed gh workflow run writes no outcome: the record stays dispatching, a later claim replays without spawning', async () => {
+    await withStore(async (path) => {
+      await admit(path);
+      const fake = scripted(ABSENT, { code: 1, stdout: '', stderr: '', outcomeUnknown: true });
+      const claims = claimTool(path, fake.spawn);
+      const stopped = await claims.claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
+      expect(stopped.ok).toBe(false);
+      if (stopped.ok) return;
+      expect(stopped.kind).toBe('dispatch_outcome_unknown');
+      expect(stopped.record?.state).toBe('dispatching');
+      expect(readAdmissionDocument(path).claims.map((event) => event.state)).toEqual(['dispatching']);
+      const spawned = fake.calls.length;
+      const again = await claims.claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
+      expect(again.ok && again.replayed).toBe(true);
+      expect(again.ok && again.record.state).toBe('dispatching');
+      const fresh = await claimTool(path, { async run() { throw new Error('spawned'); } })
+        .claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
+      expect(fresh.ok && fresh.replayed).toBe(true);
+      expect(fake.calls.length).toBe(spawned);
+      expect(ghKinds(fake.calls)).toEqual([...MAIN_READS, 'tag', 'workflow']);
+      expect(readAdmissionDocument(path).claims.map((event) => event.state)).toEqual(['dispatching']);
+    });
+  });
+
+  it('F1: a child really killed by the execFile timeout maps to outcomeUnknown; an exit, a missing binary and success do not', async () => {
+    const run = (args: string[], timeout: number) => new Promise<GhResult>((resolve) => {
+      execFile(process.execPath, args, { timeout, windowsHide: true }, (error, stdout, stderr) => resolve(ghResultFromExecFile(error, stdout, stderr)));
+    });
+    const hung = await run(['-e', 'setInterval(() => {}, 1000)'], 300);
+    expect(hung).toMatchObject({ code: 1, outcomeUnknown: true });
+    const exited = await run(['-e', 'process.exit(3)'], 30_000);
+    expect(exited.code).toBe(3);
+    expect(exited.outcomeUnknown).toBeUndefined();
+    const ok = await run(['-e', 'process.stdout.write("x")'], 30_000);
+    expect(ok).toEqual({ code: 0, stdout: 'x', stderr: '' });
+    const missing = await new Promise<GhResult>((resolve) => {
+      execFile('julius-no-such-binary-f1', [], { timeout: 30_000, windowsHide: true }, (error, stdout, stderr) => resolve(ghResultFromExecFile(error, stdout, stderr)));
+    });
+    expect(missing.code).toBe(1);
+    expect(missing.outcomeUnknown).toBeUndefined();
+  }, 60_000);
 
   it('a dispatch failure moves the record to dispatch_failed and does not retry', async () => {
     await withStore(async (path) => {
@@ -1286,8 +1330,8 @@ describe('operator claim cli', () => {
         err: () => {},
       }, {
         spawn: (() => {
-          const served = servingMain({ run: (args) => (args[0] === 'api' ? ABSENT : WORKFLOW_OK) });
-          return { run(args: readonly string[]) { calls.push([...args]); return served.run(args); } };
+          const served = servingMain({ run: async (args) => (args[0] === 'api' ? ABSENT : WORKFLOW_OK) });
+          return { async run(args: readonly string[]) { calls.push([...args]); return served.run(args); } };
         })(),
         nowIso: () => WHEN,
         readWorkflow: () => { throw new Error('a dispatch reads main, not the checkout'); },
@@ -1934,7 +1978,7 @@ describe('reconcile moves a stuck dispatching record from GitHub evidence only',
       const listed = runList([{ id: Number(RUN_ID), status: 'completed', conclusion: 'success' }]);
       const fake = github(PRESENT_ANNOTATED, tagMessage(SERVER, RUN_ID), listed);
       const moving: GhSpawner = {
-        run(args) {
+        async run(args) {
           if (args[0] === 'run') {
             // Another reconcile finishes first, recording a different run id.
             const journal = JSON.parse(readFileSync(journalPath, 'utf8')) as { revision: number; claims: Record<string, unknown>[] };
@@ -2054,6 +2098,139 @@ describe('reconcile moves a stuck dispatching record from GitHub evidence only',
   });
 });
 
+describe('the spawner is async and no lock is held while gh runs', () => {
+  it('while the workflow child is pending, the write lock is free and another tool reads dispatching', async () => {
+    await withStore(async (path) => {
+      await admit(path);
+      const calls: string[][] = [];
+      let finish: (result: GhResult) => void = () => {};
+      const pending = new Promise<GhResult>((resolve) => { finish = resolve; });
+      let workflowStarted: () => void = () => {};
+      const started = new Promise<void>((resolve) => { workflowStarted = resolve; });
+      const served = servingMain({
+        run(args) {
+          if (args[0] === 'api') return Promise.resolve(ABSENT);
+          workflowStarted();
+          return pending;
+        },
+      });
+      const spawn: GhSpawner = { async run(args) { calls.push([...args]); return served.run(args); } };
+      const claim = claimTool(path, spawn).claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
+      await started;
+      expect(existsSync(admissionWriteLockPath(path))).toBe(false);
+      const meanwhile = await claimTool(path, { run() { throw new Error('status spawned'); } }).status(RUN, SERVER);
+      expect(meanwhile.ok && meanwhile.record.state).toBe('dispatching');
+      finish(WORKFLOW_OK);
+      const result = await claim;
+      expect(result.ok && result.dispatchedWorkflow).toBe(true);
+      expect(ghKinds(calls)).toEqual([...MAIN_READS, 'tag', 'workflow']);
+      expect(readAdmissionDocument(path).claims.map((event) => event.state)).toEqual(['dispatching', 'dispatched']);
+    });
+  });
+});
+
+describe('a start binding is journaled for a start-route claim only', () => {
+  const BINDING = { startKeyHash: 'e'.repeat(64), clientTriggerId: 'c'.repeat(32), clientUiActionUtc: WHEN } as const;
+  const dispatch = (over: Partial<ClaimInput> = {}) => claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION, ...over });
+  const journalText = (path: string) => readFileSync(`${path}.operator.json`, 'utf8');
+
+  it('a claim without a binding (the CLI) journals none: the events are as before', async () => {
+    await withStore(async (path) => {
+      await admit(path);
+      const result = await claimTool(path, scripted(ABSENT, WORKFLOW_OK).spawn).claim(dispatch());
+      expect(result.ok && result.dispatchedWorkflow).toBe(true);
+      expect(journalText(path)).not.toContain('startBinding');
+      for (const event of readAdmissionDocument(path).claims) expect(Object.hasOwn(event, 'startBinding')).toBe(false);
+    });
+  });
+
+  it('the reservation and its outcome carry the binding; a replay with another binding rewrites nothing', async () => {
+    await withStore(async (path) => {
+      await admit(path);
+      const fake = scripted(ABSENT, WORKFLOW_OK);
+      const tool = claimTool(path, fake.spawn);
+      const first = await tool.claim(dispatch({ startBinding: BINDING }));
+      expect(first.ok && first.dispatchedWorkflow).toBe(true);
+      const claims = readAdmissionDocument(path).claims;
+      expect(claims.map((event) => [event.state, event.startBinding])).toEqual([['dispatching', BINDING], ['dispatched', BINDING]]);
+      const before = journalText(path);
+      const calls = fake.calls.length;
+      const replayed = await tool.claim(dispatch({
+        startBinding: { startKeyHash: 'f'.repeat(64), clientTriggerId: 'd'.repeat(32), clientUiActionUtc: '2026-10-23T17:19:00.000Z' },
+      }));
+      expect(replayed.ok && replayed.replayed).toBe(true);
+      expect(journalText(path)).toBe(before);
+      expect(fake.calls.length).toBe(calls);
+    });
+  });
+
+  it('a spent tag already present journals already_spent with the binding', async () => {
+    await withStore(async (path) => {
+      await admit(path);
+      const result = await claimTool(path, scripted(PRESENT, WORKFLOW_OK).spawn).claim(dispatch({ startBinding: BINDING }));
+      expect(result.ok === false && result.kind).toBe('RUN_ID_ALREADY_SPENT');
+      expect(readAdmissionDocument(path).claims.map((event) => [event.state, event.startBinding])).toEqual([['already_spent', BINDING]]);
+    });
+  });
+
+  it('a malformed binding is refused before gh runs and before anything is written', async () => {
+    for (const startBinding of [
+      { ...BINDING, startKeyHash: '66666666-7777-4888-9999-aaaaaaaaaaaa' },
+      { ...BINDING, clientTriggerId: 'x' },
+      { ...BINDING, clientUiActionUtc: 'later' },
+    ]) {
+      await withStore(async (path) => {
+        await admit(path);
+        const fake = scripted(ABSENT, WORKFLOW_OK);
+        const result = await claimTool(path, fake.spawn).claim(dispatch({ startBinding }));
+        expect(result.ok === false && result.kind).toBe('start_binding_invalid');
+        expect(fake.calls).toEqual([]);
+        expect(readAdmissionDocument(path).claims).toEqual([]);
+      });
+    }
+  });
+
+  it('an outcome must keep its reservation\'s binding', () => {
+    const reservation = {
+      wonderlandRunId: RUN, serverRunId: SERVER, spentTag: `julius-run-spent-${HEX}`, at: WHEN, state: 'dispatching',
+      spentTagState: 'absent', dispatchAttempted: false, dispatchError: null, halt: null, workflowRunId: null, githubDate: GITHUB_DATE,
+    } as const;
+    const outcome = { ...reservation, state: 'dispatched', dispatchAttempted: true } as const;
+    expect(legalTransition(reservation, outcome)).toBe(true);
+    expect(legalTransition({ ...reservation, startBinding: BINDING }, { ...outcome, startBinding: BINDING })).toBe(true);
+    expect(legalTransition({ ...reservation, startBinding: BINDING }, outcome)).toBe(false);
+    expect(legalTransition(reservation, { ...outcome, startBinding: BINDING })).toBe(false);
+    expect(legalTransition(
+      { ...reservation, startBinding: BINDING },
+      { ...outcome, startBinding: { ...BINDING, startKeyHash: 'f'.repeat(64) } },
+    )).toBe(false);
+  });
+
+  it('reconcile carries the reservation\'s binding onto the outcome it writes', async () => {
+    await withStore(async (path) => {
+      await admit(path);
+      const crashing = recorder((args) => {
+        if (args[0] === 'api') return ABSENT;
+        throw new Error('operator_process_killed');
+      });
+      await expect(claimTool(path, crashing.spawn).claim(dispatch({ startBinding: BINDING }))).rejects.toThrow('operator_process_killed');
+      const listed: GhResult = {
+        code: 0,
+        stdout: `${JSON.stringify([{
+          databaseId: 36568129865, displayTitle: `julius mission=${MISSION} lane=${LANE} mode=paid key=${KEY}`,
+          status: 'completed', conclusion: 'failure', event: 'workflow_dispatch', headBranch: 'main', attempt: 1,
+        }])}\n`,
+        stderr: '',
+      };
+      const github = recorder((args) => (args[0] === 'run' ? listed : ABSENT));
+      const result = await claimTool(path, github.spawn).reconcile({ wonderlandRunId: RUN, serverRunId: SERVER, repo: REPO });
+      expect(result.ok && result.reconciled).toBe(true);
+      expect(readAdmissionDocument(path).claims.map((event) => [event.state, event.startBinding]))
+        .toEqual([['dispatching', BINDING], ['dispatch_failed', BINDING]]);
+    });
+  });
+});
+
 describe('static scan', () => {
   const files = ['admission-file.ts', 'operator-claim.ts', 'operator-claim-cli.ts'] as const;
 
@@ -2065,14 +2242,18 @@ describe('static scan', () => {
     expect(combined).not.toMatch(/from ['"]node:(https?|http|net|tls)['"]/);
     expect(combined).not.toMatch(/from ['"](https?|undici|axios|node-fetch|openai|pg)['"]/);
     expect(combined).not.toMatch(/@anthropic-ai|claude-agent-sdk/);
-    expect(combined).not.toMatch(/\bexecFile(Sync)?\s*\(|\bexecSync\s*\(|(?<!\.)\bspawn\s*\(/);
+    expect(combined).not.toMatch(/\bexecFileSync\s*\(|\bexecSync\s*\(|\bspawnSync\s*\(|(?<!\.)\bspawn\s*\(/);
     expect(sources.get('admission-file.ts')).not.toContain('child_process');
     expect(sources.get('operator-claim.ts')).not.toContain('child_process');
-    expect(sources.get('operator-claim.ts')).not.toContain('spawnSync');
+    expect(sources.get('operator-claim.ts')).not.toMatch(/\bexecFile\s*\(/);
     const cli = sources.get('operator-claim-cli.ts') ?? '';
-    expect(cli).toContain("from 'node:child_process'");
-    const spawned = [...cli.matchAll(/spawnSync\s*\(\s*(['"])(.*?)\1/g)].map((match) => match[2]);
-    expect(spawned).toEqual(['gh']);
+    expect(cli).toContain("import { execFile } from 'node:child_process';");
+    // Async, so the bridge event loop is never blocked: `gh` only, no shell, a timeout, no console window.
+    const spawned = [...cli.matchAll(/execFile\s*\(\s*(['"])(.*?)\1[^\n]*/g)];
+    expect(spawned.map((match) => match[2])).toEqual(['gh']);
+    expect(spawned[0]?.[0]).toContain('timeout: GH_CLAIM_TIMEOUT_MS');
+    expect(spawned[0]?.[0]).toContain('windowsHide: true');
+    expect(cli).not.toMatch(/\bshell\s*:/);
     expect(cli).not.toMatch(/setTimeout|setInterval/);
     expect(sources.get('operator-claim.ts')).not.toMatch(/setTimeout|setInterval/);
     const route = readFileSync(join(__dirname, '../../../../relay-bridge/wonderland-admission-route.ts'), 'utf8');

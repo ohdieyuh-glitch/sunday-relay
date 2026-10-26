@@ -209,7 +209,7 @@ function fakeDispatcher(): { readonly spawn: GhSpawner; readonly calls: string[]
   return {
     calls,
     spawn: {
-      run(args) {
+      async run(args) {
         const copy = [...args];
         calls.push(copy);
         const contents = args.find((arg) => arg.includes('/contents/'));
