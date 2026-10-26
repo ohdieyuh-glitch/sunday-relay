@@ -1130,9 +1130,9 @@ export function createLiveArchitectAdapter(input: {
          * is the provider refusing THIS request unprocessed. The refusal ends the
          * DISPATCH, and the dispatch may already have bought something: a
          * correction call follows a billed answer that failed validation
-         * (`attempts`), and the SDK retries once on its own, so a 429 can follow
-         * a first try that timed out after the provider had worked on it. Neither
-         * is visible from the error. After the handoff, a failure that cannot say
+         * (`attempts`), so a 429 can follow a call that was already billed. (The
+         * SDK's own re-send is now off, `GPT_ARCHITECT_SDK_MAX_RETRIES = 0`, #43.)
+         * That is not visible from the error. After the handoff, a failure that cannot say
          * nothing ran keeps its hold as unknown spend (the coordinator's `end`).
          */
         switch (outcome.failureClass) {

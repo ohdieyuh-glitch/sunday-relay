@@ -76,6 +76,8 @@ const COMPOSED_NAMES = [
   // module adds later is a finding and not silently allowed. Their VALUES are
   // asserted below.
   'CLAUDE_CODE_NO_MODEL_FALLBACK', 'ANTHROPIC_DEFAULT_HAIKU_MODEL', 'ANTHROPIC_SMALL_FAST_MODEL',
+  // #43: the CLI may not re-send a failed API request itself.
+  'CLAUDE_CODE_MAX_RETRIES',
   ...(process.platform === 'win32'
     ? ['HOMEDRIVE', 'HOMEPATH', 'LOGONSERVER', 'SYSTEMDRIVE', 'SYSTEMROOT', 'TEMP', 'USERDOMAIN', 'USERNAME', 'USERPROFILE', 'WINDIR']
     : []),

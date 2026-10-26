@@ -186,6 +186,9 @@ export function openAiPinnedFetch(input: RequestInfo | URL, init?: RequestInit):
   return fetch(input, { ...init, redirect: 'error' });
 }
 
+/** The openai SDK's own retry budget for the architect: none (#43). */
+export const GPT_ARCHITECT_SDK_MAX_RETRIES = 0;
+
 export async function runGptArchitect(request: GptRunRequest): Promise<GptRunOutcome> {
   const { config } = request;
   if (config.model === null) {
@@ -196,8 +199,11 @@ export async function runGptArchitect(request: GptRunRequest): Promise<GptRunOut
     apiKey: request.apiKey,
     baseURL: OPENAI_PINNED_BASE_URL,
     fetch: openAiPinnedFetch,
-    // One bounded transient retry — never an indefinite loop.
-    maxRetries: 1,
+    // NO SDK RETRY (#43). The SDK re-sends after a connection error, a timeout,
+    // 408/409/429 or any 5xx, and none of those proves the first request went
+    // unprocessed, so a second paid answer could be bought before Julius ever
+    // sees the failure. Julius alone decides whether to ask again.
+    maxRetries: GPT_ARCHITECT_SDK_MAX_RETRIES,
     timeout: config.timeoutMs,
   });
 

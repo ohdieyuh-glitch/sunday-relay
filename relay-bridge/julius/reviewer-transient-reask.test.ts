@@ -16,7 +16,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { JULIUS_CONTEXT_COMPILER_VERSION, safeReviewDiagnostics, type JuliusContextSnapshot } from '../../src/relay/mission/julius';
+import { JULIUS_CONTEXT_COMPILER_VERSION, type JuliusContextSnapshot } from '../../src/relay/mission/julius';
 import { loadHermesConfig, reviewDiagnostics, type HermesConfig, type HermesOutcome, type ReviewPacket } from '../hermes-reviewer';
 import {
   REVIEW_TRANSIENT_REASK_BACKOFF_MS,
@@ -169,127 +169,6 @@ describe('the decision, as arithmetic', () => {
   });
 });
 
-describe('the live reviewer adapter re-asks a transient status once, inside the deadline', () => {
-  it('a fast 503 followed by a real verdict is a SUCCEEDED review that bought two calls', async () => {
-    const r = rig([transient(25_000), APPROVED]);
-    const result = await r.dispatch() as { status: string; diagnostics: Record<string, unknown> };
-    expect(result.status).toBe('SUCCEEDED');
-    expect(r.calls, 'asked twice, not three times').toHaveLength(2);
-    expect(r.sleeps, 'one backoff, the policy length').toEqual([REVIEW_TRANSIENT_REASK_BACKOFF_MS]);
-    // THE RECORD SAYS BOTH: how many calls, and why the second was bought.
-    expect(result.diagnostics.reviewAttempts).toBe(2);
-    expect(result.diagnostics.reviewReaskShape).toBe('review_service_unavailable');
-    // And the durable allowlist carries it through.
-    expect(safeReviewDiagnostics(result.diagnostics)?.reviewReaskShape).toBe('review_service_unavailable');
-  });
-
-  it('the second run is given the REMAINING window, so the two asks and the backoff never exceed the declared deadline', async () => {
-    const r = rig([transient(25_000), APPROVED]);
-    await r.dispatch();
-    const [first, second] = r.calls;
-    expect(first!.config.timeoutMs, 'the first ask had the whole deadline').toBe(DEADLINE);
-    expect(second!.config.timeoutMs).toBe(DEADLINE - 25_000 - REVIEW_TRANSIENT_REASK_BACKOFF_MS);
-    expect(25_000 + REVIEW_TRANSIENT_REASK_BACKOFF_MS + second!.config.timeoutMs, 'the whole dispatch fits the deadline exactly').toBe(DEADLINE);
-    expect(second!.config.timeoutMs, 'and the window it got still holds a whole review').toBeGreaterThanOrEqual(FLOOR);
-    // Everything else about the configuration is unchanged.
-    expect({ ...second!.config, timeoutMs: DEADLINE }).toEqual(first!.config);
-  });
-
-  it('a 503 that arrived too late in the window is NOT re-asked, and fails exactly as it did before', async () => {
-    const tooLate = DEADLINE - REVIEW_TRANSIENT_REASK_BACKOFF_MS - FLOOR + 1;
-    const r = rig([transient(tooLate), APPROVED]);
-    const failure = await failureOf(r.dispatch());
-    expect(r.calls, 'asked once').toHaveLength(1);
-    expect(r.sleeps).toEqual([]);
-    expect(failure.code).toBe('PROVIDER_UNAVAILABLE');
-    expect(failure.retryable, 'the shape keeps its classification; the pipeline decides what to do with it').toBe(true);
-    expect(failure.failureClass).toBe('review_service_unavailable');
-    expect(failure.diagnostics?.reviewAttempts).toBe(1);
-    expect(failure.diagnostics?.reviewReaskShape).toBeNull();
-  });
-
-  it('a second transient answer is final: the limit is one, never a loop', async () => {
-    const r = rig([transient(20_000), transient(20_000), APPROVED]);
-    const failure = await failureOf(r.dispatch());
-    expect(r.calls, 'exactly two calls were bought').toHaveLength(2);
-    expect(failure.failureClass).toBe('review_service_unavailable');
-    expect(failure.diagnostics?.reviewAttempts).toBe(2);
-    expect(failure.diagnostics?.reviewReaskShape).toBe('review_service_unavailable');
-  });
-
-  it('the consumed time charges every ask AND every backoff, observed by letting a proof buy two re-asks', async () => {
-    // Production never raises the limit. The point is the arithmetic: under a
-    // limit of one nothing reads the consumed time after the backoff, so an
-    // accounting error there would be invisible until the day the limit
-    // changed. Two re-asks make the third window observable.
-    const r = rig([transient(20_000), transient(30_000), APPROVED], { transientReaskLimit: 2 });
-    const result = await r.dispatch() as { status: string; diagnostics: Record<string, unknown> };
-    expect(result.status).toBe('SUCCEEDED');
-    expect(r.calls).toHaveLength(3);
-    expect(r.sleeps).toEqual([REVIEW_TRANSIENT_REASK_BACKOFF_MS, REVIEW_TRANSIENT_REASK_BACKOFF_MS]);
-    const consumedBeforeThird = 20_000 + REVIEW_TRANSIENT_REASK_BACKOFF_MS + 30_000 + REVIEW_TRANSIENT_REASK_BACKOFF_MS;
-    expect(r.calls[2]!.config.timeoutMs).toBe(DEADLINE - consumedBeforeThird);
-    expect(result.diagnostics.reviewAttempts).toBe(3);
-    expect(() => rig([APPROVED], { transientReaskLimit: -1 })).toThrow('hermes_reviewer_adapter_reask_limit_invalid');
-  });
-
-  it('a final upstream error (500) is never re-asked', async () => {
-    const r = rig([transient(5_000, 'review_provider_http_error'), APPROVED]);
-    const failure = await failureOf(r.dispatch());
-    expect(r.calls).toHaveLength(1);
-    expect(failure.failureClass).toBe('review_provider_http_error');
-    expect(failure.retryable).toBe(false);
-  });
-
-  it('a first ask whose duration cannot be established is not re-asked — unknown is not zero', async () => {
-    const r = rig([transient(5_000, 'review_service_unavailable', { startedAt: 'not-a-time', completedAt: iso(5_000) }), APPROVED]);
-    const failure = await failureOf(r.dispatch());
-    expect(r.calls).toHaveLength(1);
-    expect(failure.failureClass).toBe('review_service_unavailable');
-  });
-
-  it('a dispatch already cancelled is not re-asked, and one cancelled during the backoff buys nothing more', async () => {
-    const cancelledBefore = new AbortController();
-    cancelledBefore.abort();
-    const before = rig([transient(5_000), APPROVED]);
-    const refused = await failureOf(before.dispatch(cancelledBefore.signal));
-    expect(before.calls).toHaveLength(1);
-    expect(refused.failureClass).toBe('review_service_unavailable');
-
-    const cancelledDuring = new AbortController();
-    const during = rig([transient(5_000), APPROVED], { onSleep: () => cancelledDuring.abort() });
-    const cut = await failureOf(during.dispatch(cancelledDuring.signal));
-    expect(during.sleeps, 'the backoff began').toHaveLength(1);
-    expect(during.calls, 'and no second call followed it').toHaveLength(1);
-    expect(cut.failureClass).toBe('review_service_unavailable');
-  });
-
-  it('an exhausted mission buys no re-ask, the same way it buys no correction', async () => {
-    const artifacts = createInMemoryArtifactExchange();
-    artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify(VALID_PLAN));
-    let calls = 0;
-    const adapter = createLiveHermesReviewerAdapter({
-      worker, contexts: { snapshotFor: () => snapshot('plan-1:review') }, artifacts,
-      config: loadHermesConfig(LIVE_ENV as never), testCommand: 'npm run mission-test',
-      run: (async () => { calls += 1; return calls === 1 ? transient(5_000) : APPROVED; }) as never,
-      sleep: async () => {},
-    });
-    const failure = await failureOf(adapter.dispatch({
-      taskId: 'plan-1:review', attempt: { leaseGeneration: 1 }, reads: { subject: { taskId: 'plan-1', leaseGeneration: 1 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-1', taskType: 'review:plan',
-      allocation: { usdMicros: 0, basis: 'EXHAUSTED', policyVersion: 'julius-allocation.v1' },
-    }));
-    expect(calls).toBe(1);
-    expect(failure.failureClass).toBe('review_service_unavailable');
-  });
-
-  it('a review that answered first time records no re-ask shape', async () => {
-    const r = rig([APPROVED]);
-    const result = await r.dispatch() as { diagnostics: Record<string, unknown> };
-    expect(result.diagnostics.reviewAttempts).toBe(1);
-    expect(result.diagnostics.reviewReaskShape).toBeNull();
-  });
-});
-
 /** A first ask the ENGINE ended on its own per-request timeout after `elapsedMs`. */
 const timedOut = (elapsedMs: number, instants?: { startedAt: string; completedAt: string }): HermesOutcome => ({
   kind: 'review_incomplete',
@@ -303,70 +182,56 @@ const timedOut = (elapsedMs: number, instants?: { startedAt: string; completedAt
   completedAt: instants?.completedAt ?? iso(elapsedMs),
 });
 
-/**
- * THE MEASURED CASE. Paid run 34529874100 (Mission 5): `build:review` attempt 1
- * died after 94 200 ms — the engine's own 90 s request timeout, well inside
- * Relay's 480 112 ms window — and attempt 2 COMPLETED in under 209 s. Paid run
- * 34470535718 (Mission 4): `plan:review` attempt 1 was cut by Relay itself at
- * 400 093 ms and attempt 2 COMPLETED in 381 880 ms. Both missions completed only
- * because the pipeline then granted a second task attempt, and
- * `REVIEW_TASK_ATTEMPTS = 1` removes it. The re-ask is that second ask, bounded.
- */
 const ENGINE_TIMEOUT_MS = 94_200;
 
-describe('the live reviewer adapter re-asks an engine-side timeout once, under the same arithmetic', () => {
-  it('the policy names exactly the two shapes an answer can fail to arrive under', () => {
-    expect([...REVIEW_TRANSIENT_REASK_SHAPES].sort()).toEqual(['review_service_unavailable', 'review_timeout']);
+/**
+ * #43: THE RE-ASK IS GONE. Neither shape is positive evidence that the provider
+ * processed nothing. A `review_timeout` is the engine's request timeout after
+ * the request was sent, and `review_service_unavailable` cannot tell the
+ * provider's pre-processing 429 from a 503 after send. Re-asking either could
+ * buy a second paid review. So each one ends the dispatch after exactly ONE
+ * engine call. The coordinator then records it as OUTCOME UNKNOWN; see
+ * `julius-handed-outcome-unknown.test.ts` and the live-composition reviewer
+ * cases for the `reasonCode` on `task.failed`.
+ */
+describe('#43 · the live reviewer adapter never re-asks an ambiguous failure', () => {
+  it('the re-ask policy names NO shape', () => {
+    expect([...REVIEW_TRANSIENT_REASK_SHAPES]).toEqual([]);
   });
 
-  it('a timeout the engine raised early, with a whole review still in the window, is re-asked once and the review SUCCEEDS', async () => {
+  it('an engine timeout raised early, with a whole review still in the window, is NOT re-asked: one engine call, TIMEOUT', async () => {
     const r = rig([timedOut(ENGINE_TIMEOUT_MS), APPROVED]);
-    const result = await r.dispatch() as { status: string; diagnostics: Record<string, unknown> };
-    expect(result.status).toBe('SUCCEEDED');
-    expect(r.calls, 'asked twice, not three times').toHaveLength(2);
-    expect(r.sleeps, 'one backoff, the policy length').toEqual([REVIEW_TRANSIENT_REASK_BACKOFF_MS]);
-    expect(r.calls[1]!.config.timeoutMs, 'the second run got the REMAINING window').toBe(DEADLINE - ENGINE_TIMEOUT_MS - REVIEW_TRANSIENT_REASK_BACKOFF_MS);
-    expect(r.calls[1]!.config.timeoutMs, 'and that window still holds a whole review').toBeGreaterThanOrEqual(FLOOR);
-    expect(result.diagnostics.reviewAttempts).toBe(2);
-    expect(result.diagnostics.reviewReaskShape).toBe('review_timeout');
-    expect(safeReviewDiagnostics(result.diagnostics)?.reviewReaskShape).toBe('review_timeout');
-  });
-
-  it("a timeout that consumed the declared window is Relay's own cut, and is never re-asked", async () => {
-    const r = rig([timedOut(DEADLINE), APPROVED]);
     const failure = await failureOf(r.dispatch());
-    expect(r.calls, 'asked once').toHaveLength(1);
-    expect(r.sleeps).toEqual([]);
-    expect(failure.code).toBe('TIMEOUT');
-    expect(failure.retryable, 'the shape keeps its classification; the pipeline decides what to do with it').toBe(true);
-    expect(failure.failureClass).toBe('review_timeout');
-    expect(failure.diagnostics?.reviewAttempts).toBe(1);
-    expect(failure.diagnostics?.reviewReaskShape).toBeNull();
+    expect(r.calls, 'exactly one engine call').toHaveLength(1);
+    expect(r.sleeps, 'no backoff was waited for a second ask').toEqual([]);
+    expect(failure).toMatchObject({ code: 'TIMEOUT', failureClass: 'review_timeout' });
   });
 
-  it('a timeout raised too late for a whole review to fit is not re-asked either — the floor decides, not the cause', async () => {
-    const tooLate = DEADLINE - REVIEW_TRANSIENT_REASK_BACKOFF_MS - FLOOR + 1;
-    const r = rig([timedOut(tooLate), APPROVED]);
+  it('a fast 503 is NOT re-asked either: one engine call, PROVIDER_UNAVAILABLE', async () => {
+    const r = rig([transient(25_000), APPROVED]);
     const failure = await failureOf(r.dispatch());
     expect(r.calls).toHaveLength(1);
     expect(r.sleeps).toEqual([]);
-    expect(failure.failureClass).toBe('review_timeout');
-    expect(failure.diagnostics?.reviewReaskShape).toBeNull();
+    expect(failure).toMatchObject({ code: 'PROVIDER_UNAVAILABLE', failureClass: 'review_service_unavailable' });
   });
 
-  it('the two transient shapes share ONE re-ask: a 503 followed by an engine timeout is final', async () => {
-    const r = rig([transient(20_000), timedOut(20_000), APPROVED]);
-    const failure = await failureOf(r.dispatch());
-    expect(r.calls, 'exactly two calls were bought').toHaveLength(2);
-    expect(failure.failureClass).toBe('review_timeout');
-    expect(failure.diagnostics?.reviewAttempts).toBe(2);
-    expect(failure.diagnostics?.reviewReaskShape, 'the record names the shape that bought the second call').toBe('review_service_unavailable');
+  it('even with the limit raised, nothing is re-asked: the shape set decides, and it is empty', async () => {
+    const r = rig([timedOut(ENGINE_TIMEOUT_MS), transient(25_000), APPROVED], { transientReaskLimit: 5 });
+    await failureOf(r.dispatch());
+    expect(r.calls).toHaveLength(1);
   });
 
-  it('a timeout whose duration cannot be established is not re-asked — unknown is not zero', async () => {
-    const r = rig([timedOut(5_000, { startedAt: 'not-a-time', completedAt: iso(5_000) }), APPROVED]);
+  it('a final upstream error (500) is never re-asked', async () => {
+    const r = rig([transient(25_000, 'review_provider_http_error'), APPROVED]);
     const failure = await failureOf(r.dispatch());
     expect(r.calls).toHaveLength(1);
-    expect(failure.failureClass).toBe('review_timeout');
+    expect(failure.code).toBe('PROVIDER_UNAVAILABLE');
+  });
+
+  it('a review that answered first time records no re-ask shape', async () => {
+    const r = rig([APPROVED]);
+    const result = await r.dispatch() as { diagnostics: Record<string, unknown> };
+    expect(result.diagnostics.reviewAttempts).toBe(1);
+    expect(result.diagnostics.reviewReaskShape).toBeNull();
   });
 });
