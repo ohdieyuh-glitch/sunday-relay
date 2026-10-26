@@ -678,6 +678,15 @@ describe('an ambiguous provider outcome is read from the run\'s own failure reco
     expect(outcomeUnknownFrom(null, WLJ, JULIUS_OUTCOME_UNKNOWN_CAUSES)).toBeNull();
   });
 
+  it('#43: a task.failed with HANDED_TIMEOUT / HANDED_FAILURE in its reason code is one, and the reason code wins over the Julius code', () => {
+    for (const [cause, code] of [['HANDED_TIMEOUT_OUTCOME_UNKNOWN', 'TIMEOUT'], ['HANDED_FAILURE_OUTCOME_UNKNOWN', 'PROVIDER_UNAVAILABLE']] as const) {
+      expect(outcomeUnknownFrom(failures([{ task_id: 'task:plan:1', role: 'PROMPT_ARCHITECT', event_type: 'julius.task.failed', julius_code: code, failure_class: 'PROVIDER_BOUNDARY', reason_code: cause }]), WLJ, JULIUS_OUTCOME_UNKNOWN_CAUSES))
+        .toEqual({ cause, role: 'PROMPT_ARCHITECT', taskId: 'task:plan:1' });
+    }
+    // A retried timeout (no reason code) is not an unknown outcome.
+    expect(outcomeUnknownFrom(failures([{ event_type: 'julius.task.failed', julius_code: 'TIMEOUT' }]), WLJ, JULIUS_OUTCOME_UNKNOWN_CAUSES)).toBeNull();
+  });
+
   it('a task.failed carrying the cause is one too', () => {
     expect(outcomeUnknownFrom(failures([{ task_id: 'task:plan:1', role: 'PROMPT_ARCHITECT', event_type: 'julius.task.failed', failure_class: 'HANDED_OUTCOME_UNKNOWN' }]), WLJ, JULIUS_OUTCOME_UNKNOWN_CAUSES))
       .toEqual({ cause: 'HANDED_OUTCOME_UNKNOWN', role: 'PROMPT_ARCHITECT', taskId: 'task:plan:1' });

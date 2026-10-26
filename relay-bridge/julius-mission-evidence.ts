@@ -201,7 +201,7 @@ export interface JuliusMissionEvidenceReader {
  * its outcome is unknown, so the task was failed and never retried. These
  * are the record's causes. Any other value is not this.
  */
-export const JULIUS_OUTCOME_UNKNOWN_CAUSES = ['HANDED_OUTCOME_UNKNOWN'] as const;
+export const JULIUS_OUTCOME_UNKNOWN_CAUSES = ['HANDED_OUTCOME_UNKNOWN', 'HANDED_TIMEOUT_OUTCOME_UNKNOWN', 'HANDED_FAILURE_OUTCOME_UNKNOWN'] as const;
 export type JuliusOutcomeUnknownCause = (typeof JULIUS_OUTCOME_UNKNOWN_CAUSES)[number];
 
 export interface JuliusOutcomeUnknown {

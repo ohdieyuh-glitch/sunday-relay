@@ -20,7 +20,7 @@
  *
  * OUTCOME UNKNOWN (/result only). `outcomeUnknown: {cause, role, taskId}` is
  * Julius's own record that a provider request may have been processed, so the
- * task was failed and never retried (cause HANDED_OUTCOME_UNKNOWN). It is read
+ * task was failed and never retried (a cause in JULIUS_OUTCOME_UNKNOWN_CAUSES). It is read
  * only for a dispatched admission without a completion, from the finished run
  * the spend tag names, and only when that is the run the dispatch recorded.
  * `null` means none was read, not that there was none. It is never a success.
