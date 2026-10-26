@@ -589,6 +589,11 @@ MUTATIONS = [
         "const bool bRoundOpensHere = bRepair && !bInRepairRound;",
     ),
     (
+        "contract_verifying_on_unreported_cycle",
+        'View.TaskType == "repair_audit" || View.RepairCycle > 0)) // FLOW_CONTRACT_VERIFYING_NEEDS_A_REPORTED_CYCLE',
+        'View.TaskType == "repair_audit" || View.RepairCycle != 0)) // FLOW_CONTRACT_VERIFYING_NEEDS_A_REPORTED_CYCLE',
+    ),
+    (
         "contract_research_shown_as_architect",
         'else if (View.TaskType == "research") { Out.push_back(FContractBeat{"research.requested", View.Role, Round}); } // FLOW_CONTRACT_RESEARCH_ONLY_WHEN_REPORTED',
         'else if (View.TaskType == "research") { Out.push_back(FContractBeat{"architect.started", View.Role, Round}); } // FLOW_CONTRACT_RESEARCH_ONLY_WHEN_REPORTED',

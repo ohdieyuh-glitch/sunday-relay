@@ -882,6 +882,10 @@ const ABSENT_PHASE = {
 			Expect(Research.Advance(R).at(0).Type == "architect.started", "plan is PROMPT ARCHITECT, never research");
 			R.Role = "reviewer"; R.TaskType = "review"; R.RepairCycle = 0;
 			Expect(Research.Advance(R).at(0).Type == "review.started", "a first review (no repairs) is INDEPENDENT REVIEWER, not VERIFYING");
+			R.TaskType = "plan"; R.Role = "architect";
+			(void)Research.Advance(R);
+			R.Role = "reviewer"; R.TaskType = "review"; R.RepairCycle = -1;
+			Expect(Research.Advance(R).at(0).Type == "review.started", "REVIEW F1: a review with a null (unreported) cycle is INDEPENDENT REVIEWER, never VERIFYING");
 		}
 		{
 			// REVIEW 2026-10-26: a reconnect taken MID-repair-round never replays past beats and never shows a late REPAIR

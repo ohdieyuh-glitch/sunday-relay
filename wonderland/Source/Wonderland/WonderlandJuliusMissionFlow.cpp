@@ -1882,7 +1882,8 @@ namespace WonderlandJuliusMissionFlow
 				}
 				else if (View.TaskType == "research") { Out.push_back(FContractBeat{"research.requested", View.Role, Round}); } // FLOW_CONTRACT_RESEARCH_ONLY_WHEN_REPORTED
 				else if (View.TaskType == "repair_guidance") { Out.push_back(FContractBeat{"architect.guidance", View.Role, Round}); } // FLOW_CONTRACT_GUIDANCE_ONLY_WHEN_REPORTED
-				else if (View.Role == "reviewer" && (View.TaskType == "repair_audit" || View.RepairCycle != 0))
+				// RepairCycle -1 is "not reported" (JSON null): never read as repaired work (REVIEW F1).
+				else if (View.Role == "reviewer" && (View.TaskType == "repair_audit" || View.RepairCycle > 0)) // FLOW_CONTRACT_VERIFYING_NEEDS_A_REPORTED_CYCLE
 				{
 					// The Independent Reviewer checking repaired work: VERIFYING ("the repair is being checked against the contract").
 					Out.push_back(FContractBeat{"repair.completed", View.Role, Round}); // FLOW_CONTRACT_VERIFYING_IS_REVIEWER_ON_REPAIR
