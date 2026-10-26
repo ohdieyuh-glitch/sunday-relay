@@ -53,6 +53,8 @@
 #include "WonderlandBrainSculpture.h"
 #include "WonderlandProjectBrain.h"
 #include "Engine/TextureRenderTarget2D.h"
+#include "Engine/SceneCapture2D.h"
+#include "Components/SceneCaptureComponent2D.h"
 #include "Engine/UserInterfaceSettings.h"
 #include "HAL/FileManager.h"
 #include "Slate/WidgetRenderer.h"
@@ -5900,6 +5902,59 @@ namespace WonderlandJuliusMissionQa
 
 	/** After N seconds: log a WLJ1PANEL line and save an in-engine screenshot WITH the UI to Saved/Screenshots/WLJ1/<name>.png. */
 #if !UE_BUILD_SHIPPING
+	/**
+	 * QA door (founder P0 2026-10-26, REVIEW's per-case evidence): the WORLD as the player's camera sees it -- the mission
+	 * contract orb and the Dog's act -- captured offscreen (a scene capture, so it does not depend on the game window
+	 * being visible), plus one log line with what the HUD says: the contract headline, beat, provenance and Dog act.
+	 */
+	void WorldShot(const TArray<FString>& Args, UWorld* World, FOutputDevice& Ar)
+	{
+		if (!DeveloperDoor(TEXT("wl.Julius.J1.Qa.WorldShot"), Ar)) { return; }
+		if (Args.Num() != 1) { Ar.Log(TEXT("usage: wl.Julius.J1.Qa.WorldShot <name>")); return; }
+		const FString Name = FPaths::MakeValidFileName(Args[0]);
+		APlayerController* Controller = World != nullptr ? World->GetFirstPlayerController() : nullptr;
+		if (Controller == nullptr) { Ar.Log(TEXT("no player")); return; }
+		ULocalPlayer* Player = Controller->GetLocalPlayer();
+		const UWonderlandMissionSubsystem* Mission = Player != nullptr ? Player->GetSubsystem<UWonderlandMissionSubsystem>() : nullptr;
+		const ARelayDogCharacter* Dog = Cast<ARelayDogCharacter>(Controller->GetPawn());
+		UE_LOG(LogWonderlandUi, Display, TEXT("WLJ1WORLD shot=%s headline=\"%s\" beat=\"%s\" provenance=\"%s\" julius_state=\"%s\" dog_act=\"%s\""), *Name,
+			Mission != nullptr ? *Mission->GetHeadlineLabel() : TEXT(""), Mission != nullptr ? *Mission->GetBeatLabel() : TEXT(""),
+			Mission != nullptr ? *Mission->GetProvenanceBanner() : TEXT(""), Mission != nullptr ? *Mission->GetFollowedJuliusState() : TEXT(""),
+			Dog != nullptr ? WonderlandDogActName(Dog->PerformingAct()) : TEXT("(no dog)"));
+		FVector Location;
+		FRotator Rotation;
+		Controller->GetPlayerViewPoint(Location, Rotation);
+		const float Fov = Controller->PlayerCameraManager != nullptr ? Controller->PlayerCameraManager->GetFOVAngle() : 90.0f;
+		const int32 Width = 1280;
+		const int32 Height = 720;
+		UTextureRenderTarget2D* Target = NewObject<UTextureRenderTarget2D>(GetTransientPackage());
+		Target->RenderTargetFormat = RTF_RGBA8;
+		Target->InitAutoFormat(Width, Height);
+		Target->UpdateResourceImmediate(true);
+		FActorSpawnParameters Spawn;
+		Spawn.ObjectFlags |= RF_Transient;
+		ASceneCapture2D* Capture = World->SpawnActor<ASceneCapture2D>(Location, Rotation, Spawn);
+		if (Capture == nullptr) { Ar.Log(TEXT("no capture actor")); return; }
+		USceneCaptureComponent2D* Component = Capture->GetCaptureComponent2D();
+		Component->FOVAngle = Fov;
+		Component->TextureTarget = Target;
+		Component->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
+		Component->bCaptureEveryFrame = false;
+		Component->bCaptureOnMovement = false;
+		Component->CaptureScene();
+		FlushRenderingCommands();
+		TArray<FColor> Pixels;
+		FTextureRenderTargetResource* Resource = Target->GameThread_GetRenderTargetResource();
+		const bool bRead = Resource != nullptr && Resource->ReadPixels(Pixels) && Pixels.Num() == Width * Height;
+		Capture->Destroy();
+		if (!bRead) { UE_LOG(LogWonderlandUi, Warning, TEXT("WLJ1WORLD shot_error=read_back")); return; }
+		for (FColor& Pixel : Pixels) { Pixel.A = 255; }
+		const FString Path = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots") / TEXT("WLJ1") / (Name + TEXT(".png")));
+		IFileManager::Get().MakeDirectory(*FPaths::GetPath(Path), true);
+		const bool bSaved = FImageUtils::SaveImageByExtension(*Path, FImageView(Pixels.GetData(), Width, Height));
+		UE_LOG(LogWonderlandUi, Display, TEXT("WLJ1WORLD shot_path=%s saved=%d"), *Path, bSaved ? 1 : 0);
+	}
+
 	void ShotIn(const TArray<FString>& Args, UWorld* World, FOutputDevice& Ar)
 	{
 		if (!DeveloperDoor(TEXT("wl.Julius.J1.Panel.ShotIn"), Ar)) { return; }
@@ -5974,6 +6029,9 @@ namespace WonderlandJuliusMissionQa
 	FAutoConsoleCommandWithWorldArgsAndOutputDevice GAfter(TEXT("wl.Julius.J1.Qa.After"),
 		TEXT("Usage: wl.Julius.J1.Qa.After <seconds> wl.Julius.<command> [args]. Runs one Julius console command later (QA sequencing)."),
 		FConsoleCommandWithWorldArgsAndOutputDeviceDelegate::CreateStatic(&After));
+	FAutoConsoleCommandWithWorldArgsAndOutputDevice GWorldShot(TEXT("wl.Julius.J1.Qa.WorldShot"),
+		TEXT("Capture the world from the player's camera offscreen (contract orb, Dog act) and log the HUD's contract state. Dev sessions only."),
+		FConsoleCommandWithWorldArgsAndOutputDeviceDelegate::CreateStatic(&WorldShot));
 	FAutoConsoleCommandWithWorldArgsAndOutputDevice GShotIn(TEXT("wl.Julius.J1.Panel.ShotIn"),
 		TEXT("Usage: wl.Julius.J1.Panel.ShotIn <name> <seconds>. Logs the panel line and saves a UI screenshot under Saved/Screenshots/WLJ1."),
 		FConsoleCommandWithWorldArgsAndOutputDeviceDelegate::CreateStatic(&ShotIn));
