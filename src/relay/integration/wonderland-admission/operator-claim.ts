@@ -962,16 +962,37 @@ type Checked =
 
 /**
  * The rerun decision made before the reservation, bound to the one admission
- * it was made for. `reserveClaim` re-derives it under the lock and refuses if
- * it no longer holds.
+ * it was made for. `reserveClaim` asserts that binding under the lock
+ * ({@link rerunConsentBinds}); it does not re-read the counts.
  */
-interface RerunConsent {
+export interface RerunConsent {
   readonly wonderlandRunId: string;
   readonly serverRunId: string;
   readonly prior: { readonly attempted: PriorCount; readonly completed: PriorCount };
   readonly acknowledgedRerun: boolean;
   readonly priorAttempted: number;
   readonly priorCompleted: number;
+}
+
+/**
+ * THE BINDING ASSERTION under the reservation lock. It re-reads nothing: the
+ * counts are the ones read before the lock. It holds only when the consent was
+ * built for exactly this admission (both run ids), and when its recorded
+ * outcome is the one `decideRerun` gives for its own counts and THIS claim's
+ * phrase, so a consent built for another admission, another phrase, or with
+ * fields edited after the decision cannot reserve.
+ */
+export function rerunConsentBinds(
+  consent: RerunConsent,
+  admission: { readonly runId: string; readonly serverRunId: string },
+  rerunConfirmation: string | null | undefined,
+): boolean {
+  if (consent.wonderlandRunId !== admission.runId || consent.serverRunId !== admission.serverRunId) return false;
+  const decided = decideRerun(consent.prior, rerunConfirmation);
+  return decided.ok
+    && decided.acknowledgedRerun === consent.acknowledgedRerun
+    && decided.priorAttempted === consent.priorAttempted
+    && decided.priorCompleted === consent.priorCompleted;
 }
 
 /** What every event of one claim carries: present only for an acknowledged rerun. */
@@ -1170,14 +1191,11 @@ function reserveClaim(
   // in-flight check (another process) was not proven settled: refuse.
   const lateStarter = inFlightPeers(io.read(), admission).find((peer) => !settledPeers.has(peerKey(peer)));
   if (lateStarter !== undefined) return { kind: 'done', result: inFlightRefusal(admission, lateStarter) };
-  // The consent is this admission's, and the decision still holds.
-  const again = decideRerun(consent.prior, input.rerunConfirmation);
-  if (consent.wonderlandRunId !== admission.runId || consent.serverRunId !== admission.serverRunId
-    || !again.ok || again.acknowledgedRerun !== consent.acknowledgedRerun || again.priorAttempted !== consent.priorAttempted
-    || again.priorCompleted !== consent.priorCompleted) {
+  // A BINDING ASSERTION, not a second decision: the counts are not re-read here.
+  if (!rerunConsentBinds(consent, admission, input.rerunConfirmation)) {
     return {
       kind: 'done',
-      result: fail('julius_rerun_consent_moved', 'The rerun decision does not match this admission. Nothing was claimed or dispatched.', toView(admission, null)),
+      result: fail('julius_rerun_consent_not_bound', 'The rerun consent is not this admission\'s. Nothing was claimed or dispatched.', toView(admission, null)),
     };
   }
   const rerun = rerunFields(consent.acknowledgedRerun, consent.priorAttempted, consent.priorCompleted);

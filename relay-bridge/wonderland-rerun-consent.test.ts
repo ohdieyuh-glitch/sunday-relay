@@ -25,12 +25,14 @@ import {
   priorCompletedCount,
   priorCount,
   recordedPaidAttempts,
+  rerunConsentBinds,
   workflowDispatchArgs,
   type GhResult,
   type GhSpawner,
   type OperatorClaimTool,
   type PriorAttemptRead,
   type PriorAttemptReader,
+  type RerunConsent,
 } from '../src/relay/integration/wonderland-admission/operator-claim';
 import {
   createWonderlandAdmissionService,
@@ -966,6 +968,94 @@ describe('the in-flight guard: one paid run of a mission at a time', () => {
       expect(inFlightPeers(document(), { ...rowOf(RUN_B), missionId: 'julius-other-1' })).toEqual([]);
     } finally {
       fx.cleanup();
+    }
+  });
+});
+
+describe('REVIEW findings on fd7d438d', () => {
+  it('O1: a consent built for one admission never binds another, nor another phrase, nor edited fields', () => {
+    const consent: RerunConsent = {
+      wonderlandRunId: RUN_A, serverRunId: RUN_A, prior: { attempted: 1, completed: 0 },
+      acknowledgedRerun: true, priorAttempted: 1, priorCompleted: 0,
+    };
+    expect(rerunConsentBinds(consent, { runId: RUN_A, serverRunId: RUN_A }, PHRASE)).toBe(true);
+    expect(rerunConsentBinds(consent, { runId: RUN_B, serverRunId: RUN_B }, PHRASE), 'another admission').toBe(false);
+    expect(rerunConsentBinds(consent, { runId: RUN_A, serverRunId: RUN_B }, PHRASE), 'another server run').toBe(false);
+    expect(rerunConsentBinds({ ...consent, wonderlandRunId: RUN_B }, { runId: RUN_A, serverRunId: RUN_A }, PHRASE), 'built for B').toBe(false);
+    expect(rerunConsentBinds(consent, { runId: RUN_A, serverRunId: RUN_A }, null), 'no phrase on this claim').toBe(false);
+    expect(rerunConsentBinds({ ...consent, acknowledgedRerun: false }, { runId: RUN_A, serverRunId: RUN_A }, PHRASE), 'flag edited').toBe(false);
+    expect(rerunConsentBinds({ ...consent, priorAttempted: 2 }, { runId: RUN_A, serverRunId: RUN_A }, PHRASE), 'count edited').toBe(false);
+    expect(rerunConsentBinds({ ...consent, prior: { attempted: 'UNKNOWN', completed: 0 } }, { runId: RUN_A, serverRunId: RUN_A }, PHRASE), 'unknown').toBe(false);
+  });
+
+  it('O3: a stored consent needs both whole counts with at least one above 0; priorAttempted 0 alone is corrupt', async () => {
+    const fx = await admitted(RUN_A, reader(ONE));
+    try {
+      expect((await fx.start({ acknowledgeRerun: PHRASE }))?.status).toBe(202);
+      const name = readdirSync(fx.dir).find((entry) => entry.endsWith('.operator.json')) ?? '';
+      const path = join(fx.dir, name);
+      const original = readFileSync(path, 'utf8');
+      const edit = (fields: Record<string, unknown>, drop: readonly string[] = []) => {
+        const journal = JSON.parse(original) as { claims: Record<string, unknown>[] };
+        for (const claim of journal.claims) {
+          Object.assign(claim, fields);
+          for (const key of drop) delete claim[key];
+        }
+        writeFileSync(path, `${JSON.stringify(journal)}\n`);
+      };
+      for (const [fields, drop] of [
+        [{ priorAttempted: 0, priorCompleted: 0 }, []],
+        [{ priorAttempted: 0 }, ['priorCompleted']],
+        [{ priorAttempted: 0, acknowledgedRerun: false }, []],
+        [{ priorAttempted: -1, priorCompleted: 2 }, []],
+        [{ priorAttempted: 1.5, priorCompleted: 0 }, []],
+      ] as const) {
+        edit(fields, drop);
+        expect(() => readAdmissionDocument(fx.storePath), JSON.stringify(fields)).toThrow();
+      }
+      // A completed-only consent (attempted 0, completed 1) is the step-9 case, and is valid.
+      edit({ priorAttempted: 0, priorCompleted: 1 });
+      expect(readAdmissionDocument(fx.storePath).claims.every((event) => event.priorAttempted === 0 && event.priorCompleted === 1)).toBe(true);
+    } finally {
+      fx.cleanup();
+    }
+  });
+
+  it('D5 behaviourally: the phrase in process.env, or in the bridge env, under any plausible name, neither sends the flag nor satisfies consent', async () => {
+    const names = [
+      'ACKNOWLEDGE_RERUN', 'acknowledge_rerun', 'RERUN_PAID_MISSION', 'JULIUS_RERUN_ACK', 'JULIUS_ACKNOWLEDGE_RERUN',
+      'JULIUS_WONDERLAND_ACKNOWLEDGE_RERUN', 'JULIUS_WONDERLAND_RERUN_ACKNOWLEDGE', 'JULIUS_WONDERLAND_RERUN_CONFIRM',
+      'RELAY_ACKNOWLEDGE_RERUN', 'WONDERLAND_ACKNOWLEDGE_RERUN', 'RERUN_CONFIRM', 'INPUT_ACKNOWLEDGE_RERUN',
+    ];
+    const saved = new Map(names.map((name) => [name, process.env[name]]));
+    for (const name of names) process.env[name] = PHRASE;
+    const bridgeEnv = Object.fromEntries(names.map((name) => [name, PHRASE]));
+    try {
+      const counted = await admitted(RUN_A, reader(ONE), fakeGh(), bridgeEnv);
+      try {
+        const refused = await counted.start();
+        expect(refused?.status).toBe(409);
+        expect(kindOf(refused?.body)).toBe('julius_rerun_consent_required');
+        expect(counted.journal()).toEqual([]);
+        expect(workflowRuns(counted.gh.calls)).toEqual([]);
+      } finally {
+        counted.cleanup();
+      }
+      const zero = await admitted(RUN_A, reader(ZERO), fakeGh(), bridgeEnv);
+      try {
+        expect((await zero.start())?.status).toBe(202);
+        const runs = workflowRuns(zero.gh.calls);
+        expect(runs).toHaveLength(1);
+        expect(ackFlags(runs[0] ?? [])).toEqual([]);
+        for (const event of zero.journal()) expect(event).not.toHaveProperty('acknowledgedRerun');
+      } finally {
+        zero.cleanup();
+      }
+    } finally {
+      for (const [name, value] of saved) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
     }
   });
 });
