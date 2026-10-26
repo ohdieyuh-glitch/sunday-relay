@@ -640,3 +640,27 @@ meaning, and none will stop being nullable. `state` is a closed set
 breaking change announced here. `role` is the three permanent peers and never a
 `SPECIALIST:*` — a specialist is a bounded child of a slot, and
 `inspectSubagents` is where its record lives.
+
+## Is Julius executing? (`/events` `execution`)
+
+`GET /relay-api/wonderland/julius/missions/{wljRunId}/events` says whether
+Julius itself is running. The client must not infer it. `live: true` only
+means the bound paid run is queued or in progress, and that includes the
+spend-tag and paid-slot gates and the preflight. A run can be `live` and
+never execute Julius at all: run 40258482240 failed at the paid-slot code
+gate. So a client drives "Julius executing" from `execution`, never from
+`live`:
+
+| `execution` | Meaning | The client shows |
+|---|---|---|
+| `null` | No run is bound (`source: "none"`). Unknown, not "not started". | /status alone |
+| `starting` | The run is live. The LIVE step (`LIVE: run the first real Julius mission` in job `Preflight, then the live mission`) has not been seen, and no task sample has arrived. | the activation sequence, never "executing" |
+| `executing` | The LIVE step was seen in progress, or a phase sample with a task (`marker: null`) arrived, and the run is live. An `idle` marker alone is not execution. | Julius at work: phases drive the beats |
+| `finished` | The LIVE step succeeded. **Not an outcome.** | "grading": the outcome is /result `checkerVerdict` only |
+| `interrupted` | Julius started, then the LIVE step failed, was cancelled or timed out, or the run ended without the LIVE step succeeding: a **confirmed** failure or cancellation, reported as soon as GitHub does. `stoppedAt` names the step. | stop the mission presentation now; no success sequence |
+| `did_not_start` | The run finished and the LIVE step never ran. `stoppedAt: {job, step}` names the first step that failed, was cancelled or timed out (or else the job; `null` if none did). | "Mission did not start", never "Julius failed" |
+
+`executionStartedAt` is when the LIVE step, or else the first task sample,
+was first seen started. It is `null` when that is unknown. Every field is
+computed from the run's own job, step and phase events, across the whole
+run rather than one page, so a cursor or a reconnect cannot change it.
