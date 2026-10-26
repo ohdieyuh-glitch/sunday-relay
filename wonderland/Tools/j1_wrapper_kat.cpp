@@ -1162,6 +1162,9 @@ int main()
 		const FCommandOutcome Next = Rig.Session.LiveEventsRequest("c7:abc");
 		Expect(Next.bSent && Contains(Next.Request.Url, "&after=c7%3Aabc"), "live_events_cursor_encoded");
 		Expect(!Rig.Session.LiveEventsRequest("c7 x").bSent, "live_events_cursor_with_space_refused");
+		Rig.Session.SetNativeSessionToken("");
+		Expect(!Rig.Session.LiveEventsRequest("").bSent, "live_events_need_a_session");
+		Rig.Session.SetNativeSessionToken("SECRET_TOKEN_VALUE");
 		Expect(!Rig.Session.LiveEventsRequest(std::string(65, 'a')).bSent, "live_events_cursor_too_long_refused");
 		(void)Rig.Session.SetBaseUrl("http://example.com");
 		Expect(!Rig.Session.LiveEventsRequest("").bSent, "live_events_loopback_only");

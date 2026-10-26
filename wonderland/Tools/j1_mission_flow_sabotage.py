@@ -511,61 +511,102 @@ MUTATIONS = [
 ]
 
 
+# CLIENT MUTATIONS (REVIEW c573b54e, item 6): flip one rule in the J1 client wrapper; the WRAPPER KAT must then fail.
+CLIENT = "wonderland/Source/Wonderland/WonderlandJuliusMissionClient.cpp"
+CLIENT_MUTATIONS = [
+    (
+        "client_polls_without_a_session",
+        "NowMs >= NextPollAtUtcMs && bSessionReady) // CLIENT_NO_POLL_WITHOUT_SESSION",
+        "NowMs >= NextPollAtUtcMs) // CLIENT_NO_POLL_WITHOUT_SESSION",
+    ),
+]
+
+TARGETS = {
+    # target: (mutated file, KAT source, extra sources, include dirs, copy the whole module tree)
+    "flow": (FLOW, "wonderland/Tools/j1_mission_flow_kat.cpp",
+             [FLOW, "wonderland/Source/Wonderland/WonderlandJuliusMissionProgress.cpp",
+              "wonderland/Source/Wonderland/WonderlandJuliusMissionLogic.cpp"],
+             ["wonderland/Source/Wonderland"], False),
+    # The wrapper KAT reads wonderland/Source/Wonderland/Julius from its working directory, so the module tree is copied
+    # and the KAT runs from the copy's root.
+    "client": (CLIENT, "wonderland/Tools/j1_wrapper_kat.cpp",
+               [CLIENT, "wonderland/Source/Wonderland/WonderlandJuliusMissionProgress.cpp",
+                "wonderland/Source/Wonderland/WonderlandJuliusMissionLogic.cpp"],
+               ["wonderland/Source/Wonderland", "wonderland/Source"], True),
+}
+
+
+def build_and_run(cxx, target, old, new):
+    """Returns (built, kat_exit_code)."""
+    mutated, kat, sources, includes, whole_tree = TARGETS[target]
+    tmp = tempfile.mkdtemp(prefix="j1-sab-")
+    try:
+        if whole_tree:
+            shutil.copytree(os.path.join(ROOT, "wonderland/Source/Wonderland"), os.path.join(tmp, "wonderland/Source/Wonderland"))
+        for needed in NEEDED + [kat, mutated]:
+            dst = os.path.join(tmp, needed)
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            shutil.copy2(os.path.join(ROOT, needed), dst)
+        if old is not None:
+            path = os.path.join(tmp, mutated)
+            text = open(path, encoding="utf-8").read()
+            open(path, "w", encoding="utf-8").write(text.replace(old, new, 1))
+        exe = os.path.join(tmp, "kat")
+        files = [os.path.join(tmp, kat)] + [os.path.join(tmp, f) for f in sources]
+        if os.path.splitext(os.path.basename(cxx))[0].lower() == "cl":
+            # MSVC (CXX=cl from a VS developer prompt): the box that builds UE has no g++.
+            exe += ".exe"
+            command = [cxx, "/nologo", "/std:c++17", "/EHsc", "/Od", "/w"]
+            for inc in includes:
+                command += ["/I", os.path.join(tmp, inc)]
+            command += files + ["/Fe" + exe, "/Fo" + tmp + os.sep]
+        else:
+            command = [cxx, "-std=c++17", "-O0", "-w"]
+            for inc in includes:
+                command += ["-I", os.path.join(tmp, inc)]
+            command += files + ["-o", exe]
+        build = subprocess.run(command, capture_output=True, text=True)
+        if build.returncode != 0:
+            return False, build.stdout[-400:] + build.stderr[-400:]
+        run = subprocess.run([exe], capture_output=True, text=True, timeout=120, cwd=tmp)
+        return True, run.returncode
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def main():
     cxx = os.environ.get("CXX", "g++").strip()
-    source = open(os.path.join(ROOT, FLOW), encoding="utf-8").read()
-    for name, old, _new in MUTATIONS:
+    plan = [("flow", m) for m in MUTATIONS] + [("client", m) for m in CLIENT_MUTATIONS]
+    for target, (name, old, _new) in plan:
+        source = open(os.path.join(ROOT, TARGETS[target][0]), encoding="utf-8").read()
         count = source.count(old)
         if count != 1:
             print(f"SABOTAGE TARGET BROKEN {name}: found {count} times")
             return 2
+    # A baseline per target: the unmutated copy must build and PASS, or every "catch" below would be meaningless.
+    for target in TARGETS:
+        built, code = build_and_run(cxx, target, None, None)
+        if not built or code != 0:
+            print(f"SABOTAGE BASELINE FAIL {target}: built={built} result={code}")
+            return 2
+        print(f"SABOTAGE BASELINE PASS {target}")
     survived = []
-    for name, old, new in MUTATIONS:
-        tmp = tempfile.mkdtemp(prefix="j1-flow-sab-")
-        try:
-            for needed in NEEDED:
-                src = os.path.join(ROOT, needed)
-                dst = os.path.join(tmp, needed)
-                os.makedirs(os.path.dirname(dst), exist_ok=True)
-                shutil.copy2(src, dst)
-            path = os.path.join(tmp, FLOW)
-            text = open(path, encoding="utf-8").read()
-            open(path, "w", encoding="utf-8").write(text.replace(old, new, 1))
-            exe = os.path.join(tmp, "kat")
-            sources = [
-                os.path.join(tmp, "wonderland/Tools/j1_mission_flow_kat.cpp"),
-                os.path.join(tmp, FLOW),
-                os.path.join(tmp, "wonderland/Source/Wonderland/WonderlandJuliusMissionProgress.cpp"),
-                os.path.join(tmp, "wonderland/Source/Wonderland/WonderlandJuliusMissionLogic.cpp"),
-            ]
-            include = os.path.join(tmp, "wonderland/Source/Wonderland")
-            if os.path.splitext(os.path.basename(cxx))[0].lower() == "cl":
-                # MSVC (CXX=cl from a VS developer prompt): the box that builds UE has no g++.
-                exe += ".exe"
-                command = [cxx, "/nologo", "/std:c++17", "/EHsc", "/Od", "/w", "/I", include] + sources + [
-                    "/Fe" + exe, "/Fo" + tmp + os.sep]
-            else:
-                command = [cxx, "-std=c++17", "-O0", "-w", "-I", include] + sources + ["-o", exe]
-            build = subprocess.run(command, capture_output=True, text=True)
-            if build.returncode != 0:
-                survived.append(name)
-                print(f"SABOTAGE COMPILE FAIL {name}: not a catch")
-                print(build.stderr[:400])
-                continue
-            run = subprocess.run([exe], capture_output=True, text=True, timeout=60)
-            if run.returncode == 0:
-                survived.append(name)
-                print(f"SABOTAGE SURVIVED {name}")
-            else:
-                print(f"SABOTAGE CAUGHT {name}")
-        finally:
-            shutil.rmtree(tmp)
+    for target, (name, old, new) in plan:
+        built, code = build_and_run(cxx, target, old, new)
+        if not built:
+            survived.append(name)
+            print(f"SABOTAGE COMPILE FAIL {name}: not a catch")
+            print(code)
+        elif code == 0:
+            survived.append(name)
+            print(f"SABOTAGE SURVIVED {name}")
+        else:
+            print(f"SABOTAGE CAUGHT {name}")
     if survived:
         print(f"SABOTAGE RESULT FAIL survived={len(survived)}: {' '.join(survived)}")
         return 1
-    print(f"SABOTAGE RESULT PASS caught={len(MUTATIONS)}/{len(MUTATIONS)}")
+    print(f"SABOTAGE RESULT PASS caught={len(plan)}/{len(plan)}")
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(main())

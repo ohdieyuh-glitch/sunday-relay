@@ -1454,7 +1454,14 @@ namespace WonderlandJuliusMissionFlow
 		const FJson* Reset = Field(Root, "reset");
 		if (Reset != nullptr && Reset->Kind != EJsonKind::Null && !LiveBool(Reset, Read.bReset)) { return Out; }
 		const FJson* Next = Field(Root, "next");
-		if (Next != nullptr && Next->Kind != EJsonKind::Null && !LivePlainText(Next, 64, true, Read.Next)) { return Out; }
+		if (Next != nullptr && Next->Kind != EJsonKind::Null)
+		{
+			if (!LivePlainText(Next, 64, false, Read.Next)) { return Out; }
+			for (const char Ch : Read.Next)
+			{
+				if (Ch == ' ') { return Out; } // FLOW_LIVE_CURSOR_MATCHES_REQUEST (LiveEventsRequest refuses <= 0x20)
+			}
+		}
 		Read.bParsed = true;
 		return Read;
 	}
@@ -1553,7 +1560,7 @@ namespace WonderlandJuliusMissionFlow
 		if (Feed.Source() == ELiveSource::GithubActionsRecorded)
 		{
 			Out.Header = "RECORDED RUN, NOT LIVE" + RunRef; // FLOW_RECORDED_IS_NEVER_LIVE
-			if (!Feed.RunConclusion().empty()) { Out.Header += " -- GitHub conclusion: " + Feed.RunConclusion(); }
+			if (!Feed.RunConclusion().empty()) { Out.Header += " -- GitHub workflow conclusion: " + Feed.RunConclusion() + " (not the mission result)"; }
 		}
 		else if (Out.bLive)
 		{
@@ -1563,8 +1570,9 @@ namespace WonderlandJuliusMissionFlow
 		}
 		else
 		{
-			Out.Header = std::string("Run ") + (Feed.Run() == ELiveRunStatus::Completed ? "finished" : "not running")
-				+ (Feed.RunConclusion().empty() ? std::string() : ": " + Feed.RunConclusion()) + RunRef;
+			Out.Header = std::string("GitHub workflow ") + (Feed.Run() == ELiveRunStatus::Completed ? "finished" : "not running")
+				+ (Feed.RunConclusion().empty() ? std::string() : ": " + Feed.RunConclusion() + " (workflow conclusion, not the mission result)")
+				+ RunRef; // FLOW_LIVE_CONCLUSION_IS_THE_WORKFLOWS
 		}
 		if (Feed.IsStale())
 		{

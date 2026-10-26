@@ -386,9 +386,19 @@ void SWonderlandJuliusMissionFlow::Rebuild()
 	FString JuliusLine;
 	if (View.bShowProgress && Live != nullptr && !Live->ClientRunId().IsEmpty())
 	{
-		JuliusLine = Live->HasNativeSession()
-			? FString::Printf(TEXT("Julius: connected to the mission bridge (%s)."), *Live->EndpointBase())
-			: FString(TEXT("Julius: NOT CONNECTED. This mission is still admitted and nothing is re-sent. To watch it, open the terminal (Ctrl+T) and type /brain pair <code>."));
+		if (Live->HasNativeSession())
+		{
+			JuliusLine = FString::Printf(TEXT("Julius: connected to the mission bridge (%s)."), *Live->EndpointBase());
+		}
+		else if (!Live->CanStartNewMission())
+		{
+			// REVIEW LOW: "still admitted" only while the run is live; a terminal run is not described as admitted.
+			JuliusLine = TEXT("Julius: NOT CONNECTED. This mission is still admitted and nothing is re-sent. To watch it, open the terminal (Ctrl+T) and type /brain pair <code>.");
+		}
+		else
+		{
+			JuliusLine = TEXT("Julius: not connected to the mission bridge.");
+		}
 	}
 	bool bLiveRun = false;
 	FString LiveHeader;

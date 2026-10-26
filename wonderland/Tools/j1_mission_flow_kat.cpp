@@ -487,14 +487,14 @@ const ABSENT_PHASE = {
 		Expect(!ParseLiveEvents(LiveWlj, 200, LiveBody(Swap(LiveTop, "\"github_actions\"", "\"github_actions_recorded\""), LiveStep)).bParsed, "recorded+live refused");
 		FLiveFeed RecDone;
 		RecDone.Apply(ParseLiveEvents(LiveWlj, 200, LiveBody(Swap(RecTop, "\"runConclusion\":null", "\"runConclusion\":\"failure\""), LiveStep)));
-		Expect(PanelHas(LivePanelFor(RecDone, 0), "RECORDED RUN, NOT LIVE (GitHub Actions run 18733051234) -- GitHub conclusion: failure"), "recorded shows GitHub's conclusion");
+		Expect(PanelHas(LivePanelFor(RecDone, 0), "RECORDED RUN, NOT LIVE (GitHub Actions run 18733051234) -- GitHub workflow conclusion: failure (not the mission result)"), "recorded shows GitHub's conclusion");
 		++LiveCases;
 
 		// Finished run: not live, conclusion shown; completed+live refused.
 		const std::string DoneTop = Swap(Swap(Swap(LiveTop, "\"live\":true", "\"live\":false"), "\"in_progress\"", "\"completed\""), "\"runConclusion\":null", "\"runConclusion\":\"success\"");
 		FLiveFeed Done;
 		Done.Apply(ParseLiveEvents(LiveWlj, 200, LiveBody(DoneTop, LiveStep)));
-		Expect(!Done.IsLive() && PanelHas(LivePanelFor(Done, 0), "Run finished: success"), "finished header");
+		Expect(!Done.IsLive() && PanelHas(LivePanelFor(Done, 0), "GitHub workflow finished: success (workflow conclusion, not the mission result)"), "finished header");
 		Expect(!ParseLiveEvents(LiveWlj, 200, LiveBody(Swap(LiveTop, "\"in_progress\"", "\"completed\""), LiveStep)).bParsed, "completed+live refused");
 		Expect(!PanelHas(LivePanelFor(Done, 0), "last sampled:"), "no phase line without phases");
 		++LiveCases;
@@ -627,6 +627,10 @@ const ABSENT_PHASE = {
 			Expect(!ParseLiveEvents(LiveWlj, 200, LiveBody(LiveTop, Swap(LivePhase, "\"repairCycle\":1", "\"repairCycle\":\"x\""))).bParsed, "raw x is not the wire form");
 			++LiveCases;
 		}
+		// REVIEW LOW: the kept cursor is exactly what the request will send (no space, not empty).
+		Expect(!ParseLiveEvents(LiveWlj, 200, Swap(Good, "\"next\":\"c7\"", "\"next\":\"c 7\"")).bParsed, "cursor with a space refused");
+		Expect(!ParseLiveEvents(LiveWlj, 200, Swap(Good, "\"next\":\"c7\"", "\"next\":\"\"")).bParsed, "empty cursor refused");
+		++LiveCases;
 		// The real folded step name from the workflow.
 		Expect(ParseLiveEvents(LiveWlj, 200, Swap(Good, "LIVE: run the first real Julius mission", "Preflight complete - stopping here (no confirm_live given)")).bParsed, "real folded step name");
 		++LiveCases;

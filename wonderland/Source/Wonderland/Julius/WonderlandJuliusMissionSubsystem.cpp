@@ -749,6 +749,15 @@ void UWonderlandJuliusMissionSubsystem::CompleteMissionRead(
 	Slot.Body = Body;
 }
 
+namespace
+{
+	/** REVIEW LOW (c573b54e): a bridge-supplied string in a JSON log line is escaped, never spliced raw. */
+	FString JsonEscaped(const FString& In)
+	{
+		return In.Replace(TEXT("\\"), TEXT("\\\\")).Replace(TEXT("\""), TEXT("\\\""));
+	}
+}
+
 void UWonderlandJuliusMissionSubsystem::PollLiveEvents()
 {
 	using namespace WonderlandJuliusMissionFlow;
@@ -866,7 +875,7 @@ void UWonderlandJuliusMissionSubsystem::CompleteLiveRead(
 			TEXT("{\"event\":\"live_read\",\"wlj_run_id\":\"%s\",\"workflow_run_id\":\"%s\",\"source\":\"%s\",\"live\":%s,\"stale\":%s,\"events_new\":%d,\"events_shown\":%d,\"cursor\":\"%s\"}"),
 			*ForRunId, *ToF(Feed.WorkflowRunId()), SourceName, Feed.IsLive() ? TEXT("true") : TEXT("false"),
 			Feed.IsStale() ? TEXT("true") : TEXT("false"), static_cast<int32>(Read.Events.size()),
-			static_cast<int32>(Feed.Events().size()), *ToF(Feed.Cursor()));
+			static_cast<int32>(Feed.Events().size()), *JsonEscaped(ToF(Feed.Cursor())));
 	}
 }
 
