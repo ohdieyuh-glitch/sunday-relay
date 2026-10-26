@@ -1,13 +1,13 @@
 JULIUS-CHECKPOINT-V1
 repo: ohdieyuh-glitch/sunday-relay
 prior: 2528ac5c0f0d4303051123a7592ef18e3552ba74
-checkpoint: 53451ee1cda5f041f186c149f4eee435897b87f0
+checkpoint: e94554990cd3d79b6ad31fe3d240167c6c9ad23c
 key-spki-sha256: 12c9b1853c4c33322241273f386b0fd08fdefd08134c911dd4024c5bb5cdff13
-nonce: 91718a8bbea4a50f1b1e2c08267d4a4c
-issued: 2026-10-25T16:25:00Z
-expires: 2026-12-24T16:25:00Z
+nonce: 22665cc1b73dce20fe7718e819ab1fe2
+issued: 2026-10-26T01:28:00Z
+expires: 2027-01-23T01:28:00Z
 by: INDEPENDENT_REVIEW
-count: 43
+count: 48
 1.sha: 3f20fc1ace7b157d4ff2673959c98998564ef43b
 1.tree: 75a61ea2721429a4c7f0849ecc6fffec9e8f6e7f
 1.basis: PR #392. The founder's exact-head APPROVED review at 5936fde4 (same tree), and Kaisin INDEPENDENT_REVIEW records ce9963 and 08a19b. These are unsigned, self-registered reviewer records, NOT Skywalker's review. The basis is carried verbatim from docs/provenance/checkpoint-2528ac5c-f539cab2.unsigned.txt and was not re-reviewed by the independent review session.
@@ -137,6 +137,21 @@ count: 43
 43.sha: 53451ee1cda5f041f186c149f4eee435897b87f0
 43.tree: c93efb78c09b486aa2b5d06afe8630bd02b05bde
 43.basis: PR #463 (governed-lander repair, replacing #417/#451/#452/#453). Covered by the independent review session's exact-head verification of the combined tree at 53451ee1cda5f041f186c149f4eee435897b87f0. That comprises: security and provenance/e2e re-verification PASS WITH FINDINGS at 9a70a917; delta verification of a960a4bb, 27373446, 4c9d5791 and 01ffd5eb (queue seed); identity-rule security verification PASS WITH FINDINGS at 5792f2af; and a doc-only delta at 53451ee1. Not reviewed commit by commit.
+44.sha: 22d4fdeed3e104d71b22fb2343dfc2d082935b15
+44.tree: 0db63b64955c8c8ff8787c2beaab468d97c86bfe
+44.basis: Installer commit of the dual-signed checkpoint attestation for 53451ee1 (governed bootstrap run by the founder; App-authored, single parent 53451ee1, checkpoint directory only).
+45.sha: bacf68fb91a228b937d1a1737fbe18c33f5fe59c
+45.tree: 771be0d38d870d2a0a5ece503b7979fe7402cb57
+45.basis: PR #459 (paid stack + graded J1), landed by the governed lander: exact-head INDEPENDENT_REVIEW clearance plus founder-approval signature; audit ref julius-governed-audit/pr/459.
+46.sha: d2da6a9f35562efd82a56a1314ff3aea4a6c2bf3
+46.tree: 44cf7d5a6de8f9ed527d66109f7ea9556ea6fd3e
+46.basis: PR #407 (bridge paid gate on the attested chain), landed by the governed lander: exact-head INDEPENDENT_REVIEW clearance plus founder-approval signature; audit ref julius-governed-audit/pr/407.
+47.sha: 7f909165afb5dcd9f7a9ff2c84768c2be8d98996
+47.tree: c9622f63c71a3a7a42b60bee3541e8144934e9fc
+47.basis: PR #448 (live-event stream, evidence reader, preflight run-id fix), landed by the governed lander: exact-head INDEPENDENT_REVIEW clearance plus founder-approval signature; audit ref julius-governed-audit/pr/448.
+48.sha: e94554990cd3d79b6ad31fe3d240167c6c9ad23c
+48.tree: 977dbc7b67e9d3a4ea3e02ed7b986c04c4026507
+48.basis: PR #469: the governed queue gains one line, 468 (and its pinned test line), and the bootstrap installer read-back counts a GitHub "renamed" row as its removal plus addition (installerReadBackProblems only, with targeted tests). Reviewed by the independent review session at this exact commit on main 7f909165, including a replay of the refused live compare 8eb2398b...0488131e and three mutation checks.
 tcb-count: 20
 tcb.1.path: .github/julius-landing/reviewer-ed25519.pub
 tcb.1.sha256: d1be6e15b19f0be375d300c9ae3530c32c59c22e072f3d26a6f5026e395b5815
@@ -149,7 +164,7 @@ tcb.4.sha256: 1e0ffa3c4e04c9e79f65b272b4fd17e1f7c9971213b2b2620b1b39b016c45a39
 tcb.5.path: .github/julius-landing/governed-land.mjs
 tcb.5.sha256: 1e605b744581ee6690e598746cbfd5d5cb54880a675b8455f668ee6b2b067dc9
 tcb.6.path: .github/julius-landing/governed-queue.txt
-tcb.6.sha256: 961520f20ae47c7459543166ddb87424cedb5ac82aac46a1d7a556838ad069d3
+tcb.6.sha256: 897f4bad110c9ccd997a2945661cad98e8cf7e6a0d326bd10633eca2a1beb971
 tcb.7.path: .github/julius-landing/main-ruleset.json
 tcb.7.sha256: 186d7ad0c64266f221e58abc69454fc240ef8328af171054e4c4facb50a45df8
 tcb.8.path: .github/julius-landing/reviewer-tools.mjs
@@ -175,6 +190,6 @@ tcb.17.sha256: 6a6e9b8ef5a49dfd165657b3e5d44fbbe4f5f33217e2dfa89b3b3857e18ecfd2
 tcb.18.path: scripts/julius-review-currency.mjs
 tcb.18.sha256: 786aa3ff76f325ae3c41f488c1451ed5a2088119daf61d2689497e928081d267
 tcb.19.path: scripts/julius-governed-bootstrap.mjs
-tcb.19.sha256: 7f796d49b48004cd358a0ce453c601ee510b358420eb98554af1f4309cce6119
+tcb.19.sha256: 6056f80e57c74d2f151cb14092dcf00cdc17e3918a3fe6e3ab9a86d4522a9c7e
 tcb.20.path: scripts/julius-main-monotonicity.mjs
 tcb.20.sha256: dfbe1f4230d89b28c57727aa288b3e4106c4a0877d9f829e61f8dd620645d37f

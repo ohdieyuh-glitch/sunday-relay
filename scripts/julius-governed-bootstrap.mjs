@@ -253,7 +253,13 @@ export function installerReadBackProblems({ commit, compare, expectedTree, targe
   if (compare?.status !== 'ahead' || compare?.ahead_by !== 1 || compare?.behind_by !== 0 || files === null) {
     problems.push('the target...installer diff is not one commit ahead');
   } else {
-    const rows = files.map((file) => `${file?.status}:${file?.filename}`).sort();
+    // GitHub reports a replaced file whose text is similar enough as one `renamed` row: the same
+    // removal and addition. A `renamed` row without both names stays one row and is refused.
+    const rows = files.flatMap((file) => (
+      file?.status === 'renamed' && typeof file?.filename === 'string' && typeof file?.previous_filename === 'string'
+        ? [`removed:${file.previous_filename}`, `added:${file.filename}`]
+        : [`${file?.status}:${file?.filename}`]
+    )).sort();
     const wanted = [...plan.added.map((path) => `added:${path}`), ...plan.removed.map((path) => `removed:${path}`)].sort();
     if (rows.length !== wanted.length || rows.some((row, index) => row !== wanted[index])) {
       problems.push(`the target...installer diff is ${rows.join(', ') || 'empty'}, not exactly ${wanted.join(', ')}`);

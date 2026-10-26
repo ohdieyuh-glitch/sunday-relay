@@ -331,6 +331,72 @@ describe('the bootstrap decision fails closed', () => {
   });
 });
 
+describe('the installer read-back accepts a replacement GitHub reports as a rename, and nothing else', () => {
+  const readBack = (boot as unknown as {
+    installerDiffPlan: (target: string, names: string[]) => { added: string[]; removed: string[] };
+    installerReadBackProblems: (input: Record<string, unknown>) => string[];
+  });
+  const DIR = '.github/julius-landing/checkpoints';
+  const plan = readBack.installerDiffPlan(TARGET, [`${PREV}.txt`, `${PREV}.sig`, `${PREV}.founder.sig`]);
+  const commit = { tree: { sha: TREE }, parents: [{ sha: TARGET }], message: boot.INSTALLER_COMMIT_MESSAGE };
+  const sigRows = [
+    { status: 'removed', filename: `${DIR}/${PREV}.sig` },
+    { status: 'removed', filename: `${DIR}/${PREV}.founder.sig` },
+    { status: 'added', filename: `${DIR}/${TARGET}.sig` },
+    { status: 'added', filename: `${DIR}/${TARGET}.founder.sig` },
+  ];
+  const problems = (files: unknown[]) => readBack.installerReadBackProblems({
+    commit, expectedTree: TREE, target: TARGET, plan, compare: { status: 'ahead', ahead_by: 1, behind_by: 0, files },
+  });
+
+  it('(f) the plain removed and added rows still pass', () => {
+    expect(problems([
+      ...sigRows,
+      { status: 'removed', filename: `${DIR}/${PREV}.txt` },
+      { status: 'added', filename: `${DIR}/${TARGET}.txt` },
+    ])).toEqual([]);
+  });
+
+  it('(a) the attestation text reported as renamed old to new, beside the signature rows, passes', () => {
+    expect(problems([
+      ...sigRows,
+      { status: 'renamed', filename: `${DIR}/${TARGET}.txt`, previous_filename: `${DIR}/${PREV}.txt` },
+    ])).toEqual([]);
+  });
+
+  it('(b) a rename from a path that is not a checkpoint file is refused', () => {
+    expect(problems([
+      ...sigRows,
+      { status: 'removed', filename: `${DIR}/${PREV}.txt` },
+      { status: 'renamed', filename: `${DIR}/${TARGET}.txt`, previous_filename: 'scripts/julius-governed-bootstrap.mjs' },
+    ]).join('\n')).toMatch(/not exactly/u);
+  });
+
+  it('(c) a rename without previous_filename stays one row and is refused', () => {
+    expect(problems([
+      ...sigRows,
+      { status: 'removed', filename: `${DIR}/${PREV}.txt` },
+      { status: 'renamed', filename: `${DIR}/${TARGET}.txt` },
+    ]).join('\n')).toMatch(/renamed:.*not exactly/u);
+  });
+
+  it('(d) a modified checkpoint file is refused', () => {
+    expect(problems([
+      ...sigRows,
+      { status: 'removed', filename: `${DIR}/${PREV}.txt` },
+      { status: 'modified', filename: `${DIR}/${TARGET}.txt` },
+    ]).join('\n')).toMatch(/not exactly/u);
+  });
+
+  it('(e) an extra added file is refused', () => {
+    expect(problems([
+      ...sigRows,
+      { status: 'renamed', filename: `${DIR}/${TARGET}.txt`, previous_filename: `${DIR}/${PREV}.txt` },
+      { status: 'added', filename: `${DIR}/extra.txt` },
+    ]).join('\n')).toMatch(/not exactly/u);
+  });
+});
+
 describe('runBootstrap talks to GitHub only with a token and never prints it', () => {
   const source = readFileSync(join(ROOT, 'scripts/julius-governed-bootstrap.mjs'), 'utf8');
 
