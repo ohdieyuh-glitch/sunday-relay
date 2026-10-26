@@ -114,6 +114,7 @@ describe('wonderland status', () => {
       exactMissionResult: false,
       exactMissionProgress: false,
       exactMissionEvents: false,
+      exactMissionStart: false,
       exactCompanion: false,
     });
     for (const raw of [

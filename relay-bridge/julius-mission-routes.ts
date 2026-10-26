@@ -162,6 +162,15 @@ export interface JuliusMissionRoutePorts {
     handle(request: JuliusMissionRouteRequest): Promise<JuliusMissionRouteResult | null>;
   };
   /**
+   * The founder's in-Wonderland Start of an admitted mission, injected the
+   * same way. The handler runs the operator claim core; this file does not
+   * import it.
+   */
+  readonly wonderlandMissionStartBridge?: {
+    matches(path: string): boolean;
+    handle(request: JuliusMissionRouteRequest): Promise<JuliusMissionRouteResult | null>;
+  };
+  /**
    * Wonderland companion read, one path shape, injected the same way.
    * This file does not import the companion module.
    */
@@ -217,6 +226,9 @@ export async function handleJuliusMissionRoute(
   }
   if (ports.wonderlandMissionEventsBridge !== undefined && ports.wonderlandMissionEventsBridge.matches(request.path)) {
     return ports.wonderlandMissionEventsBridge.handle(request);
+  }
+  if (ports.wonderlandMissionStartBridge !== undefined && ports.wonderlandMissionStartBridge.matches(request.path)) {
+    return ports.wonderlandMissionStartBridge.handle(request);
   }
   if (ports.wonderlandCompanionBridge !== undefined && ports.wonderlandCompanionBridge.matches(request.path)) {
     return ports.wonderlandCompanionBridge.handle(request);
