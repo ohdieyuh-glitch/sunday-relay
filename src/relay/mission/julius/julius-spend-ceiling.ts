@@ -298,7 +298,28 @@ export function authorizeJuliusLiveSpend(input: {
  * provider call. It is not a provider invoice.
  */
 export {
+  classifyJuliusPriorRun,
+  classifyJuliusSpentTags,
   interpretJuliusSpentTags,
+  juliusAttemptMarkerBindings,
+  juliusAttemptMarkerLine,
+  juliusBoundArtifactId,
+  juliusPriorRunLine,
+  juliusPsqlTsvRows,
+  juliusSpentTagBinding,
   juliusSpentTagMessage,
+  JULIUS_EVIDENCE_MANIFEST_FILE,
+  JULIUS_INWORLD_VERDICT_ARTIFACT,
+  JULIUS_INWORLD_VERDICT_FILE,
+  JULIUS_LIVE_EVIDENCE_ARTIFACT,
+  JULIUS_LIVE_STEP_NAME,
+  JULIUS_MISSION_JOB_NAME,
+  JULIUS_PAID_WORKFLOW_PATH,
+  JULIUS_ZERO_ROW_EVIDENCE_FILES,
+  type JuliusPriorRunAudit,
+  type JuliusPriorRunClassification,
+  type JuliusPriorRunObservation,
+  type JuliusPriorRunProof,
   type JuliusSpentTag,
+  type JuliusWorkflowRunBinding,
 } from './julius-spent-tag-record';

@@ -925,9 +925,16 @@ jobs:
             echo "recorded_paid_attempts_not_a_count: '$RECORDED_PAID_ATTEMPTS'" >&2
             exit 1
           }
-          # Either list failing means the previous-run state is UNKNOWN, and
+          # THE ATTEMPTED MARKERS ARE COUNTED LATER, NOT HERE (founder decision
+          # "Count only real spend"). Whether an `<ns>-attempted` marker counts
+          # depends on whether its own run READABLY made no provider call, and
+          # that proof is the TypeScript the combined cap uses. It runs in the
+          # built entrypoint at "Gate: attempted markers and the combined cap,
+          # before the attempted marker", after the build and before this run
+          # writes its own marker. A COMPLETED marker always counts, here.
+          # The list failing means the previous-run state is UNKNOWN, and
           # unknown is never treated as zero.
-          if ! completed=$(count_markers "${MARKER_NAMESPACE}-completed") || ! attempted=$(count_markers "${MARKER_NAMESPACE}-attempted"); then
+          if ! completed=$(count_markers "${MARKER_NAMESPACE}-completed"); then
             echo 'julius_first_live_marker_unknown: the marker list could not be read.' >&2
             if [ "$ACKNOWLEDGE_RERUN" != 'RERUN PAID MISSION' ]; then
               echo 'Refusing to pay while the previous-run state is unknown. Re-dispatch with' >&2
@@ -943,7 +950,7 @@ jobs:
           # TESTED ON ITS OWN: concatenating them lets an empty answer hide
           # behind the other's digits, which is how this check first passed a
           # blank count as zero.
-          elif ! is_count "$completed" || ! is_count "$attempted"; then
+          elif ! is_count "$completed"; then
             echo 'julius_first_live_marker_unknown: the marker list did not answer with a count.' >&2
             if [ "$ACKNOWLEDGE_RERUN" != 'RERUN PAID MISSION' ]; then
               echo 'Refusing to pay while the previous-run state is unknown. Re-dispatch with' >&2
@@ -951,17 +958,17 @@ jobs:
               exit 1
             fi
             echo 'operator acknowledged proceeding despite an UNPARSEABLE marker count'
-          elif [ "$completed" -gt 0 ] || [ "$attempted" -gt 0 ] || [ "$RECORDED_PAID_ATTEMPTS" -gt 0 ]; then
+          elif [ "$completed" -gt 0 ] || [ "$RECORDED_PAID_ATTEMPTS" -gt 0 ]; then
             if [ "$ACKNOWLEDGE_RERUN" != 'RERUN PAID MISSION' ]; then
-              echo "julius_paid_mission_already_entered_for_${MARKER_NAMESPACE}: $completed completion marker(s), $attempted attempt marker(s) and $RECORDED_PAID_ATTEMPTS recorded prior attempt(s)." >&2
+              echo "julius_paid_mission_already_entered_for_${MARKER_NAMESPACE}: $completed completion marker(s) and $RECORDED_PAID_ATTEMPTS recorded prior attempt(s)." >&2
               echo 'A paid first-live mission has already been entered — a previous attempt may have' >&2
               echo 'spent provider money whether or not it completed. Re-dispatch with' >&2
               echo 'acknowledge_rerun = "RERUN PAID MISSION" only if you intend to pay again.' >&2
               exit 1
             fi
-            echo "operator acknowledged a deliberate rerun over $completed completion marker(s), $attempted attempt marker(s) and $RECORDED_PAID_ATTEMPTS recorded prior attempt(s)"
+            echo "operator acknowledged a deliberate rerun over $completed completion marker(s) and $RECORDED_PAID_ATTEMPTS recorded prior attempt(s)"
           else
-            echo 'no completion or attempt marker found; this would be the first paid mission'
+            echo 'no completion marker and no recorded prior attempt; attempted markers are counted after the build'
           fi
 
       - name: Install
@@ -1001,6 +1008,62 @@ jobs:
           npm run relay:executor:build
           npm run relay:julius:preflight:build
           npm run relay:julius:build
+
+      # THE PRE-MARKER GATE (founder decision "Count only real spend"). It runs
+      # the built entrypoint, so the proof is the SAME TypeScript the live
+      # entrypoint re-checks with (relay-bridge/julius/julius-prior-spend.ts):
+      #
+      #   1. attempt-markers: an `<ns>-attempted` marker counts as a prior
+      #      attempt unless its own workflow run READABLY proves no provider
+      #      execution (the jobs API shows LIVE never ran, or its evidence has
+      #      zero rows and its verdict is NOT_RUN). Unknown is not zero, and
+      #      acknowledge_rerun stays the explicit override.
+      #   2. authorize-spend: the qualifying-pair combined cap, with one
+      #      `prior_run` line per prior run. A refusal exits non-zero HERE,
+      #      before "Record that a paid mission was attempted", so a refused
+      #      run leaves no attempted marker. There is no override.
+      #
+      # Reads only: `contents: read` for the spent tags and `actions: read` for
+      # other runs' jobs and artifacts, both already granted to this job. No
+      # secret, no database, no provider.
+      - name: 'Gate: attempted markers and the combined cap, before the attempted marker'
+        id: pre_marker_spend
+        if: success() && inputs.confirm_live == 'RUN LIVE MISSION'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ACKNOWLEDGE_RERUN: ${{ inputs.acknowledge_rerun }}
+          JULIUS_RUN_ID: ${{ needs.spend-tag.outputs.run_id }}
+          JULIUS_SERVER_RUN_ID: ${{ needs.spend-tag.outputs.run_id }}
+        run: |
+          set -uo pipefail
+          test -f dist-relay-bridge/julius-live-mission.cjs || { echo 'entrypoint_not_built' >&2; exit 1; }
+          markers=$(node dist-relay-bridge/julius-live-mission.cjs attempt-markers --contract "$CONTRACT")
+          markers_status=$?
+          printf '%s\n' "$markers"
+          counted=$(printf '%s\n' "$markers" | sed -n 's/^attempt_markers_counted=//p')
+          case "$counted" in ''|*[!0-9]*) counted='' ;; esac
+          if [ "$markers_status" -ne 0 ] || [ -z "$counted" ]; then
+            echo 'julius_attempt_markers_unknown: the attempted markers could not be classified.' >&2
+            if [ "$ACKNOWLEDGE_RERUN" != 'RERUN PAID MISSION' ]; then
+              echo 'Refusing to pay while the previous-run state is unknown. Re-dispatch with' >&2
+              echo 'acknowledge_rerun = "RERUN PAID MISSION" to proceed anyway.' >&2
+              exit 1
+            fi
+            echo 'operator acknowledged proceeding despite UNKNOWN attempted markers'
+          elif [ "$counted" -gt 0 ]; then
+            if [ "$ACKNOWLEDGE_RERUN" != 'RERUN PAID MISSION' ]; then
+              echo "julius_paid_mission_already_attempted: $counted attempted marker(s) whose run is not proven to have made no provider call." >&2
+              echo 'Re-dispatch with acknowledge_rerun = "RERUN PAID MISSION" only if you intend to pay again.' >&2
+              exit 1
+            fi
+            echo "operator acknowledged a deliberate rerun over $counted counted attempted marker(s)"
+          else
+            echo 'no counted attempted marker: every marker found is proven to have made no provider call'
+          fi
+          node dist-relay-bridge/julius-live-mission.cjs authorize-spend --contract "$CONTRACT"
+          status=$?
+          echo "spend_pre_marker_exit=$status"
+          exit "$status"
 
       - name: Build the pinned sandbox and executor images
         id: images
@@ -1497,6 +1560,14 @@ jobs:
           # for the hidden checker (relay-bridge/julius/julius-final-message.ts).
           # Empty for every other mission, so nothing is written for them.
           JULIUS_FINAL_MESSAGE_DIR: ${{ steps.final_message_dir.outputs.dir }}
+          # THE SPENT-TAG LEDGER'S READ TOKEN, for the entrypoint's own
+          # defence-in-depth cap check (contents: read and actions: read, both
+          # job-level; nothing widened). Run 40278849833 had no job token here
+          # and was refused spend_ledger_unreadable before any provider call.
+          # The coder's and the reviewer's child environments are built from
+          # an allowlist (hostedChildEnv, the Hermes wrapper), so it is not
+          # handed to either.
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -uo pipefail
           # The bundle was built in an earlier step and is invoked directly,
