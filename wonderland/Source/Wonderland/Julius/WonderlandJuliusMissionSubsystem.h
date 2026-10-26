@@ -156,7 +156,7 @@ private:
 	bool bAwaitingVerdict = false;
 	/** A /result read must arrive this long after the completion was seen to count, and NOT_RUN is final only after the grace. */
 	static constexpr uint64 VerdictReadSlackMs = 2000;
-	static constexpr uint64 VerdictGraceMs = 120000;
+	static constexpr uint64 VerdictGraceMs = 180000; // JUDEV: /result lags completion by up to ~30-90 s; margin for a slow link
 	FString MissionReadRunId;
 	FMissionReadSlot ResultRead;
 	FMissionReadSlot ProgressRead;

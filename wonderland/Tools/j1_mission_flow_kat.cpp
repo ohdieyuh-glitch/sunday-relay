@@ -722,11 +722,18 @@ const ABSENT_PHASE = {
 			+ "\",\"reason\":null,\"live\":" + (bLive ? "true" : "false") + ",\"stale\":false,\"mode\":\"" + Mode + "\",\"runStatus\":\"" + RunStatus
 			+ "\",\"runConclusion\":" + (Conclusion == nullptr ? std::string("null") : std::string("\"") + Conclusion + "\"") + ",\"fetchedAt\":\"x\",\"next\":\"e1.1\"";
 	}
-	FExecutionView ViewOf(const std::string& Body, ECheckerVerdict Verdict = ECheckerVerdict::NotRun, bool bCompletion = false, const char* Bound = "40258482240")
+	FExecutionView ViewOf(const std::string& Body, ECheckerVerdict Verdict = ECheckerVerdict::NotRun, bool bCompletion = false, const char* Bound = "40258482240",
+		bool bNoVerdictIsFinal = true, const char* OutcomeUnknownCause = nullptr)
 	{
 		FLiveFeed Feed;
 		Feed.Apply(ParseLiveEvents(LiveWlj, 200, Body));
-		return ExecutionViewFor(Feed, true, Bound, Verdict, bCompletion);
+		FVerdictRead Read;
+		Read.Verdict = Verdict;
+		Read.bHasCompletion = bCompletion;
+		Read.bNoVerdictIsFinal = bNoVerdictIsFinal;
+		Read.bOutcomeUnknown = OutcomeUnknownCause != nullptr;
+		Read.OutcomeUnknownCause = OutcomeUnknownCause != nullptr ? OutcomeUnknownCause : "";
+		return ExecutionViewFor(Feed, true, Bound, Read);
 	}
 	void ExecFixtures()
 	{
@@ -772,11 +779,58 @@ const ABSENT_PHASE = {
 		Expect(ViewOf(LiveBody(Top("in_progress", nullptr, true), Refused)).Phase == EExecutionPhase::Starting, "a skipped LIVE step on a still-running run is never GRADING or executing");
 		Expect(ViewOf(LiveBody(Top("completed", "cancelled", false), Ran)).Phase == EExecutionPhase::Cancelled, "cancelled after LIVE: CANCELLED");
 		++ExecCases;
+		// REVIEW B1 (2026-10-26): /result trails the run's completion. No verdict yet is a neutral wait, never a failure;
+		// the wait ends on PASS (success), FAIL (interrupt) or a NOT_RUN read after completion once the grace passed.
+		V = ViewOf(LiveBody(Top("completed", "success", false), Ran), ECheckerVerdict::NotRun, false, "40258482240", false);
+		Expect(V.Phase == EExecutionPhase::Grading, "completed + no /result read yet: GRADING, not failed");
+		Expect(std::string(ContractTaskStateFor(V)) == "waiting", "completed + awaiting verdict: neutral wait");
+		Expect(ViewOf(LiveBody(Top("completed", "failure", false), Ran), ECheckerVerdict::NotRun, false, "40258482240", false).Phase == EExecutionPhase::Grading, "completed + stale pre-completion /result (NOT_RUN): GRADING");
+		Expect(ViewOf(LiveBody(Top("completed", "success", false), Ran), ECheckerVerdict::Pass, true, "40258482240", false).Phase == EExecutionPhase::Completed, "the wait ends on PASS: COMPLETED");
+		V = ViewOf(LiveBody(Top("completed", "failure", false), Ran), ECheckerVerdict::Fail, true, "40258482240", false);
+		Expect(V.Phase == EExecutionPhase::Failed && V.Detail == "Checker: FAIL", "the wait ends on a graded FAIL (run concluded failure): FAILED, Checker: FAIL");
+		{
+			// The cursor across the wait: GRADING then PASS still plays run.completed (the B1 defect latched it as failed).
+			FContractCursor Wait;
+			FExecutionView W;
+			W.Phase = EExecutionPhase::Executing;
+			Wait.Advance(W);
+			W.Phase = EExecutionPhase::Grading;
+			Expect(Wait.Advance(W).empty() && !Wait.Ended() && !Wait.Released(), "awaiting the verdict neither ends nor interrupts");
+			W.Phase = EExecutionPhase::Completed;
+			const std::vector<FContractBeat> Done = Wait.Advance(W);
+			Expect(Done.size() == 1 && Done[0].Type == "run.completed", "PASS after the wait: run.completed");
+		}
+		// B7 OUTCOME UNKNOWN (#478 /result outcomeUnknown, any cause): interrupt, never success -- even over a PASS.
+		V = ViewOf(LiveBody(Top("completed", "failure", false), Gates + "," + Step(4, PJ, LS, "completed", "failure")), ECheckerVerdict::NotRun, false, "40258482240", false, "HANDED_TIMEOUT_OUTCOME_UNKNOWN");
+		Expect(V.Phase == EExecutionPhase::OutcomeUnknown && V.Detail == "HANDED_TIMEOUT_OUTCOME_UNKNOWN", "outcomeUnknown: OUTCOME_UNKNOWN with its cause");
+		Expect(std::string(ContractTaskStateFor(V)) == "failed", "outcomeUnknown is a terminal non-success state");
+		Expect(ViewOf(LiveBody(Top("completed", "success", false), Ran), ECheckerVerdict::Pass, true, "40258482240", true, "SOME_FUTURE_CAUSE").Phase == EExecutionPhase::OutcomeUnknown, "any non-null outcomeUnknown wins over PASS");
+		Expect(ViewOf(LiveBody(Top("completed", "failure", false), Refused), ECheckerVerdict::NotRun, false, "40258482240", true, "HANDED_OUTCOME_UNKNOWN").Phase == EExecutionPhase::DidNotStart, "outcomeUnknown on a run Julius never started stays DID NOT START");
+		{
+			FContractCursor Unknown;
+			FExecutionView U;
+			U.Phase = EExecutionPhase::Executing;
+			Unknown.Advance(U);
+			U.Phase = EExecutionPhase::OutcomeUnknown;
+			Expect(Unknown.Advance(U).empty() && Unknown.Released(), "outcomeUnknown interrupts: released, no ending");
+		}
+		{
+			// The /result field itself (#478 shape): any object is OUTCOME UNKNOWN, null or absent is not.
+			const std::string Head = std::string("{\"wljRunId\":\"") + BridgeRun + "\",\"serverRunId\":\"" + BridgeRun
+				+ "\",\"state\":\"dispatched\",\"checkerVerdict\":\"NOT_RUN\",\"completion\":null,\"outcomeUnknown\":";
+			FResultRead R = Load(Head + "{\"cause\":\"HANDED_TIMEOUT_OUTCOME_UNKNOWN\",\"role\":\"CODING_AGENT\",\"taskId\":\"task:build:1\"}}", "");
+			Expect(R.bOutcomeUnknown && R.OutcomeUnknownCause == "HANDED_TIMEOUT_OUTCOME_UNKNOWN", "/result outcomeUnknown object: read with its cause");
+			R = Load(Head + "{\"cause\":null,\"role\":null,\"taskId\":null}}", "");
+			Expect(R.bOutcomeUnknown && R.OutcomeUnknownCause.empty(), "/result outcomeUnknown with null cause: still OUTCOME UNKNOWN");
+			R = Load(Head + "null}", "");
+			Expect(!R.bOutcomeUnknown, "/result outcomeUnknown null: none");
+		}
+		++ExecCases;
 		Expect(ViewOf(LiveBody(Top("in_progress", nullptr, true, "preflight"), Gates + "," + Step(4, PJ, LS, "in_progress", nullptr))).Phase == EExecutionPhase::Starting, "a preflight run never binds");
 		Expect(ViewOf(LiveBody(Top("in_progress", nullptr, true, "paid", "999"), Gates + "," + Step(4, PJ, LS, "in_progress", nullptr))).Phase == EExecutionPhase::Starting, "another workflow run never binds");
 		{
 			FLiveFeed None;
-			Expect(ExecutionViewFor(None, false, "", ECheckerVerdict::NotRun, false).Phase == EExecutionPhase::None, "nothing started: NONE");
+			Expect(ExecutionViewFor(None, false, "", FVerdictRead{}).Phase == EExecutionPhase::None, "nothing started: NONE");
 		}
 		++ExecCases;
 		// The contract cursor (founder acceptance 2026-10-26): nothing before execution; activation only on CONFIRMED

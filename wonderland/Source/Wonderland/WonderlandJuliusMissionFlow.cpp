@@ -946,6 +946,14 @@ namespace WonderlandJuliusMissionFlow
 			}
 		};
 		Out.Cause = ReadString(&Root, "cause");
+		// #478: any non-null outcomeUnknown object is OUTCOME UNKNOWN, whatever its cause string says.
+		const FJson* Unknown = Field(Root, "outcomeUnknown");
+		if (Unknown != nullptr && Unknown->Kind == EJsonKind::Object)
+		{
+			Out.bOutcomeUnknown = true; // FLOW_OUTCOME_UNKNOWN_ANY_OBJECT
+			const FReportedString UnknownCause = ReadString(Unknown, "cause");
+			if (UnknownCause.bKnown) { Out.OutcomeUnknownCause = UnknownCause.Text; }
+		}
 		Out.Phases = ReadPhases(&Root, Out.PhaseSlots);
 		Out.ProjectBrainRevision = ReadRevision(&Root, Out.bRevisionMalformed);
 		const FJson* Completion = Field(Root, "completion");
@@ -1753,13 +1761,16 @@ namespace WonderlandJuliusMissionFlow
 		case EExecutionPhase::FailedUnverified: return "FAILED_UNVERIFIED";
 		case EExecutionPhase::DidNotStart: return "DID_NOT_START";
 		case EExecutionPhase::Cancelled: return "CANCELLED";
+		case EExecutionPhase::OutcomeUnknown: return "OUTCOME_UNKNOWN";
 		default: return "";
 		}
 	}
 
 	FExecutionView ExecutionViewFor(const FLiveFeed& Feed, bool bStartAccepted, std::string_view BoundWorkflowRunId,
-		ECheckerVerdict Verdict, bool bHasCompletion)
+		const FVerdictRead& Read)
 	{
+		const ECheckerVerdict Verdict = Read.Verdict;
+		const bool bHasCompletion = Read.bHasCompletion;
 		FExecutionView Out;
 		Out.Phase = bStartAccepted ? EExecutionPhase::Starting : EExecutionPhase::None;
 		if (!Feed.HasRead()) { return Out; }
@@ -1775,6 +1786,13 @@ namespace WonderlandJuliusMissionFlow
 			Out.Role = Feed.LastTaskPhase().Role;
 			Out.TaskType = Feed.LastTaskPhase().TaskType;
 			Out.RepairCycle = Feed.LastTaskPhase().RepairCycle;
+		}
+		if (Read.bOutcomeUnknown && bExecutionSeen)
+		{
+			// #478: a provider call's outcome is unknown; Julius stopped that step and did not retry it. Interrupt, never success.
+			Out.Phase = EExecutionPhase::OutcomeUnknown; // FLOW_EXEC_OUTCOME_UNKNOWN_INTERRUPTS
+			Out.Detail = Read.OutcomeUnknownCause;
+			return Out;
 		}
 		if (Feed.LiveStepInterrupted())
 		{
@@ -1801,9 +1819,10 @@ namespace WonderlandJuliusMissionFlow
 				return Out;
 			}
 			if (Verdict == ECheckerVerdict::Pass && bHasCompletion) { Out.Phase = EExecutionPhase::Completed; return Out; } // FLOW_EXEC_SUCCESS_ONLY_FROM_RESULT
-			if (Verdict == ECheckerVerdict::Fail) { Out.Phase = EExecutionPhase::Failed; return Out; }
-			// NOT_RUN after the run completed: unverified, treated as failed -- never success.
-			Out.Phase = EExecutionPhase::FailedUnverified;
+			if (Verdict == ECheckerVerdict::Fail) { Out.Phase = EExecutionPhase::Failed; Out.Detail = "Checker: FAIL"; return Out; }
+			// NO VERDICT YET IS NOT A FAILURE: /result trails the run's completion. A neutral wait until a read made after the
+			// completion still says NOT_RUN and the grace has passed; only then unverified, treated as failed -- never success.
+			Out.Phase = Read.bNoVerdictIsFinal ? EExecutionPhase::FailedUnverified : EExecutionPhase::Grading; // FLOW_EXEC_NO_VERDICT_YET_IS_GRADING
 			return Out;
 		}
 		if (Feed.LiveStepSucceeded()) { Out.Phase = EExecutionPhase::Grading; return Out; }
@@ -1822,6 +1841,7 @@ namespace WonderlandJuliusMissionFlow
 		case EExecutionPhase::FailedUnverified:
 		case EExecutionPhase::DidNotStart:
 		case EExecutionPhase::Cancelled:
+		case EExecutionPhase::OutcomeUnknown:
 			// No ending is played, nothing finishes or loops: the presentation is interrupted by the caller.
 			bReleased = true; // FLOW_CONTRACT_FAILURE_INTERRUPTS
 			bEnded = true;
@@ -1879,6 +1899,7 @@ namespace WonderlandJuliusMissionFlow
 		case EExecutionPhase::Completed: return "completed";
 		case EExecutionPhase::Failed:
 		case EExecutionPhase::FailedUnverified:
+		case EExecutionPhase::OutcomeUnknown:
 		case EExecutionPhase::DidNotStart: return "failed";
 		case EExecutionPhase::Cancelled: return "cancelled";
 		default: return "";

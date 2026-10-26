@@ -558,6 +558,26 @@ MUTATIONS = [
         "Out.Phase = EExecutionPhase::Failed; // FLOW_EXEC_ENDED_WITHOUT_LIVE_SUCCESS",
         "Out.Phase = EExecutionPhase::Grading; // FLOW_EXEC_ENDED_WITHOUT_LIVE_SUCCESS",
     ),
+    (
+        "exec_no_verdict_yet_is_failure",
+        "Out.Phase = Read.bNoVerdictIsFinal ? EExecutionPhase::FailedUnverified : EExecutionPhase::Grading; // FLOW_EXEC_NO_VERDICT_YET_IS_GRADING",
+        "Out.Phase = EExecutionPhase::FailedUnverified; // FLOW_EXEC_NO_VERDICT_YET_IS_GRADING",
+    ),
+    (
+        "exec_no_verdict_never_final",
+        "Out.Phase = Read.bNoVerdictIsFinal ? EExecutionPhase::FailedUnverified : EExecutionPhase::Grading; // FLOW_EXEC_NO_VERDICT_YET_IS_GRADING",
+        "Out.Phase = EExecutionPhase::Grading; // FLOW_EXEC_NO_VERDICT_YET_IS_GRADING",
+    ),
+    (
+        "exec_outcome_unknown_ignored",
+        "Out.Phase = EExecutionPhase::OutcomeUnknown; // FLOW_EXEC_OUTCOME_UNKNOWN_INTERRUPTS",
+        "Out.Phase = EExecutionPhase::Grading; // FLOW_EXEC_OUTCOME_UNKNOWN_INTERRUPTS",
+    ),
+    (
+        "result_outcome_unknown_not_read",
+        "Out.bOutcomeUnknown = true; // FLOW_OUTCOME_UNKNOWN_ANY_OBJECT",
+        "Out.bOutcomeUnknown = false; // FLOW_OUTCOME_UNKNOWN_ANY_OBJECT",
+    ),
 ]
 
 

@@ -250,6 +250,10 @@ namespace WonderlandJuliusMissionFlow
 		FReportedString CheckerJudgedSha256;
 		/** PASS that does not name a well-formed judged sha256: not bound to what was graded, so never shown as Completed. */
 		bool bCheckerUnbound = false;
+		/** Top-level outcomeUnknown (#478): any object = a provider call's outcome is unknown and Julius did not retry it. */
+		bool bOutcomeUnknown = false;
+		/** Its cause word as reported (HANDED_OUTCOME_UNKNOWN, HANDED_TIMEOUT_OUTCOME_UNKNOWN, ...); empty when absent. */
+		std::string OutcomeUnknownCause;
 	};
 
 	class IMissionResultReader
@@ -594,6 +598,20 @@ namespace WonderlandJuliusMissionFlow
 		/** The run completed and the LIVE step never started (a gate refused): Julius did not run. */
 		DidNotStart,
 		Cancelled,
+		/** /result says a provider call's outcome is unknown: Julius stopped that step and did not retry it. Never success. */
+		OutcomeUnknown,
+	};
+
+	/** What /result says, as the contract reads it. */
+	struct FVerdictRead
+	{
+		ECheckerVerdict Verdict = ECheckerVerdict::NotRun;
+		bool bHasCompletion = false;
+		/** NOT_RUN may be taken as final: a /result read made after the run's completion still said it AND the grace passed.
+		 *  Until then no verdict is a neutral wait, never a failure (/result trails the run's completion). */
+		bool bNoVerdictIsFinal = false;
+		bool bOutcomeUnknown = false;
+		std::string OutcomeUnknownCause;
 	};
 
 	const char* ExecutionPhaseWord(EExecutionPhase Phase);
@@ -620,7 +638,7 @@ namespace WonderlandJuliusMissionFlow
 	 * else (no read yet, a preflight, another run) is at most Starting when the founder's start was accepted.
 	 */
 	FExecutionView ExecutionViewFor(const FLiveFeed& Feed, bool bStartAccepted, std::string_view BoundWorkflowRunId,
-		ECheckerVerdict Verdict, bool bHasCompletion);
+		const FVerdictRead& Read);
 
 	/** One event for the EXISTING mission-contract fold (WonderlandApplyEvent), in the fold's own vocabulary. */
 	struct FContractBeat

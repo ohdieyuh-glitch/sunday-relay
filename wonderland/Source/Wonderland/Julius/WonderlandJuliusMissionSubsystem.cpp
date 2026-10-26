@@ -404,7 +404,8 @@ void UWonderlandJuliusMissionSubsystem::SyncMissionContract()
 	if (Run.IsEmpty() || StartRecord != 2 || StartRunId != Run) { return; }
 	// A RUN RESTORED FROM THE SAVE waits for its first /events read: it never replays the activation of a run that may
 	// already have ended. A start accepted in this session shows STARTING at once (that is what just happened).
-	if (!bStartAcceptedHere && !Host->LiveFeed.HasRead()) { return; }
+	// ...and for its first /result read: a restored run must never read "no verdict" off a /result it has not fetched yet.
+	if (!bStartAcceptedHere && (!Host->LiveFeed.HasRead() || ResultRead.Status == 0)) { return; }
 	if (Run != ContractRunId)
 	{
 		ContractRunId = Run;
@@ -427,24 +428,23 @@ void UWonderlandJuliusMissionSubsystem::SyncMissionContract()
 	// A PASS that is not bound to what was graded is not a verdict; success needs the verified completion too.
 	const ECheckerVerdict Verdict = Result.bCheckerReported && !(Result.Checker == ECheckerVerdict::Pass && Result.bCheckerUnbound)
 		? Result.Checker : ECheckerVerdict::NotRun;
-	FExecutionView View = ExecutionViewFor(Host->LiveFeed, true, ToStd(StartWorkflowRunId), Verdict, Result.bVerified && !Result.bCheckerUnbound);
-	// NO VERDICT YET IS NOT A FAILURE. /result can trail the run's completion, so NOT_RUN only counts once a /result read
-	// made after the completion was seen still says it, and then only after a grace; until then the run is a neutral
-	// wait (live) or shows nothing at all (a restored run: no activation replay, no invented outcome).
+	// NO VERDICT YET IS NOT A FAILURE (REVIEW B1). /result trails the run's completion (bridge cache + artifact download,
+	// up to ~90 s), so NOT_RUN is final only once a /result read made after this client saw the completion still says it
+	// AND the grace has passed. A stale /events read never counts as having seen the completion.
 	const uint64 VerdictNowMs = Host->Clock.NowUtcMs();
-	if (Host->LiveFeed.Run() == ELiveRunStatus::Completed && RunCompletedSeenUtcMs == 0) { RunCompletedSeenUtcMs = VerdictNowMs; }
-	bAwaitingVerdict = false;
-	if (View.Phase == EExecutionPhase::FailedUnverified)
-	{
-		const bool bReadAfterCompletion = ResultRead.Status == 200 && ResultRead.AtUtcMs >= RunCompletedSeenUtcMs + VerdictReadSlackMs;
-		const bool bGraceOver = VerdictNowMs >= RunCompletedSeenUtcMs + VerdictGraceMs;
-		if (!(bReadAfterCompletion && bGraceOver))
-		{
-			bAwaitingVerdict = true;
-			if (!ContractCursor->Started()) { return; }
-			View.Phase = EExecutionPhase::Grading; // VERDICT_GRACE_HOLDS
-		}
-	}
+	if (Host->LiveFeed.Run() == ELiveRunStatus::Completed && !Host->LiveFeed.IsStale() && RunCompletedSeenUtcMs == 0) { RunCompletedSeenUtcMs = VerdictNowMs; }
+	FVerdictRead Read;
+	Read.Verdict = Verdict;
+	Read.bHasCompletion = Result.bVerified && !Result.bCheckerUnbound;
+	Read.bNoVerdictIsFinal = RunCompletedSeenUtcMs != 0 && ResultRead.Status == 200
+		&& ResultRead.AtUtcMs >= RunCompletedSeenUtcMs + VerdictReadSlackMs && VerdictNowMs >= RunCompletedSeenUtcMs + VerdictGraceMs;
+	Read.bOutcomeUnknown = Result.bOutcomeUnknown;
+	Read.OutcomeUnknownCause = Result.OutcomeUnknownCause;
+	const FExecutionView View = ExecutionViewFor(Host->LiveFeed, true, ToStd(StartWorkflowRunId), Read);
+	// Keep reading /result past the wrapper's final read while the run is over and no verdict has come.
+	bAwaitingVerdict = RunCompletedSeenUtcMs != 0 && View.Phase == EExecutionPhase::Grading;
+	// A RESTORED run that is waiting for its verdict shows nothing yet: no activation replay, no invented outcome.
+	if (!bStartAcceptedHere && !ContractCursor->Started() && View.Phase == EExecutionPhase::Grading) { return; }
 	UGameInstance* Instance = GetGameInstance();
 	ULocalPlayer* Player = Instance != nullptr ? Instance->GetFirstGamePlayer() : nullptr;
 	UWonderlandMissionTaskSubsystem* Tasks = Player != nullptr ? Player->GetSubsystem<UWonderlandMissionTaskSubsystem>() : nullptr;
@@ -495,8 +495,15 @@ void UWonderlandJuliusMissionSubsystem::SyncMissionContract()
 		FWonderlandText JuliusState;
 		JuliusState.bKnown = true;
 		// THE BRIEF, ACCURATE MESSAGE that stays available after an interrupt (the contract's task line and banner).
+		// #478 cause words, shortened for the player (JUDEV); an unrecognised cause shows no detail, never a guess.
+		const FString UnknownCause = ToF(View.Detail);
+		const FString UnknownDetail = UnknownCause == TEXT("HANDED_TIMEOUT_OUTCOME_UNKNOWN") ? FString(TEXT(" (provider timed out)"))
+			: UnknownCause == TEXT("HANDED_FAILURE_OUTCOME_UNKNOWN") ? FString(TEXT(" (connection failed)"))
+			: UnknownCause == TEXT("HANDED_OUTCOME_UNKNOWN") ? FString(TEXT(" (interrupted)")) : FString();
 		JuliusState.Value = View.Phase == EExecutionPhase::DidNotStart ? FString::Printf(TEXT("MISSION DID NOT START (%s)"), *ToF(View.Detail))
-			: View.Phase == EExecutionPhase::Failed ? (View.Detail.empty() ? FString(TEXT("MISSION FAILED (checker FAIL)")) : FString::Printf(TEXT("MISSION INTERRUPTED (%s)"), *ToF(View.Detail)))
+			: View.Phase == EExecutionPhase::OutcomeUnknown ? FString::Printf(TEXT("Outcome unknown: Julius stopped this step and did not retry it%s"), *UnknownDetail)
+			: View.Phase == EExecutionPhase::Failed && (View.Detail.empty() || View.Detail == "Checker: FAIL") ? FString(TEXT("MISSION FAILED (Checker: FAIL)"))
+			: View.Phase == EExecutionPhase::Failed ? FString::Printf(TEXT("MISSION INTERRUPTED (%s)"), *ToF(View.Detail))
 			: View.Phase == EExecutionPhase::Grading ? FString(TEXT("GRADING - waiting for the pinned checker"))
 			: View.Phase == EExecutionPhase::FailedUnverified ? FString(TEXT("MISSION FAILED (no verdict; not verified)"))
 			: View.Phase == EExecutionPhase::Cancelled ? FString(TEXT("MISSION CANCELLED"))
