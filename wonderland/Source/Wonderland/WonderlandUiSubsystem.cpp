@@ -5939,20 +5939,41 @@ namespace WonderlandJuliusMissionQa
 		Component->FOVAngle = Fov;
 		Component->TextureTarget = Target;
 		Component->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
-		Component->bCaptureEveryFrame = false;
+		// A one-off capture has no eye-adaptation history and comes out blown white. Use the player camera's post process,
+		// keep the capture's history, and let exposure settle over a short burst of frames before reading it back.
+		if (Controller->PlayerCameraManager != nullptr)
+		{
+			const FMinimalViewInfo& View = Controller->PlayerCameraManager->GetCameraCacheView();
+			Component->PostProcessSettings = View.PostProcessSettings;
+			Component->PostProcessBlendWeight = View.PostProcessBlendWeight;
+		}
+		Component->PostProcessSettings.bOverride_AutoExposureSpeedUp = true;
+		Component->PostProcessSettings.AutoExposureSpeedUp = 20.0f;
+		Component->PostProcessSettings.bOverride_AutoExposureSpeedDown = true;
+		Component->PostProcessSettings.AutoExposureSpeedDown = 20.0f;
+		Component->bAlwaysPersistRenderingState = true;
+		Component->bCaptureEveryFrame = true;
 		Component->bCaptureOnMovement = false;
-		Component->CaptureScene();
-		FlushRenderingCommands();
-		TArray<FColor> Pixels;
-		FTextureRenderTargetResource* Resource = Target->GameThread_GetRenderTargetResource();
-		const bool bRead = Resource != nullptr && Resource->ReadPixels(Pixels) && Pixels.Num() == Width * Height;
-		Capture->Destroy();
-		if (!bRead) { UE_LOG(LogWonderlandUi, Warning, TEXT("WLJ1WORLD shot_error=read_back")); return; }
-		for (FColor& Pixel : Pixels) { Pixel.A = 255; }
-		const FString Path = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots") / TEXT("WLJ1") / (Name + TEXT(".png")));
-		IFileManager::Get().MakeDirectory(*FPaths::GetPath(Path), true);
-		const bool bSaved = FImageUtils::SaveImageByExtension(*Path, FImageView(Pixels.GetData(), Width, Height));
-		UE_LOG(LogWonderlandUi, Display, TEXT("WLJ1WORLD shot_path=%s saved=%d"), *Path, bSaved ? 1 : 0);
+		const TWeakObjectPtr<ASceneCapture2D> WeakCapture(Capture);
+		FTimerHandle Settle;
+		World->GetTimerManager().SetTimer(Settle, FTimerDelegate::CreateLambda([WeakCapture, Name, Width, Height]()
+		{
+			ASceneCapture2D* Done = WeakCapture.Get();
+			UTextureRenderTarget2D* Shot = Done != nullptr ? Done->GetCaptureComponent2D()->TextureTarget.Get() : nullptr;
+			if (Shot == nullptr) { UE_LOG(LogWonderlandUi, Warning, TEXT("WLJ1WORLD shot_error=capture_gone")); return; }
+			Done->GetCaptureComponent2D()->bCaptureEveryFrame = false;
+			FlushRenderingCommands();
+			TArray<FColor> Pixels;
+			FTextureRenderTargetResource* Resource = Shot->GameThread_GetRenderTargetResource();
+			const bool bRead = Resource != nullptr && Resource->ReadPixels(Pixels) && Pixels.Num() == Width * Height;
+			Done->Destroy();
+			if (!bRead) { UE_LOG(LogWonderlandUi, Warning, TEXT("WLJ1WORLD shot_error=read_back")); return; }
+			for (FColor& Pixel : Pixels) { Pixel.A = 255; }
+			const FString Path = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots") / TEXT("WLJ1") / (Name + TEXT(".png")));
+			IFileManager::Get().MakeDirectory(*FPaths::GetPath(Path), true);
+			const bool bSaved = FImageUtils::SaveImageByExtension(*Path, FImageView(Pixels.GetData(), Width, Height));
+			UE_LOG(LogWonderlandUi, Display, TEXT("WLJ1WORLD shot_path=%s saved=%d"), *Path, bSaved ? 1 : 0);
+		}), 1.0f, false);
 	}
 
 	void ShotIn(const TArray<FString>& Args, UWorld* World, FOutputDevice& Ar)
