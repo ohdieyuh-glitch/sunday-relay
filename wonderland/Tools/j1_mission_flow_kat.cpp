@@ -753,8 +753,14 @@ const ABSENT_PHASE = {
 		Expect(ViewOf(LiveBody(Top("completed", "success", false), Ran), ECheckerVerdict::Pass, true).Phase == EExecutionPhase::Completed, "PASS + completion: COMPLETED");
 		Expect(ViewOf(LiveBody(Top("completed", "success", false), Ran), ECheckerVerdict::Pass, false).Phase != EExecutionPhase::Completed, "PASS without completion is not success");
 		Expect(ViewOf(LiveBody(Top("completed", "failure", false), Ran), ECheckerVerdict::Fail, false).Phase == EExecutionPhase::Failed, "FAIL: FAILED");
-		Expect(ViewOf(LiveBody(Top("completed", "success", false), Ran)).Phase == EExecutionPhase::Grading, "NOT_RUN, grade job not done: GRADING");
-		Expect(ViewOf(LiveBody(Top("completed", "success", false), Ran + "," + Job(5, "J1: grade the final message with the pinned hidden checker", "completed", "success"))).Phase == EExecutionPhase::FailedUnverified, "NOT_RUN after grading: FAILED_UNVERIFIED (never success)");
+		Expect(ViewOf(LiveBody(Top("completed", "success", false), Ran)).Phase == EExecutionPhase::FailedUnverified, "NOT_RUN once the run completed: failed, unverified (never success)");
+		// MAIN JULIUS 2026-10-26: a LIVE step that fails/cancels/times out interrupts AT ONCE, even mid-run.
+		V = ViewOf(LiveBody(Top("in_progress", nullptr, true), Gates + "," + Step(4, PJ, LS, "completed", "failure")));
+		Expect(V.Phase == EExecutionPhase::Failed && V.Detail.find("(failure)") != std::string::npos, "LIVE failure mid-run: interrupted now");
+		Expect(ViewOf(LiveBody(Top("in_progress", nullptr, true), Gates + "," + Step(4, PJ, LS, "completed", "cancelled"))).Phase == EExecutionPhase::Cancelled, "LIVE cancelled mid-run: interrupted now");
+		Expect(ViewOf(LiveBody(Top("in_progress", nullptr, true), Gates + "," + Step(4, PJ, LS, "completed", "timed_out"))).Phase == EExecutionPhase::Failed, "LIVE timed out: interrupted now");
+		Expect(ViewOf(LiveBody(Top("completed", "failure", false), Gates + "," + Step(4, PJ, LS, "in_progress", nullptr))).Phase == EExecutionPhase::Failed, "run ended without LIVE success: interrupted");
+		Expect(std::string(ContractTaskStateFor(ViewOf(LiveBody(Top("in_progress", nullptr, true), Ran)))) == "waiting", "grading is a neutral wait");
 		Expect(ViewOf(LiveBody(Top("completed", "success", false), Ran)).Phase != EExecutionPhase::Completed, "a successful WORKFLOW is never mission success without the checker");
 		++ExecCases;
 		// 40258482240 exactly: paid-slot gate refused, LIVE skipped.

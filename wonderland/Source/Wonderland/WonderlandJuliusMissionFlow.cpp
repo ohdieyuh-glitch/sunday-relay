@@ -1527,6 +1527,13 @@ namespace WonderlandJuliusMissionFlow
 		{
 			if (Event.Status == "in_progress" || Event.Status == "completed") { bLiveStepStarted = Event.Status == "in_progress" || Event.Conclusion != "skipped"; } // FLOW_EXEC_LIVE_STEP_IS_EXECUTION
 			if (Event.Status == "completed" && Event.Conclusion != "skipped") { bLiveStepFinished = true; } // a skipped LIVE step never ran
+			if (Event.Status == "completed")
+			{
+				LiveConclusion = Event.Conclusion;
+				bLiveStepSucceeded = Event.Conclusion == "success";
+				// MAIN JULIUS 2026-10-26: a LIVE step that ends failure/cancelled/timed_out interrupts at once.
+				bLiveStepInterrupted = Event.Conclusion == "failure" || Event.Conclusion == "cancelled" || Event.Conclusion == "timed_out"; // FLOW_EXEC_LIVE_FAILURE_INTERRUPTS
+			}
 		}
 		if (Event.Kind == "step" && Event.Job == LiveJob && Event.Name.rfind(AttemptStepPrefix, 0) == 0 && Event.Status == "completed" && Event.Conclusion == "success")
 		{
@@ -1769,6 +1776,13 @@ namespace WonderlandJuliusMissionFlow
 			Out.TaskType = Feed.LastTaskPhase().TaskType;
 			Out.RepairCycle = Feed.LastTaskPhase().RepairCycle;
 		}
+		if (Feed.LiveStepInterrupted())
+		{
+			// Reported immediately, even while the workflow is still running: never wait for the run to wrap up.
+			Out.Phase = Feed.LiveStepConclusion() == "cancelled" ? EExecutionPhase::Cancelled : EExecutionPhase::Failed;
+			Out.Detail = std::string(LiveJob) + " / " + LiveStep + " (" + Feed.LiveStepConclusion() + ")";
+			return Out;
+		}
 		if (Feed.Run() == ELiveRunStatus::Completed)
 		{
 			if (!bExecutionSeen)
@@ -1779,12 +1793,20 @@ namespace WonderlandJuliusMissionFlow
 				return Out;
 			}
 			if (Feed.RunConclusion() == "cancelled") { Out.Phase = EExecutionPhase::Cancelled; return Out; }
+			if (!Feed.LiveStepSucceeded())
+			{
+				// Julius started but the run ended without LIVE success: interrupted, naming where it stopped.
+				Out.Phase = EExecutionPhase::Failed; // FLOW_EXEC_ENDED_WITHOUT_LIVE_SUCCESS
+				Out.Detail = !Feed.FirstFailure().empty() ? Feed.FirstFailure() : std::string(LiveJob) + " / " + LiveStep + " (did not complete)";
+				return Out;
+			}
 			if (Verdict == ECheckerVerdict::Pass && bHasCompletion) { Out.Phase = EExecutionPhase::Completed; return Out; } // FLOW_EXEC_SUCCESS_ONLY_FROM_RESULT
 			if (Verdict == ECheckerVerdict::Fail) { Out.Phase = EExecutionPhase::Failed; return Out; }
-			Out.Phase = Feed.GradeJobFinished() ? EExecutionPhase::FailedUnverified : EExecutionPhase::Grading;
+			// NOT_RUN after the run completed: unverified, treated as failed -- never success.
+			Out.Phase = EExecutionPhase::FailedUnverified;
 			return Out;
 		}
-		if (Feed.LiveStepFinished()) { Out.Phase = EExecutionPhase::Grading; return Out; }
+		if (Feed.LiveStepSucceeded()) { Out.Phase = EExecutionPhase::Grading; return Out; }
 		if (bExecutionSeen) { Out.Phase = EExecutionPhase::Executing; return Out; }
 		Out.Phase = Feed.AttemptRecorded() ? EExecutionPhase::Committing : EExecutionPhase::Starting; // FLOW_EXEC_GATES_ARE_NOT_EXECUTION
 		return Out;
@@ -1853,7 +1875,7 @@ namespace WonderlandJuliusMissionFlow
 			if (View.Role == "reviewer") { return "review"; }
 			if (View.Role == "architect") { return "preparation"; }
 			return "implementation";
-		case EExecutionPhase::Grading: return "verification";
+		case EExecutionPhase::Grading: return "waiting"; // neutral: the Dog waits, nothing loops
 		case EExecutionPhase::Completed: return "completed";
 		case EExecutionPhase::Failed:
 		case EExecutionPhase::FailedUnverified:

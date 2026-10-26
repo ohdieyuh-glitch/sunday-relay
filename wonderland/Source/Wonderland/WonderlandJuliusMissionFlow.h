@@ -464,6 +464,11 @@ namespace WonderlandJuliusMissionFlow
 		 */
 		bool LiveStepStarted() const { return bLiveStepStarted; }
 		bool LiveStepFinished() const { return bLiveStepFinished; }
+		/** The LIVE step completed with success (the only "finished" that may lead to an outcome). */
+		bool LiveStepSucceeded() const { return bLiveStepSucceeded; }
+		/** The LIVE step completed failure/cancelled/timed_out: Julius was interrupted (reported at once). */
+		bool LiveStepInterrupted() const { return bLiveStepInterrupted; }
+		const std::string& LiveStepConclusion() const { return LiveConclusion; }
 		bool TaskPhaseSeen() const { return bTaskPhaseSeen; }
 		bool AttemptRecorded() const { return bAttemptRecorded; }
 		bool GradeJobFinished() const { return bGradeJobFinished; }
@@ -487,6 +492,9 @@ namespace WonderlandJuliusMissionFlow
 		std::vector<FLiveEvent> EventList;
 		bool bLiveStepStarted = false;
 		bool bLiveStepFinished = false;
+		bool bLiveStepSucceeded = false;
+		bool bLiveStepInterrupted = false;
+		std::string LiveConclusion;
 		bool bTaskPhaseSeen = false;
 		bool bAttemptRecorded = false;
 		bool bGradeJobFinished = false;
@@ -577,7 +585,7 @@ namespace WonderlandJuliusMissionFlow
 		/** "Record that a paid mission was attempted" succeeded: the point of no return, still not executing. */
 		Committing,
 		Executing,
-		/** The LIVE step finished and the pinned checker has not reported yet. */
+		/** The LIVE step SUCCEEDED, the run is still going and the pinned checker has not reported: a neutral wait. */
 		Grading,
 		Completed,
 		Failed,

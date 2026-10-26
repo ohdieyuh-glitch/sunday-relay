@@ -548,6 +548,16 @@ MUTATIONS = [
         "return bStale || !bHasSession || (bEverRead && MsSinceLastGoodRead > LiveNoReadAfterMs); // FLOW_CONTRACT_UNCERTAIN_SUSPENDS",
         "return false; // FLOW_CONTRACT_UNCERTAIN_SUSPENDS",
     ),
+    (
+        "exec_live_failure_not_interrupting",
+        'bLiveStepInterrupted = Event.Conclusion == "failure" || Event.Conclusion == "cancelled" || Event.Conclusion == "timed_out"; // FLOW_EXEC_LIVE_FAILURE_INTERRUPTS',
+        "bLiveStepInterrupted = false; // FLOW_EXEC_LIVE_FAILURE_INTERRUPTS",
+    ),
+    (
+        "exec_ended_without_live_success_not_failed",
+        "Out.Phase = EExecutionPhase::Failed; // FLOW_EXEC_ENDED_WITHOUT_LIVE_SUCCESS",
+        "Out.Phase = EExecutionPhase::Grading; // FLOW_EXEC_ENDED_WITHOUT_LIVE_SUCCESS",
+    ),
 ]
 
 

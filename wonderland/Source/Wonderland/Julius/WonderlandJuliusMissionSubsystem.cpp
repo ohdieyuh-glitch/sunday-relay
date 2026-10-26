@@ -380,6 +380,7 @@ namespace
 		if (Word == TEXT("verification")) { return EWonderlandTaskState::Verification; }
 		if (Word == TEXT("completed")) { return EWonderlandTaskState::Completed; }
 		if (Word == TEXT("cancelled")) { return EWonderlandTaskState::Cancelled; }
+		if (Word == TEXT("waiting")) { return EWonderlandTaskState::Waiting; }
 		return EWonderlandTaskState::Failed;
 	}
 
@@ -412,6 +413,7 @@ void UWonderlandJuliusMissionSubsystem::SyncMissionContract()
 		ContractPhaseWord.Reset();
 		bContractReleased = false;
 		bContractSuspended = false;
+		bGradingReleased = false;
 	}
 	FResultRead Result;
 	if (ResultRead.Status != 0)
@@ -475,7 +477,8 @@ void UWonderlandJuliusMissionSubsystem::SyncMissionContract()
 		JuliusState.bKnown = true;
 		// THE BRIEF, ACCURATE MESSAGE that stays available after an interrupt (the contract's task line and banner).
 		JuliusState.Value = View.Phase == EExecutionPhase::DidNotStart ? FString::Printf(TEXT("MISSION DID NOT START (%s)"), *ToF(View.Detail))
-			: View.Phase == EExecutionPhase::Failed ? FString(TEXT("MISSION FAILED (checker FAIL)"))
+			: View.Phase == EExecutionPhase::Failed ? (View.Detail.empty() ? FString(TEXT("MISSION FAILED (checker FAIL)")) : FString::Printf(TEXT("MISSION INTERRUPTED (%s)"), *ToF(View.Detail)))
+			: View.Phase == EExecutionPhase::Grading ? FString(TEXT("GRADING - waiting for the pinned checker"))
 			: View.Phase == EExecutionPhase::FailedUnverified ? FString(TEXT("MISSION FAILED (no verdict; not verified)"))
 			: View.Phase == EExecutionPhase::Cancelled ? FString(TEXT("MISSION CANCELLED"))
 			: PhaseWord;
@@ -489,6 +492,12 @@ void UWonderlandJuliusMissionSubsystem::SyncMissionContract()
 			ContractRole(Beat.Role), static_cast<int32>(Beat.RepairRound));
 		UE_LOG(LogJuliusJ1, Display, TEXT("{\"event\":\"contract_beat\",\"wlj_run_id\":\"%s\",\"type\":\"%s\",\"applied\":%s,\"beat\":\"%s\"}"),
 			*Run, *ToF(Beat.Type), bApplied ? TEXT("true") : TEXT("false"), *Contract->GetBeatLabel());
+	}
+	// GRADING IS NEUTRAL (MAIN JULIUS): the stage releases once so nothing loops; success, if it comes, re-shows it.
+	if (View.Phase == EExecutionPhase::Grading && !bGradingReleased)
+	{
+		bGradingReleased = true;
+		Contract->ReleaseRealRunBeat();
 	}
 	if (ContractCursor->Released() && !bContractReleased)
 	{

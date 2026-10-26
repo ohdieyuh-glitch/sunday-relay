@@ -175,6 +175,7 @@ private:
 	FString ContractPhaseWord;
 	bool bContractReleased = false;
 	bool bContractSuspended = false;
+	bool bGradingReleased = false;
 	bool bStartAcceptedHere = false;
 	TUniquePtr<WonderlandJuliusMissionFlow::FContractCursor> ContractCursor;
 	void SaveStartRecord() const;

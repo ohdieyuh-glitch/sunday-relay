@@ -5947,7 +5947,8 @@ namespace WonderlandJuliusMissionQa
 	void After(const TArray<FString>& Args, UWorld* World, FOutputDevice& Ar)
 	{
 		if (!DeveloperDoor(TEXT("wl.Julius.J1.Qa.After"), Ar)) { return; }
-		if (Args.Num() < 2 || !Args[0].IsNumeric() || !Args[1].StartsWith(TEXT("wl.Julius.")))
+		// Also UE's own `shot showui` (a full-window capture for REVIEW's per-case evidence); still dev-sessions only.
+		if (Args.Num() < 2 || !Args[0].IsNumeric() || !(Args[1].StartsWith(TEXT("wl.Julius.")) || Args[1].Equals(TEXT("shot"), ESearchCase::IgnoreCase)))
 		{
 			Ar.Log(TEXT("usage: wl.Julius.J1.Qa.After <seconds> wl.Julius.<command> [args]"));
 			return;
