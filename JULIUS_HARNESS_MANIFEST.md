@@ -528,6 +528,7 @@ Production Julius modules that implement a Julius port but are not reached from 
 | `node:os` | node |
 | `node:path` | node |
 | `node:url` | node |
+| `node:zlib` | node |
 | `openai` | package |
 | `pg` | package |
 
