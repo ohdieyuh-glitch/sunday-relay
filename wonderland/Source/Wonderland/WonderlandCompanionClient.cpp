@@ -3,6 +3,7 @@
 // Routes as served by BRIDGE 7e5e1e30: POST / GET / DELETE /relay-api/wonderland/companions/agents[/{agentId}]?projectId=.
 #include "WonderlandCompanionClient.h"
 
+#include "Async/Async.h"
 #include "HttpModule.h"
 #include "Interfaces/IHttpResponse.h"
 #include "WonderlandJuliusMissionLogic.h"
@@ -68,21 +69,22 @@ void UWonderlandCompanionClient::RefreshMissionAgents(const FString& WljRunId, c
 {
 	if (!Session) { return; } // deinitialized: refuse, never dereference
 	const std::string Wlj = ToUtf8(WljRunId);
+	const TWeakObjectPtr<UWonderlandCompanionClient> WeakThis(this);
 	Issue(CompanionMissionRequest(Session->RelayOrigin(), Wlj, ToUtf8(ProjectId)),
-		[this, Wlj](int32 Status, const FString&, const TArray<uint8>& Body) { if (!Session) { return; }
+		[WeakThis, Wlj](int32 Status, const FString&, const TArray<uint8>& Body) { if (!WeakThis.IsValid() || !WeakThis->Session) { return; }
 			FCompanionMissionView Mission;
 			const ECompanionMissionParse Parse = ParseCompanionMission(Status, BytesView(Body), Wlj, Mission); // agents[] are read even if a v0.1 field fails
 			// One trace word per read: the HTTP status and the parser's verdict, never the body.
 			UE_LOG(LogTemp, Display, TEXT("WLCOMPANION mission read: http %d, parse %s, agents %d"), Status,
 				UTF8_TO_TCHAR(CompanionMissionParseName(Parse)), static_cast<int32>(Mission.Agents.size()));
-			if (Mission.AgentsParse == EAgentListParse::Ok) { Session->ApplyAgentSlots(Mission.Agents); }
+			if (Mission.AgentsParse == EAgentListParse::Ok) { WeakThis->Session->ApplyAgentSlots(Mission.Agents); }
 			// #447 traceId: kept as reported for THIS run only; an answer without one clears the last one (never reused).
-			MissionTraceWljRunId = FromUtf8(Wlj);
-			MissionTraceId = Mission.TraceId.empty() ? FString() : FromUtf8(Mission.TraceId);
-			MissionView = Mission;
-			bHaveMissionView = true;
-			MissionViewHttpStatus = Status;
-			Changed();
+			WeakThis->MissionTraceWljRunId = FromUtf8(Wlj);
+			WeakThis->MissionTraceId = Mission.TraceId.empty() ? FString() : FromUtf8(Mission.TraceId);
+			WeakThis->MissionView = Mission;
+			WeakThis->bHaveMissionView = true;
+			WeakThis->MissionViewHttpStatus = Status;
+			WeakThis->Changed();
 		});
 }
 
@@ -93,9 +95,10 @@ void UWonderlandCompanionClient::ConnectAgent(const FString& ProviderId, const F
 	FRelayRequest Request;
 	if (Session->BeginConnect(ToUtf8(ProviderId), ToUtf8(WljRunIdOrEmpty), ToUtf8(DisplayLabelOrEmpty), Request))
 	{
-		Issue(Request, [this](int32 Status, const FString&, const TArray<uint8>& Body) { if (!Session) { return; }
-			Session->ApplyConnectAnswer(Status, BytesView(Body), NowMs());
-			Changed();
+		const TWeakObjectPtr<UWonderlandCompanionClient> WeakThis(this);
+		Issue(Request, [WeakThis](int32 Status, const FString&, const TArray<uint8>& Body) { if (!WeakThis.IsValid() || !WeakThis->Session) { return; }
+			WeakThis->Session->ApplyConnectAnswer(Status, BytesView(Body), WeakThis->NowMs());
+			WeakThis->Changed();
 		});
 	}
 	Changed();
@@ -105,9 +108,10 @@ void UWonderlandCompanionClient::RefreshAgent(const FString& AgentId)
 {
 	if (!Session) { return; } // deinitialized: refuse, never dereference
 	const std::string Id = ToUtf8(AgentId);
-	Issue(Session->BeginReadAgent(Id), [this, Id](int32 Status, const FString&, const TArray<uint8>& Body) { if (!Session) { return; }
-		Session->ApplyReadAgentAnswer(Id, Status, BytesView(Body));
-		Changed();
+	const TWeakObjectPtr<UWonderlandCompanionClient> WeakThis(this);
+	Issue(Session->BeginReadAgent(Id), [WeakThis, Id](int32 Status, const FString&, const TArray<uint8>& Body) { if (!WeakThis.IsValid() || !WeakThis->Session) { return; }
+		WeakThis->Session->ApplyReadAgentAnswer(Id, Status, BytesView(Body));
+		WeakThis->Changed();
 	});
 }
 
@@ -115,9 +119,10 @@ void UWonderlandCompanionClient::Disconnect(const FString& AgentId)
 {
 	if (!Session) { return; } // deinitialized: refuse, never dereference
 	const std::string Id = ToUtf8(AgentId);
-	Issue(Session->BeginDisconnect(Id), [this, Id](int32 Status, const FString&, const TArray<uint8>& Body) { if (!Session) { return; }
-		Session->ApplyDisconnectAnswer(Id, Status, BytesView(Body));
-		Changed();
+	const TWeakObjectPtr<UWonderlandCompanionClient> WeakThis(this);
+	Issue(Session->BeginDisconnect(Id), [WeakThis, Id](int32 Status, const FString&, const TArray<uint8>& Body) { if (!WeakThis.IsValid() || !WeakThis->Session) { return; }
+		WeakThis->Session->ApplyDisconnectAnswer(Id, Status, BytesView(Body));
+		WeakThis->Changed();
 	});
 }
 
@@ -157,23 +162,29 @@ void UWonderlandCompanionClient::StartChatRequest(const FString& AgentId, const 
 	Request->SetContentAsString(FromUtf8(In.Body));
 	// UNVERIFIED: UE 5.4+ streaming body delegate name and signature. Bytes arrive on the HTTP thread; they are
 	// marshalled to the game thread before touching the session.
-	Request->SetResponseBodyReceiveStreamDelegateV2(FHttpRequestStreamDelegateV2::CreateWeakLambda(this,
-		[this, Id](void* Data, int64& Length) {
+	// Bug-batch #10 (REVIEW #467): no raw `this` crosses a thread. The HTTP-thread callback copies only a weak
+	// pointer and never dereferences it there; the game-thread hop checks it first, so a chunk queued before
+	// Deinitialize or GC is dropped instead of touching a dead client.
+	const TWeakObjectPtr<UWonderlandCompanionClient> WeakThis(this);
+	Request->SetResponseBodyReceiveStreamDelegateV2(FHttpRequestStreamDelegateV2::CreateLambda(
+		[WeakThis, Id](void* Data, int64& Length) {
 			std::string Chunk(static_cast<const char*>(Data), static_cast<size_t>(Length));
-			AsyncTask(ENamedThreads::GameThread, [this, Id, Chunk = MoveTemp(Chunk)]() { if (!Session) { return; }
-				if (Session) { Session->FeedChatBytes(Id, Chunk, NowMs()); Changed(); }
+			AsyncTask(ENamedThreads::GameThread, [WeakThis, Id, Chunk = MoveTemp(Chunk)]() { if (!WeakThis.IsValid() || !WeakThis->Session) { return; }
+				WeakThis->Session->FeedChatBytes(Id, Chunk, WeakThis->NowMs());
+				WeakThis->Changed();
 			});
 		}));
-	Request->OnProcessRequestComplete().BindWeakLambda(this, [this, Id, AgentId](FHttpRequestPtr, FHttpResponsePtr Response, bool bOk) { if (!Session) { return; }
-		ChatRequests.Remove(AgentId);
-		if (!bOk || !Response.IsValid()) { Session->ApplyChatTransportFailure(Id, NowMs()); Changed(); return; }
+	Request->OnProcessRequestComplete().BindLambda([WeakThis, Id, AgentId](FHttpRequestPtr, FHttpResponsePtr Response, bool bOk) { if (!WeakThis.IsValid() || !WeakThis->Session) { return; }
+		UWonderlandCompanionClient* const Self = WeakThis.Get();
+		Self->ChatRequests.Remove(AgentId);
+		if (!bOk || !Response.IsValid()) { Self->Session->ApplyChatTransportFailure(Id, Self->NowMs()); Self->Changed(); return; }
 		const int32 Status = Response->GetResponseCode();
-		if (Status == 200 && Response->GetContentType().StartsWith(TEXT("text/event-stream"))) { Session->FinishChatStream(Id, NowMs()); }
+		if (Status == 200 && Response->GetContentType().StartsWith(TEXT("text/event-stream"))) { Self->Session->FinishChatStream(Id, Self->NowMs()); }
 		else
 		{
-			Session->ApplyChatHttpAnswer(Id, Status, ToUtf8(Response->GetHeader(TEXT("Retry-After"))), BytesView(Response->GetContent()), NowMs());
+			Self->Session->ApplyChatHttpAnswer(Id, Status, ToUtf8(Response->GetHeader(TEXT("Retry-After"))), BytesView(Response->GetContent()), Self->NowMs());
 		}
-		Changed();
+		Self->Changed();
 	});
 	ChatRequests.Add(AgentId, Request);
 	Request->ProcessRequest();
@@ -183,9 +194,10 @@ void UWonderlandCompanionClient::DeleteHistory(const FString& AgentId)
 {
 	if (!Session) { return; } // deinitialized: refuse, never dereference
 	const std::string Id = ToUtf8(AgentId);
-	Issue(Session->BeginDeleteHistory(Id), [this, Id](int32 Status, const FString&, const TArray<uint8>&) { if (!Session) { return; }
-		Session->ApplyDeleteHistoryAnswer(Id, Status);
-		Changed();
+	const TWeakObjectPtr<UWonderlandCompanionClient> WeakThis(this);
+	Issue(Session->BeginDeleteHistory(Id), [WeakThis, Id](int32 Status, const FString&, const TArray<uint8>&) { if (!WeakThis.IsValid() || !WeakThis->Session) { return; }
+		WeakThis->Session->ApplyDeleteHistoryAnswer(Id, Status);
+		WeakThis->Changed();
 	});
 	Changed();
 }
