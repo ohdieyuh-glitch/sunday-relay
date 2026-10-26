@@ -694,6 +694,117 @@ const ABSENT_PHASE = {
 		++StartCases;
 	}
 
+	// EXECUTION STATE (founder P0 2026-10-26; MAIN JULIUS's contract): dispatch is never execution; the outcome only from
+	// /result; a run whose LIVE step never started DID NOT START; the contract fold gets each beat once, in order.
+	int ExecCases = 0;
+	std::string Step(int Seq, const char* Job, const char* Name, const char* Status, const char* Conclusion)
+	{
+		return std::string("{\"seq\":") + std::to_string(Seq) + ",\"at\":null,\"kind\":\"step\",\"job\":\"" + Job + "\",\"name\":\"" + Name
+			+ "\",\"status\":\"" + Status + "\",\"conclusion\":" + (Conclusion == nullptr ? std::string("null") : std::string("\"") + Conclusion + "\"") + "}";
+	}
+	std::string Job(int Seq, const char* Name, const char* Status, const char* Conclusion)
+	{
+		return std::string("{\"seq\":") + std::to_string(Seq) + ",\"at\":null,\"kind\":\"job\",\"job\":\"" + Name + "\",\"name\":\"" + Name
+			+ "\",\"status\":\"" + Status + "\",\"conclusion\":" + (Conclusion == nullptr ? std::string("null") : std::string("\"") + Conclusion + "\"") + "}";
+	}
+	std::string Phase(int Seq, const char* Role, const char* TaskType, int Cycle)
+	{
+		return std::string("{\"seq\":") + std::to_string(Seq) + ",\"at\":\"2026-10-26T02:30:00Z\",\"kind\":\"phase\",\"role\":\"" + Role + "\",\"taskType\":\"" + TaskType
+			+ "\",\"state\":\"active\",\"ordinal\":" + std::to_string(Seq) + ",\"repairCycle\":" + std::to_string(Cycle) + ",\"sampled\":true}";
+	}
+	std::string Top(const char* RunStatus, const char* Conclusion, bool bLive, const char* Mode = "paid", const char* Workflow = "40258482240")
+	{
+		return std::string("\"workflowRunId\":\"") + Workflow + "\",\"source\":\"" + (bLive ? "github_actions" : "github_actions_recorded")
+			+ "\",\"reason\":null,\"live\":" + (bLive ? "true" : "false") + ",\"stale\":false,\"mode\":\"" + Mode + "\",\"runStatus\":\"" + RunStatus
+			+ "\",\"runConclusion\":" + (Conclusion == nullptr ? std::string("null") : std::string("\"") + Conclusion + "\"") + ",\"fetchedAt\":\"x\",\"next\":\"e1.1\"";
+	}
+	FExecutionView ViewOf(const std::string& Body, ECheckerVerdict Verdict = ECheckerVerdict::NotRun, bool bCompletion = false, const char* Bound = "40258482240")
+	{
+		FLiveFeed Feed;
+		Feed.Apply(ParseLiveEvents(LiveWlj, 200, Body));
+		return ExecutionViewFor(Feed, true, Bound, Verdict, bCompletion);
+	}
+	void ExecFixtures()
+	{
+		const char* const PJ = "Preflight, then the live mission";
+		const char* const LS = "LIVE: run the first real Julius mission";
+		const std::string Gates = Job(1, "spend-tag", "completed", "success") + "," + Job(2, "paid-slot", "in_progress", nullptr);
+		FExecutionView V = ViewOf(LiveBody(Top("in_progress", nullptr, true), Gates));
+		Expect(V.Phase == EExecutionPhase::Starting, "gates running is STARTING, never executing (live:true is not execution)");
+		V = ViewOf(LiveBody(Top("in_progress", nullptr, true), Gates + "," + Step(3, PJ, "Record that a paid mission was attempted (before any provider can be reached)", "completed", "success")));
+		Expect(V.Phase == EExecutionPhase::Committing, "attempt recorded is COMMITTING, still not executing");
+		V = ViewOf(LiveBody(Top("in_progress", nullptr, true), Gates + "," + Step(3, PJ, "Preflight: each provider accepts its credential", "completed", "success")));
+		Expect(V.Phase == EExecutionPhase::Starting, "provider preflight is not execution");
+		++ExecCases;
+		V = ViewOf(LiveBody(Top("in_progress", nullptr, true), Gates + "," + Step(4, PJ, LS, "in_progress", nullptr)));
+		Expect(V.Phase == EExecutionPhase::Executing && V.Role.empty(), "LIVE step in_progress is EXECUTING");
+		V = ViewOf(LiveBody(Top("in_progress", nullptr, true), Gates + "," + Phase(5, "coder", "build", 0)));
+		Expect(V.Phase == EExecutionPhase::Executing && V.Role == "coder", "a task phase sample is EXECUTING");
+		V = ViewOf(LiveBody(Top("in_progress", nullptr, true), Gates + ",{\"seq\":5,\"at\":\"x\",\"kind\":\"phase\",\"marker\":\"idle\",\"role\":null,\"taskType\":null,\"state\":null,\"ordinal\":null,\"repairCycle\":null,\"sampled\":true}"));
+		Expect(V.Phase == EExecutionPhase::Starting, "an idle marker alone is not execution");
+		V = ViewOf(LiveBody(Top("in_progress", nullptr, true), Gates + "," + Step(4, PJ, LS, "completed", "success")));
+		Expect(V.Phase == EExecutionPhase::Grading, "LIVE finished, run still going: GRADING");
+		++ExecCases;
+		const std::string Ran = Gates + "," + Step(4, PJ, LS, "completed", "success");
+		Expect(ViewOf(LiveBody(Top("completed", "success", false), Ran), ECheckerVerdict::Pass, true).Phase == EExecutionPhase::Completed, "PASS + completion: COMPLETED");
+		Expect(ViewOf(LiveBody(Top("completed", "success", false), Ran), ECheckerVerdict::Pass, false).Phase != EExecutionPhase::Completed, "PASS without completion is not success");
+		Expect(ViewOf(LiveBody(Top("completed", "failure", false), Ran), ECheckerVerdict::Fail, false).Phase == EExecutionPhase::Failed, "FAIL: FAILED");
+		Expect(ViewOf(LiveBody(Top("completed", "success", false), Ran)).Phase == EExecutionPhase::Grading, "NOT_RUN, grade job not done: GRADING");
+		Expect(ViewOf(LiveBody(Top("completed", "success", false), Ran + "," + Job(5, "J1: grade the final message with the pinned hidden checker", "completed", "success"))).Phase == EExecutionPhase::FailedUnverified, "NOT_RUN after grading: FAILED_UNVERIFIED (never success)");
+		Expect(ViewOf(LiveBody(Top("completed", "success", false), Ran)).Phase != EExecutionPhase::Completed, "a successful WORKFLOW is never mission success without the checker");
+		++ExecCases;
+		// 40258482240 exactly: paid-slot gate refused, LIVE skipped.
+		const std::string Refused = Job(1, "spend-tag", "completed", "success") + "," + Step(2, "paid-slot", "Gate: admission runs only reviewed, current, not rolled-back code", "completed", "failure")
+			+ "," + Job(3, "paid-slot", "completed", "failure") + "," + Step(4, PJ, LS, "completed", "skipped");
+		V = ViewOf(LiveBody(Top("completed", "failure", false), Refused));
+		Expect(V.Phase == EExecutionPhase::DidNotStart && V.Detail == "paid-slot / Gate: admission runs only reviewed, current, not rolled-back code", "gate refusal: DID NOT START, naming the gate");
+		Expect(ViewOf(LiveBody(Top("completed", "cancelled", false), Gates)).Phase == EExecutionPhase::DidNotStart, "cancelled before LIVE: did not start");
+		Expect(ViewOf(LiveBody(Top("in_progress", nullptr, true), Refused)).Phase == EExecutionPhase::Starting, "a skipped LIVE step on a still-running run is never GRADING or executing");
+		Expect(ViewOf(LiveBody(Top("completed", "cancelled", false), Ran)).Phase == EExecutionPhase::Cancelled, "cancelled after LIVE: CANCELLED");
+		++ExecCases;
+		Expect(ViewOf(LiveBody(Top("in_progress", nullptr, true, "preflight"), Gates + "," + Step(4, PJ, LS, "in_progress", nullptr))).Phase == EExecutionPhase::Starting, "a preflight run never binds");
+		Expect(ViewOf(LiveBody(Top("in_progress", nullptr, true, "paid", "999"), Gates + "," + Step(4, PJ, LS, "in_progress", nullptr))).Phase == EExecutionPhase::Starting, "another workflow run never binds");
+		{
+			FLiveFeed None;
+			Expect(ExecutionViewFor(None, false, "", ECheckerVerdict::NotRun, false).Phase == EExecutionPhase::None, "nothing started: NONE");
+		}
+		++ExecCases;
+		// The contract cursor: each beat once, in order; stale moves nothing; one ending.
+		FContractCursor Cursor;
+		FExecutionView Seq;
+		Seq.Phase = EExecutionPhase::Starting;
+		std::vector<FContractBeat> B = Cursor.Advance(Seq);
+		Expect(B.size() == 1 && B[0].Type == "run.started", "starting: run.started");
+		Expect(Cursor.Advance(Seq).empty(), "run.started once");
+		Seq.Phase = EExecutionPhase::Executing;
+		Expect(Cursor.Advance(Seq).empty(), "executing without a sample: no role beat");
+		Seq.Role = "coder"; Seq.TaskType = "build";
+		B = Cursor.Advance(Seq);
+		Expect(B.size() == 1 && B[0].Type == "coder.started", "coder beat");
+		Expect(Cursor.Advance(Seq).empty(), "the same sample is not a new beat");
+		Seq.Role = "reviewer"; Seq.TaskType = "review";
+		Expect(Cursor.Advance(Seq).at(0).Type == "review.started", "reviewer beat");
+		Seq.Role = "coder"; Seq.TaskType = "repair_build"; Seq.RepairCycle = 1;
+		B = Cursor.Advance(Seq);
+		Expect(B.size() == 1 && B[0].Type == "repair.started" && B[0].RepairRound == 1, "repair beat with its round");
+		FExecutionView Stale = Seq; Stale.bStale = true; Stale.Phase = EExecutionPhase::Completed;
+		Expect(Cursor.Advance(Stale).empty() && !Cursor.Ended(), "stale moves nothing");
+		Seq.Phase = EExecutionPhase::Completed;
+		B = Cursor.Advance(Seq);
+		Expect(!B.empty() && B.back().Type == "run.completed" && Cursor.Ended(), "one ending");
+		Expect(Cursor.Advance(Seq).empty(), "nothing after the ending");
+		FContractCursor Gate;
+		FExecutionView Dns; Dns.Phase = EExecutionPhase::DidNotStart;
+		B = Gate.Advance(Dns);
+		Expect(B.size() == 2 && B[0].Type == "run.started" && B[1].Type == "run.failed", "restored did-not-start: started then failed, no role beats");
+		FContractCursor Cancel;
+		FExecutionView Can; Can.Phase = EExecutionPhase::Cancelled;
+		B = Cancel.Advance(Can);
+		Expect(B.size() == 1 && Cancel.ReleasedForCancel() && Cancel.Ended(), "cancel releases the beat, no fold ending");
+		Expect(std::string(ContractTaskStateFor(Seq)) == "completed" && std::string(ContractTaskStateFor(Dns)) == "failed", "task states");
+		++ExecCases;
+	}
+
 	void PhaseFixtures()
 	{
 		Expect(std::strstr(VerbatimPhaseVectors, "stage: 'repair:build',\n  attempt: 2,") != nullptr, "verbatim coder phase");
@@ -1446,6 +1557,7 @@ int main()
 	PhaseFixtures();
 	LiveFixtures();
 	StartFixtures();
+	ExecFixtures();
 
 	if (Failures != 0)
 	{
@@ -1453,7 +1565,7 @@ int main()
 		return 1;
 	}
 	std::printf(
-		"J1 MISSION FLOW KAT PASS meanings=%d route=%d result=%d flow=%d windows=%d bridge=%d phases=%d live=%d start=%d\n",
-		Meanings, Routes, Results, FlowSteps, Windows, Bridge, PhaseCases, LiveCases, StartCases);
+		"J1 MISSION FLOW KAT PASS meanings=%d route=%d result=%d flow=%d windows=%d bridge=%d phases=%d live=%d start=%d exec=%d\n",
+		Meanings, Routes, Results, FlowSteps, Windows, Bridge, PhaseCases, LiveCases, StartCases, ExecCases);
 	return 0;
 }

@@ -1485,6 +1485,7 @@ namespace WonderlandJuliusMissionFlow
 		for (const FLiveEvent& Event : Read.Events)
 		{
 			if (Event.Seq <= LastSeq) { continue; } // FLOW_LIVE_RESUME_WITHOUT_DUPLICATES
+			Latch(Event);
 			EventList.push_back(Event);
 			LastSeq = Event.Seq;
 		}
@@ -1493,6 +1494,42 @@ namespace WonderlandJuliusMissionFlow
 			EventList.erase(EventList.begin(), EventList.begin() + static_cast<std::ptrdiff_t>(EventList.size() - MaxEvents));
 		}
 		if (!Read.Next.empty()) { CursorNow = Read.Next; }
+	}
+
+	namespace
+	{
+		// MAIN JULIUS's execution-state contract (2026-10-26): the workflow's real job/step names, ASCII-folded.
+		constexpr const char* LiveJob = "Preflight, then the live mission";
+		constexpr const char* LiveStep = "LIVE: run the first real Julius mission";
+		constexpr const char* AttemptStepPrefix = "Record that a paid mission was attempted";
+		constexpr const char* GradeJob = "J1: grade the final message with the pinned hidden checker";
+	}
+
+	void FLiveFeed::Latch(const FLiveEvent& Event)
+	{
+		if (Event.Kind == "phase")
+		{
+			if (Event.Marker.empty() && !Event.Role.empty())
+			{
+				bTaskPhaseSeen = true; // FLOW_EXEC_TASK_PHASE_IS_EXECUTION
+				LastTaskPhaseEvent = Event;
+			}
+			return;
+		}
+		if (Event.Kind == "step" && Event.Job == LiveJob && Event.Name == LiveStep)
+		{
+			if (Event.Status == "in_progress" || Event.Status == "completed") { bLiveStepStarted = Event.Status == "in_progress" || Event.Conclusion != "skipped"; } // FLOW_EXEC_LIVE_STEP_IS_EXECUTION
+			if (Event.Status == "completed" && Event.Conclusion != "skipped") { bLiveStepFinished = true; } // a skipped LIVE step never ran
+		}
+		if (Event.Kind == "step" && Event.Job == LiveJob && Event.Name.rfind(AttemptStepPrefix, 0) == 0 && Event.Status == "completed" && Event.Conclusion == "success")
+		{
+			bAttemptRecorded = true;
+		}
+		if (Event.Kind == "job" && Event.Name == GradeJob && Event.Status == "completed") { bGradeJobFinished = true; }
+		if (FirstFailureName.empty() && Event.Status == "completed" && Event.Conclusion == "failure")
+		{
+			FirstFailureName = Event.Kind == "job" ? Event.Name : Event.Job + " / " + Event.Name;
+		}
 	}
 
 	FLivePanel LivePanelFor(const FLiveFeed& Feed, std::uint64_t MsSinceLastRead)
@@ -1686,5 +1723,128 @@ namespace WonderlandJuliusMissionFlow
 		Out.bSend = true;
 		Out.Why = "send";
 		return Out;
+	}
+
+	const char* ExecutionPhaseWord(EExecutionPhase Phase)
+	{
+		switch (Phase)
+		{
+		case EExecutionPhase::Starting: return "STARTING";
+		case EExecutionPhase::Committing: return "COMMITTING";
+		case EExecutionPhase::Executing: return "EXECUTING";
+		case EExecutionPhase::Grading: return "GRADING";
+		case EExecutionPhase::Completed: return "COMPLETED";
+		case EExecutionPhase::Failed: return "FAILED";
+		case EExecutionPhase::FailedUnverified: return "FAILED_UNVERIFIED";
+		case EExecutionPhase::DidNotStart: return "DID_NOT_START";
+		case EExecutionPhase::Cancelled: return "CANCELLED";
+		default: return "";
+		}
+	}
+
+	FExecutionView ExecutionViewFor(const FLiveFeed& Feed, bool bStartAccepted, std::string_view BoundWorkflowRunId,
+		ECheckerVerdict Verdict, bool bHasCompletion)
+	{
+		FExecutionView Out;
+		Out.Phase = bStartAccepted ? EExecutionPhase::Starting : EExecutionPhase::None;
+		if (!Feed.HasRead()) { return Out; }
+		const bool bSource = Feed.Source() == ELiveSource::GithubActions || Feed.Source() == ELiveSource::GithubActionsRecorded;
+		const bool bBoundRun = !Feed.WorkflowRunId().empty() && (BoundWorkflowRunId.empty() || Feed.WorkflowRunId() == BoundWorkflowRunId);
+		if (!bSource || Feed.Mode() != ELiveMode::Paid || !bBoundRun) { return Out; } // FLOW_EXEC_BIND_PAID_BOUND_RUN_ONLY
+		Out.WorkflowRunId = Feed.WorkflowRunId();
+		Out.bStale = Feed.IsStale();
+		Out.bRecorded = Feed.Source() == ELiveSource::GithubActionsRecorded;
+		const bool bExecutionSeen = Feed.LiveStepStarted() || Feed.TaskPhaseSeen();
+		if (Feed.TaskPhaseSeen())
+		{
+			Out.Role = Feed.LastTaskPhase().Role;
+			Out.TaskType = Feed.LastTaskPhase().TaskType;
+			Out.RepairCycle = Feed.LastTaskPhase().RepairCycle;
+		}
+		if (Feed.Run() == ELiveRunStatus::Completed)
+		{
+			if (!bExecutionSeen)
+			{
+				// Julius never ran: say which gate refused (or that it was cancelled), never "Julius failed".
+				Out.Phase = EExecutionPhase::DidNotStart; // FLOW_EXEC_NO_LIVE_STEP_IS_DID_NOT_START
+				Out.Detail = !Feed.FirstFailure().empty() ? Feed.FirstFailure() : Feed.RunConclusion();
+				return Out;
+			}
+			if (Feed.RunConclusion() == "cancelled") { Out.Phase = EExecutionPhase::Cancelled; return Out; }
+			if (Verdict == ECheckerVerdict::Pass && bHasCompletion) { Out.Phase = EExecutionPhase::Completed; return Out; } // FLOW_EXEC_SUCCESS_ONLY_FROM_RESULT
+			if (Verdict == ECheckerVerdict::Fail) { Out.Phase = EExecutionPhase::Failed; return Out; }
+			Out.Phase = Feed.GradeJobFinished() ? EExecutionPhase::FailedUnverified : EExecutionPhase::Grading;
+			return Out;
+		}
+		if (Feed.LiveStepFinished()) { Out.Phase = EExecutionPhase::Grading; return Out; }
+		if (bExecutionSeen) { Out.Phase = EExecutionPhase::Executing; return Out; }
+		Out.Phase = Feed.AttemptRecorded() ? EExecutionPhase::Committing : EExecutionPhase::Starting; // FLOW_EXEC_GATES_ARE_NOT_EXECUTION
+		return Out;
+	}
+
+	std::vector<FContractBeat> FContractCursor::Advance(const FExecutionView& View)
+	{
+		std::vector<FContractBeat> Out;
+		if (View.bStale || View.Phase == EExecutionPhase::None || bEnded) { return Out; } // FLOW_CONTRACT_STALE_MOVES_NOTHING
+		if (!bStarted)
+		{
+			Out.push_back(FContractBeat{"run.started", std::string(), 0});
+			bStarted = true;
+		}
+		if (View.Phase == EExecutionPhase::Executing && !View.Role.empty())
+		{
+			const std::string Key = View.Role + "/" + View.TaskType + "/" + std::to_string(View.RepairCycle);
+			if (Key != LastBeatKey)
+			{
+				LastBeatKey = Key;
+				const bool bRepair = View.TaskType.rfind("repair_", 0) == 0;
+				const std::int64_t Round = View.RepairCycle > 0 ? View.RepairCycle : 0;
+				if (bRepair) { Out.push_back(FContractBeat{"repair.started", View.Role, Round}); }
+				else if (View.Role == "reviewer") { Out.push_back(FContractBeat{"review.started", View.Role, Round}); }
+				else if (View.Role == "coder") { Out.push_back(FContractBeat{"coder.started", View.Role, Round}); }
+				else if (View.Role == "architect") { Out.push_back(FContractBeat{"architect.started", View.Role, Round}); }
+			}
+		}
+		switch (View.Phase)
+		{
+		case EExecutionPhase::Completed:
+			Out.push_back(FContractBeat{"run.completed", std::string(), 0});
+			bEnded = true;
+			break;
+		case EExecutionPhase::Failed:
+		case EExecutionPhase::FailedUnverified:
+		case EExecutionPhase::DidNotStart:
+			Out.push_back(FContractBeat{"run.failed", std::string(), 0}); // FLOW_CONTRACT_ONE_ENDING
+			bEnded = true;
+			break;
+		case EExecutionPhase::Cancelled:
+			bCancelled = true;
+			bEnded = true;
+			break;
+		default:
+			break;
+		}
+		return Out;
+	}
+
+	const char* ContractTaskStateFor(const FExecutionView& View)
+	{
+		switch (View.Phase)
+		{
+		case EExecutionPhase::Starting: return "queued";
+		case EExecutionPhase::Committing: return "preparation";
+		case EExecutionPhase::Executing:
+			if (View.TaskType.rfind("repair_", 0) == 0) { return "repair"; }
+			if (View.Role == "reviewer") { return "review"; }
+			if (View.Role == "architect") { return "preparation"; }
+			return "implementation";
+		case EExecutionPhase::Grading: return "verification";
+		case EExecutionPhase::Completed: return "completed";
+		case EExecutionPhase::Failed:
+		case EExecutionPhase::FailedUnverified:
+		case EExecutionPhase::DidNotStart: return "failed";
+		case EExecutionPhase::Cancelled: return "cancelled";
+		default: return "";
+		}
 	}
 }

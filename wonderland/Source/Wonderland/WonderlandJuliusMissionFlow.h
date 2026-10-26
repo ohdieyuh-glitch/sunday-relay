@@ -458,6 +458,19 @@ namespace WonderlandJuliusMissionFlow
 		const std::string& WorkflowRunId() const { return Workflow; }
 		const std::string& Cursor() const { return CursorNow; }
 		const std::vector<FLiveEvent>& Events() const { return EventList; }
+		/**
+		 * EXECUTION FACTS, latched as events arrive (the event list is capped, these are not). Names per MAIN JULIUS's
+		 * execution-state contract (2026-10-26), compared exactly.
+		 */
+		bool LiveStepStarted() const { return bLiveStepStarted; }
+		bool LiveStepFinished() const { return bLiveStepFinished; }
+		bool TaskPhaseSeen() const { return bTaskPhaseSeen; }
+		bool AttemptRecorded() const { return bAttemptRecorded; }
+		bool GradeJobFinished() const { return bGradeJobFinished; }
+		/** "job / step" of the first job or step that concluded failure, or empty. */
+		const std::string& FirstFailure() const { return FirstFailureName; }
+		/** The newest non-marker phase sample (Role empty when none yet). */
+		const FLiveEvent& LastTaskPhase() const { return LastTaskPhaseEvent; }
 
 	private:
 		bool bHasRead = false;
@@ -472,6 +485,14 @@ namespace WonderlandJuliusMissionFlow
 		std::string CursorNow;
 		std::int64_t LastSeq = -1;
 		std::vector<FLiveEvent> EventList;
+		bool bLiveStepStarted = false;
+		bool bLiveStepFinished = false;
+		bool bTaskPhaseSeen = false;
+		bool bAttemptRecorded = false;
+		bool bGradeJobFinished = false;
+		std::string FirstFailureName;
+		FLiveEvent LastTaskPhaseEvent;
+		void Latch(const FLiveEvent& Event);
 	};
 
 	struct FLivePanel
@@ -541,4 +562,90 @@ namespace WonderlandJuliusMissionFlow
 	 */
 	FStartGate StartGateFor(std::string_view WrapperToken, bool bHasSession, bool bHasWorkflowRun, EStartRecord Record,
 		bool bExplicitClick, std::string_view Typed);
+
+	// ---------------------------------------------------------------------------------------------------------------
+	// EXECUTION STATE (founder P0 2026-10-26: the mission contract follows Julius's ACTUAL execution, not "a workflow
+	// is running"). MAIN JULIUS's contract, verbatim: /events `live` means queued/in_progress INCLUDING the gates and is
+	// never "executing"; EXECUTING is the first of the LIVE step in_progress or a non-marker phase sample; the outcome
+	// comes only from /result once the LIVE step started; a run whose LIVE step never started DID NOT START.
+	// ---------------------------------------------------------------------------------------------------------------
+	enum class EExecutionPhase : std::uint8_t
+	{
+		None,
+		/** Start accepted / dispatched; the workflow is in its gates. Never "executing". */
+		Starting,
+		/** "Record that a paid mission was attempted" succeeded: the point of no return, still not executing. */
+		Committing,
+		Executing,
+		/** The LIVE step finished and the pinned checker has not reported yet. */
+		Grading,
+		Completed,
+		Failed,
+		/** The run completed, the LIVE step ran, and no verdict arrived: unknown, never success. */
+		FailedUnverified,
+		/** The run completed and the LIVE step never started (a gate refused): Julius did not run. */
+		DidNotStart,
+		Cancelled,
+	};
+
+	const char* ExecutionPhaseWord(EExecutionPhase Phase);
+
+	struct FExecutionView
+	{
+		EExecutionPhase Phase = EExecutionPhase::None;
+		/** The server said stale: keep the last state; never advance or regress on it. */
+		bool bStale = false;
+		/** The run is over and the server reads it as recorded (not live). */
+		bool bRecorded = false;
+		/** The bound GitHub Actions run, when bound. */
+		std::string WorkflowRunId;
+		/** DidNotStart: the failing gate ("job / step"); otherwise empty. */
+		std::string Detail;
+		/** The newest real task sample while executing: role, task type, repair cycle (-1 unknown). */
+		std::string Role;
+		std::string TaskType;
+		std::int64_t RepairCycle = 0;
+	};
+
+	/**
+	 * Binds ONLY to a paid GitHub Actions run whose id is the start's bound run (when the start named one). Anything
+	 * else (no read yet, a preflight, another run) is at most Starting when the founder's start was accepted.
+	 */
+	FExecutionView ExecutionViewFor(const FLiveFeed& Feed, bool bStartAccepted, std::string_view BoundWorkflowRunId,
+		ECheckerVerdict Verdict, bool bHasCompletion);
+
+	/** One event for the EXISTING mission-contract fold (WonderlandApplyEvent), in the fold's own vocabulary. */
+	struct FContractBeat
+	{
+		std::string Type;
+		/** "architect", "coder", "reviewer" or empty. */
+		std::string Role;
+		std::int64_t RepairRound = 0;
+	};
+
+	/**
+	 * Turns execution views into the contract's events, each emitted ONCE and in order: run.started, then a role beat
+	 * per new task sample (architect/coder/review/repair .started), then exactly one ending (run.completed or
+	 * run.failed). A cancel ends the presentation without a fold event (the fold has no cancelled beat). A stale view
+	 * emits nothing. Restarting the client starts a fresh cursor, and the views rebuild the same sequence.
+	 */
+	class FContractCursor
+	{
+	public:
+		std::vector<FContractBeat> Advance(const FExecutionView& View);
+		bool Started() const { return bStarted; }
+		bool Ended() const { return bEnded; }
+		/** True once a cancel was seen: the caller releases the beat so the headline reads the task state. */
+		bool ReleasedForCancel() const { return bCancelled; }
+
+	private:
+		bool bStarted = false;
+		bool bEnded = false;
+		bool bCancelled = false;
+		std::string LastBeatKey;
+	};
+
+	/** The contract task state word for a view ("queued", "preparation", "implementation", "review", "repair",
+	 *  "verification", "completed", "failed", "cancelled") or empty for none. */
+	const char* ContractTaskStateFor(const FExecutionView& View);
 }
