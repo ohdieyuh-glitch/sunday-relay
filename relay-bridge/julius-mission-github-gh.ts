@@ -26,6 +26,7 @@ import type {
   JuliusMissionWorkflowArtifactFile,
   JuliusMissionWorkflowRun,
 } from './julius-mission-evidence-reader';
+import { EVIDENCE_ARTIFACT, VERDICT_ARTIFACT } from './julius-mission-evidence-reader';
 
 /** One `gh` invocation. The production runner (wonderland-live-wiring.ts) starts `gh`; tests pass a fake. */
 export interface GhReadRunner {
@@ -91,8 +92,9 @@ const ARTIFACT_NAME = /^[A-Za-z0-9._-]{1,120}$/u;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/u;
 const NAME_MAX = 300;
 
-/** The evidence reader reads these artifacts and no others; their bytes are fetched only for a finished run. */
-export const EVIDENCE_ARTIFACT_NAMES: ReadonlySet<string> = new Set(['julius-live-evidence', 'julius-inworld-grade']);
+/** The evidence reader reads these artifacts and no others; their bytes are fetched only for a finished run. The names are the reader's own
+ * constants, so the two cannot drift apart: a hand-typed 'julius-inworld-grade' here once meant the grade job's verdict was never downloaded. */
+export const EVIDENCE_ARTIFACT_NAMES: ReadonlySet<string> = new Set([EVIDENCE_ARTIFACT, VERDICT_ARTIFACT]);
 const COMPLETED_MARKER = /^[a-z][a-z0-9-]{2,48}-completed$/u;
 /** Bound on the bytes one finished run's artifacts may bring into the bridge. */
 export const ARTIFACT_BYTES_MAX = 32 * 1024 * 1024;

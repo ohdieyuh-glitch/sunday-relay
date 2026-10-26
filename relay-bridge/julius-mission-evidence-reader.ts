@@ -26,9 +26,9 @@ import { juliusMissionTraceId } from '../scripts/julius-mission-trace.mjs';
 import { projectJuliusSlotViews, type JuliusTimelineEntry } from '../src/relay/mission/julius/julius-runtime-api';
 
 export const JULIUS_SPEND_TAG_SCHEMA = 'julius-run-spent.v1' as const;
-const EVIDENCE_ARTIFACT = 'julius-live-evidence';
+export const EVIDENCE_ARTIFACT = 'julius-live-evidence';
 /** The grade job's own artifact. A verdict anywhere else is not read. */
-const VERDICT_ARTIFACT = 'julius-inworld-verdict';
+export const VERDICT_ARTIFACT = 'julius-inworld-verdict';
 /** The grade job's one step that exits with the checker's status (julius-first-live-mission.yml). */
 const GRADE_STEP = 'J1: stage the pinned checker from git objects and grade';
 /** J1_PINNED_CHECKER_FILE_SHA256 (relay-bridge/julius-inworld-checker.ts), inlined so this reader does not reach the J1 dispatch modules. A test holds the two equal. */

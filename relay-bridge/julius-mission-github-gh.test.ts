@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { createGhMissionGitHub, GithubUnreadableError, type GhReadRunner } from './julius-mission-github-gh';
+import { createGhMissionGitHub, EVIDENCE_ARTIFACT_NAMES, GithubUnreadableError, type GhReadRunner } from './julius-mission-github-gh';
 import { cachedEvidenceReader, EVIDENCE_RECHECK_MS, wonderlandLiveReadsFrom } from './wonderland-live-wiring';
 
 const REPO = 'ohdieyuh-glitch/sunday-relay';
@@ -104,7 +104,7 @@ describe('the read-only gh port', () => {
     const artifacts = json({ artifacts: [
       { name: 'julius-live-evidence', size_in_bytes: 100, expired: false },
       { name: 'julius-inworld-data-1-completed', size_in_bytes: 10, expired: false },
-      { name: 'julius-inworld-grade', size_in_bytes: 10, expired: false },
+      { name: 'julius-inworld-verdict', size_in_bytes: 10, expired: false },
       { name: 'some-other-artifact', size_in_bytes: 10, expired: false },
       { name: 'julius-live-evidence-old', size_in_bytes: 10, expired: true },
     ] });
@@ -123,7 +123,7 @@ describe('the read-only gh port', () => {
     });
     const live = await createGhMissionGitHub({ repo: REPO, runner: running }).readWorkflowRun(RUN, '1');
     expect(live?.artifacts.map((artifact) => [artifact.name, artifact.files])).toEqual([
-      ['julius-live-evidence', null], ['julius-inworld-data-1-completed', null], ['julius-inworld-grade', null],
+      ['julius-live-evidence', null], ['julius-inworld-data-1-completed', null], ['julius-inworld-verdict', null],
     ]);
     expect(running.calls.some((args) => args[0] === 'run')).toBe(false);
     const finished = fake({
@@ -132,7 +132,7 @@ describe('the read-only gh port', () => {
       [`${base}/actions/runs/${RUN}/artifacts?per_page=100`]: artifacts,
       'download julius-live-evidence': (args) => { downloadedTo = args[8] ?? ''; return download(args); },
       'download julius-inworld-data-1-completed': download,
-      'download julius-inworld-grade': download,
+      'download julius-inworld-verdict': download,
     });
     const done = await createGhMissionGitHub({ repo: REPO, runner: finished }).readWorkflowRun(RUN, '1');
     expect(done).toMatchObject({ workflowRunId: RUN, headSha: SHA, status: 'completed', conclusion: 'success', createdAt: '2026-10-23T17:19:00Z', failedSteps: ['LIVE: run the first real Julius mission'] });
@@ -142,10 +142,25 @@ describe('the read-only gh port', () => {
       { path: 'nested/runs.tsv', text: 'run_id\tstate\n' },
     ]);
     expect(finished.calls.filter((args) => args[0] === 'run').map((args) => args[6])).toEqual([
-      'julius-live-evidence', 'julius-inworld-data-1-completed', 'julius-inworld-grade',
+      'julius-live-evidence', 'julius-inworld-data-1-completed', 'julius-inworld-verdict',
     ]);
     expect(existsSync(downloadedTo)).toBe(false);
     expectReadOnly([...running.calls, ...finished.calls]);
+  });
+
+  it('downloads exactly the artifacts the paid workflow uploads for evidence and verdict, so a graded verdict can reach /result', () => {
+    // Every `name:` under an upload-artifact step of the paid workflow; the reader's names must each be one of them.
+    const workflow = readFileSync(join('.github', 'workflows', 'julius-first-live-mission.yml'), 'utf8');
+    const lines = workflow.split('\n');
+    const uploaded = new Set<string>();
+    lines.forEach((line, i) => {
+      if (!/^\s*- uses: actions\/upload-artifact@/u.test(line)) return;
+      const name = lines.slice(i + 1, i + 7).map((next) => /^\s+name:\s*(\S.*)$/u.exec(next)?.[1]).find((hit) => hit !== undefined);
+      if (name !== undefined) uploaded.add(name.trim());
+    });
+    expect(uploaded.has('julius-inworld-verdict')).toBe(true);
+    for (const name of EVIDENCE_ARTIFACT_NAMES) expect(uploaded.has(name), name).toBe(true);
+    expect([...EVIDENCE_ARTIFACT_NAMES].sort()).toEqual(['julius-inworld-verdict', 'julius-live-evidence']);
   });
 
   it('reads job steps and commit statuses as names and states only', async () => {
