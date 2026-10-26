@@ -44,6 +44,8 @@
     "julius:main-monotonicity": "node scripts/julius-main-monotonicity.mjs",
     "julius:live-preflight": "node scripts/julius-live-preflight-gates.mjs",
     "relay:beta-gate": "node scripts/wonderland-beta-gate.mjs",
+    "julius:latency:measure:build": "esbuild scripts/julius-latency-measure-main.ts --bundle --platform=node --format=cjs --outfile=dist-relay-bridge/julius-latency-measure.cjs --log-level=warning",
+    "julius:latency:measure": "npm run julius:latency:measure:build --silent && node dist-relay-bridge/julius-latency-measure.cjs",
     "julius:harness:export": "node scripts/export-julius-harness.mjs",
     "julius:harness:check": "node scripts/export-julius-harness.mjs --check",
     "julius:harness:verify": "node scripts/export-julius-harness.mjs && node scripts/export-julius-harness.mjs --check",

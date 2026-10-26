@@ -128,6 +128,7 @@ const BOUNDARIES = [
 const EXCLUDED_FILES = [
   { path: 'relay-bridge/julius/coding-agent-fixtures.ts', category: 'fixtures', reason: 'deterministic Coding Agent providers — generic scripted and Codex-shaped — and a recording fake executor, for the provider-swappability proofs; nothing on the live path imports it, so no scripted provider can reach a real mission' },
   { path: 'src/relay/mission/julius/julius-runtime-fixtures.ts', category: 'fixtures', reason: 'a complete deterministic Julius deployment in memory — scripted adapters, stepping clock, counting ids — exported by the kernel barrel for tests; the live composition has no import through which a scripted adapter could arrive' },
+  { path: 'src/relay/mission/julius/julius-latency-measure.ts', category: 'test harness', reason: 'the SIMULATED-provider-latency measurement: scripted fixture adapters wrapped in injected delays, driven by one or more run loops to separate Julius time from fake provider time; run by its e2e test and `npm run julius:latency:measure`, imported by no root' },
   { path: 'src/relay/mission/julius/julius-fault-injection.ts', category: 'test harness', reason: 'wraps a store so a named method throws on its Nth call — the chaos instrument the recovery scenarios use; no production caller' },
   { path: 'src/relay/connectors/gpt-architect/fake-architect.ts', category: 'fake', reason: 'the deterministic offline fake of the GPT architect, exported by the connector barrel for the suite and Demo Simulation; the live worker binds runGptArchitect only' },
 ];
