@@ -481,7 +481,8 @@ void UWonderlandJuliusMissionSubsystem::SyncMissionContract()
 		{
 			bContractSuspended = false;
 			ContractTaskWord.Reset(); // re-apply the verified state below
-			Contract->ResumeRealRunBeat();
+			// D1: the grading wait stays neutral after a reconnect -- never re-show the last role's act.
+			if (View.Phase != EExecutionPhase::Grading) { Contract->ResumeRealRunBeat(); }
 			UE_LOG(LogJuliusJ1, Display, TEXT("{\"event\":\"contract_resumed\",\"wlj_run_id\":\"%s\",\"phase\":\"%s\"}"), *Run, UTF8_TO_TCHAR(ExecutionPhaseWord(View.Phase)));
 		}
 	}
@@ -958,7 +959,9 @@ void UWonderlandJuliusMissionSubsystem::PollLiveEvents()
 	if (bLiveInFlight) { return; }
 	const FLiveFeed& Feed = Host->LiveFeed;
 	// The bound workflow run finished, GitHub was readable, and the last page brought nothing new: the stream is done.
-	if (Feed.Run() == ELiveRunStatus::Completed && !Feed.IsStale() && bLiveDrained) { return; }
+	// ...unless the contract still awaits the verdict (REVIEW N1): the uncertainty clock runs on /events, so a stopped poll
+	// would read as a lost connection. Polling on keeps that clock honest; a real drop still trips it.
+	if (Feed.Run() == ELiveRunStatus::Completed && !Feed.IsStale() && bLiveDrained && !bAwaitingVerdict) { return; }
 	// The wrapper's run is over and the bridge says nothing was ever dispatched: no stream will ever exist.
 	if (Host->Session.CanStartNewAttempt() && Feed.Source() == ELiveSource::None && Feed.Reason() == "not_dispatched") { return; }
 	const uint64 NowMs = Host->Clock.NowUtcMs();
