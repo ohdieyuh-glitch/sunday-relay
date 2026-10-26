@@ -227,6 +227,34 @@ describe('a provider error is classified on its way to being discarded', () => {
     expect(JSON.stringify(outcome)).not.toContain('sk-ant');
   });
 
+  it('#56: the runtime\'s structured `error: "rate_limit"` is the rate limit, and a 429 in prose is not', async () => {
+    // The installed CLI's real shape: a synthetic assistant message whose prose names no body type and whose `error`
+    // field is the runtime's own classification; then the process exits.
+    const limited = (error: unknown) => runHostedCodingAgent({
+      queryFn: () => (async function* () {
+        yield {
+          type: 'assistant', parent_tool_use_id: null, ...(error === undefined ? {} : { error }),
+          message: { content: [{ type: 'text', text: 'API Error: Request rejected (429) · this may be a temporary capacity issue.' }] },
+        };
+        throw new Error('Claude Code process exited with code 1: API Error: Request rejected (429)');
+      })(),
+      prompt: 'x', workspacePath: WS, apiKey: 'sk-ant-SECRET-VALUE', requestedModel: null, now: clock(),
+    });
+    const structured = await limited('rate_limit');
+    expect(structured.kind).toBe('launch_failed');
+    if (structured.kind !== 'launch_failed') throw new Error('expected launch_failed');
+    expect(structured.observation.initSeen).toBe(false);
+    expect(structured.observation.assistantError).toBe('rate_limit');
+    expect(structured.failureReason).toBe('rate_limited');
+    for (const absent of [undefined, null, 'overloaded', 'something_new']) {
+      const prose = await limited(absent);
+      if (prose.kind !== 'launch_failed') throw new Error('expected launch_failed');
+      expect(prose.failureReason, String(absent)).not.toBe('rate_limited');
+    }
+    const unknown = await limited('something_new');
+    expect(unknown.observation.assistantError, 'an unknown value is recorded as unrecognised, never forwarded').toBe('unrecognised');
+  });
+
   it('says "no_message" when the throw carried no message at all', async () => {
     // Unknown stays Unknown: a throw with nothing in it is not an execution
     // error we recognised, and `unclassified` would claim we read something.

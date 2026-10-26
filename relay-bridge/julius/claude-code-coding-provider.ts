@@ -201,7 +201,7 @@ export const hostedCoderDiagnostics = (input: {
      * classifying a successful summary would read the word "error" in it as one.
      */
     failureReason: input.outcome === 'failed'
-      ? input.failureReason ?? classifyHostedFailure(observed?.finalText ?? null)
+      ? input.failureReason ?? classifyHostedFailure(observed?.finalText ?? null, { assistantError: observed?.assistantError ?? null })
       : null,
     // THE ROUND THAT SPENT THE MONEY.
     stage: input.taskType === 'repair:build' ? 'repair:build' : 'build',

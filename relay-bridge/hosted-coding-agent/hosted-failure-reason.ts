@@ -67,12 +67,39 @@ export const HOSTED_FAILURE_REASONS = [
 export type HostedFailureReason = (typeof HOSTED_FAILURE_REASONS)[number];
 
 /**
+ * A RATE LIMIT IS RECOGNISED ONLY FROM A STRUCTURED SIGNAL (bug batch #56).
+ *
+ * `rate_limited` becomes RATE_LIMIT, and a RATE_LIMIT with `runtimeStarted === false` is the ONE handed failure the
+ * coordinator still retries: it is taken as the provider's own proof that nothing ran. Prose cannot carry that proof.
+ * The loose rule this replaces (`\b429\b|rate limit|too many requests`) read any sentence that mentioned a 429 as
+ * that proof — a tool's output quoted back, a proxy's page, a model's own words.
+ *
+ * Two signals are structured, and only these:
+ *  - the runtime's own classification, the SDK assistant message's `error: 'rate_limit'` (`HostedObservation`'s
+ *    `assistantError`). The installed CLI (claude-agent-sdk 0.3.286) writes a 429 as
+ *    `API Error: Request rejected (429) · <the body's message>` with `error: "rate_limit"` beside it, so for the
+ *    current runtime this field is the signal and the prose is not;
+ *  - the Messages API error body's own type, `"type":"rate_limit_error"`, as an APIError message carries it
+ *    (`429 {"type":"error","error":{"type":"rate_limit_error",…}}`). The CLI recognises a rate limit by exactly this
+ *    substring; whitespace and one level of JSON-string escaping are tolerated.
+ *
+ * Anything else that mentions a 429 falls through to the table below, to whatever else it says or `unclassified`:
+ * never a reason to retry.
+ */
+const STRUCTURED_RATE_LIMIT_BODY = /\\?"type\\?"\s*:\s*\\?"rate_limit_error\\?"/u;
+
+/** The structured signals the caller may hold beside the text. */
+export interface HostedFailureSignals {
+  /** The SDK assistant message's `error` field, as `HostedObservation.assistantError` records it. */
+  readonly assistantError?: string | null;
+}
+
+/**
  * Ordered, because a provider sentence can satisfy more than one pattern and
- * the FIRST match wins deterministically. Specific before general: a 429 that
- * also says "error" is a rate limit, not an execution error.
+ * the FIRST match wins deterministically. Specific before general.
  */
 const PATTERNS: readonly (readonly [RegExp, HostedFailureReason])[] = [
-  [/\b429\b|rate[ _-]?limit|too many requests/iu, 'rate_limited'],
+  [STRUCTURED_RATE_LIMIT_BODY, 'rate_limited'],
   // BEFORE the 400 rule: credit exhaustion arrives as a 400, and it is not a
   // malformed request — retrying it buys nothing until someone pays.
   [/credit balance|insufficient[ _-]?(credit|funds|balance)|billing|payment required|\b402\b|quota (exceeded|exhausted)/iu, 'credit_unavailable'],
@@ -93,10 +120,16 @@ const PATTERNS: readonly (readonly [RegExp, HostedFailureReason])[] = [
  * returned value is a literal from this module; no substring of `finalText`
  * can reach the caller, which is what makes it safe to record durably.
  */
-export function classifyHostedFailure(finalText: string | null | undefined): HostedFailureReason {
-  if (typeof finalText !== 'string' || finalText.trim() === '') return 'no_message';
-  // FIRST, because it is the most specific: a limit sentence may also carry a 429 or the word "error".
-  if (isSubscriptionUsageLimit(finalText)) return 'usage_limit_reached';
-  for (const [pattern, reason] of PATTERNS) if (pattern.test(finalText)) return reason;
+export function classifyHostedFailure(
+  finalText: string | null | undefined,
+  signals: HostedFailureSignals = {},
+): HostedFailureReason {
+  const text = typeof finalText === 'string' && finalText.trim() !== '' ? finalText : null;
+  // FIRST, because it is the most specific: a limit sentence may also carry a 429, the word "error", or the runtime's
+  // own `rate_limit` (the CLI writes the subscription's limits under that same field).
+  if (text !== null && isSubscriptionUsageLimit(text)) return 'usage_limit_reached';
+  if (signals.assistantError === 'rate_limit') return 'rate_limited';
+  if (text === null) return 'no_message';
+  for (const [pattern, reason] of PATTERNS) if (pattern.test(text)) return reason;
   return 'unclassified';
 }
