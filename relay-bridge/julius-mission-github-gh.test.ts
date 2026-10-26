@@ -14,6 +14,7 @@ const TAG = 'refs/tags/julius-run-spent-0b7a1c2e4f3d4a6b8c2d3e4f5a6b7c8d';
 /** Every argv this port may hand `gh`: a GET of one allowlisted path, or one artifact download. */
 const ALLOWED_API = [
   /^repos\/ohdieyuh-glitch\/sunday-relay\/git\/ref\/tags\/julius-run-spent-[0-9a-f]{32}$/u,
+  /^repos\/ohdieyuh-glitch\/sunday-relay\/git\/ref\/tags\/julius-run-record-[0-9a-f]{32}-result$/u,
   /^repos\/ohdieyuh-glitch\/sunday-relay\/git\/tags\/[0-9a-f]{40}$/u,
   /^repos\/ohdieyuh-glitch\/sunday-relay\/actions\/runs\/\d+$/u,
   /^repos\/ohdieyuh-glitch\/sunday-relay\/actions\/runs\/\d+\/attempts\/\d+$/u,
@@ -93,6 +94,25 @@ describe('the read-only gh port', () => {
       [`${base}/git/ref/tags/julius-run-spent-0b7a1c2e4f3d4a6b8c2d3e4f5a6b7c8d`]: { code: 1, stdout: '', stderr: 'HTTP 502: Bad Gateway' },
     }) });
     await expect(broken.readAnnotatedTagMessage(TAG)).rejects.toBeInstanceOf(GithubUnreadableError);
+    expectReadOnly(runner.calls);
+  });
+
+  it('X′ §4: reads the result record tag the same way; no other record ref is read', async () => {
+    const RESULT = 'refs/tags/julius-run-record-0b7a1c2e4f3d4a6b8c2d3e4f5a6b7c8d-result';
+    const runner = fake({
+      [`${base}/git/ref/tags/julius-run-record-0b7a1c2e4f3d4a6b8c2d3e4f5a6b7c8d-result`]: json({ object: { type: 'tag', sha: TAG_SHA } }),
+      [`${base}/git/tags/${TAG_SHA}`]: json({ message: 'julius-run-result.v1\nrun=x\n' }),
+    });
+    const github = createGhMissionGitHub({ repo: REPO, runner });
+    expect(await github.readAnnotatedTagMessage(RESULT)).toBe('julius-run-result.v1\nrun=x\n');
+    const none = fake({});
+    const refused = createGhMissionGitHub({ repo: REPO, runner: none });
+    for (const ref of [
+      'refs/tags/julius-run-record-0b7a1c2e4f3d4a6b8c2d3e4f5a6b7c8d-attempted',
+      'refs/tags/julius-run-record-0b7a1c2e4f3d4a6b8c2d3e4f5a6b7c8d-result-x',
+      'refs/tags/julius-run-record-../../x-result',
+    ]) expect(await refused.readAnnotatedTagMessage(ref), ref).toBeNull();
+    expect(none.calls).toEqual([]);
     expectReadOnly(runner.calls);
   });
 
@@ -180,7 +200,7 @@ describe('the read-only gh port', () => {
       steps: [{ number: 1, name: 'Set up job', status: 'completed', conclusion: 'success', startedAt: '2026-10-23T17:19:01Z', completedAt: '2026-10-23T17:19:02Z' }],
     }]);
     expect(await github.readCommitStatuses(SHA)).toEqual([{
-      id: '99', context: 'julius-live-progress', state: 'pending', description: 'v1 r1.a1.0b7a1c2e s1 idle', creator: 'github-actions[bot]', createdAt: '2026-10-23T17:20:00Z',
+      id: '99', context: 'julius-live-progress', state: 'pending', description: 'v1 r1.a1.0b7a1c2e s1 idle', creator: 'github-actions[bot]', createdAt: '2026-10-23T17:20:00Z', targetUrl: 'https://example.invalid',
     }]);
     expectReadOnly(runner.calls);
   });

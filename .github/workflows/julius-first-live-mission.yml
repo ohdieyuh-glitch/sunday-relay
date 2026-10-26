@@ -448,6 +448,13 @@ jobs:
     outputs:
       handoff_sha256sums: ${{ steps.handoff.outputs.sums }}
       handoff_sums_sha256: ${{ steps.handoff.outputs.sums_sha256 }}
+      # THE RESULT RECORD'S RUN HALF (X′ §4): closed fields only, read by the record job.
+      marker_namespace: ${{ steps.inputs_gate.outputs.marker_namespace }}
+      final_state: ${{ steps.run_summary.outputs.final_state }}
+      completed_at: ${{ steps.run_summary.outputs.completed_at }}
+      outcome_unknown: ${{ steps.run_summary.outputs.outcome_unknown }}
+      cost_basis: ${{ steps.run_summary.outputs.cost_basis }}
+      usd_micros: ${{ steps.run_summary.outputs.usd_micros }}
     # THE JOB BUDGET IS SHARED OUT, not a taste. It is `JOB_BUDGET_MS` in
     # relay-bridge/reviewer-deadline.ts and a structural test fails if the two
     # disagree. 60 -> 90 when the reviewer deadline was derived (50 minutes: six
@@ -1562,6 +1569,10 @@ jobs:
           derived=$(node scripts/julius-admission-run-id.mjs derive) || refuse ATTEMPT_TAG_UNVERIFIED
           run_id=$(printf '%s\n' "$derived" | sed -n 's/^run_id=//p')
           suffix=$(printf '%s\n' "$derived" | sed -n 's/^tag_suffix=//p')
+          # One line each: `grep -x` below would accept a value if ANY of its lines matched.
+          for value in "$run_id" "$suffix" "${MARKER_NAMESPACE:-}"; do
+            case "$value" in *$'\n'*|*$'\r'*) refuse ATTEMPT_TAG_UNVERIFIED ;; esac
+          done
           printf '%s' "$run_id" | grep -Eqx 'wlj_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|run:[0-9a-f]{24}' || refuse ATTEMPT_TAG_UNVERIFIED
           printf '%s' "$suffix" | grep -Eqx '[0-9a-f]{24}|[0-9a-f]{32}' || refuse ATTEMPT_TAG_UNVERIFIED
           printf '%s' "${MARKER_NAMESPACE:-}" | grep -Eqx '[a-z][a-z0-9-]{2,48}' || refuse ATTEMPT_TAG_UNVERIFIED
@@ -2122,6 +2133,84 @@ jobs:
           if [ "$code" -ne 0 ]; then echo "::error title=Evidence bundle does not resolve::resolve-artifacts --strict exited $code (see the job summary)"; fi
           exit "$code"
 
+      # THE RESULT RECORD'S RUN HALF (X′ §4), from the SCANNED bundle: whether Julius completed (LIVE
+      # succeeded AND the evidence has this run's one `RESULT: COMPLETED`), when, the first ambiguous
+      # provider outcome Julius recorded (the reader's closed causes), and the settled cost. Closed
+      # tokens only, each held to its shape here and again by the record job; never model text.
+      - name: 'Result record: summarize this run in closed fields'
+        id: run_summary
+        if: always() && inputs.mission == 'julius-inworld-data-1' && inputs.confirm_live == 'RUN LIVE MISSION'
+        env:
+          LIVE_OUTCOME: ${{ steps.live_mission.outcome }}
+          JULIUS_RUN_ID: ${{ needs.spend-tag.outputs.run_id }}
+          MARKER_NAMESPACE: ${{ steps.inputs_gate.outputs.marker_namespace }}
+        run: |
+          set -euo pipefail
+          completed_line=0
+          if [ -f julius-live-evidence/live-mission.evidence.txt ]; then
+            completed_line=$(JULIUS_RUN_ID="$JULIUS_RUN_ID" node -e 'const l=require("fs").readFileSync("julius-live-evidence/live-mission.evidence.txt","utf8").split("\n").map((x)=>x.replace(/\r$/,""));let n=0;for(let i=0;i<l.length-1;i++){if(l[i].startsWith("RESULT: COMPLETED")&&l[i+1]==="  run: "+process.env.JULIUS_RUN_ID)n++}process.stdout.write(String(n))' 2>/dev/null) || completed_line=0
+          fi
+          case "${LIVE_OUTCOME:-}" in
+            success) if [ "$completed_line" = 1 ]; then final_state=COMPLETED; else final_state=FAILED; fi ;;
+            cancelled) final_state=INTERRUPTED ;;
+            *) final_state=FAILED ;;
+          esac
+          completed_at=none
+          if [ "$final_state" = COMPLETED ]; then
+            completed_at=$(sed -n 's/^completed_at=\([0-9TZ:-]*\)$/\1/p' "${MARKER_NAMESPACE}-completed/marker.txt" 2>/dev/null | head -1 || true)
+            printf '%s' "$completed_at" | grep -Eqx '[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z' || final_state=FAILED
+            [ "$final_state" = COMPLETED ] || completed_at=none
+          fi
+          summary=$(JULIUS_RUN_ID="$JULIUS_RUN_ID" node -e '
+            const fs = require("fs");
+            const run = process.env.JULIUS_RUN_ID;
+            const table = (name) => {
+              let text; try { text = fs.readFileSync("julius-live-evidence/" + name, "utf8"); } catch { return null; }
+              const lines = text.split("\n").map((x) => x.replace(/\r$/, "")).filter((x) => x !== "" && !/^\(\d+ rows?\)$/.test(x.trim()));
+              if (lines.length === 0 || lines[0].trim() === "unavailable") return null;
+              const head = lines[0].split("\t");
+              const rows = [];
+              for (const line of lines.slice(1)) { const cells = line.split("\t"); if (cells.length !== head.length) return null; rows.push(Object.fromEntries(head.map((k, i) => [k, cells[i]]))); }
+              return rows;
+            };
+            const causes = ["HANDED_OUTCOME_UNKNOWN", "HANDED_TIMEOUT_OUTCOME_UNKNOWN", "HANDED_FAILURE_OUTCOME_UNKNOWN"];
+            let unknown = "none";
+            for (const row of table("failures.tsv") ?? []) {
+              if (row.run_id !== run) continue;
+              const cause = [row.reason_code, row.julius_code, row.failure_class].find((v) => causes.includes(v));
+              if (cause === undefined) continue;
+              if (!((row.event_type === "julius.recovery.action" && row.recovery_action === "FAIL_TASK") || row.event_type === "julius.task.failed")) continue;
+              const role = /^[A-Z_]{1,40}$/.test(row.role ?? "") ? row.role : "none";
+              const task = /^[A-Za-z0-9:_-]{1,128}$/.test(row.task_id ?? "") ? row.task_id : "none";
+              unknown = cause + "/" + role + "/" + task;
+              break;
+            }
+            let basis = "UNKNOWN", micros = "UNKNOWN";
+            const cost = (table("cost-accounting.tsv") ?? []).filter((row) => row.run_id === run);
+            const n = (v) => (/^(0|[1-9][0-9]{0,15})$/.test(v ?? "") ? Number(v) : null);
+            if (cost.length > 0) {
+              let known = 0, ok = true, complete = true;
+              for (const row of cost) {
+                const k = n(row.known_usd_micros), u = n(row.unknown_components), e = n(row.estimated_components), s = n(row.unsettled_components);
+                if (k === null || u === null || e === null || s === null) { ok = false; break; }
+                known += k; if (u !== 0 || e !== 0 || s !== 0) complete = false;
+              }
+              if (ok && Number.isSafeInteger(known)) { basis = complete ? "COMPLETE" : "PARTIAL"; micros = String(known); }
+            }
+            process.stdout.write(unknown + " " + basis + " " + micros);
+          ' 2>/dev/null) || summary='none UNKNOWN UNKNOWN'
+          read -r outcome_unknown cost_basis usd_micros <<< "$summary"
+          printf '%s' "$outcome_unknown" | grep -Eqx 'none|HANDED_(TIMEOUT_|FAILURE_)?OUTCOME_UNKNOWN/([A-Z_]{1,40}|none)/([A-Za-z0-9:_-]{1,128}|none)' || outcome_unknown=none
+          printf '%s %s' "$cost_basis" "$usd_micros" | grep -Eqx '(COMPLETE|PARTIAL) (0|[1-9][0-9]{0,15})|UNKNOWN UNKNOWN' || { cost_basis=UNKNOWN; usd_micros=UNKNOWN; }
+          {
+            echo "final_state=$final_state"
+            echo "completed_at=$completed_at"
+            echo "outcome_unknown=$outcome_unknown"
+            echo "cost_basis=$cost_basis"
+            echo "usd_micros=$usd_micros"
+          } >> "${GITHUB_OUTPUT:?}"
+          echo "run_summary final_state=$final_state completed_at=$completed_at outcome_unknown=$outcome_unknown cost_basis=$cost_basis usd_micros=$usd_micros"
+
       # THE J1 HAND-OFF, ON THE RUNNER HOST (X′ §3). Under the billing lock the
       # grade job cannot download an artifact, and since Branch S it runs on this
       # same host as this same user. So the raw trimmed final message and its
@@ -2252,6 +2341,15 @@ jobs:
     if: ${{ always() && inputs.mission == 'julius-inworld-data-1' && inputs.confirm_live == 'RUN LIVE MISSION' && needs.first-live-mission.result != 'skipped' }}
     runs-on: julius-paid
     timeout-minutes: 15
+    # THE RESULT RECORD'S VERDICT HALF (X′ §4): closed fields only. This job writes nothing; the
+    # record job below holds the write tokens, so the grading process never does.
+    outputs:
+      verdict: ${{ steps.verdict.outputs.verdict }}
+      checker_sha256: ${{ steps.verdict.outputs.checker_sha256 }}
+      combined_pin_sha256: ${{ steps.verdict.outputs.combined_pin_sha256 }}
+      judged_trimmed_sha256: ${{ steps.verdict.outputs.judged_trimmed_sha256 }}
+      published_trimmed_sha256: ${{ steps.verdict.outputs.published_trimmed_sha256 }}
+      final_message_sha256: ${{ steps.verdict.outputs.final_message_sha256 }}
     permissions:
       contents: read
     steps:
@@ -2325,6 +2423,46 @@ jobs:
           rm -rf "$stage" "$GITHUB_WORKSPACE/j1-final-message"
           echo "grade_exit=$status"
           exit "$status"
+      # The verdict file's closed fields, and the published record's trimmed sha256 for the graded
+      # task (from the hash-verified handoff), for the record job. Anything out of shape is `none`.
+      - name: 'J1: read the verdict for the result record (closed fields)'
+        id: verdict
+        if: always()
+        run: |
+          set -uo pipefail
+          file=julius-inworld-verdict/checker-verdict.txt
+          # Every helper answers 0: GitHub runs this step under `bash -e`, and a missing file is NOT_RUN, not a failed step.
+          field() { [ -f "$file" ] || return 0; sed -n "s/^$1=//p" "$file" | head -1 || true; }
+          shaped() { if printf '%s' "$2" | grep -Eqx "$1"; then printf '%s' "$2"; else printf none; fi; }
+          verdict=$(shaped 'PASS|FAIL|NOT_RUN' "$(field verdict)")
+          [ "$verdict" != none ] || verdict=NOT_RUN
+          checker=$(shaped '[0-9a-f]{64}' "$(field checker_sha256)")
+          pin=$(shaped '[0-9a-f]{64}' "$(field combined_pin)")
+          judged=$(shaped '[0-9a-f]{64}' "$(field judged_trimmed_sha256)")
+          run=$(field run_id); task=$(field task_id); ctx=$(field context_id)
+          published=none; final=none
+          if printf '%s' "$task" | grep -Eqx '[A-Za-z0-9:_-]{1,128}' && printf '%s' "$ctx" | grep -Eqx '[A-Za-z0-9:_-]{1,128}'; then
+            stem="$(printf '%s' "$task" | tr ':' '_').$(printf '%s' "$ctx" | tr ':' '_')"
+            record() { node -e 'try{const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));const[,,t,c,r]=process.argv;process.stdout.write(j&&j.schema==="julius-final-message.v2"&&j.taskId===t&&j.contextId===c&&j.runId===r&&/^[0-9a-f]{64}$/.test(j.trimmedSha256)?j.trimmedSha256:"none")}catch{process.stdout.write("none")}' "$1" "$task" "$ctx" "$run" 2>/dev/null || printf none; }
+            published=$(shaped '[0-9a-f]{64}' "$(record "j1-evidence/final-message/$stem.redacted.json")")
+            final=$(shaped '[0-9a-f]{64}' "$(record "$RUNNER_TEMP/j1-manifests/$stem.manifest.json")")
+          fi
+          {
+            echo "verdict=$verdict"
+            echo "checker_sha256=$checker"
+            echo "combined_pin_sha256=$pin"
+            echo "judged_trimmed_sha256=$judged"
+            echo "published_trimmed_sha256=$published"
+            echo "final_message_sha256=$final"
+          } >> "${GITHUB_OUTPUT:?}"
+          echo "verdict_fields verdict=$verdict checker_sha256=$checker judged_trimmed_sha256=$judged published_trimmed_sha256=$published"
+      # THE RUN-BOUND PASS (X′ §4, run binding). A genuine FAIL also exits 0, so the grade step's
+      # success cannot tell PASS from FAIL. This step runs ONLY when the pinned checker's own
+      # verdict file in THIS run said PASS, and the result reader requires it to have succeeded:
+      # a result tag forged by another workflow cannot change this run's jobs.
+      - name: 'J1: the pinned checker''s verdict is PASS'
+        if: success() && steps.verdict.outputs.verdict == 'PASS'
+        run: echo 'checker_verdict=PASS'
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         continue-on-error: true
@@ -2333,6 +2471,113 @@ jobs:
           path: julius-inworld-verdict
           if-no-files-found: ignore
           retention-days: 90
+
+  # THE RESULT RECORD (X′ §4), IN A JOB OF ITS OWN, so the grading process never holds a write token.
+  # `contents: write` and `statuses: write` are granted here and nowhere else in the grade path. It
+  # checks out nothing and runs nothing from the repository: one bash step over the two jobs' closed
+  # outputs, each held to its shape. It writes the annotated tag
+  # refs/tags/julius-run-record-<suffix>-result (julius-run-result.v1) and ONE commit status
+  # `julius-run-result` on this run's head, `v1 sha256:<sha256 of the tag body>`, target_url this
+  # run. Neither is trusted alone: the bridge binds both to the run the PROTECTED spend tag names,
+  # through that run's own jobs. BEST-EFFORT: a failed write leaves /result unverified, never PASS.
+  record-result:
+    name: 'J1: record the result (tag and status)'
+    needs: [spend-tag, first-live-mission, grade-inworld]
+    if: ${{ always() && inputs.mission == 'julius-inworld-data-1' && inputs.confirm_live == 'RUN LIVE MISSION' && needs.first-live-mission.result != 'skipped' && needs.grade-inworld.result != 'skipped' }}
+    runs-on: julius-paid
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      statuses: write
+    steps:
+      - name: 'J1: write the result tag and the julius-run-result status'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ needs.spend-tag.outputs.run_id }}
+          NAMESPACE: ${{ needs.first-live-mission.outputs.marker_namespace }}
+          FINAL_STATE: ${{ needs.first-live-mission.outputs.final_state }}
+          COMPLETED_AT: ${{ needs.first-live-mission.outputs.completed_at }}
+          OUTCOME_UNKNOWN: ${{ needs.first-live-mission.outputs.outcome_unknown }}
+          COST_BASIS: ${{ needs.first-live-mission.outputs.cost_basis }}
+          USD_MICROS: ${{ needs.first-live-mission.outputs.usd_micros }}
+          VERDICT: ${{ needs.grade-inworld.outputs.verdict }}
+          CHECKER_SHA256: ${{ needs.grade-inworld.outputs.checker_sha256 }}
+          COMBINED_PIN_SHA256: ${{ needs.grade-inworld.outputs.combined_pin_sha256 }}
+          JUDGED_TRIMMED_SHA256: ${{ needs.grade-inworld.outputs.judged_trimmed_sha256 }}
+          PUBLISHED_TRIMMED_SHA256: ${{ needs.grade-inworld.outputs.published_trimmed_sha256 }}
+          FINAL_MESSAGE_SHA256: ${{ needs.grade-inworld.outputs.final_message_sha256 }}
+        run: |
+          set -euo pipefail
+          refuse() { echo "RESULT_RECORD_UNVERIFIED: $1" >&2; exit 1; }
+          # ONE LINE, WHOLLY IN SHAPE: `grep -x` accepts a value if ANY of its lines matches, so a
+          # value with a line break is refused before grep sees it (it would add a key to the body).
+          shape() {
+            case "$2" in *$'\n'*|*$'\r'*) refuse "$3" ;; esac
+            printf '%s' "$2" | grep -Eqx "$1" || refuse "$3"
+          }
+          shape 'wlj_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|run:[0-9a-f]{24}' "${RUN:-}" run
+          case "$RUN" in wlj_*) suffix=$(printf '%s' "${RUN#wlj_}" | tr -d '-') ;; *) suffix=${RUN#run:} ;; esac
+          shape '[0-9a-f]{24}|[0-9a-f]{32}' "$suffix" suffix
+          shape '[a-z][a-z0-9-]{2,48}' "${NAMESPACE:-}" namespace
+          shape '[0-9]{1,20}' "${GITHUB_RUN_ID:?}" workflow_run_id
+          shape '[0-9]{1,10}' "${GITHUB_RUN_ATTEMPT:?}" workflow_run_attempt
+          shape '[0-9a-f]{40}' "${GITHUB_SHA:?}" head_sha
+          repository="${GITHUB_REPOSITORY:?}"
+          shape '[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+' "$repository" repository
+          shape 'COMPLETED|FAILED|INTERRUPTED' "${FINAL_STATE:-}" final_state
+          shape '[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z|none' "${COMPLETED_AT:-}" completed_at
+          shape 'none|HANDED_(TIMEOUT_|FAILURE_)?OUTCOME_UNKNOWN/([A-Z_]{1,40}|none)/([A-Za-z0-9:_-]{1,128}|none)' "${OUTCOME_UNKNOWN:-}" outcome_unknown
+          shape '(COMPLETE|PARTIAL) (0|[1-9][0-9]{0,15})|UNKNOWN UNKNOWN' "${COST_BASIS:-} ${USD_MICROS:-}" cost
+          # A grade job that produced no verdict is NOT_RUN, never a PASS.
+          verdict=${VERDICT:-NOT_RUN}
+          shape 'PASS|FAIL|NOT_RUN' "$verdict" verdict
+          for name in CHECKER_SHA256 COMBINED_PIN_SHA256 JUDGED_TRIMMED_SHA256 PUBLISHED_TRIMMED_SHA256 FINAL_MESSAGE_SHA256; do
+            value=${!name:-none}
+            shape '[0-9a-f]{64}|none' "$value" "$name"
+            printf -v "$name" '%s' "$value"
+          done
+          body="julius-run-result.v1\nrun=${RUN}\nnamespace=${NAMESPACE}\nworkflow_run_id=${GITHUB_RUN_ID}\nworkflow_run_attempt=${GITHUB_RUN_ATTEMPT}\nhead_sha=${GITHUB_SHA}\nfinal_state=${FINAL_STATE}\ncompleted_at=${COMPLETED_AT}\nverdict=${verdict}\nchecker_sha256=${CHECKER_SHA256}\ncombined_pin_sha256=${COMBINED_PIN_SHA256}\njudged_trimmed_sha256=${JUDGED_TRIMMED_SHA256}\npublished_trimmed_sha256=${PUBLISHED_TRIMMED_SHA256}\nfinal_message_sha256=${FINAL_MESSAGE_SHA256}\noutcome_unknown=${OUTCOME_UNKNOWN}\ncost_basis=${COST_BASIS}\nusd_micros=${USD_MICROS}\n"
+          digest=$(printf '%b' "$body" | sha256sum | cut -d' ' -f1)
+          shape '[0-9a-f]{64}' "$digest" digest
+          stamped=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          tag="julius-run-record-${suffix}-result"
+          post() {
+            api_body=$(mktemp)
+            set +e
+            api_code=$(curl -sS -o "$api_body" -w '%{http_code}' -X POST \
+              -H "Authorization: Bearer ${GH_TOKEN:?}" \
+              -H 'Accept: application/vnd.github+json' \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              "https://api.github.com/repos/${repository}$1" \
+              --data-binary "$2")
+            api_status=$?
+            set -e
+          }
+          created_sha() {
+            [ "$api_status" -eq 0 ] && [ "$api_code" = 201 ] || refuse "$1"
+            api_sha=$(grep -oE '"sha"[[:space:]]*:[[:space:]]*"[0-9a-f]{40}"' "$api_body" | head -1 | grep -oE '[0-9a-f]{40}' || true)
+            [ -n "$api_sha" ] || refuse "$1"
+          }
+          post /git/blobs "$(printf '{"content":"%s","encoding":"utf-8"}' "$body")"
+          created_sha blob
+          post /git/trees "$(printf '{"tree":[{"path":"julius-run-result.txt","mode":"100644","type":"blob","sha":"%s"}]}' "$api_sha")"
+          created_sha tree
+          post /git/commits "$(printf '{"message":"%s","tree":"%s","parents":["%s"]}' "$body" "$api_sha" "$GITHUB_SHA")"
+          created_sha commit
+          post /git/tags "$(printf '{"tag":"%s","message":"%s","object":"%s","type":"commit","tagger":{"name":"github-actions[bot]","email":"41898282+github-actions[bot]@users.noreply.github.com","date":"%s"}}' "$tag" "$body" "$api_sha" "$stamped")"
+          created_sha tag
+          tag_sha=$api_sha
+          post /git/refs "$(printf '{"ref":"refs/tags/%s","sha":"%s"}' "$tag" "$tag_sha")"
+          if [ "$api_status" -eq 0 ] && [ "$api_code" = 422 ] && grep -q 'Reference already exists' "$api_body"; then
+            refuse result_tag_already_exists
+          fi
+          [ "$api_status" -eq 0 ] && [ "$api_code" = 201 ] && grep -F -q "$tag_sha" "$api_body" || refuse ref
+          state=failure
+          [ "$verdict" != PASS ] || state=success
+          post "/statuses/${GITHUB_SHA}" "$(printf '{"state":"%s","context":"julius-run-result","description":"v1 sha256:%s","target_url":"%s/%s/actions/runs/%s"}' "$state" "$digest" "${GITHUB_SERVER_URL:-https://github.com}" "$repository" "$GITHUB_RUN_ID")"
+          [ "$api_status" -eq 0 ] && [ "$api_code" = 201 ] || refuse status
+          echo "result_record tag=refs/tags/${tag} tag_sha=${tag_sha} status=${state} body_sha256=${digest}"
 
   # THE GRADED FINAL MESSAGE IS DELETED BY A JOB THAT DOES NOTHING ELSE. `actions: write` is
   # granted here and only here; it checks out nothing and runs nothing from the repository.

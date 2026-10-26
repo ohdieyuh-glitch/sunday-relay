@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
@@ -7,6 +8,7 @@ import { delimiter, join, resolve } from 'node:path';
 import { LEGACY_RUN_ID_PATTERN, parseJuliusAdmissionRunId, WLJ_RUN_ID_PATTERN } from './julius-admission-run-id.mjs';
 import { preflightIdentityFor } from './julius-live-preflight-identity';
 import { parseJuliusAttemptRecordTag } from '../src/relay/mission/julius/julius-spend-ceiling';
+import { juliusRunResultCanonicalBody, parseJuliusRunResultRecord } from '../relay-bridge/julius-mission-evidence-reader';
 
 /**
  * ONE SPENDING PATH, ONE SLOT, NO WAY AROUND EITHER.
@@ -1129,7 +1131,7 @@ describe('X′ §2: the attempted marker is a job-token tag, and LIVE waits for 
       expect(refused.status, JSON.stringify(failure)).not.toBe(0);
       expect(refused.stderr, JSON.stringify(failure)).toContain('ATTEMPT_TAG_UNVERIFIED');
     }
-    for (const bad of [{ JULIUS_RUN_ID: 'not-an-id' }, { MARKER_NAMESPACE: 'Bad Namespace' }, { GITHUB_SHA: 'z'.repeat(40) }]) {
+    for (const bad of [{ JULIUS_RUN_ID: 'not-an-id' }, { MARKER_NAMESPACE: 'Bad Namespace' }, { MARKER_NAMESPACE: 'julius-inworld-data-1\nnamespace=other-ns' }, { GITHUB_SHA: 'z'.repeat(40) }]) {
       const refused = runWithFakeCurl(tagScript, { ...env, ...bad });
       expect(refused.status, JSON.stringify(bad)).not.toBe(0);
       expect(refused.curlLog, JSON.stringify(bad)).toBe('');
@@ -1331,6 +1333,170 @@ describe('X′ §3: grading without an artifact handoff', () => {
     for (const file of readdirSync(join(ROOT, '.github/workflows'))) {
       if (file === 'julius-first-live-mission.yml') continue;
       expect(readFileSync(join(ROOT, '.github/workflows', file), 'utf8'), file).not.toMatch(/actions\/artifacts\/[^\n]*-X DELETE|-X DELETE[^\n]*actions\/artifacts|git\/refs\/tags[^\n]*DELETE/u);
+    }
+  });
+});
+
+const RECORD_STEP = "'J1: write the result tag and the julius-run-result status'";
+const VERDICT_STEP = "'J1: read the verdict for the result record (closed fields)'";
+const PASS_STEP_NAME = "'J1: the pinned checker''s verdict is PASS'";
+const SUMMARY_STEP = "'Result record: summarize this run in closed fields'";
+
+/** A job's `permissions:` block as a map, or null. */
+const permissionsOf = (text: string): Record<string, string> | null => {
+  const block = /\n {4}permissions:\n((?: {6}[a-z-]+: [a-z]+\n)+)/u.exec(text)?.[1];
+  return block === undefined ? null : Object.fromEntries(block.trim().split('\n').map((line) => line.trim().split(/:\s*/u)));
+};
+
+describe('X′ §4: the result record is written by a minimal job of its own; grading never holds a write token', () => {
+  const record = job('record-result');
+  const grade = job('grade-inworld');
+  const recordScript = script(step(record, RECORD_STEP));
+  const outputs = {
+    RUN: X_WLJ, NAMESPACE: 'julius-inworld-data-1', FINAL_STATE: 'COMPLETED', COMPLETED_AT: '2026-10-26T10:00:00Z', OUTCOME_UNKNOWN: 'none',
+    COST_BASIS: 'COMPLETE', USD_MICROS: '1234567', VERDICT: 'PASS', CHECKER_SHA256: '1a98f1a4d739ebe2da254715d81f56cd5fa08d534a1fbf10ef6214e8b262207e',
+    COMBINED_PIN_SHA256: 'c'.repeat(64), JUDGED_TRIMMED_SHA256: 'b'.repeat(64), PUBLISHED_TRIMMED_SHA256: 'b'.repeat(64), FINAL_MESSAGE_SHA256: 'b'.repeat(64),
+  };
+
+  it('record-result: contents: write + statuses: write and nothing else, no checkout, no secret, one best-effort step', () => {
+    expect(permissionsOf(record)).toEqual({ contents: 'write', statuses: 'write' });
+    expect(record).toContain('    needs: [spend-tag, first-live-mission, grade-inworld]\n');
+    expect(record).toContain("    if: ${{ always() && inputs.mission == 'julius-inworld-data-1' && inputs.confirm_live == 'RUN LIVE MISSION' && needs.first-live-mission.result != 'skipped' && needs.grade-inworld.result != 'skipped' }}\n");
+    expect(record).not.toMatch(/actions\/checkout|secrets\.|environment:|vars\./u);
+    expect(record.split('\n      - ').length - 1).toBe(1);
+    expect(step(record, RECORD_STEP)).toContain('continue-on-error: true');
+    expect(recordScript, 'no repository code runs with the write token').not.toMatch(/\bnode\b|\bnpm\b|\.\/\.github\/|scripts\//u);
+  });
+
+  it('THE GRADER NEVER HOLDS contents: write OR statuses: write (mutation: the grader with contents: write fails here)', () => {
+    expect(permissionsOf(grade)).toEqual({ contents: 'read' });
+    // The only jobs that may write contents: the spend tag, the paid job's attempted tag, and the record job.
+    const writers = ['spend-tag', 'paid-slot', 'first-live-mission', 'grade-inworld', 'record-result', 'delete-final-message']
+      .filter((name) => permissionsOf(job(name))?.contents === 'write');
+    expect(writers).toEqual(['spend-tag', 'first-live-mission', 'record-result']);
+    expect(permissionsOf(job('delete-final-message'))).toEqual({ actions: 'write' });
+  });
+
+  it('the result tag and the julius-run-result status are written only by the record job', () => {
+    const writes = (text: string) => /julius-run-record-\$\{suffix\}-result|"context":"julius-run-result"/u.test(text);
+    expect(writes(record)).toBe(true);
+    for (const name of ['spend-tag', 'paid-slot', 'first-live-mission', 'grade-inworld', 'delete-final-message']) expect(writes(job(name)), name).toBe(false);
+    for (const file of readdirSync(join(ROOT, '.github/workflows')).filter((name) => name !== 'julius-first-live-mission.yml')) {
+      expect(readFileSync(join(ROOT, '.github/workflows', file), 'utf8'), file).not.toMatch(/julius-run-record-|julius-run-result/u);
+    }
+  });
+
+  it('writes the v1 body under julius-run-record-<suffix>-result, and the status hash, state and target the reader binds on', () => {
+    const run = runWithFakeCurl(recordScript, outputs);
+    expect(run.status, run.stderr).toBe(0);
+    expect(run.curlLog).toContain(`"ref":"refs/tags/julius-run-record-${X_WLJ_HEX}-result"`);
+    expect(run.curlLog).not.toContain('julius-run-spent-');
+    const body = postedBody(run.curlLog, '/git/tags');
+    const parsed = parseJuliusRunResultRecord(body);
+    expect(parsed).toMatchObject({ run: X_WLJ, workflowRunId: '40400000001', workflowRunAttempt: '1', headSha: 'a'.repeat(40), finalState: 'COMPLETED', verdict: 'PASS', usdMicros: 1234567 });
+    const statusLine = run.curlLog.split('\n').find((line) => line.includes(`/statuses/${'a'.repeat(40)} `)) ?? '';
+    const status = JSON.parse(statusLine.slice(statusLine.indexOf(' DATA ') + 6)) as Record<string, string>;
+    expect(status).toEqual({
+      state: 'success', context: 'julius-run-result',
+      description: `v1 sha256:${createHash('sha256').update(juliusRunResultCanonicalBody(body)).digest('hex')}`,
+      target_url: 'https://github.com/ohdieyuh-glitch/sunday-relay/actions/runs/40400000001',
+    });
+    expect(status.description?.length ?? 0).toBeLessThanOrEqual(140);
+  });
+
+  it('no verdict from the grade job is NOT_RUN and a failure status; a malformed field writes nothing', () => {
+    const notRun = runWithFakeCurl(recordScript, { ...outputs, VERDICT: '', JUDGED_TRIMMED_SHA256: '', PUBLISHED_TRIMMED_SHA256: '' });
+    expect(notRun.status, notRun.stderr).toBe(0);
+    expect(parseJuliusRunResultRecord(postedBody(notRun.curlLog, '/git/tags'))?.verdict).toBe('NOT_RUN');
+    expect(notRun.curlLog).toContain('"state":"failure"');
+    for (const bad of [{ VERDICT: 'PASS\nverdict=PASS' }, { CHECKER_SHA256: 'x' }, { RUN: 'not-an-id' }, { FINAL_STATE: 'DONE' }, { OUTCOME_UNKNOWN: 'anything' }, { USD_MICROS: '-1' }]) {
+      const refused = runWithFakeCurl(recordScript, { ...outputs, ...bad });
+      expect(refused.status, JSON.stringify(bad)).not.toBe(0);
+      expect(refused.curlLog, JSON.stringify(bad)).toBe('');
+    }
+    const exists = runWithFakeCurl(recordScript, outputs, { refCode: '422', refBody: '{"message":"Reference already exists"}' });
+    expect(exists.stderr).toContain('result_tag_already_exists');
+    expect(exists.curlLog, 'no status for a tag this run did not write').not.toContain('/statuses/');
+  });
+
+  it('the PASS step runs only on the pinned checker\'s own PASS, after the grade step; the verdict step reads closed fields', () => {
+    expect(ifOf(step(grade, PASS_STEP_NAME))).toBe("success() && steps.verdict.outputs.verdict == 'PASS'");
+    expect(grade.indexOf(`- name: ${GRADE_STEP_NAME}`)).toBeLessThan(grade.indexOf(`- name: ${VERDICT_STEP}`));
+    expect(grade.indexOf(`- name: ${VERDICT_STEP}`)).toBeLessThan(grade.indexOf(`- name: ${PASS_STEP_NAME}`));
+    expect(ifOf(step(grade, VERDICT_STEP))).toBe('always()');
+    const work = mkdtempSync(join(tmpdir(), 'julius-x-prime-verdict-'));
+    const rt = mkdtempSync(join(tmpdir(), 'julius-x-prime-rt-'));
+    try {
+      execFileSync('bash', ['-c', `mkdir -p "${work}/julius-inworld-verdict" "${work}/j1-evidence/final-message" "${rt}/j1-manifests"`]);
+      const record = (sha: string) => JSON.stringify({ schema: 'julius-final-message.v2', taskId: 'build:task', contextId: 'ctx:1', runId: X_WLJ, trimmedSha256: sha });
+      writeFileSync(join(work, 'julius-inworld-verdict', 'checker-verdict.txt'), [
+        'schema=julius-inworld-verdict.v1', 'verdict=PASS', 'reason=none', `run_id=${X_WLJ}`, 'task_id=build:task', 'task_type=build',
+        `judged_trimmed_sha256=${'b'.repeat(64)}`, 'context_id=ctx:1', `checker_sha256=${'1'.repeat(64)}`, `combined_pin=${'c'.repeat(64)}`, '',
+      ].join('\n'));
+      writeFileSync(join(work, 'j1-evidence', 'final-message', 'build_task.ctx_1.redacted.json'), record('b'.repeat(64)));
+      writeFileSync(join(rt, 'j1-manifests', 'build_task.ctx_1.manifest.json'), record('b'.repeat(64)));
+      const output = join(work, 'out.txt');
+      writeFileSync(output, '');
+      const run = runStep(script(step(grade, VERDICT_STEP)), work, { RUNNER_TEMP: rt, GITHUB_OUTPUT: output });
+      expect(run.status, run.stderr).toBe(0);
+      expect(readOutputs(output)).toEqual({
+        verdict: 'PASS', checker_sha256: '1'.repeat(64), combined_pin_sha256: 'c'.repeat(64), judged_trimmed_sha256: 'b'.repeat(64),
+        published_trimmed_sha256: 'b'.repeat(64), final_message_sha256: 'b'.repeat(64),
+      });
+      // No verdict file at all: NOT_RUN, every hash `none`.
+      rmSync(join(work, 'julius-inworld-verdict'), { recursive: true, force: true });
+      writeFileSync(output, '');
+      expect(runStep(script(step(grade, VERDICT_STEP)), work, { RUNNER_TEMP: rt, GITHUB_OUTPUT: output }).status).toBe(0);
+      expect(readOutputs(output).verdict).toBe('NOT_RUN');
+      expect(readOutputs(output).published_trimmed_sha256).toBe('none');
+    } finally {
+      rmSync(work, { recursive: true, force: true });
+      rmSync(rt, { recursive: true, force: true });
+    }
+  });
+
+  it('the run summary is closed tokens from the scanned bundle: COMPLETED only with LIVE success AND this run\'s RESULT line', () => {
+    const paid = job('first-live-mission');
+    const summary = script(step(paid, SUMMARY_STEP));
+    expect(paid.indexOf("- name: 'Refuse to publish evidence that contains credential material'")).toBeLessThan(paid.indexOf(`- name: ${SUMMARY_STEP}`));
+    const work = mkdtempSync(join(tmpdir(), 'julius-x-prime-summary-'));
+    try {
+      execFileSync('bash', ['-c', `mkdir -p "${work}/julius-live-evidence" "${work}/julius-inworld-data-1-completed"`]);
+      writeFileSync(join(work, 'julius-live-evidence', 'live-mission.evidence.txt'), `RESULT: COMPLETED after 9 ticks\n  run: ${X_WLJ}\n`);
+      writeFileSync(join(work, 'julius-inworld-data-1-completed', 'marker.txt'), 'completed_at=2026-10-26T10:00:00Z\nrun_id=1\n');
+      writeFileSync(join(work, 'julius-live-evidence', 'cost-accounting.tsv'), `run_id\tknown_usd_micros\tunknown_components\testimated_components\tunsettled_components\n${X_WLJ}\t1200000\t0\t0\t0\n${X_WLJ}\t34567\t0\t0\t0\n(2 rows)\n`);
+      writeFileSync(join(work, 'julius-live-evidence', 'failures.tsv'), `run_id\tevent_type\treason_code\tjulius_code\tfailure_class\trecovery_action\trole\ttask_id\n${X_WLJ}\tjulius.task.failed\tHANDED_TIMEOUT_OUTCOME_UNKNOWN\t\t\t\tCODING_AGENT\tbuild:1\n(1 row)\n`);
+      const run = (live: string) => {
+        const output = join(work, `out-${live}.txt`);
+        writeFileSync(output, '');
+        const result = runStep(summary, work, { LIVE_OUTCOME: live, JULIUS_RUN_ID: X_WLJ, MARKER_NAMESPACE: 'julius-inworld-data-1', GITHUB_OUTPUT: output });
+        expect(result.status, result.stderr).toBe(0);
+        return readOutputs(output);
+      };
+      expect(run('success')).toEqual({
+        final_state: 'COMPLETED', completed_at: '2026-10-26T10:00:00Z', outcome_unknown: 'HANDED_TIMEOUT_OUTCOME_UNKNOWN/CODING_AGENT/build:1', cost_basis: 'COMPLETE', usd_micros: '1234567',
+      });
+      expect(run('failure').final_state).toBe('FAILED');
+      expect(run('cancelled').final_state).toBe('INTERRUPTED');
+      writeFileSync(join(work, 'julius-live-evidence', 'live-mission.evidence.txt'), 'RESULT: COMPLETED after 9 ticks\n  run: wlj_other\n');
+      expect(run('success'), 'a run whose own record never said COMPLETED is not COMPLETED').toMatchObject({ final_state: 'FAILED', completed_at: 'none' });
+    } finally {
+      rmSync(work, { recursive: true, force: true });
+    }
+  });
+
+  it('LIVE PROGRESS IS UNCHANGED: the two publisher steps are byte-identical (comments aside) to #486\'s head b2764b76', () => {
+    const paid = job('first-live-mission');
+    const pinned = {
+      "'Live progress: start the phase publisher (best-effort)'": '0c0e849f3206d40b00e53c8054b3c9245276013d5ad0771d83941f71983ac5e7',
+      "'Live progress: stop the phase publisher'": 'a96dade13436b24050ec0cef51803b1e5289e327da832ef62140285e7f5ce4cf',
+    };
+    for (const [name, sha] of Object.entries(pinned)) {
+      let block = step(paid, name);
+      const blank = block.indexOf('\n\n');
+      if (blank >= 0) block = block.slice(0, blank);
+      block = block.split('\n').filter((line) => !/^\s*#/u.test(line)).join('\n').trimEnd();
+      expect(createHash('sha256').update(block).digest('hex'), name).toBe(sha);
     }
   });
 });

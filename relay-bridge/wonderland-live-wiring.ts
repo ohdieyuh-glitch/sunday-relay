@@ -49,7 +49,8 @@ export function wonderlandLiveReadsFrom(
   const repo = (env.JULIUS_WONDERLAND_GITHUB_REPO ?? '').trim();
   if (!REPO.test(repo)) return null;
   const github = createGhMissionGitHub({ repo, runner });
-  return { evidenceReader: cachedEvidenceReader(createJuliusMissionEvidenceReader(github), now), runReader: github };
+  // The same port twice: the evidence reader binds X′'s result record to the run's own jobs and statuses.
+  return { evidenceReader: cachedEvidenceReader(createJuliusMissionEvidenceReader(github, github), now), runReader: github };
 }
 
 /** A completed reading is kept; anything else is read again after EVIDENCE_RECHECK_MS. One read at a time per run. */

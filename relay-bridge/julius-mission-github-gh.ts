@@ -9,7 +9,8 @@
  *
  * It serves two readers:
  * - `JuliusMissionGitHub`, for YUJI's evidence reader (the spent tag and the
- *   finished run's artifacts), so /result and /progress can reach completed;
+ *   finished run's artifacts, and X′'s result record tag), so /result and
+ *   /progress can reach completed;
  * - `JuliusRunJobsReader`, for the live events route (the run and its jobs'
  *   step states while it executes).
  *
@@ -75,6 +76,8 @@ export interface JuliusCommitStatus {
   readonly description: string;
   readonly creator: string;
   readonly createdAt: string | null;
+  /** The status's target_url, for the result record's run binding (X′ §4). Null when absent. */
+  readonly targetUrl?: string | null;
 }
 
 export interface JuliusRunJobsReader {
@@ -87,7 +90,8 @@ const REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
 const RUN_ID = /^[1-9][0-9]{0,19}$/u;
 const ATTEMPT = /^[1-9][0-9]{0,4}$/u;
 const SHA40 = /^[0-9a-f]{40}$/u;
-const SPENT_TAG_REF = /^refs\/tags\/(julius-run-spent-(?:[0-9a-f]{24}|[0-9a-f]{32}))$/u;
+/** The spent tag, and (X′ §4) the result record tag. No other ref is read. */
+const SPENT_TAG_REF = /^refs\/tags\/(julius-run-spent-(?:[0-9a-f]{24}|[0-9a-f]{32})|julius-run-record-(?:[0-9a-f]{24}|[0-9a-f]{32})-result)$/u;
 const ARTIFACT_NAME = /^[A-Za-z0-9._-]{1,120}$/u;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/u;
 const NAME_MAX = 300;
@@ -315,6 +319,7 @@ function commitStatus(value: unknown): JuliusCommitStatus | null {
     description: typeof status.description === 'string' ? status.description.slice(0, 200) : '',
     creator: typeof creator?.login === 'string' ? creator.login : '',
     createdAt: isoOrNull(status.created_at),
+    targetUrl: typeof status.target_url === 'string' && status.target_url.length <= 500 ? status.target_url : null,
   };
 }
 
