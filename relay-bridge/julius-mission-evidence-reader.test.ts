@@ -8,11 +8,14 @@ import { juliusMissionTraceId } from '../scripts/julius-mission-trace.mjs';
 import {
   checkerVerdictFrom,
   createJuliusMissionEvidenceReader,
+  outcomeUnknownFrom,
   type JuliusMissionCompletionEvidence,
   type JuliusMissionGitHub,
   type JuliusMissionWorkflowRun,
 } from './julius-mission-evidence-reader';
 import { J1_PINNED_CHECKER_FILE_SHA256 } from './julius-inworld-checker';
+import { acceptJuliusOutcomeUnknown, JULIUS_OUTCOME_UNKNOWN_CAUSES } from './julius-mission-evidence';
+import { cachedEvidenceReader } from './wonderland-live-wiring';
 
 const WLJ = 'wlj_01234567-89ab-4cde-8fab-0123456789ab';
 const LEGACY = 'run:0123456789abcdef01234567';
@@ -612,5 +615,79 @@ describe('the reader\'s inlined checker pin', () => {
   it('equals the runtime pin, so a re-pinned checker cannot be read past', async () => {
     const source = (await import('node:fs')).readFileSync('relay-bridge/julius-mission-evidence-reader.ts', 'utf8');
     expect(source).toContain(`const J1_PINNED_CHECKER_FILE_SHA256 = '${J1_PINNED_CHECKER_FILE_SHA256}';`);
+  });
+});
+
+describe('an ambiguous provider outcome is read from the run\'s own failure record', () => {
+  /** psql -A -F $'\t' header of failures.tsv, alias order of the dump. */
+  const FAILURE_COLUMNS = ['run_id', 'sequence', 'task_id', 'role', 'event_type', 'julius_code', 'failure_class', 'error_retryable', 'reason_code', 'recovery_action', 'occurred_at'] as const;
+  const failures = (rows: readonly Partial<Record<(typeof FAILURE_COLUMNS)[number], string>>[]) => [
+    FAILURE_COLUMNS.join('\t'),
+    ...rows.map((row) => FAILURE_COLUMNS.map((column) => row[column] ?? (column === 'run_id' ? WLJ : '')).join('\t')),
+    `(${rows.length} ${rows.length === 1 ? 'row' : 'rows'})`,
+    '',
+  ].join('\n');
+  const HANDED = { sequence: '41', task_id: 'task:build:1', role: 'CODING_AGENT', event_type: 'julius.recovery.action', reason_code: 'HANDED_OUTCOME_UNKNOWN', recovery_action: 'FAIL_TASK' };
+  const failedRun = (text: string, overrides: Partial<JuliusMissionWorkflowRun> = {}) => workflow({
+    conclusion: 'failure',
+    ...overrides,
+    artifacts: [{ name: 'julius-live-evidence', files: [{ path: 'failures.tsv', text }] }],
+  });
+
+  it('the recovery sweep\'s FAIL_TASK HANDED_OUTCOME_UNKNOWN is the outcome, with its task and role', () => {
+    expect(outcomeUnknownFrom(failures([{ sequence: '3', event_type: 'julius.retry.scheduled', julius_code: 'TIMEOUT' }, HANDED]), WLJ, JULIUS_OUTCOME_UNKNOWN_CAUSES))
+      .toEqual({ cause: 'HANDED_OUTCOME_UNKNOWN', role: 'CODING_AGENT', taskId: 'task:build:1' });
+  });
+
+  it('a requeue, another run, an unlisted cause, another event or a malformed table is not one', () => {
+    expect(outcomeUnknownFrom(failures([{ ...HANDED, recovery_action: 'REQUEUE' }]), WLJ, JULIUS_OUTCOME_UNKNOWN_CAUSES)).toBeNull();
+    expect(outcomeUnknownFrom(failures([{ ...HANDED, run_id: 'wlj_other' }]), WLJ, JULIUS_OUTCOME_UNKNOWN_CAUSES)).toBeNull();
+    expect(outcomeUnknownFrom(failures([{ ...HANDED, reason_code: 'LEASE_EXPIRED' }]), WLJ, JULIUS_OUTCOME_UNKNOWN_CAUSES)).toBeNull();
+    expect(outcomeUnknownFrom(failures([{ ...HANDED, event_type: 'julius.retry.scheduled' }]), WLJ, JULIUS_OUTCOME_UNKNOWN_CAUSES)).toBeNull();
+    expect(outcomeUnknownFrom('run_id\tsequence\nbroken', WLJ, JULIUS_OUTCOME_UNKNOWN_CAUSES)).toBeNull();
+    expect(outcomeUnknownFrom(null, WLJ, JULIUS_OUTCOME_UNKNOWN_CAUSES)).toBeNull();
+  });
+
+  it('a task.failed carrying the cause is one too', () => {
+    expect(outcomeUnknownFrom(failures([{ task_id: 'task:plan:1', role: 'PROMPT_ARCHITECT', event_type: 'julius.task.failed', failure_class: 'HANDED_OUTCOME_UNKNOWN' }]), WLJ, JULIUS_OUTCOME_UNKNOWN_CAUSES))
+      .toEqual({ cause: 'HANDED_OUTCOME_UNKNOWN', role: 'PROMPT_ARCHITECT', taskId: 'task:plan:1' });
+  });
+
+  it('the reader binds it to the spend tag\'s FINISHED run of any conclusion, and names that run', async () => {
+    const tag = tagMessage(WLJ);
+    const reader = createJuliusMissionEvidenceReader(github(tag, failedRun(failures([HANDED]))));
+    expect(await reader.readOutcomeUnknown?.(WLJ)).toEqual({ cause: 'HANDED_OUTCOME_UNKNOWN', role: 'CODING_AGENT', taskId: 'task:build:1', workflowRunId: RUN });
+    // Still running, another head, another attempt: none read.
+    for (const run of [
+      failedRun(failures([HANDED]), { status: 'in_progress', conclusion: null }),
+      failedRun(failures([HANDED]), { headSha: 'b'.repeat(40) }),
+      failedRun(failures([HANDED]), { workflowRunAttempt: '2' }),
+    ]) {
+      expect(await createJuliusMissionEvidenceReader(github(tag, run)).readOutcomeUnknown?.(WLJ)).toBeNull();
+    }
+    expect(await createJuliusMissionEvidenceReader(github(null, failedRun(failures([HANDED])))).readOutcomeUnknown?.(WLJ)).toBeNull();
+    expect(await createJuliusMissionEvidenceReader(github(tag, 'throw-run')).readOutcomeUnknown?.(WLJ)).toBeNull();
+    expect(await createJuliusMissionEvidenceReader(github(tag, failedRun(failures([HANDED])))).readOutcomeUnknown?.(LEGACY)).toBeNull();
+  });
+
+  it('it is accepted only for the run the dispatch recorded, in its exact shape', () => {
+    const value = { cause: 'HANDED_OUTCOME_UNKNOWN', role: 'CODING_AGENT', taskId: 'task:build:1', workflowRunId: RUN };
+    expect(acceptJuliusOutcomeUnknown(value, RUN)).toEqual({ cause: 'HANDED_OUTCOME_UNKNOWN', role: 'CODING_AGENT', taskId: 'task:build:1' });
+    expect(acceptJuliusOutcomeUnknown(value, '4243')).toBeNull();
+    expect(acceptJuliusOutcomeUnknown(value, null)).toBeNull();
+    expect(acceptJuliusOutcomeUnknown({ ...value, cause: 'TIMEOUT' }, RUN)).toBeNull();
+    expect(acceptJuliusOutcomeUnknown({ ...value, role: 'SOMEONE' }, RUN)).toBeNull();
+    expect(acceptJuliusOutcomeUnknown({ ...value, taskId: 'bad id with spaces' }, RUN)).toBeNull();
+    expect(acceptJuliusOutcomeUnknown({ ...value, role: null, taskId: null }, RUN)).toEqual({ cause: 'HANDED_OUTCOME_UNKNOWN', role: null, taskId: null });
+    expect(acceptJuliusOutcomeUnknown(null, RUN)).toBeNull();
+  });
+
+  it('the bridge\'s cached reader keeps the method, and keeps a found outcome', async () => {
+    const source = github(tagMessage(WLJ), failedRun(failures([HANDED])));
+    const cached = cachedEvidenceReader(createJuliusMissionEvidenceReader(source), () => 0);
+    expect(await cached.readOutcomeUnknown?.(WLJ)).toMatchObject({ cause: 'HANDED_OUTCOME_UNKNOWN' });
+    const calls = source.calls.length;
+    expect(await cached.readOutcomeUnknown?.(WLJ)).toMatchObject({ cause: 'HANDED_OUTCOME_UNKNOWN' });
+    expect(source.calls.length).toBe(calls);
   });
 });

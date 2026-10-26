@@ -24,6 +24,7 @@ import { createHash } from 'node:crypto';
 import { deriveJuliusSpentTag } from '../scripts/julius-admission-run-id.mjs';
 import { juliusMissionTraceId } from '../scripts/julius-mission-trace.mjs';
 import { projectJuliusSlotViews, type JuliusTimelineEntry } from '../src/relay/mission/julius/julius-runtime-api';
+import { JULIUS_OUTCOME_UNKNOWN_CAUSES } from './julius-mission-evidence';
 
 export const JULIUS_SPEND_TAG_SCHEMA = 'julius-run-spent.v1' as const;
 const EVIDENCE_ARTIFACT = 'julius-live-evidence';
@@ -179,6 +180,30 @@ export interface JuliusCheckerEvidence {
  */
 export interface JuliusMissionEvidenceReader {
   read(wljRunId: string): Promise<unknown>;
+  readOutcomeUnknown?(wljRunId: string): Promise<unknown>;
+}
+
+/**
+ * The first ambiguous provider outcome Julius recorded for `runId` in
+ * `failures.tsv`: the recovery sweep's FAIL_TASK, or a task.failed, whose
+ * reason code (or code or failure class) is one of `causes`. Null when the
+ * table is missing, malformed, or names none.
+ */
+export function outcomeUnknownFrom(
+  text: string | null,
+  runId: string,
+  causes: readonly string[],
+): { readonly cause: string; readonly role: string | null; readonly taskId: string | null } | null {
+  const rows = rowsForRun(text, runId);
+  if (rows === null) return null;
+  for (const row of rows) {
+    const cause = [row.reason_code, row.julius_code, row.failure_class].find((value) => value !== undefined && causes.includes(value));
+    if (cause === undefined) continue;
+    const recovered = row.event_type === 'julius.recovery.action' && row.recovery_action === 'FAIL_TASK';
+    if (!recovered && row.event_type !== 'julius.task.failed') continue;
+    return { cause, role: row.role === undefined || row.role === '' ? null : row.role, taskId: row.task_id === undefined || row.task_id === '' ? null : row.task_id };
+  }
+  return null;
 }
 
 export const JULIUS_MISSION_WORKFLOW_STATUSES = ['queued', 'in_progress', 'completed'] as const;
@@ -674,6 +699,40 @@ export function createJuliusMissionEvidenceReader(github: JuliusMissionGitHub): 
         ),
       };
       return completion;
+    },
+
+    /**
+     * The same spend-tag binding as `read`, for a FINISHED run of any
+     * conclusion: a run that stopped on an unknown outcome did not succeed.
+     */
+    async readOutcomeUnknown(wljRunId: string): Promise<unknown> {
+      const derived = deriveJuliusSpentTag(wljRunId);
+      if (!derived.ok || derived.form !== 'wlj') return null;
+      let message: string | null;
+      try {
+        message = await github.readAnnotatedTagMessage(derived.tag);
+      } catch {
+        return null;
+      }
+      if (message === null) return null;
+      const spendTag = parseSpendTag(message, derived.runId);
+      if (spendTag === null) return null;
+      let observed: JuliusMissionWorkflowRun | null;
+      try {
+        observed = normalizeRun(await github.readWorkflowRun(spendTag.workflowRunId, spendTag.workflowRunAttempt));
+      } catch {
+        return null;
+      }
+      if (observed === null
+        || observed.workflowRunId !== spendTag.workflowRunId
+        || observed.workflowRunAttempt !== spendTag.workflowRunAttempt
+        || observed.headSha !== spendTag.headSha
+        || observed.status !== 'completed') {
+        return null;
+      }
+      const evidence = observed.artifacts.find((artifact) => artifact.name === EVIDENCE_ARTIFACT);
+      const found = outcomeUnknownFrom(fileText(evidence, 'failures.tsv'), derived.runId, JULIUS_OUTCOME_UNKNOWN_CAUSES);
+      return found === null ? null : { ...found, workflowRunId: observed.workflowRunId };
     },
   };
 }

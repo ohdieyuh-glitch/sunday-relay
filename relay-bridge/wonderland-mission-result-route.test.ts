@@ -808,3 +808,69 @@ describe('evidence is bound to the operator dispatch record', () => {
     }
   });
 });
+
+describe('/result says OUTCOME UNKNOWN when Julius recorded one, for the dispatched run only', () => {
+  const OUTCOME = { cause: 'HANDED_OUTCOME_UNKNOWN', role: 'CODING_AGENT', taskId: 'task:build:1', workflowRunId: '4242' };
+  const dispatchedTo = (storePath: string, workflowRunId: string | null) => {
+    recordDispatch(storePath);
+    const journalPath = `${storePath}.operator.json`;
+    const journal = JSON.parse(readFileSync(journalPath, 'utf8')) as { claims: Record<string, unknown>[] };
+    journal.claims = journal.claims.map((claim) => ({ ...claim, workflowRunId }));
+    writeFileSync(journalPath, `${JSON.stringify(journal)}\n`);
+  };
+  const reader = (outcome: unknown, completion: unknown = null): JuliusMissionEvidenceReader & { outcomeReads: number } => {
+    const double = {
+      outcomeReads: 0,
+      read: async () => completion,
+      async readOutcomeUnknown() { double.outcomeReads += 1; return outcome; },
+    };
+    return double;
+  };
+  const withRun = async (run: (ctx: Awaited<ReturnType<typeof admitted>>) => Promise<void>) => {
+    const ctx = await admitted();
+    try { await run(ctx); } finally { ctx.ports.close(); rmSync(ctx.dir, { recursive: true, force: true }); }
+  };
+  const body = async (ctx: Awaited<ReturnType<typeof admitted>>, double: JuliusMissionEvidenceReader) =>
+    (await handleWonderlandMissionReadRoute(readRequest('result', RUN), ctx.ports, double))?.body as Record<string, unknown>;
+
+  it('a dispatched run whose record holds HANDED_OUTCOME_UNKNOWN reports it, and is never completed or PASS', async () => {
+    await withRun(async (ctx) => {
+      dispatchedTo(ctx.storePath, '4242');
+      const result = await body(ctx, reader(OUTCOME));
+      expect(result.outcomeUnknown).toEqual({ cause: 'HANDED_OUTCOME_UNKNOWN', role: 'CODING_AGENT', taskId: 'task:build:1' });
+      expect(result).toMatchObject({ state: 'dispatched', checkerVerdict: 'NOT_RUN', completion: null });
+    });
+  });
+
+  it('the outcome of another workflow run, or a dispatch that recorded no run, is not this run\'s', async () => {
+    await withRun(async (ctx) => {
+      dispatchedTo(ctx.storePath, '4243');
+      expect((await body(ctx, reader(OUTCOME))).outcomeUnknown).toBeNull();
+    });
+    await withRun(async (ctx) => {
+      dispatchedTo(ctx.storePath, null);
+      expect((await body(ctx, reader(OUTCOME))).outcomeUnknown).toBeNull();
+    });
+  });
+
+  it('before dispatch nothing is read; a reader without the method, a throw or a bad value is none read', async () => {
+    await withRun(async (ctx) => {
+      const double = reader(OUTCOME);
+      expect((await body(ctx, double)).outcomeUnknown).toBeNull();
+      expect(double.outcomeReads).toBe(0);
+      dispatchedTo(ctx.storePath, '4242');
+      expect((await body(ctx, createJuliusMissionEvidenceTestDouble({}))).outcomeUnknown).toBeNull();
+      expect((await body(ctx, { read: async () => null, readOutcomeUnknown: async () => { throw new Error('unread'); } })).outcomeUnknown).toBeNull();
+      expect((await body(ctx, reader({ ...OUTCOME, cause: 'TIMEOUT' }))).outcomeUnknown).toBeNull();
+      expect((await body(ctx, reader(null))).outcomeUnknown).toBeNull();
+    });
+  });
+
+  it('progress does not carry it', async () => {
+    await withRun(async (ctx) => {
+      dispatchedTo(ctx.storePath, '4242');
+      const progress = (await handleWonderlandMissionReadRoute(readRequest('progress', RUN), ctx.ports, reader(OUTCOME)))?.body as Record<string, unknown>;
+      expect(progress).not.toHaveProperty('outcomeUnknown');
+    });
+  });
+});

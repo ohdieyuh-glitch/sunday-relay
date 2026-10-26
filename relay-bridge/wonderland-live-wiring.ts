@@ -54,24 +54,29 @@ export function wonderlandLiveReadsFrom(
 
 /** A completed reading is kept; anything else is read again after EVIDENCE_RECHECK_MS. One read at a time per run. */
 export function cachedEvidenceReader(reader: JuliusMissionEvidenceReader, now: () => number = Date.now): JuliusMissionEvidenceReader {
-  const cache = new Map<string, { readonly value: unknown; readonly at: number; readonly final: boolean }>();
-  const inflight = new Map<string, Promise<unknown>>();
-  return {
-    read(wljRunId) {
+  const cached = (source: (wljRunId: string) => Promise<unknown>) => {
+    const cache = new Map<string, { readonly value: unknown; readonly at: number; readonly final: boolean }>();
+    const inflight = new Map<string, Promise<unknown>>();
+    return (wljRunId: string): Promise<unknown> => {
       const hit = cache.get(wljRunId);
       if (hit !== undefined && (hit.final || now() - hit.at < EVIDENCE_RECHECK_MS)) return Promise.resolve(hit.value);
       const running = inflight.get(wljRunId);
       if (running !== undefined) return running;
-      const read = reader.read(wljRunId).then((value) => {
+      const read = source(wljRunId).then((value) => {
         cache.set(wljRunId, { value, at: now(), final: value !== null && value !== undefined });
         return value;
       }, () => {
-        // Unreadable: no completion. The next read after the recheck window tries again.
+        // Unreadable: nothing read. The next read after the recheck window tries again.
         cache.set(wljRunId, { value: null, at: now(), final: false });
         return null;
       }).finally(() => inflight.delete(wljRunId));
       inflight.set(wljRunId, read);
       return read;
-    },
+    };
+  };
+  const outcome = reader.readOutcomeUnknown;
+  return {
+    read: cached((wljRunId) => reader.read(wljRunId)),
+    ...(outcome === undefined ? {} : { readOutcomeUnknown: cached((wljRunId) => outcome.call(reader, wljRunId)) }),
   };
 }
