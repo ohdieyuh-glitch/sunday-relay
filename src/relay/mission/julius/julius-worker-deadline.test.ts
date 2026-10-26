@@ -169,10 +169,10 @@ const deadlineArmed = async (): Promise<void> => {
 };
 
 describe('1–4 · a worker that outlives its declared deadline is cut', () => {
-  it('1 · the dispatch ends as a retryable TIMEOUT rather than hanging', async () => {
+  it('1 · the dispatch ends as a TIMEOUT rather than hanging, and is never retried: it was handed (#43)', async () => {
     const { adapter } = deaf();
     const h = harness(adapter, 40);
-    expect(await h.coordinator.execute(request)).toMatchObject({ status: 'RETRY', code: 'TIMEOUT' });
+    expect(await h.coordinator.execute(request)).toMatchObject({ status: 'FAILED', code: 'TIMEOUT', reasonCode: 'HANDED_TIMEOUT_OUTCOME_UNKNOWN' });
   }, 30_000);
 
   it('2 · the row names the declared limit and how long the worker actually ran', async () => {
@@ -184,7 +184,7 @@ describe('1–4 · a worker that outlives its declared deadline is cut', () => {
       await vi.advanceTimersByTimeAsync(40);
       expect(vi.getTimerCount(), 'the declared deadline must have fired at 40').toBe(0);
       await running;
-      const row = facts(h.rows, 'retry.scheduled');
+      const row = facts(h.rows, 'task.failed');
       expect(row.failureClass).toBe('worker_deadline_exceeded');
       // Which limit was reached, not merely that one was.
       expect(row.diag_timeoutMs).toBe(40);
@@ -283,8 +283,8 @@ describe('8–9 · the number comes from the worker', () => {
         await vi.advanceTimersByTimeAsync(1);
         expect(vi.getTimerCount(), `declared ${declared} must cut exactly at its own deadline`).toBe(0);
 
-        expect(await running, `declared ${declared}`).toMatchObject({ status: 'RETRY', code: 'TIMEOUT' });
-        const row = facts(h.rows, 'retry.scheduled');
+        expect(await running, `declared ${declared}`).toMatchObject({ status: 'FAILED', code: 'TIMEOUT', reasonCode: 'HANDED_TIMEOUT_OUTCOME_UNKNOWN' });
+        const row = facts(h.rows, 'task.failed');
         expect(row.diag_timeoutMs, `declared ${declared}`).toBe(declared);
         expect(row.diag_elapsedMs, `declared ${declared} must actually bound the wait`).toBe(declared);
       }
@@ -311,7 +311,7 @@ describe('10–16 · a late result changes nothing', () => {
   it('10 · an adapter that resolves one tick after the deadline is discarded', async () => {
     const { adapter, done } = late(60, 'resolve');
     const h = harness(adapter, 30);
-    expect(await h.coordinator.execute(request)).toMatchObject({ status: 'RETRY', code: 'TIMEOUT' });
+    expect(await h.coordinator.execute(request)).toMatchObject({ status: 'FAILED', code: 'TIMEOUT', reasonCode: 'HANDED_TIMEOUT_OUTCOME_UNKNOWN' });
     // Let the abandoned promise actually settle, then let any microtask it
     // might have queued run. Nothing may have changed.
     await done;
@@ -348,7 +348,7 @@ describe('10–16 · a late result changes nothing', () => {
     // collision: two timeouts, one dispatch. Only Julius's may be recorded.
     const { adapter, done } = late(60, 'reject');
     const h = harness(adapter, 30);
-    expect(await h.coordinator.execute(request)).toMatchObject({ status: 'RETRY', code: 'TIMEOUT' });
+    expect(await h.coordinator.execute(request)).toMatchObject({ status: 'FAILED', code: 'TIMEOUT', reasonCode: 'HANDED_TIMEOUT_OUTCOME_UNKNOWN' });
     await done.catch(() => {});
     await new Promise(resolve => setTimeout(resolve, 20));
     const failures = h.rows.filter(row => row.type === 'retry.scheduled' || row.type === 'task.failed');
@@ -370,7 +370,7 @@ describe('10–16 · a late result changes nothing', () => {
     const h = harness(racing, 30);
     const outcome = await h.coordinator.execute(request);
     await new Promise(resolve => setTimeout(resolve, 30));
-    expect(outcome.status, 'a timeout either way').toBe('RETRY');
+    expect(outcome.status, 'a handed timeout either way: failed, never retried').toBe('FAILED');
     expect(h.rows.filter(row => row.type === 'retry.scheduled' || row.type === 'task.failed')).toHaveLength(1);
     expect(h.calls.filter(call => call === 'release')).toHaveLength(1);
   }, 30_000);
@@ -403,7 +403,7 @@ describe('10–16 · a late result changes nothing', () => {
 
 describe('17 · a recorded timeout stays a timeout', () => {
   it('17 · replaying the durable rows never reads the cut as work that succeeded', async () => {
-    // Restart/replay reads the event rows. A `retry.scheduled` carrying
+    // Restart/replay reads the event rows. A `task.failed` carrying
     // `worker_deadline_exceeded` and no `worker.completed` beside it is the
     // whole record of this dispatch, and nothing in it can be mistaken for a
     // result — which is what "do not silently continue dependent work" needs.
@@ -414,9 +414,11 @@ describe('17 · a recorded timeout stays a timeout', () => {
     await new Promise(resolve => setTimeout(resolve, 20));
     const replayed = h.rows.map(row => row.type);
     expect(replayed).toContain('worker.dispatched');
-    expect(replayed).toContain('retry.scheduled');
+    expect(replayed).toContain('task.failed');
+    expect(replayed, 'a handed timeout schedules no retry').not.toContain('retry.scheduled');
     expect(replayed, 'no completion was ever written').not.toContain('worker.completed');
-    const ending = h.rows.filter(row => row.type === 'retry.scheduled').at(-1)!;
+    const ending = h.rows.filter(row => row.type === 'task.failed').at(-1)!;
+    expect(ending.reasonCode).toBe('HANDED_TIMEOUT_OUTCOME_UNKNOWN');
     expect(ending.failureClass).toBe('worker_deadline_exceeded');
     expect(ending.diag_timedOut).toBe(true);
     // And the spend it may have incurred is still unknown rather than zero.

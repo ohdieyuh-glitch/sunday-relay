@@ -86,7 +86,7 @@ than complete on a document that claims otherwise. Both halves are rows.
 |---|---|---|---|---|
 | D1 | provider failure, retried to the ceiling and no further | DETERMINISTIC | `src/relay/mission/julius/julius-continuous-lifecycle.e2e.test.ts` | `a coder whose provider is rate limited FOREVER` |
 | D2 | provider refusal of the caller | DETERMINISTIC | `src/relay/mission/julius/julius-continuous-lifecycle.e2e.test.ts` | `a coder whose provider refuses its credential every time: one call, FAILED, not retried, not completed` |
-| D3 | timeout is a retryable outcome, not a hang | DETERMINISTIC | `src/relay/mission/julius/julius-worker-deadline.test.ts` | `1 · the dispatch ends as a retryable TIMEOUT rather than hanging` |
+| D3 | timeout is a terminal OUTCOME UNKNOWN once handed (#43), not a hang and never a retry | DETERMINISTIC | `src/relay/mission/julius/julius-worker-deadline.test.ts` | `1 · the dispatch ends as a TIMEOUT rather than hanging, and is never retried: it was handed (#43)` |
 | D4 | malformed provider response | DETERMINISTIC | `src/relay/mission/julius/julius-chaos.test.ts` | `refuses a malformed provider result and records no evidence from it` |
 | D5 | restart: nothing executed twice | DETERMINISTIC | `src/relay/mission/julius/julius-chaos.test.ts` | `a crash between the provider result and its verification never buys the answer twice` |
 | D6 | restart: the new durable records survive | DETERMINISTIC | `src/relay/mission/julius/julius-restart-survival.e2e.test.ts` | `serves the same slot view to a client after the restart as before it` |

@@ -929,22 +929,23 @@ describe('a full mission drive with Julius in control', () => {
      * and third asks reach the same wall with the same packet — three paid
      * cuts instead of one, and no more information.
      *
-     * The coordinator still writes ONE `retry.scheduled`: its job is to
-     * classify the ERROR, and a timeout genuinely is retryable. Whether the run
-     * carries on is `decideJuliusContinuation`'s, and it declines — the same
-     * division that already let a SUPERVISED run stop on a retryable error. The
-     * terminal `task.failed` below is the authority on what actually happened.
+     * AND NO RETRY IS EVEN SCHEDULED (#43). The review was handed, and a
+     * timeout is never proof the provider did not run it: it may have answered
+     * and billed. So the coordinator ends it itself as OUTCOME UNKNOWN, before
+     * the review ceiling is ever consulted. Its `task.failed` is the one ending
+     * row, and it carries the worker's telemetry.
      */
-    const scheduled = memory.events().filter((event) => event.type === 'retry.scheduled');
+    expect(memory.events().filter((event) => event.type === 'retry.scheduled'), 'never scheduled').toEqual([]);
+    const scheduled = memory.events().filter((event) => event.type === 'task.failed' && event.taskId === 'plan-1:review');
     expect(scheduled).toHaveLength(1);
     expect(fakes.log.order.filter((step) => step === 'reviewer')).toHaveLength(1);
     for (const event of scheduled) {
       const facts = event.facts as Record<string, unknown>;
-      // TIMEOUT STAYS RETRYABLE. It describes an answer that did not arrive,
-      // not one that arrived wrong, and nothing paid for is thrown away.
+      // The ERROR is still classified retryable; the handed attempt is not retried.
       expect(facts.code).toBe('TIMEOUT');
       expect(facts.errorRetryable).toBe(true);
       expect(facts.failureClass).toBe('review_timeout');
+      expect(facts.reasonCode).toBe('HANDED_TIMEOUT_OUTCOME_UNKNOWN');
     }
 
     /**
@@ -970,7 +971,7 @@ describe('a full mission drive with Julius in control', () => {
     const failed = memory.events().filter((event) => event.type === 'task.failed')
       .find((event) => event.taskId === 'plan-1:review')!;
     const facts = failed.facts as Record<string, unknown>;
-    expect(facts.reasonCode, 'and the run says WHY it stopped asking').toBe('RETRY_ATTEMPTS_EXHAUSTED');
+    expect(facts.reasonCode, 'and the run says WHY it stopped asking').toBe('HANDED_TIMEOUT_OUTCOME_UNKNOWN');
     expect(facts.code).toBe('TIMEOUT');
 
     /**
@@ -1039,7 +1040,7 @@ describe('a full mission drive with Julius in control', () => {
     expect(fakes.log.order.filter((step) => step === 'reviewer')).toHaveLength(1);
     const failed = memory.events().filter((event) => event.type === 'task.failed')
       .find((event) => event.taskId === 'plan-1:review')!;
-    expect((failed.facts as Record<string, unknown>).reasonCode).toBe('RETRY_ATTEMPTS_EXHAUSTED');
+    expect((failed.facts as Record<string, unknown>).reasonCode).toBe('HANDED_TIMEOUT_OUTCOME_UNKNOWN');
   });
 
   it('no review is ever asked a question that mentions the timeout', async () => {
@@ -2239,10 +2240,15 @@ describe('the first paid attempt, reproduced: a failing Prompt Architect', () =>
    * widening a core return type, which is its own change; this test holds the
    * half that works so a later repair can be measured against it.
    */
-  it('carries the diagnostics on each scheduled retry', async () => {
+  it('carries the diagnostics on the ending of a rate limit it cannot retry (#43)', async () => {
+    // The Prompt Architect never attests that nothing ran (a 429 can follow a
+    // billed first try inside the SDK's own retry), so its rate limit after the
+    // handoff is OUTCOME UNKNOWN: no retry, and the ending row carries the facts.
     const { failures } = await failedRun('rate_limited');
-    const scheduled = failures.filter((event) => event.type === 'retry.scheduled');
-    expect(scheduled.length, 'a retryable class must schedule at least one retry').toBeGreaterThan(0);
+    expect(failures.filter((event) => event.type === 'retry.scheduled'), 'never retried').toEqual([]);
+    const scheduled = failures.filter((event) => event.type === 'task.failed');
+    expect(scheduled).toHaveLength(1);
+    expect(scheduled[0]!.facts.reasonCode).toBe('HANDED_FAILURE_OUTCOME_UNKNOWN');
     for (const event of scheduled) {
       expect(event.facts.diag_maxOutputTokens, 'every scheduled retry says what ceiling it ran under').toBe(4_000);
       expect(event.facts.diag_requestedModel).not.toBeUndefined();

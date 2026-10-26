@@ -21,7 +21,9 @@
  * and would also retry an authentication failure forever, spending an attempt
  * per round on a credential that will never work.
  *
- *   RUN A — the architect's first dispatch fails TIMEOUT. The task must go back
+ *   RUN A — the architect's first dispatch is refused by the provider's own 429,
+ *   attested unprocessed: the one failure after the handoff that proves nothing
+ *   ran (#43; a TIMEOUT there is OUTCOME UNKNOWN and never retried). The task must go back
  *   to RUNNABLE with a next attempt time rather than FAILED, exactly one
  *   attempt must be spent, the second dispatch must succeed, and the mission
  *   must reach COMPLETED. A retry that never retries and a retry that loops are
@@ -93,8 +95,8 @@ const reviewer = worker({
 const PLAN_OK: ScriptedOutcome = { kind: 'succeed', evidence: [{ type: 'ARTIFACT', status: 'PASSED', safeSummary: 'Validated architect plan stored for this run.' }] };
 const BUILD_OK: ScriptedOutcome = { kind: 'succeed', evidence: [{ type: 'TEST', status: 'PASSED', safeSummary: 'node --test: exit 0.' }] };
 const REVIEW_OK: ScriptedOutcome = { kind: 'succeed', evidence: [{ type: 'REVIEW_FINDING', status: 'PASSED', safeSummary: 'Independent review approved the change.' }] };
-/** Transient: the provider took too long. The runtime's own classifier decides it is retryable. */
-const TIMEOUT: ScriptedOutcome = { kind: 'fail', code: 'TIMEOUT' };
+/** Transient, and PROVEN unprocessed: the provider refused the request with its own 429. */
+const RATE_LIMITED: ScriptedOutcome = { kind: 'fail', code: 'RATE_LIMIT', runtimeStarted: false };
 /** Permanent: the credential is wrong, and it will be just as wrong next time. */
 const AUTH: ScriptedOutcome = { kind: 'fail', code: 'AUTH_CONFIGURATION' };
 
@@ -202,22 +204,22 @@ async function orchestrate(pool: Pool, outDir: string, repoRoot: string): Promis
   await new TransactionalWonderlandDatabase(pool).migrate();
 
   /* ------------------------------------- RUN A: transient, and it must recover */
-  record.say('RUN A — the architect times out once, and the runtime is expected to try again');
-  const a = await driveRun(pool, TRANSIENT, [TIMEOUT, PLAN_OK, PLAN_OK]);
+  record.say('RUN A — the architect is rate limited once, unprocessed, and the runtime is expected to try again');
+  const a = await driveRun(pool, TRANSIENT, [RATE_LIMITED, PLAN_OK, PLAN_OK]);
 
   const scheduled = await scalar(
     `SELECT e.payload->'facts'->>'code'||'/'||COALESCE(e.payload->'facts'->>'errorRetryable','?')
        FROM relay_wonderland.events e
       WHERE e.event_type='julius.retry.scheduled' AND e.payload->>'taskId'=$1 ORDER BY e.occurred_at LIMIT 1`, [a.plan]);
-  record.step('the runtime classified the timeout as retryable and scheduled a retry',
-    scheduled === 'TIMEOUT/true', String(scheduled));
+  record.step('the runtime classified the rate limit as retryable and scheduled a retry',
+    scheduled === 'RATE_LIMIT/true', String(scheduled));
 
   const failedTerminally = await scalar(
     `SELECT count(*) FROM relay_wonderland.events WHERE event_type='julius.task.failed' AND payload->>'taskId'=$1`, [a.plan]);
   record.step('and did NOT end the task — a retry is a hand-back, not a failure',
     failedTerminally === '0', `${failedTerminally} terminal failure event(s)`);
 
-  record.step('the architect was dispatched exactly twice: the timeout, then the retry',
+  record.step('the architect was dispatched exactly twice: the rate limit, then the retry',
     a.dispatches === 2, `${a.dispatches} dispatch(es)`);
 
   const attempt = await scalar(`SELECT attempt FROM relay_wonderland.julius_tasks WHERE task_id=$1`, [a.plan]);

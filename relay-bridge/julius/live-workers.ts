@@ -1143,6 +1143,9 @@ export function createLiveArchitectAdapter(input: {
             throw new JuliusDispatchError('RATE_LIMIT', true, 'Prompt Architect provider rate limit reached.', outcome.failureClass, failed);
           case 'timeout':
           case 'network_disconnected':
+            // Retryable as a CLASS only. Raised after the handoff, so the
+            // coordinator never retries it: the call may have been answered and
+            // billed (HANDED_TIMEOUT_OUTCOME_UNKNOWN, #43).
             throw new JuliusDispatchError('TIMEOUT', true, 'Prompt Architect provider timed out.', outcome.failureClass, failed);
           case 'model_unavailable':
             throw new JuliusDispatchError('PROVIDER_UNAVAILABLE', false, 'Prompt Architect model is unavailable.', outcome.failureClass, failed);
@@ -2455,8 +2458,12 @@ export function createLiveHermesReviewerAdapter(input: {
          * that timed out or a service that was full. The rest of Julius already
          * knows this: the Prompt Architect and the Coding Agent both raise
          * TIMEOUT retryable, and only the reviewer treated its own timeout as
-         * final. Nothing paid for is discarded by retrying one: a timeout and a
-         * 503 produced no verdict to throw away.
+         * final. A 503 produced no verdict to throw away. A TIMEOUT is NOT known
+         * to have produced none: the review may have run and been billed, so
+         * `retryable` here classifies the error and does not license a second
+         * ask. The coordinator ends a TIMEOUT that was handed as
+         * HANDED_TIMEOUT_OUTCOME_UNKNOWN and never retries it (#43), and every
+         * review dispatch is handed.
          *
          * The refusals stay final, and are held there twice — `retryable: false`
          * here, and `decideJuliusContinuation` refusing AUTH_CONFIGURATION and
