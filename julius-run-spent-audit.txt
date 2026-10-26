@@ -1,0 +1,7 @@
+julius-run-spent.v1
+run=wlj_1ed344d1-16f4-48fa-baa2-9f7cc8602e36
+namespace=julius-inworld-data-1
+reservedUsdMicros=30000000
+workflow_run_id=40258482240
+workflow_run_attempt=1
+head_sha=73a4aa3fe0c6a5d23fb6a10f5ac9121016443e28
