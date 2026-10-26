@@ -1884,6 +1884,20 @@ const stepScript = (name: string): string => {
   return body.split('\n').map((line) => line.replace(/^ {10}/u, '')).join('\n');
 };
 
+/**
+ * AN EMPTY STAND-IN FOR THE BUILT ENTRYPOINT, in a fresh directory, at the path
+ * the pre-marker step's own `test -f` guard names. Nothing built is read: the
+ * stubbed `node` on PATH answers instead.
+ */
+const fakeBuiltEntrypoint = (): string => {
+  const guarded = /test -f (\S+) \|\|/u.exec(stepScript("'Gate: attempted markers and the combined cap, before the attempted marker'"))?.[1] ?? '';
+  expect(guarded).toMatch(/julius-live-mission\.cjs$/u);
+  const root = mkdtempSync(join(realpathSync(tmpdir()), 'julius-built-'));
+  mkdirSync(join(root, ...guarded.split('/').slice(0, -1)), { recursive: true });
+  writeFileSync(join(root, ...guarded.split('/')), '');
+  return root;
+};
+
 describe('F4 — the executor owns its signing key, and Julius cannot reach it', () => {
   it('the host never generates or holds private signing material', () => {
     expect(workflow, 'a key minted on the runner is readable by the user that runs Julius')
@@ -2887,9 +2901,7 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
         CONTRACT: 'contract.json',
       };
       // Step 9, then the pre-marker step: together they are the guard.
-      const built = mkdtempSync(join(realpathSync(tmpdir()), 'julius-built-'));
-      mkdirSync(join(built, 'dist-relay-bridge'));
-      writeFileSync(join(built, 'dist-relay-bridge', 'julius-live-mission.cjs'), '');
+      const built = fakeBuiltEntrypoint();
       try {
         execFileSync('bash', ['-c', script], { cwd: ROOT, stdio: 'ignore', env });
         execFileSync('bash', ['-c', stepScript(PRE_MARKER)], { cwd: built, stdio: 'ignore', env });
@@ -4292,9 +4304,7 @@ describe('count only real spend: the combined cap and the attempted markers are 
       '  *) exit 98;;',
       'esac',
     ].join('\n'), { mode: 0o755 });
-    const built = mkdtempSync(join(realpathSync(tmpdir()), 'julius-built-'));
-    mkdirSync(join(built, 'dist-relay-bridge'));
-    writeFileSync(join(built, 'dist-relay-bridge', 'julius-live-mission.cjs'), '');
+    const built = fakeBuiltEntrypoint();
     try {
       execFileSync('bash', ['-c', stepScript(PRE_MARKER)], {
         cwd: built, stdio: 'ignore',
