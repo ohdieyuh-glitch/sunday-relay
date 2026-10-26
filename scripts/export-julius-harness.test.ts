@@ -1,9 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import {
   JULIUS_SCHEMA_MIGRATIONS_BY_NAME, JULIUS_SCHEMA_MIGRATION_REASONS, NON_JULIUS_MIGRATION_DESCRIPTIONS,
   describeNonJuliusMigrations, isJuliusSchemaMigration, juliusSchemaListProblems,
@@ -50,6 +51,71 @@ interface JsonReport {
   files: { path: string; subsystem: string; role: string; lines: number; bytes: number; sha256: string }[];
   subsystems: { name: string; files: number }[];
   totals: { files: number; lines: number; bytes: number };
+  kernelDependants: string[];
+}
+
+/**
+ * J1 dispatch paths named by an earlier exclusion. They are not in this tree,
+ * so they do not import the kernel and cannot be kernel-dependant exclusions.
+ * A later tree that adds one of them back, and in which that file imports the
+ * kernel, still has to reach it, declare it, or exclude it: the generator
+ * refuses both an unclassified kernel dependant and an exclusion whose file
+ * no longer imports the kernel.
+ */
+const J1_DISPATCH_PATHS = [
+  'relay-bridge/julius-dispatch-adapters.ts',
+  'relay-bridge/julius-dispatch-wiring-core.ts',
+  'relay-bridge/julius-dispatch-wiring-real.ts',
+  'relay-bridge/julius-dispatch-wiring-testkit.ts',
+] as const;
+
+const LIVE_ROOTS = [
+  'relay-bridge/julius-live-mission.ts',
+  'src/relay/workspace/julius-tools/executor-control-plane-main.ts',
+];
+const SOURCE_EXTS = ['.ts', '.tsx', '.mts', '.cts', '.js', '.mjs', '.cjs'];
+const ts = createRequire(__filename)('typescript') as typeof import('typescript');
+
+/** The same static import closure the generator traces from the production roots. */
+function importClosure(roots: readonly string[]): Set<string> {
+  const seen = new Set<string>();
+  const pending = [...roots];
+  const resolveSpec = (fromRel: string, spec: string): string | null => {
+    if (!spec.startsWith('./') && !spec.startsWith('../')) return null;
+    const base = resolve(dirname(join(REPO_ROOT, fromRel)), spec);
+    const candidates = [base];
+    if (/\.[cm]?js$/.test(base)) candidates.push(base.replace(/\.([cm]?)js$/, '.$1ts'));
+    for (const ext of SOURCE_EXTS) candidates.push(base + ext);
+    for (const ext of SOURCE_EXTS) candidates.push(resolve(base, `index${ext}`));
+    for (const candidate of candidates) {
+      if (existsSync(candidate) && statSync(candidate).isFile()) return relative(REPO_ROOT, candidate).split(sep).join('/');
+    }
+    return null;
+  };
+  while (pending.length > 0) {
+    const path = pending.pop();
+    if (path === undefined || seen.has(path) || !existsSync(join(REPO_ROOT, path))) continue;
+    seen.add(path);
+    const text = readFileSync(join(REPO_ROOT, path), 'utf8');
+    const kind = path.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
+    const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, kind);
+    const specs: string[] = [];
+    const visit = (node: import('typescript').Node): void => {
+      if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) specs.push(node.moduleSpecifier.text);
+      else if (ts.isExportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) specs.push(node.moduleSpecifier.text);
+      else if (ts.isCallExpression(node) && node.arguments.length > 0 && ts.isStringLiteralLike(node.arguments[0])) {
+        const callee = node.expression;
+        if (callee.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(callee) && callee.text === 'require')) specs.push(node.arguments[0].text);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+    for (const spec of specs) {
+      const resolved = resolveSpec(path, spec);
+      if (resolved !== null) pending.push(resolved);
+    }
+  }
+  return seen;
 }
 
 function run(args: string[]): Run {
@@ -162,6 +228,25 @@ describe('export-julius-harness generates the Julius harness export from the liv
     expect(committed, 'regenerate with: node scripts/export-julius-harness.mjs').toBe(generated);
     expect(committed).toContain('## Production composition roots');
     for (const name of REQUIRED_SUBSYSTEMS) expect(committed).toContain(` ${name}\n`);
+  });
+
+  it('does not exclude J1 dispatch files that are absent and do not import the kernel', () => {
+    const source = readFileSync(GENERATOR, 'utf8');
+    expect(source).toContain('kernel-dependant exclusion no longer imports the kernel — drop or re-justify it');
+    expect(source).toContain('unclassified Julius kernel dependant (reach it from a root, declare it, or exclude it with a reason)');
+    expect(source).toContain('excluded as a kernel dependant but reached by the trace — reclassify');
+    const blockStart = source.indexOf('const KERNEL_DEPENDANT_EXCLUSIONS = [');
+    const blockEnd = source.indexOf('\n];', blockStart);
+    const block = source.slice(blockStart, blockEnd);
+    const reached = importClosure(LIVE_ROOTS);
+    const included = report.files.map((file) => file.path);
+    for (const path of J1_DISPATCH_PATHS) {
+      expect(existsSync(join(REPO_ROOT, path)), `${path} is not in this tree, so it imports nothing`).toBe(false);
+      expect(block, path).not.toContain(path);
+      expect(reached.has(path), path).toBe(false);
+      expect(included, path).not.toContain(path);
+      expect(report.kernelDependants, path).not.toContain(path);
+    }
   });
 });
 
