@@ -117,7 +117,14 @@ export function wonderlandAdmissionRequestFrom(request: {
   };
 }
 
-export function createWonderlandStatusBridge(ports: WonderlandAdmissionRoutePorts): {
+/**
+ * The counted prior paid attempts for one admitted mission, as the paid
+ * workflow's attempted-marker gate would count them, or UNKNOWN. Injected by
+ * the composition root; this module starts no process and reads no network.
+ */
+export type WonderlandStatusPriorAttempts = (missionId: string) => Promise<number | 'UNKNOWN'>;
+
+export function createWonderlandStatusBridge(ports: WonderlandAdmissionRoutePorts, priorAttempts?: WonderlandStatusPriorAttempts): {
   readonly path: string;
   handle(request: {
     readonly method: string;
@@ -136,7 +143,7 @@ export function createWonderlandStatusBridge(ports: WonderlandAdmissionRoutePort
 } {
   return {
     path: WONDERLAND_STATUS_PATH,
-    handle: (request) => handleWonderlandStatusRoute(wonderlandAdmissionRequestFrom(request), ports),
+    handle: (request) => handleWonderlandStatusRoute(wonderlandAdmissionRequestFrom(request), ports, priorAttempts),
   };
 }
 
@@ -370,10 +377,19 @@ export function handleWonderlandAdmissionRoute(
  * Reads the admission file. A missing file is an unknown run. A held row
  * stays held. A stored state or cause outside the closed unions is returned
  * as `state: "unknown"` with no cause. `unknown` is never terminal.
+ *
+ * Every 200 also carries, at top level, `priorAttempted` (the counted prior
+ * paid attempts for the admitted mission: an integer >= 0, or "UNKNOWN") and
+ * `rerunConsentRequired` (true exactly when `priorAttempted` is an integer
+ * above 0), so the client shows the second phrase field only then. They are
+ * read only while the admission is startable (`awaiting_operator`); in any
+ * other state nothing is read and they are "UNKNOWN" and false. The phrase
+ * itself is never in this body.
  */
 export function handleWonderlandStatusRoute(
   request: WonderlandAdmissionRouteRequest,
   ports: WonderlandAdmissionRoutePorts,
+  priorAttempts?: WonderlandStatusPriorAttempts,
 ): Promise<{ status: number; body: unknown } | null> {
   if (!isWonderlandStatusRoute(request.path)) return Promise.resolve(null);
   const guarded = juliusLoopbackGuard(request, ports);
@@ -385,7 +401,26 @@ export function handleWonderlandStatusRoute(
   } catch {
     runId = '';
   }
-  return readAdmittedWonderlandStatus(request, ports, runId, guarded.native.playerId);
+  return readAdmittedStatusWithMission(request, ports, runId, guarded.native.playerId).then(async (read) => {
+    if (read.status !== 200 || read.body === null || typeof read.body !== 'object') return { status: read.status, body: read.body };
+    const view = read.body as Record<string, unknown>;
+    let priorAttempted: number | 'UNKNOWN' = 'UNKNOWN';
+    const missionId = read.missionId ?? null;
+    if (view.state === 'awaiting_operator' && missionId !== null && priorAttempts !== undefined) {
+      try {
+        const counted = await priorAttempts(missionId);
+        priorAttempted = typeof counted === 'number' && Number.isSafeInteger(counted) && counted >= 0 ? counted : 'UNKNOWN';
+      } catch {
+        priorAttempted = 'UNKNOWN';
+      }
+    }
+    return { status: 200, body: withRerunConsent(view, priorAttempted) };
+  });
+}
+
+/** The status body plus the two rerun fields, at top level. Existing fields are untouched. */
+export function withRerunConsent(view: Record<string, unknown>, priorAttempted: number | 'UNKNOWN'): Record<string, unknown> {
+  return { ...view, priorAttempted, rerunConsentRequired: typeof priorAttempted === 'number' && priorAttempted > 0 };
 }
 
 /**
@@ -401,6 +436,16 @@ export function readAdmittedWonderlandStatus(
   runId: string,
   playerId: string,
 ): Promise<{ status: number; body: unknown }> {
+  return readAdmittedStatusWithMission(request, ports, runId, playerId).then((read) => ({ status: read.status, body: read.body }));
+}
+
+/** The same read, plus the admitted row's mission slug on a 200 (never sent to the client). */
+function readAdmittedStatusWithMission(
+  request: WonderlandAdmissionRouteRequest,
+  ports: WonderlandAdmissionRoutePorts,
+  runId: string,
+  playerId: string,
+): Promise<{ status: number; body: unknown; missionId?: string | null }> {
   const storePath = (ports.env.JULIUS_WONDERLAND_ADMISSION_STORE ?? '').trim();
   if (storePath === '' || !isLocalStorePath(storePath)) {
     return Promise.resolve(err(503, 'julius_dispatch_unavailable', 'Wonderland admission store is not available. Nothing was reserved.'));
@@ -427,7 +472,11 @@ export function readAdmittedWonderlandStatus(
   const owner = admission.ownerPlayerId ?? (ports.env.JULIUS_J1_FOUNDER_PLAYER_ID ?? '').trim();
   if (owner === '' || owner !== playerId) return Promise.resolve(STATUS_NOT_FOUND);
   try {
-    return Promise.resolve({ status: 200, body: statusView(storePath, admission, document, identity.serverRunId, request.nowMs) });
+    return Promise.resolve({
+      status: 200,
+      body: statusView(storePath, admission, document, identity.serverRunId, request.nowMs),
+      missionId: admission.missionId,
+    });
   } catch (error) {
     if (isAdmissionFileClosed(error)) {
       return Promise.resolve(err(503, 'julius_dispatch_unavailable', 'Wonderland admission store is not available. Nothing was reserved.'));

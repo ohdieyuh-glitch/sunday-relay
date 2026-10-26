@@ -82,6 +82,7 @@ import { createWonderlandMissionReadBridge, isWonderlandMissionReadRoute } from 
 import { createWonderlandMissionEventsBridge, isWonderlandMissionEventsRoute } from './wonderland-mission-events-route';
 import { createWonderlandMissionStartBridge, isWonderlandMissionStartRoute, type WonderlandMissionStartBridge } from './wonderland-mission-start-route';
 import { wonderlandLiveReadsFrom } from './wonderland-live-wiring';
+import { wonderlandStatusPriorAttemptsFrom } from './wonderland-prior-attempts';
 import { createCompanionResultStore, createWonderlandCompanionBridge, isWonderlandCompanionAgentRoute, isWonderlandCompanionRoute } from './wonderland-companion-route';
 import { createCompanionAdapterRegistry, type CompanionAdapterRegistry } from './wonderland-companion-registry';
 import { handleProjectBrainRoute, isProjectBrainRoute, type ProjectBrainRoutePorts } from './project-brain-routes';
@@ -474,6 +475,18 @@ let wonderlandLiveCache: {
   readonly reads: ReturnType<typeof wonderlandLiveReadsFrom>;
   readonly events: ReturnType<typeof createWonderlandMissionEventsBridge>;
 } | null = null;
+/**
+ * The prior-attempt count `/status` shows before Start, read through the
+ * founder's own `gh` only when Start is on and a repository is set. One reader
+ * per process, so its short cache spans polls. The Start itself reads fresh.
+ */
+let wonderlandStatusPriorAttemptsCache: { readonly value: ReturnType<typeof wonderlandStatusPriorAttemptsFrom> } | null = null;
+const wonderlandStatusPriorAttempts = (): ReturnType<typeof wonderlandStatusPriorAttemptsFrom> => {
+  if (wonderlandStatusPriorAttemptsCache === null) {
+    wonderlandStatusPriorAttemptsCache = { value: wonderlandStatusPriorAttemptsFrom(process.env) };
+  }
+  return wonderlandStatusPriorAttemptsCache.value;
+};
 /** One Start bridge (and so one claim core) per admission service, so its claims run one after another. */
 let wonderlandStartCache: { readonly ports: WonderlandAdmissionRoutePorts; readonly bridge: WonderlandMissionStartBridge } | null = null;
 const wonderlandMissionStart = (wonderlandAdmission: WonderlandAdmissionRoutePorts): WonderlandMissionStartBridge => {
@@ -511,7 +524,7 @@ const juliusMissionPorts = (
   return {
     ...juliusMissionCache,
     wonderlandAdmissionBridge: createWonderlandAdmissionBridge(wonderlandAdmission),
-    wonderlandStatusBridge: createWonderlandStatusBridge(wonderlandAdmission),
+    wonderlandStatusBridge: createWonderlandStatusBridge(wonderlandAdmission, wonderlandStatusPriorAttempts()),
     // YUJI's JuliusMissionEvidenceReader reads GitHub through the founder's own
     // `gh` when JULIUS_WONDERLAND_GITHUB_REPO is set; unset, result and
     // progress stay on the status ceiling and never report completed.

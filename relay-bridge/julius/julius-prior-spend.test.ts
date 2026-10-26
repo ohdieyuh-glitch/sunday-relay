@@ -21,6 +21,7 @@ import {
   type SqlQueryable,
 } from './julius-prior-spend';
 import { attemptMarkersCommand, authorizeSpendCommand } from '../julius-live-mission';
+import { createGhPriorAttemptReader, ghApiFetch, ghApiGetArgs, type GhBytesRunner } from '../wonderland-prior-attempts';
 
 function pool(handler: (sql: string, values: readonly unknown[] | undefined) => { rows: Record<string, unknown>[] }): SqlQueryable {
   return {
@@ -732,5 +733,58 @@ describe('REVIEW pins: the classified listing never drops or zeroes a run it can
     }, base.wlj);
     expect(proof.basis).not.toBe('no_provider_execution_live_never_ran');
     expect(proof.classification).toBe('UNKNOWN');
+  });
+});
+
+describe('the Wonderland Start reads the same markers through `gh api -X GET`', () => {
+  /** `gh` as the bridge runs it: GET only, GitHub's redirect followed by `gh` itself, raw bytes out. */
+  function ghFor(runs: readonly RealRun[], options: GithubOptions = {}, mangle = false): { run: GhBytesRunner; argv: string[][] } {
+    const { fetchImpl } = githubFor(runs, options);
+    const argv: string[][] = [];
+    return {
+      argv,
+      run: async (args) => {
+        argv.push([...args]);
+        if (args[0] !== 'api' || args[1] !== '-X' || args[2] !== 'GET' || args.length !== 4) return { code: 2, stdout: new Uint8Array() };
+        let response = await fetchImpl(`https://api.github.com/${args[3] ?? ''}`, { redirect: 'manual' });
+        if (response.status >= 300 && response.status < 400) response = await fetchImpl(response.headers.get('location') ?? '', {});
+        if (!response.ok) return { code: 1, stdout: new Uint8Array() };
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        // A text-only shim: what a utf8-decoded child would hand back.
+        return { code: 0, stdout: mangle ? new TextEncoder().encode(new TextDecoder().decode(bytes)) : bytes };
+      },
+    };
+  }
+
+  it('40278849833 reads NOT_EXECUTED from its real zips through the bytes, so the count is 0; an executed marker counts 1', async () => {
+    const real = run40278849833();
+    const zero = ghFor([real], { markers: [real] });
+    expect(await createGhPriorAttemptReader(zero.run).read({ repo: REPO, namespace: J1 })).toEqual({ readable: true, counted: 0 });
+    expect(zero.argv.some((args) => (args[3] ?? '').endsWith('/zip')), 'the zero-row proof needed the artifact bytes').toBe(true);
+    expect(zero.argv.every((args) => args.slice(0, 3).join(' ') === 'api -X GET')).toBe(true);
+    const executed = run40278849833({ 'sessions.tsv': 'execution_id\nexecution:x\n(1 row)\n' });
+    const one = ghFor([executed], { markers: [executed] });
+    expect(await createGhPriorAttemptReader(one.run).read({ repo: REPO, namespace: J1 })).toEqual({ readable: true, counted: 1 });
+  });
+
+  it('a text-only shim cannot read the zip, so the same run is UNKNOWN and counted: the bytes path is load-bearing', async () => {
+    const real = run40278849833();
+    const mangled = ghFor([real], { markers: [real] }, true);
+    expect(await createGhPriorAttemptReader(mangled.run).read({ repo: REPO, namespace: J1 })).toEqual({ readable: true, counted: 1 });
+  });
+
+  it('a listing gh cannot read is UNKNOWN, never zero; a non-GET or a foreign URL is never run', async () => {
+    const real = run40278849833();
+    const down = ghFor([real], { markers: [real], fail: (url) => url.includes('?name=') });
+    expect(await createGhPriorAttemptReader(down.run).read({ repo: REPO, namespace: J1 })).toEqual({ readable: false });
+    const argv: string[][] = [];
+    const fetchImpl = ghApiFetch(async (args) => { argv.push([...args]); return { code: 0, stdout: new Uint8Array() }; });
+    expect((await fetchImpl('https://api.github.com/repos/x/y', { method: 'POST' })).ok).toBe(false);
+    expect((await fetchImpl('https://example.com/repos/x/y')).ok).toBe(false);
+    expect((await fetchImpl('https://api.github.com/../x')).ok).toBe(false);
+    expect((await fetchImpl('https://api.github.com/-X')).ok).toBe(false);
+    expect(argv).toEqual([]);
+    expect(ghApiGetArgs('https://api.github.com/repos/o/r/actions/artifacts?name=a-attempted&per_page=100'))
+      .toEqual(['api', '-X', 'GET', 'repos/o/r/actions/artifacts?name=a-attempted&per_page=100']);
   });
 });

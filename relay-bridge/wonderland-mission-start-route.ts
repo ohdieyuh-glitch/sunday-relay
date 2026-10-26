@@ -25,6 +25,18 @@
  * `gh` runs under the founder's own login on this machine. No credential is
  * read here, and none is sent to or from the client. The response carries only
  * the wlj, the state, the workflowRunId, dispatchedAt and replayed.
+ *
+ * THE SECOND PHRASE. When the paid workflow's own attempted-marker count for
+ * this mission is PROVEN above zero, the claim core refuses
+ * (`julius_rerun_consent_required`, 409, nothing claimed or dispatched, the
+ * admission still held) unless this body also carries
+ * `acknowledgeRerun: "RERUN PAID MISSION"`, typed by the founder for THIS
+ * admission. Any other value of that key is a 400 before any claim. An
+ * UNKNOWN count is refused whatever the body says
+ * (`julius_prior_attempts_unknown`). A count of 0 ignores the key. The phrase
+ * comes only from this body: never from the environment, a config, a default
+ * or a replay. A replay of a started admission never runs `gh` again, so it
+ * never re-sends it.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -35,6 +47,7 @@ import {
   OPERATOR_DISPATCH_CONFIRMATION,
   OPERATOR_LANES,
   openOperatorClaimTool,
+  RERUN_PAID_MISSION_CONFIRMATION,
   type ClaimResult,
   type GhResult,
   type GhSpawner,
@@ -50,6 +63,7 @@ import {
   type WonderlandAdmissionRoutePorts,
   type WonderlandAdmissionRouteRequest,
 } from './wonderland-admission-route';
+import { createGhPriorAttemptReader } from './wonderland-prior-attempts';
 
 const START_PATH = /^\/wonderland\/julius\/missions\/([^/]+)\/start$/u;
 const REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
@@ -111,7 +125,7 @@ function productionClaimTool(): (storePath: string) => OperatorClaimTool {
   return (storePath) => {
     let tool = tools.get(storePath);
     if (tool === undefined) {
-      tool = openOperatorClaimTool(storePath, ghClaimSpawner);
+      tool = openOperatorClaimTool(storePath, ghClaimSpawner, undefined, createGhPriorAttemptReader());
       tools.set(storePath, tool);
     }
     return tool;
@@ -162,6 +176,14 @@ export async function handleWonderlandMissionStartRoute(
   if (body.confirm !== OPERATOR_DISPATCH_CONFIRMATION) {
     return err(400, 'julius_start_confirmation_required', `The founder's Start must carry confirm: "${OPERATOR_DISPATCH_CONFIRMATION}". Nothing was dispatched.`);
   }
+  // The founder's second phrase: absent, or exactly the phrase. It is read from this body only.
+  let rerunConfirmation: string | null = null;
+  if (Object.hasOwn(body, 'acknowledgeRerun')) {
+    if (body.acknowledgeRerun !== RERUN_PAID_MISSION_CONFIRMATION) {
+      return err(400, 'julius_rerun_ack_invalid', `acknowledgeRerun must be absent or exactly "${RERUN_PAID_MISSION_CONFIRMATION}". Nothing was claimed or dispatched.`);
+    }
+    rerunConfirmation = RERUN_PAID_MISSION_CONFIRMATION;
+  }
   if (typeof body.clientTriggerId !== 'string' || !CLIENT_TRIGGER_ID.test(body.clientTriggerId)
     || typeof body.clientUiActionUtc !== 'string' || !Number.isFinite(Date.parse(body.clientUiActionUtc))) {
     return err(400, 'julius_start_client_binding_required', 'clientTriggerId and clientUiActionUtc are required.');
@@ -182,6 +204,7 @@ export async function handleWonderlandMissionStartRoute(
       workflowSource: '',
       dispatch: true,
       confirmation: OPERATOR_DISPATCH_CONFIRMATION,
+      rerunConfirmation,
     });
   } catch {
     return err(503, 'julius_start_unavailable', 'The claim could not run. Check /status before trying again.');
@@ -211,5 +234,6 @@ export function startHttp(wljRunId: string, result: ClaimResult): { status: numb
   }
   const body: Record<string, unknown> = { error: { kind: result.kind, message: result.message }, retry: false };
   if (result.record !== null) Object.assign(body, startBody(wljRunId, result.record, false));
+  if (result.priorAttempted !== undefined) body.priorAttempted = result.priorAttempted;
   return { status: 409, body };
 }

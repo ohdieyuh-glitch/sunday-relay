@@ -494,9 +494,13 @@ const PROGRESS_CAUSE = /^[\x20-\x7e]{1,200}$/;
 const CLAIM_KEYS = [
   'wonderlandRunId', 'serverRunId', 'state', 'spentTag', 'spentTagState', 'at',
   'dispatchAttempted', 'dispatchError', 'halt', 'workflowRunId', 'githubDate',
+  'acknowledgedRerun', 'priorAttempted',
 ] as const;
-/** Keys a claim written before they existed may lack. Absent reads as null. */
-const OPTIONAL_CLAIM_KEYS: readonly string[] = ['workflowRunId', 'githubDate'];
+/**
+ * Keys a claim written before they existed may lack. Absent `workflowRunId`
+ * and `githubDate` read as null; absent `acknowledgedRerun` reads as false.
+ */
+const OPTIONAL_CLAIM_KEYS: readonly string[] = ['workflowRunId', 'githubDate', 'acknowledgedRerun', 'priorAttempted'];
 /** GitHub's `Date:` header as ISO UTC, second precision. */
 const GITHUB_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 /** A GitHub Actions workflow run id. Null until dispatch learns one. */
@@ -538,6 +542,17 @@ export interface ClaimEvent {
    * evidence.
    */
   readonly githubDate: string | null;
+  /**
+   * True only when the founder's paired Wonderland session typed
+   * `RERUN PAID MISSION` for THIS admission and the bridge read a proven
+   * prior paid attempt (`priorAttempted` > 0) before the reservation. Then,
+   * and only then, the dispatch carried `acknowledge_rerun`. Absent means
+   * false: a legacy journal, or a first run. Set on the reservation and
+   * carried unchanged by every later event of the same claim.
+   */
+  readonly acknowledgedRerun?: true;
+  /** The counted prior paid attempts the consent was given over. Present exactly when `acknowledgedRerun` is. */
+  readonly priorAttempted?: number;
 }
 
 /** True for a decimal GitHub workflow run id that fits in a signed 64-bit integer. */
@@ -937,6 +952,7 @@ function claimStamp(claim: ClaimEvent): string {
     claim.halt ?? '',
     claim.workflowRunId ?? '',
     claim.githubDate ?? '',
+    claim.acknowledgedRerun === true ? `rerun:${String(claim.priorAttempted ?? '')}` : '',
   ].join('\0');
 }
 
@@ -963,6 +979,7 @@ function parseClaim(value: unknown, schemaVersion: OperatorJournal['schemaVersio
     ? storedWorkflowRunId(claim.workflowRunId)
     : null;
   const githubDate = Object.hasOwn(claim, 'githubDate') ? storedGithubDate(claim.githubDate) : null;
+  const rerun = storedRerun(claim);
   const identity = identifyAdmissionRun(claim.wonderlandRunId, claim.serverRunId);
   const form = schemaVersion === LEGACY_ADMISSION_SCHEMA_VERSION ? 'legacy' : 'wlj';
   if (!identity.ok || identity.form !== form) throw new AdmissionFileClosedError('corrupt');
@@ -1026,7 +1043,25 @@ function parseClaim(value: unknown, schemaVersion: OperatorJournal['schemaVersio
     halt: state === 'dispatched' || state === 'dispatching' ? null : recordedHalt,
     workflowRunId,
     githubDate,
+    ...rerun,
   };
+}
+
+/**
+ * `acknowledgedRerun` and `priorAttempted` travel together: both absent (or
+ * an explicit `false` with no count) is no rerun consent; `true` needs a
+ * whole count of at least one. Anything else is corrupt.
+ */
+function storedRerun(claim: Record<string, unknown>): { readonly acknowledgedRerun?: true; readonly priorAttempted?: number } {
+  const hasAck = Object.hasOwn(claim, 'acknowledgedRerun');
+  const hasCount = Object.hasOwn(claim, 'priorAttempted');
+  if (!hasAck && !hasCount) return {};
+  if (hasAck && claim.acknowledgedRerun === false && !hasCount) return {};
+  const count = claim.priorAttempted;
+  if (claim.acknowledgedRerun === true && typeof count === 'number' && Number.isSafeInteger(count) && count >= 1) {
+    return { acknowledgedRerun: true, priorAttempted: count };
+  }
+  throw new AdmissionFileClosedError('corrupt');
 }
 
 function storedGithubDate(value: unknown): string | null {

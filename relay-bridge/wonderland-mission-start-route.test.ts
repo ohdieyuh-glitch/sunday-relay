@@ -12,6 +12,7 @@ import {
   type GhResult,
   type GhSpawner,
   type OperatorClaimTool,
+  type PriorAttemptReader,
 } from '../src/relay/integration/wonderland-admission/operator-claim';
 import { openAdmissionFile } from '../src/relay/integration/wonderland-admission/admission-file';
 import {
@@ -138,14 +139,17 @@ const startBody = (over: Record<string, unknown> = {}) => JSON.stringify({
 const startRequest = (over: Partial<WonderlandAdmissionRouteRequest> = {}) => base({ rawBody: startBody(), ...over });
 
 /** An admitted, held J1 row on a real admission file, and the real claim core over a fake `gh`. */
-async function admitted(over: Record<string, string | undefined> = {}, nowIso: () => string = () => WHEN) {
+/** The paid workflow's attempted-marker count, proven zero: a first run. */
+const ZERO_PRIOR: PriorAttemptReader = { read: () => Promise.resolve({ readable: true, counted: 0 }) };
+
+async function admitted(over: Record<string, string | undefined> = {}, nowIso: () => string = () => WHEN, prior: PriorAttemptReader = ZERO_PRIOR) {
   const dir = mkdtempSync(join(tmpdir(), 'wlj-start-'));
   const storePath = join(dir, 'admission.json');
   const ports = service(storePath, over);
   const created = await handleWonderlandAdmissionRoute(admitRequest(), ports);
   expect(created?.status).toBe(202);
   const gh = fakeGh();
-  const tool = createOperatorClaimTool(openAdmissionFile(storePath), gh.spawn, { nowIso });
+  const tool = createOperatorClaimTool(openAdmissionFile(storePath), gh.spawn, { nowIso }, prior);
   const claims: string[] = [];
   const deps = {
     claimTool: (path: string): OperatorClaimTool => {
@@ -225,7 +229,7 @@ describe('the in-Wonderland mission start route', () => {
     const fx = await admitted();
     try {
       const second = fakeGh();
-      const other = createOperatorClaimTool(openAdmissionFile(fx.storePath), second.spawn, { nowIso: () => WHEN });
+      const other = createOperatorClaimTool(openAdmissionFile(fx.storePath), second.spawn, { nowIso: () => WHEN }, ZERO_PRIOR);
       const [a, b] = await Promise.all([
         handleWonderlandMissionStartRoute(startRequest(), fx.ports, fx.deps),
         handleWonderlandMissionStartRoute(startRequest(), fx.ports, { claimTool: () => other }),

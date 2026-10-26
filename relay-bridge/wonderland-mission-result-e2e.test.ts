@@ -261,7 +261,7 @@ describe('OFFLINE / NOT A PAID RUN — wonderland mission result end to end', ()
       ports.close();
 
       const { calls, spawn } = fakeDispatcher();
-      const claimed = await createOperatorClaimTool(openAdmissionFile(storePath), spawn, { nowIso: () => WHEN }).claim({
+      const claimed = await createOperatorClaimTool(openAdmissionFile(storePath), spawn, { nowIso: () => WHEN }, { read: () => Promise.resolve({ readable: true, counted: 0 }) }).claim({
         wonderlandRunId: RUN,
         serverRunId: RUN,
         repo: 'founder/sunday-relay',
@@ -380,7 +380,7 @@ describe('OFFLINE / NOT A PAID RUN — wonderland mission result end to end', ()
 
     const { dir, storePath } = await admittedStore();
     const { calls, spawn } = fakeDispatcher();
-    const claimed = await createOperatorClaimTool(openAdmissionFile(storePath), spawn, { nowIso: () => WHEN }).claim({
+    const claimed = await createOperatorClaimTool(openAdmissionFile(storePath), spawn, { nowIso: () => WHEN }, { read: () => Promise.resolve({ readable: true, counted: 0 }) }).claim({
       wonderlandRunId: RUN,
       serverRunId: RUN,
       repo: 'founder/sunday-relay',

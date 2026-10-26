@@ -27,6 +27,7 @@ import {
   type GhResult,
   type GhSpawner,
   type OperatorView,
+  type PriorAttemptReader,
   type ReconcileResult,
   type StatusResult,
 } from './operator-claim';
@@ -63,6 +64,13 @@ export interface OperatorClaimCliDeps {
   readonly spawn: GhSpawner;
   readonly nowIso: () => string;
   readonly readWorkflow: (path: string) => string;
+  /**
+   * The prior-attempt reader. This CLI wires none, so a CLI `--dispatch` reads
+   * UNKNOWN and is refused before anything is claimed: the paid rerun gate is
+   * proven only on the bridge, and only the founder's Wonderland session can
+   * carry the rerun phrase. Tests inject a reader.
+   */
+  readonly priorAttempts?: PriorAttemptReader;
 }
 
 export async function runOperatorClaimCli(
@@ -101,7 +109,7 @@ export async function runOperatorClaimCli(
   } catch (error) {
     return failClosed(io, error);
   }
-  const tool = createOperatorClaimTool(file, deps.spawn, { nowIso: deps.nowIso });
+  const tool = createOperatorClaimTool(file, deps.spawn, { nowIso: deps.nowIso }, deps.priorAttempts);
   if (parsed.command === 'status') {
     if (parsed.dispatch || parsed.flags.has('confirm') || parsed.flags.has('lane') || parsed.flags.has('repo')) {
       io.err(USAGE);

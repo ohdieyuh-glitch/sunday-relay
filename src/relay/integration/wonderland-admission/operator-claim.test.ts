@@ -35,6 +35,7 @@ import {
   type ClaimInput,
   type GhResult,
   type GhSpawner,
+  type PriorAttemptReader,
 } from './operator-claim';
 
 const RUN = 'wlj_0b7a1c2e-4f3d-4a6b-8c2d-3e4f5a6b7c8d';
@@ -132,8 +133,11 @@ function claimInput(over: Partial<ClaimInput> = {}): ClaimInput {
   };
 }
 
+/** The paid workflow's attempted-marker count, proven zero: a first run. */
+const ZERO_PRIOR: PriorAttemptReader = { read: () => Promise.resolve({ readable: true, counted: 0 }) };
+
 function claimTool(path: string, spawn: GhSpawner, nowIso: () => string = () => WHEN) {
-  return createOperatorClaimTool(openAdmissionFile(path), spawn, { nowIso });
+  return createOperatorClaimTool(openAdmissionFile(path), spawn, { nowIso }, ZERO_PRIOR);
 }
 
 /**
@@ -1127,6 +1131,7 @@ describe('an expiry note is terminal while the row stays held', () => {
       }, {
         spawn: { run() { throw new Error('spawned'); } },
         nowIso: () => WHEN,
+        priorAttempts: ZERO_PRIOR,
         readWorkflow: () => { throw new Error('status reads no workflow'); },
       });
       expect(code).toBe(0);
@@ -1231,6 +1236,31 @@ describe('workflow run id', () => {
 });
 
 describe('operator claim cli', () => {
+  it('a cli --dispatch wires no prior-attempt reader: UNKNOWN, refused before anything is claimed or dispatched', async () => {
+    await withStore(async (path) => {
+      await admit(path);
+      const calls: string[][] = [];
+      const out: string[] = [];
+      const code = await runOperatorClaimCli([
+        'claim', '--store', path,
+        '--wonderland-run', RUN, '--server-run', SERVER,
+        '--repo', REPO, '--lane', LANE,
+        '--dispatch', '--confirm', OPERATOR_DISPATCH_CONFIRMATION,
+      ], {
+        out: (line) => { out.push(line); },
+        err: (line) => { out.push(line); },
+      }, {
+        spawn: servingMain({ run(args) { calls.push([...args]); return ABSENT; } }),
+        nowIso: () => WHEN,
+        readWorkflow: () => { throw new Error('a dispatch reads main, not the checkout'); },
+      });
+      expect(code).not.toBe(0);
+      expect(out.join('\n')).toContain('julius_prior_attempts_unknown');
+      expect(calls).toEqual([]);
+      expect(readAdmissionDocument(path).claims).toEqual([]);
+    });
+  });
+
   it('dry-run prints the command and does not spawn', async () => {
     await withStore(async (path) => {
       await admit(path);
@@ -1245,6 +1275,7 @@ describe('operator claim cli', () => {
       }, {
         spawn: { run() { throw new Error('spawned'); } },
         nowIso: () => WHEN,
+        priorAttempts: ZERO_PRIOR,
         readWorkflow: () => WORKFLOW_WITH_INPUT,
       });
       expect(code).toBe(0);
@@ -1272,6 +1303,7 @@ describe('operator claim cli', () => {
       }, {
         spawn: servingMain({ run() { throw new Error('spawned past main'); } }, { workflow: WORKFLOW_WITHOUT_INPUT }),
         nowIso: () => WHEN,
+        priorAttempts: ZERO_PRIOR,
         readWorkflow: () => { throw new Error('a dispatch reads main, not the checkout'); },
       });
       expect(refused).toBe(1);
@@ -1290,6 +1322,7 @@ describe('operator claim cli', () => {
           return { run(args: readonly string[]) { calls.push([...args]); return served.run(args); } };
         })(),
         nowIso: () => WHEN,
+        priorAttempts: ZERO_PRIOR,
         readWorkflow: () => { throw new Error('a dispatch reads main, not the checkout'); },
       });
       expect(code).toBe(0);
@@ -1315,6 +1348,7 @@ describe('operator claim cli', () => {
       }, {
         spawn: { run() { throw new Error('spawned'); } },
         nowIso: () => WHEN,
+        priorAttempts: ZERO_PRIOR,
         readWorkflow: () => { throw new Error('status reads no workflow'); },
       });
       expect(code).toBe(0);
@@ -1346,6 +1380,7 @@ describe('operator claim cli', () => {
       }, {
         spawn: { run() { throw new Error('spawned'); } },
         nowIso: () => expiredAt,
+        priorAttempts: ZERO_PRIOR,
         readWorkflow: () => { throw new Error('status reads no workflow'); },
       });
       expect(code).toBe(0);
@@ -1392,6 +1427,7 @@ describe('operator claim cli', () => {
       }, {
         spawn: { run() { throw new Error('spawned'); } },
         nowIso: () => WHEN,
+        priorAttempts: ZERO_PRIOR,
         readWorkflow: () => { throw new Error('status reads no workflow'); },
       });
       expect(later).toBe(0);
@@ -1420,6 +1456,7 @@ describe('operator claim cli', () => {
       }, {
         spawn: { run() { throw new Error('spawned'); } },
         nowIso: () => { clockReads += 1; return WHEN; },
+        priorAttempts: ZERO_PRIOR,
         readWorkflow: () => WORKFLOW_WITH_INPUT,
       });
       expect(code).toBe(2);
@@ -1447,6 +1484,7 @@ describe('operator claim cli', () => {
       }, {
         spawn: { run() { throw new Error('spawned'); } },
         nowIso: () => { clockReads += 1; return WHEN; },
+        priorAttempts: ZERO_PRIOR,
         readWorkflow: () => WORKFLOW_WITH_INPUT,
       });
       expect(code).toBe(2);
@@ -1471,6 +1509,7 @@ describe('operator claim cli', () => {
     }, {
       spawn: { run() { throw new Error('spawned'); } },
       nowIso: () => WHEN,
+      priorAttempts: ZERO_PRIOR,
       readWorkflow: () => WORKFLOW_WITH_INPUT,
     });
     expect(code).toBe(1);
@@ -1614,6 +1653,7 @@ describe('the dispatch reads main and the lane grant before anything is written'
       ], { out: () => {}, err: () => {} }, {
         spawn: scripted(ABSENT, WORKFLOW_OK).spawn,
         nowIso: () => WHEN,
+        priorAttempts: ZERO_PRIOR,
         readWorkflow: () => { localReads += 1; return WORKFLOW_WITHOUT_INPUT; },
       });
       expect(code).toBe(0);
@@ -2033,6 +2073,7 @@ describe('reconcile moves a stuck dispatching record from GitHub evidence only',
       ], { out: (line) => { out.push(line); }, err: () => {} }, {
         spawn: github(PRESENT_ANNOTATED, tagMessage(SERVER, RUN_ID), runList([{ id: Number(RUN_ID), status: 'completed', conclusion: 'success' }])).spawn,
         nowIso: () => WHEN,
+        priorAttempts: ZERO_PRIOR,
         readWorkflow: () => { throw new Error('reconcile reads no workflow'); },
       });
       expect(code).toBe(0);
@@ -2046,6 +2087,7 @@ describe('reconcile moves a stuck dispatching record from GitHub evidence only',
         ], { out: () => {}, err: () => {} }, {
           spawn: { run() { throw new Error('spawned'); } },
           nowIso: () => WHEN,
+          priorAttempts: ZERO_PRIOR,
           readWorkflow: () => { throw new Error('reconcile reads no workflow'); },
         });
         expect(refused, extra.join(' ')).toBe(2);
