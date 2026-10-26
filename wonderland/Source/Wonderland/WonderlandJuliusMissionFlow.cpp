@@ -1918,6 +1918,12 @@ namespace WonderlandJuliusMissionFlow
 		return bRowConfirmedThisSession; // FLOW_TASK_UNMAPPED_REPORT_NEVER_CONFIRMS
 	}
 
+	bool KeepReadingResultAfterStop(bool bStoppedAfterExecution, bool bOutcomeUnknownSeen, bool bRunCompletedSeen,
+		std::uint64_t MsSinceRunCompleted, std::uint64_t GraceMs)
+	{
+		return bStoppedAfterExecution && !bOutcomeUnknownSeen && (!bRunCompletedSeen || MsSinceRunCompleted < GraceMs); // FLOW_RESULT_READ_AFTER_STOP
+	}
+
 	bool ConnectionUncertain(bool bStale, bool bHasSession, bool bEverRead, std::uint64_t MsSinceLastGoodRead)
 	{
 		return bStale || !bHasSession || (bEverRead && MsSinceLastGoodRead > LiveNoReadAfterMs); // FLOW_CONTRACT_UNCERTAIN_SUSPENDS

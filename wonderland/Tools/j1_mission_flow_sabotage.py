@@ -604,6 +604,16 @@ MUTATIONS = [
         "return true; // FLOW_TASK_UNMAPPED_REPORT_NEVER_CONFIRMS",
     ),
     (
+        "result_reads_stop_at_the_interrupt",
+        "return bStoppedAfterExecution && !bOutcomeUnknownSeen && (!bRunCompletedSeen || MsSinceRunCompleted < GraceMs); // FLOW_RESULT_READ_AFTER_STOP",
+        "return false; // FLOW_RESULT_READ_AFTER_STOP",
+    ),
+    (
+        "result_reads_ignore_the_grace",
+        "return bStoppedAfterExecution && !bOutcomeUnknownSeen && (!bRunCompletedSeen || MsSinceRunCompleted < GraceMs); // FLOW_RESULT_READ_AFTER_STOP",
+        "return bStoppedAfterExecution && !bOutcomeUnknownSeen; // FLOW_RESULT_READ_AFTER_STOP",
+    ),
+    (
         "task_new_run_keeps_old_state",
         "return !bRowHadRun || RowRunId != NewRunId; // FLOW_TASK_NEW_RUN_STARTS_QUEUED",
         "return !bRowHadRun; // FLOW_TASK_NEW_RUN_STARTS_QUEUED",

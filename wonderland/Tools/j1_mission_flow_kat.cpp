@@ -897,6 +897,12 @@ const ABSENT_PHASE = {
 			Expect(AdoptingRunResetsToQueued(false, "", "wlj_a"), "a row with no run yet starts queued");
 			Expect(!UnmappedReportMayApply(false), "REVIEW #70: an unmapped stream report never confirms an unconfirmed (restored) row");
 			Expect(UnmappedReportMayApply(true), "an unmapped report may re-show the state of a row Julius already confirmed");
+			// #75: after a stop that followed execution, keep reading /result until outcomeUnknown or run completion + grace.
+			Expect(KeepReadingResultAfterStop(true, false, false, 0, 180000), "stopped, run still going: keep reading /result");
+			Expect(KeepReadingResultAfterStop(true, false, true, 179999, 180000), "stopped, run completed, inside the grace: keep reading");
+			Expect(!KeepReadingResultAfterStop(true, false, true, 180000, 180000), "the grace has passed: stop reading");
+			Expect(!KeepReadingResultAfterStop(true, true, false, 0, 180000), "outcomeUnknown seen: nothing more to wait for");
+			Expect(!KeepReadingResultAfterStop(false, false, false, 0, 180000), "not stopped after execution (e.g. did not start): no extra reads");
 		}
 		{
 			// REVIEW 2026-10-26: a reconnect taken MID-repair-round never replays past beats and never shows a late REPAIR

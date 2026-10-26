@@ -700,6 +700,15 @@ namespace WonderlandJuliusMissionFlow
 	 */
 	bool UnmappedReportMayApply(bool bRowConfirmedThisSession);
 
+	/**
+	 * KEEP READING /result AFTER A STOP (REVIEW/JUDEV #75): /result gains outcomeUnknown only once the WHOLE workflow run has
+	 * completed (grade + cleanup jobs, then a cache of up to 30 s), long after /events has already interrupted the
+	 * presentation. After a stop that followed confirmed execution, keep reading until outcomeUnknown is seen or the run has
+	 * completed plus the grace -- read-only: nothing is started, nothing re-animates, the Dog stays normal.
+	 */
+	bool KeepReadingResultAfterStop(bool bStoppedAfterExecution, bool bOutcomeUnknownSeen, bool bRunCompletedSeen,
+		std::uint64_t MsSinceRunCompleted, std::uint64_t GraceMs);
+
 	/** The contract task state word for a view ("queued", "preparation", "implementation", "review", "repair",
 	 *  "verification", "completed", "failed", "cancelled") or empty for none. */
 	const char* ContractTaskStateFor(const FExecutionView& View);

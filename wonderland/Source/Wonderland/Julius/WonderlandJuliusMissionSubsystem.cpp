@@ -443,6 +443,15 @@ void UWonderlandJuliusMissionSubsystem::SyncMissionContract()
 	const FExecutionView View = ExecutionViewFor(Host->LiveFeed, true, ToStd(StartWorkflowRunId), Read);
 	// Keep reading /result past the wrapper's final read while the run is over and no verdict has come.
 	bAwaitingVerdict = RunCompletedSeenUtcMs != 0 && View.Phase == EExecutionPhase::Grading;
+	// ...and after a stop that followed confirmed execution (#75): outcomeUnknown reaches /result only once the whole run
+	// completed, so keep reading it until it appears or the run completed + the grace. Read-only; the stage stays released.
+	const bool bStoppedAfterExecution = View.Phase == EExecutionPhase::Failed
+		&& (Host->LiveFeed.LiveStepStarted() || Host->LiveFeed.TaskPhaseSeen());
+	const uint64 SinceCompletedMs = RunCompletedSeenUtcMs != 0 && VerdictNowMs > RunCompletedSeenUtcMs ? VerdictNowMs - RunCompletedSeenUtcMs : 0;
+	if (KeepReadingResultAfterStop(bStoppedAfterExecution, Read.bOutcomeUnknown, RunCompletedSeenUtcMs != 0, SinceCompletedMs, VerdictGraceMs))
+	{
+		bAwaitingVerdict = true;
+	}
 	// A RESTORED run that is waiting for its verdict shows nothing yet: no activation replay, no invented outcome.
 	if (!bStartAcceptedHere && !ContractCursor->Started() && View.Phase == EExecutionPhase::Grading) { return; }
 	UGameInstance* Instance = GetGameInstance();
