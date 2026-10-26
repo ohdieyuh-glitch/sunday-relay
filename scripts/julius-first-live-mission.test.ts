@@ -1884,6 +1884,20 @@ const stepScript = (name: string): string => {
   return body.split('\n').map((line) => line.replace(/^ {10}/u, '')).join('\n');
 };
 
+/**
+ * AN EMPTY STAND-IN FOR THE BUILT ENTRYPOINT, in a fresh directory, at the path
+ * the pre-marker step's own `test -f` guard names. Nothing built is read: the
+ * stubbed `node` on PATH answers instead.
+ */
+const fakeBuiltEntrypoint = (): string => {
+  const guarded = /test -f (\S+) \|\|/u.exec(stepScript("'Gate: attempted markers and the combined cap, before the attempted marker'"))?.[1] ?? '';
+  expect(guarded).toMatch(/julius-live-mission\.cjs$/u);
+  const root = mkdtempSync(join(realpathSync(tmpdir()), 'julius-built-'));
+  mkdirSync(join(root, ...guarded.split('/').slice(0, -1)), { recursive: true });
+  writeFileSync(join(root, ...guarded.split('/')), '');
+  return root;
+};
+
 describe('F4 — the executor owns its signing key, and Julius cannot reach it', () => {
   it('the host never generates or holds private signing material', () => {
     expect(workflow, 'a key minted on the runner is readable by the user that runs Julius')
@@ -2695,6 +2709,7 @@ describe('F9 — dispatch inputs are validated before anything is built', () => 
 describe('F6 — a paid mission cannot be run twice by accident', () => {
   const GATE = "'Gate: no paid mission has been attempted or completed for THIS contract'";
   const ATTEMPT_STEP = "'Record that a paid mission was attempted (before any provider can be reached)'";
+  const PRE_MARKER = "'Gate: attempted markers and the combined cap, before the attempted marker'";
 
   it('live dispatches serialise through admission and one job-level group; dry runs do not', () => {
     // REPAIRED, NOT DELETED: the property is unchanged — paid runs one at a
@@ -2810,8 +2825,13 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
 
   it('the guard reads BOTH markers and can only be overridden by the exact phrase', () => {
     const guard = stepScript(GATE);
-    expect(guard, 'a failed attempt must block the next ordinary dispatch')
-      .toContain('${MARKER_NAMESPACE}-attempted');
+    // The attempted markers are classified after the build, by the shared proof, before the marker step.
+    const preMarker = stepScript(PRE_MARKER);
+    expect(preMarker, 'a failed attempt must block the next ordinary dispatch')
+      .toContain('julius-live-mission.cjs attempt-markers --contract "$CONTRACT"');
+    expect(preMarker).toContain('julius_paid_mission_already_attempted');
+    expect(preMarker).toContain('RERUN PAID MISSION');
+    expect(guard, 'step 9 no longer counts attempted markers itself').not.toContain('${MARKER_NAMESPACE}-attempted');
     expect(guard, 'a completed run must block it too').toContain('${MARKER_NAMESPACE}-completed');
     expect(guard).toContain('julius_paid_mission_already_entered_for_');
     // Unknown is not zero: a failed marker QUERY must refuse like a found
@@ -2845,8 +2865,21 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
         readable ? '' : 'exit 1',
         'case "$*" in',
         `  *${namespace}-completed*) echo '${input.completed ?? 0}';;`,
-        `  *${namespace}-attempted*) echo '${input.attempted ?? 0}';;`,
+        `  *${namespace}-attempted*) echo 'step 9 must not count attempted markers' >&2; exit 97;;`,
         '  *) echo 0;;',
+        'esac',
+      ].join('\n'), { mode: 0o755 });
+      // THE ATTEMPTED MARKERS are counted by the pre-marker step's built
+      // entrypoint. Its `attempt-markers` answer is stubbed here exactly as it
+      // prints: a count, or UNKNOWN and exit 1 when the listing cannot be read.
+      writeFileSync(join(bin, 'node'), [
+        '#!/usr/bin/env bash',
+        'case "$2" in',
+        readable
+          ? `  attempt-markers) printf '%s\\n' 'attempt_markers_counted=${String(input.attempted ?? 0).replace(/\n/gu, '\\n')}';;`
+          : "  attempt-markers) echo 'attempt_markers_counted=UNKNOWN'; exit 1;;",
+        '  authorize-spend) echo spend_pre_marker=authorized;;',
+        '  *) exit 98;;',
         'esac',
       ].join('\n'), { mode: 0o755 });
       let script = stepScript(GATE);
@@ -2858,18 +2891,20 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
         expect(script, `the substitution must have replaced the arm for "${input.constant}"`)
           .toContain(`julius-first-live) RECORDED_PAID_ATTEMPTS=${input.constant}`);
       }
+      const env = {
+        ...process.env,
+        PATH: `${bin}:${process.env.PATH ?? ''}`,
+        GITHUB_REPOSITORY: 'owner/repo',
+        GH_TOKEN: 'stub',
+        ACKNOWLEDGE_RERUN: input.acknowledge ?? '',
+        MARKER_NAMESPACE: namespace,
+        CONTRACT: 'contract.json',
+      };
+      // Step 9, then the pre-marker step: together they are the guard.
+      const built = fakeBuiltEntrypoint();
       try {
-        execFileSync('bash', ['-c', script], {
-          cwd: ROOT, stdio: 'ignore',
-          env: {
-            ...process.env,
-            PATH: `${bin}:${process.env.PATH ?? ''}`,
-            GITHUB_REPOSITORY: 'owner/repo',
-            GH_TOKEN: 'stub',
-            ACKNOWLEDGE_RERUN: input.acknowledge ?? '',
-            MARKER_NAMESPACE: namespace,
-          },
-        });
+        execFileSync('bash', ['-c', script], { cwd: ROOT, stdio: 'ignore', env });
+        execFileSync('bash', ['-c', stepScript(PRE_MARKER)], { cwd: built, stdio: 'ignore', env });
         return 0;
       } catch (error) {
         return (error as { status?: number }).status ?? 1;
@@ -4212,4 +4247,85 @@ describe('a learning pair is two jobs on one store: arm WITHOUT exports it, arm 
     expect(scan('clean', 'Xk7Qm2Rv9TzLbN4pAeWs6YcHgJdF1uOi3ZrKxVtB0nM'), 'a derived scoped credential').toEqual(refused);
     expect(scan('clean', null), 'no rendering, no upload').toEqual(refused);
   }, 30_000);
+});
+
+describe('count only real spend: the combined cap and the attempted markers are decided BEFORE the attempted marker', () => {
+  const PRE_MARKER = "'Gate: attempted markers and the combined cap, before the attempted marker'";
+  const stepIndex = (name: string): number => workflow.indexOf(`- name: ${name}`);
+
+  it('the pre-marker step runs after the entrypoint is built and before the attempted marker is recorded', () => {
+    const build = stepIndex('Build the executor, the preflight probe and the live entrypoint');
+    const preMarker = stepIndex(PRE_MARKER);
+    const attempt = stepIndex("'Record that a paid mission was attempted (before any provider can be reached)'");
+    const live = stepIndex("'LIVE: run the first real Julius mission'");
+    expect(build).toBeGreaterThan(-1);
+    expect(preMarker, 'the pre-marker step must exist').toBeGreaterThan(-1);
+    expect(attempt).toBeGreaterThan(-1);
+    expect(build, 'it runs the BUILT entrypoint').toBeLessThan(preMarker);
+    expect(preMarker, 'a refusal must leave no attempted marker').toBeLessThan(attempt);
+    expect(attempt).toBeLessThan(live);
+    const head = workflow.slice(preMarker, preMarker + 400);
+    expect(/\n\s*if: (.+)/u.exec(head)?.[1]).toBe("success() && inputs.confirm_live == 'RUN LIVE MISSION'");
+  });
+
+  it('the pre-marker step runs the same authorization the live entrypoint keeps, with the job token and no secret', () => {
+    const script = stepScript(PRE_MARKER);
+    expect(script).toContain('node dist-relay-bridge/julius-live-mission.cjs authorize-spend --contract "$CONTRACT"');
+    expect(script).toContain('node dist-relay-bridge/julius-live-mission.cjs attempt-markers --contract "$CONTRACT"');
+    expect(script.indexOf('attempt-markers'), 'markers first, then the cap').toBeLessThan(script.indexOf('authorize-spend'));
+    expect(script.trimEnd().endsWith('exit "$status"'), 'the cap\'s exit status is the step\'s').toBe(true);
+    const start = stepIndex(PRE_MARKER);
+    const block = workflow.slice(start, workflow.indexOf('\n      - ', start + 10));
+    expect(block).toContain('GITHUB_TOKEN: ${{ github.token }}');
+    expect(block, 'no secret reaches the pre-marker step').not.toContain('secrets.');
+    const entry = read('relay-bridge/julius-live-mission.ts');
+    expect(entry, 'one implementation: the run path calls the same function').toContain('await authorizeQualifyingPairSpend({ contract, env, out })');
+    expect(entry).toMatch(/authorizeSpendCommand[\s\S]*authorizeQualifyingPairSpend\(/u);
+  });
+
+  it('the LIVE step carries the job token for its own ledger read, and the job permissions are not widened', () => {
+    const live = stepIndex("'LIVE: run the first real Julius mission'");
+    const block = workflow.slice(live, workflow.indexOf('\n        run: |', live));
+    expect(block).toContain('GITHUB_TOKEN: ${{ github.token }}');
+    const job = workflow.slice(workflow.indexOf('\n  first-live-mission:'), workflow.indexOf('\n  grade-inworld:'));
+    const permissions = /\n    permissions:\n((?:      [a-z-]+: [a-z]+\n)+)/u.exec(job)?.[1] ?? '';
+    expect(permissions.trim().split('\n').map((line) => line.trim())).toEqual([
+      'contents: read', 'actions: read', 'pull-requests: read', 'issues: read', 'statuses: write',
+    ]);
+  });
+
+  const runPreMarker = (input: { markers: string; markersExit?: number; spendExit: number; acknowledge?: string }): number => {
+    const bin = mkdtempSync(join(realpathSync(tmpdir()), 'julius-node-'));
+    writeFileSync(join(bin, 'node'), [
+      '#!/usr/bin/env bash',
+      'case "$2" in',
+      `  attempt-markers) echo '${input.markers}'; exit ${String(input.markersExit ?? 0)};;`,
+      `  authorize-spend) echo 'RESULT: stubbed'; exit ${String(input.spendExit)};;`,
+      '  *) exit 98;;',
+      'esac',
+    ].join('\n'), { mode: 0o755 });
+    const built = fakeBuiltEntrypoint();
+    try {
+      execFileSync('bash', ['-c', stepScript(PRE_MARKER)], {
+        cwd: built, stdio: 'ignore',
+        env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}`, CONTRACT: 'contract.json', ACKNOWLEDGE_RERUN: input.acknowledge ?? '' },
+      });
+      return 0;
+    } catch (error) {
+      return (error as { status?: number }).status ?? 1;
+    }
+  };
+
+  it('a refused combined cap fails the pre-marker step, and the rerun phrase cannot override it', () => {
+    expect(runPreMarker({ markers: 'attempt_markers_counted=0', spendExit: 1 })).not.toBe(0);
+    expect(runPreMarker({ markers: 'attempt_markers_counted=0', spendExit: 1, acknowledge: 'RERUN PAID MISSION' })).not.toBe(0);
+    expect(runPreMarker({ markers: 'attempt_markers_counted=0', spendExit: 0 }), 'the control: an authorized cap proceeds').toBe(0);
+  });
+
+  it('a zero-proved attempted marker does not count; a counted or unknown one still refuses', () => {
+    expect(runPreMarker({ markers: 'attempt_markers_counted=0', spendExit: 0 })).toBe(0);
+    expect(runPreMarker({ markers: 'attempt_markers_counted=1', spendExit: 0 })).not.toBe(0);
+    expect(runPreMarker({ markers: 'attempt_markers_counted=UNKNOWN', markersExit: 1, spendExit: 0 })).not.toBe(0);
+    expect(runPreMarker({ markers: 'attempt_markers_counted=1', spendExit: 0, acknowledge: 'RERUN PAID MISSION' })).toBe(0);
+  });
 });

@@ -829,7 +829,7 @@ describe('the live-progress publisher is best-effort, paid-only, and the job wri
     expect(workflow).not.toMatch(/^\s+checks:\s*write\s*$/mu);
   });
 
-  it('starts before LIVE and stops after it, both paid-only and continue-on-error; the token goes to the publisher alone', () => {
+  it('starts before LIVE and stops after it, both paid-only and continue-on-error; the status token goes to the publisher alone', () => {
     const start = step(paid, START);
     const stop = step(paid, STOP);
     expect(paid.indexOf(`- name: ${START}`)).toBeLessThan(paid.indexOf(`- name: ${LIVE}`));
@@ -842,5 +842,8 @@ describe('the live-progress publisher is best-effort, paid-only, and the job wri
     expect(start).toContain('nohup node .github/julius-live-progress.mjs');
     expect(stop).not.toContain('GH_TOKEN');
     expect(step(paid, LIVE)).not.toContain('GH_TOKEN');
+    // The LIVE step's one GitHub token is the job token, for the spent-tag ledger read (count only real spend).
+    expect(step(paid, LIVE).split('GITHUB_TOKEN: ${{ github.token }}')).toHaveLength(2);
+    expect(step(paid, LIVE)).not.toContain('secrets.GITHUB_TOKEN');
   });
 });

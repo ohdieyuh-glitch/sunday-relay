@@ -4,6 +4,8 @@
  *
  *   node dist-relay-bridge/julius-live-mission.cjs run --contract <file> [--confirm-live]
  *   node dist-relay-bridge/julius-live-mission.cjs observe-research --contract <file>
+ *   node dist-relay-bridge/julius-live-mission.cjs authorize-spend --contract <file>
+ *   node dist-relay-bridge/julius-live-mission.cjs attempt-markers --contract <file>
  *
  * `observe-research` starts no run, opens no database and contacts no model
  * provider. It makes the one observation `run` refuses to invent — whether a
@@ -117,8 +119,8 @@ function tickOverrideOf(value: string | null): { readonly ok: true; readonly ove
   if (!/^[1-9][0-9]{0,5}$/u.test(value)) return { ok: false };
   return { ok: true, override: Number(value) };
 }
-import { authorizeJuliusLiveSpend, JULIUS_QUALIFYING_PAIR_NAMESPACES, juliusFileCreationGrantFor, noJuliusResearch, type JuliusResearchPolicy } from '../src/relay/mission/julius';
-import { readJuliusPriorRunSpend, readJuliusSpentTagLedger } from './julius/julius-prior-spend';
+import { authorizeJuliusLiveSpend, JULIUS_QUALIFYING_PAIR_NAMESPACES, juliusAttemptMarkerLine, juliusFileCreationGrantFor, juliusPriorRunLine, noJuliusResearch, type JuliusResearchPolicy, type JuliusSpendAuthorization } from '../src/relay/mission/julius';
+import { readJuliusAttemptMarkers, readJuliusClassifiedSpentTags, readJuliusPriorRunSpend } from './julius/julius-prior-spend';
 import {
   LIVE_REACH_ACTION_CAPABILITIES,
   LIVE_REACH_READ_CAPABILITIES,
@@ -612,6 +614,119 @@ export function admitLiveJuliusRunId(env: {
   return { ok: true, runId: presented.runId };
 }
 
+/* ------------------------------------------------- the combined cap, shared */
+
+/**
+ * THE QUALIFYING-PAIR AUTHORIZATION, ONE IMPLEMENTATION FOR TWO CALLERS.
+ *
+ * `run` calls it before a run row exists (defence in depth), and the paid
+ * workflow calls it through `authorize-spend` BEFORE it records the attempted
+ * marker, so a refusal leaves no marker behind. Both list the same
+ * `julius-run-spent-*` tags and classify each prior run by its own workflow
+ * evidence (`readJuliusClassifiedSpentTags`). One `prior_run` line per prior
+ * run says why it counted or did not; an unreadable prior prints UNKNOWN,
+ * never 0. The token is a header and is never printed.
+ */
+export async function authorizeQualifyingPairSpend(input: {
+  readonly contract: Pick<LiveMissionContractFile, 'markerNamespace' | 'limits'>;
+  readonly env: Readonly<Record<string, string | undefined>>;
+  readonly out: (line: string) => void;
+  readonly fetchImpl?: typeof fetch;
+}): Promise<JuliusSpendAuthorization> {
+  const { contract, env, out } = input;
+  const classified = await readJuliusClassifiedSpentTags({
+    repository: env.GITHUB_REPOSITORY ?? '',
+    token: env.GITHUB_TOKEN ?? env.GH_TOKEN ?? '',
+    namespace: contract.markerNamespace,
+    excludeRunId: env.JULIUS_SERVER_RUN_ID,
+    ...(input.fetchImpl === undefined ? {} : { fetchImpl: input.fetchImpl }),
+  });
+  if (!classified.ledger.readable) {
+    out('prior_runs ledger=UNREADABLE counted=UNKNOWN');
+  } else {
+    for (const entry of classified.audit) out(juliusPriorRunLine(entry));
+    out(`prior_runs ledger=READABLE counted=${String(classified.ledger.priorRuns.length)} of=${String(classified.audit.length)}`);
+  }
+  return authorizeJuliusLiveSpend({
+    namespace: contract.markerNamespace,
+    spendUsd: contract.limits?.spendUsd ?? null,
+    repairCycles: contract.limits?.repairCycles ?? null,
+    ledger: classified.ledger,
+  });
+}
+
+function contractForGate(path: string | null, readFile: (path: string) => string, out: (line: string) => void): LiveMissionContractFile | null {
+  if (path === null) return null;
+  let raw: string;
+  try { raw = readFile(path); } catch { out(`The contract file could not be read: ${path}`); return null; }
+  const parsed = parseLiveMissionContract(raw);
+  if (!parsed.ok) { out(`Mission Contract refused: ${parsed.problem}`); return null; }
+  return parsed.contract;
+}
+
+/**
+ * `authorize-spend --contract <file>` — THE PRE-MARKER GATE. Opens no
+ * database, starts no run, contacts no provider. Exit 0 authorized (or not a
+ * qualifying-pair namespace), 1 refused, 2 usage or an unreadable contract.
+ */
+export async function authorizeSpendCommand(input: {
+  readonly contractPath: string | null;
+  readonly env: Readonly<Record<string, string | undefined>>;
+  readonly out: (line: string) => void;
+  readonly readFile?: (path: string) => string;
+  readonly fetchImpl?: typeof fetch;
+}): Promise<number> {
+  const { out } = input;
+  if (input.contractPath === null) { out('Usage: julius-live-mission authorize-spend --contract <mission.json>'); return 2; }
+  const contract = contractForGate(input.contractPath, input.readFile ?? ((path) => readFileSync(path, 'utf8')), out);
+  if (contract === null) return 2;
+  const admitted = admitLiveJuliusRunId(input.env);
+  if (!admitted.ok) { out(`RESULT: BLOCKED — ${admitted.reason}. No marker was written and no provider was contacted.`); return 1; }
+  if (!(JULIUS_QUALIFYING_PAIR_NAMESPACES as readonly string[]).includes(contract.markerNamespace)) {
+    out(`spend_pre_marker=not_applicable namespace=${contract.markerNamespace}`);
+    return 0;
+  }
+  const authorization = await authorizeQualifyingPairSpend({
+    contract, env: input.env, out, ...(input.fetchImpl === undefined ? {} : { fetchImpl: input.fetchImpl }),
+  });
+  if (!authorization.authorized) {
+    out(`RESULT: BLOCKED — ${authorization.reasonCode}: ${authorization.safeMessage}`);
+    return 1;
+  }
+  out(`spend_pre_marker=authorized namespace=${contract.markerNamespace} spend_ceiling_usd_micros=${String(authorization.spendCeilingUsdMicros)} max_repair_rounds=${String(authorization.maxRepairRounds)}`);
+  return 0;
+}
+
+/**
+ * `attempt-markers --contract <file>` — THE ATTEMPTED-MARKER COUNT, on the
+ * same proofs. Prints one `attempt_marker` line per marked run, then
+ * `attempt_markers_counted=<n>`, or `attempt_markers_counted=UNKNOWN` when the
+ * listing cannot be read. The workflow decides; `acknowledge_rerun` is its
+ * explicit override. Exit 0 counted, 1 unknown, 2 usage.
+ */
+export async function attemptMarkersCommand(input: {
+  readonly contractPath: string | null;
+  readonly env: Readonly<Record<string, string | undefined>>;
+  readonly out: (line: string) => void;
+  readonly readFile?: (path: string) => string;
+  readonly fetchImpl?: typeof fetch;
+}): Promise<number> {
+  const { out } = input;
+  if (input.contractPath === null) { out('Usage: julius-live-mission attempt-markers --contract <mission.json>'); return 2; }
+  const contract = contractForGate(input.contractPath, input.readFile ?? ((path) => readFileSync(path, 'utf8')), out);
+  if (contract === null) return 2;
+  const markers = await readJuliusAttemptMarkers({
+    repository: input.env.GITHUB_REPOSITORY ?? '',
+    token: input.env.GITHUB_TOKEN ?? input.env.GH_TOKEN ?? '',
+    namespace: contract.markerNamespace,
+    ...(input.fetchImpl === undefined ? {} : { fetchImpl: input.fetchImpl }),
+  });
+  if (!markers.readable) { out('attempt_markers_counted=UNKNOWN'); return 1; }
+  for (const proof of markers.proofs) out(juliusAttemptMarkerLine(proof));
+  out(`attempt_markers_counted=${String(markers.proofs.filter((proof) => proof.classification !== 'NOT_EXECUTED').length)}`);
+  return 0;
+}
+
 /* ------------------------------------------------------------------ main */
 
 async function main(argv: readonly string[]): Promise<number> {
@@ -633,6 +748,14 @@ async function main(argv: readonly string[]): Promise<number> {
       out,
       err: (line) => { process.stderr.write(`${liveOneLine(line)}\n`); },
     });
+  }
+  /* THE PRE-MARKER GATES. Matched exactly, like `observe-research`; each
+   * returns before a database, a run or a provider exists. */
+  if (argv[0] === 'authorize-spend') {
+    return authorizeSpendCommand({ contractPath: option('contract'), env: process.env, out });
+  }
+  if (argv[0] === 'attempt-markers') {
+    return attemptMarkersCommand({ contractPath: option('contract'), env: process.env, out });
   }
   if (argv[0] !== 'run' || option('contract') === null) {
     out('Usage: julius-live-mission run --contract <mission.json> [--confirm-live] [--max-ticks N]');
@@ -913,22 +1036,18 @@ async function main(argv: readonly string[]): Promise<number> {
      * record. The comparison never claims a provider balance was verified.
      */
     const qualifyingPair = (JULIUS_QUALIFYING_PAIR_NAMESPACES as readonly string[]).includes(contract.markerNamespace);
-    const spendLedger = qualifyingPair
-      ? await readJuliusSpentTagLedger({
-          repository: env.GITHUB_REPOSITORY ?? '',
-          token: env.GITHUB_TOKEN ?? env.GH_TOKEN ?? '',
+    // DEFENCE IN DEPTH. The paid workflow already ran this same authorization
+    // (`authorize-spend`) before it recorded the attempted marker.
+    const spendAuthorization = qualifyingPair
+      ? await authorizeQualifyingPairSpend({ contract, env, out })
+      : authorizeJuliusLiveSpend({
           namespace: contract.markerNamespace,
-          excludeRunId: env.JULIUS_SERVER_RUN_ID,
-        })
-      : await readJuliusPriorRunSpend(pool, {
-          missionId: contract.missionId, projectId: contract.projectId,
+          spendUsd: contract.limits?.spendUsd ?? null,
+          repairCycles: contract.limits?.repairCycles ?? null,
+          ledger: await readJuliusPriorRunSpend(pool, {
+            missionId: contract.missionId, projectId: contract.projectId,
+          }),
         });
-    const spendAuthorization = authorizeJuliusLiveSpend({
-      namespace: contract.markerNamespace,
-      spendUsd: contract.limits?.spendUsd ?? null,
-      repairCycles: contract.limits?.repairCycles ?? null,
-      ledger: spendLedger,
-    });
     if (!spendAuthorization.authorized) {
       out(`RESULT: BLOCKED — ${spendAuthorization.reasonCode}: ${spendAuthorization.safeMessage}`);
       return 1;

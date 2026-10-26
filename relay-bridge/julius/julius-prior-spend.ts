@@ -10,9 +10,24 @@
  * result here stays absent prior-spend, not a verified zero.
  */
 
+import { inflateRawSync } from 'node:zlib';
+
 import {
-  interpretJuliusSpentTags,
+  classifyJuliusPriorRun,
+  classifyJuliusSpentTags,
+  juliusAttemptMarkerBindings,
+  juliusBoundArtifactId,
+  juliusSpentTagBinding,
+  JULIUS_INWORLD_VERDICT_ARTIFACT,
+  JULIUS_INWORLD_VERDICT_FILE,
+  JULIUS_LIVE_EVIDENCE_ARTIFACT,
+  JULIUS_EVIDENCE_MANIFEST_FILE,
+  JULIUS_ZERO_ROW_EVIDENCE_FILES,
   summarizeJuliusPriorRunSpend,
+  type JuliusPriorRunAudit,
+  type JuliusPriorRunObservation,
+  type JuliusPriorRunProof,
+  type JuliusWorkflowRunBinding,
   type JuliusSettlementFact,
   type JuliusSpentTag,
   type JuliusSpendLedgerRead,
@@ -98,8 +113,67 @@ const TAG_OBJECT_SHA = /^[0-9a-f]{40}$/u;
  * annotated body. Contents: read is enough. A missing token, a missing
  * repository, a non-success response, a page past the follow cap, or a
  * thrown fetch is unreadable. The token is a header and is not copied into
- * the ledger. The current run's own tag is excluded by {@link interpretJuliusSpentTags}.
+ * the ledger. The current run's own tag is excluded by {@link classifyJuliusSpentTags}.
+ *
+ * Each verified tag's own workflow run is then read ({@link observeJuliusWorkflowRun})
+ * and classified NOT_EXECUTED, EXECUTED_CHARGES_KNOWN or UNKNOWN. A read
+ * that fails for one run leaves that run UNKNOWN at its full reservation;
+ * it does not make the ledger unreadable and it never makes the run zero.
+ * Actions: read is what those reads need, beside Contents: read.
  */
+export async function readJuliusClassifiedSpentTags(input: {
+  readonly repository: string;
+  readonly token: string;
+  readonly namespace: string;
+  readonly excludeRunId?: string;
+  readonly fetchImpl?: typeof fetch;
+}): Promise<{ readonly ledger: JuliusSpendLedgerRead; readonly audit: readonly JuliusPriorRunAudit[] }> {
+  const unreadable = { ledger: { readable: false } as const, audit: [] };
+  if (!GITHUB_REPOSITORY.test(input.repository)) return unreadable;
+  if (!tokenIsUsable(input.token)) return unreadable;
+  const fetchImpl = input.fetchImpl ?? fetch;
+  const headers = githubHeaders(input.token);
+  let tags: JuliusSpentTag[];
+  try {
+    tags = [];
+    let url: string | null = `https://api.github.com/repos/${input.repository}/git/matching-refs/tags/julius-run-spent-`;
+    let pages = 0;
+    while (url !== null) {
+      if (pages === 5) return unreadable;
+      pages += 1;
+      const response = await fetchImpl(url, { headers });
+      if (!response.ok) return unreadable;
+      const body: unknown = await response.json();
+      if (!Array.isArray(body)) return unreadable;
+      for (const entry of body) {
+        const tag = await readOneSpentTag(entry, input.repository, headers, fetchImpl);
+        if (tag === 'unreadable') return unreadable;
+        tags.push(tag);
+      }
+      const next = nextGitHubPage(response.headers.get('link'));
+      if (next === 'rejected') return unreadable;
+      url = next;
+    }
+  } catch {
+    return unreadable;
+  }
+  const base = { namespace: input.namespace, excludeRunId: input.excludeRunId, tags };
+  const first = classifyJuliusSpentTags(base);
+  if (!first.ledger.readable) return first;
+  const proofs = new Map<string, JuliusPriorRunProof>();
+  for (const entry of first.audit) {
+    if (entry.basis !== 'proof_absent' || entry.workflowRunId === null || entry.workflowRunAttempt === null) continue;
+    const binding = bindingOf(tags, entry);
+    if (binding === null) continue;
+    const observation = await observeJuliusWorkflowRun({
+      repository: input.repository, headers, fetchImpl, binding, juliusRunId: entry.runId,
+    });
+    proofs.set(entry.runId, classifyJuliusPriorRun(observation, entry.runId));
+  }
+  return classifyJuliusSpentTags({ ...base, proofs });
+}
+
+/** The ledger the cap counts. One reader: {@link readJuliusClassifiedSpentTags}. */
 export async function readJuliusSpentTagLedger(input: {
   readonly repository: string;
   readonly token: string;
@@ -107,45 +181,115 @@ export async function readJuliusSpentTagLedger(input: {
   readonly excludeRunId?: string;
   readonly fetchImpl?: typeof fetch;
 }): Promise<JuliusSpendLedgerRead> {
-  if (!GITHUB_REPOSITORY.test(input.repository)) return { readable: false };
-  if (input.token.trim() === '' || /[\r\n]/u.test(input.token) || input.token.length > 512) {
-    return { readable: false };
-  }
+  return (await readJuliusClassifiedSpentTags(input)).ledger;
+}
+
+/**
+ * THE ATTEMPTED MARKERS, on the same proofs. Lists `<namespace>-attempted`
+ * artifacts repository-wide and classifies the run that uploaded each one.
+ * A listing that fails is unreadable, never zero.
+ */
+export async function readJuliusAttemptMarkers(input: {
+  readonly repository: string;
+  readonly token: string;
+  readonly namespace: string;
+  readonly fetchImpl?: typeof fetch;
+}): Promise<{ readonly readable: false } | { readonly readable: true; readonly proofs: readonly JuliusPriorRunProof[] }> {
+  if (!GITHUB_REPOSITORY.test(input.repository) || !tokenIsUsable(input.token)) return { readable: false };
+  if (!/^[a-z][a-z0-9-]{2,48}$/u.test(input.namespace)) return { readable: false };
   const fetchImpl = input.fetchImpl ?? fetch;
-  const headers = {
-    Authorization: `Bearer ${input.token}`,
+  const headers = githubHeaders(input.token);
+  const markerName = `${input.namespace}-attempted`;
+  const listing = await readJson(
+    fetchImpl,
+    `https://api.github.com/repos/${input.repository}/actions/artifacts?name=${markerName}&per_page=100`,
+    headers,
+  );
+  const bindings = juliusAttemptMarkerBindings(listing, markerName);
+  if (bindings === null) return { readable: false };
+  const proofs: JuliusPriorRunProof[] = [];
+  const seen = new Set<string>();
+  for (const binding of bindings) {
+    const key = `${binding.workflowRunId}\t${binding.headSha}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    // A marker names no admission run id, so no cost row can match it:
+    // an executed marker is UNKNOWN or counted, never charges-known zero.
+    const observation = await observeJuliusWorkflowRun({
+      repository: input.repository, headers, fetchImpl, binding, juliusRunId: '',
+    });
+    proofs.push(classifyJuliusPriorRun(observation, ''));
+  }
+  return { readable: true, proofs };
+}
+
+function bindingOf(tags: readonly JuliusSpentTag[], entry: JuliusPriorRunAudit): JuliusWorkflowRunBinding | null {
+  const tag = tags.find((candidate) => candidate.message?.trim().split('\n')[1] === `run=${entry.runId}`);
+  const binding = tag === undefined ? null : juliusSpentTagBinding(tag.message);
+  if (binding === null || binding.workflowRunId !== entry.workflowRunId || binding.workflowRunAttempt !== entry.workflowRunAttempt) {
+    return null;
+  }
+  return binding;
+}
+
+function tokenIsUsable(token: string): boolean {
+  return token.trim() !== '' && !/[\r\n]/u.test(token) && token.length <= 512;
+}
+
+function githubHeaders(token: string): Readonly<Record<string, string>> {
+  return {
+    Authorization: `Bearer ${token}`,
     Accept: 'application/vnd.github+json',
     'X-GitHub-Api-Version': '2022-11-28',
     'User-Agent': 'sunday-relay',
   };
+}
+
+async function readJson(
+  fetchImpl: typeof fetch,
+  url: string,
+  headers: Readonly<Record<string, string>>,
+): Promise<unknown> {
   try {
-    const tags: JuliusSpentTag[] = [];
-    let url: string | null = `https://api.github.com/repos/${input.repository}/git/matching-refs/tags/julius-run-spent-`;
-    let pages = 0;
-    while (url !== null) {
-      if (pages === 5) return { readable: false };
-      pages += 1;
-      const response = await fetchImpl(url, { headers });
-      if (!response.ok) return { readable: false };
-      const body: unknown = await response.json();
-      if (!Array.isArray(body)) return { readable: false };
-      for (const entry of body) {
-        const tag = await readOneSpentTag(entry, input.repository, headers, fetchImpl);
-        if (tag === 'unreadable') return { readable: false };
-        tags.push(tag);
-      }
-      const next = nextGitHubPage(response.headers.get('link'));
-      if (next === 'rejected') return { readable: false };
-      url = next;
-    }
-    return interpretJuliusSpentTags({
-      namespace: input.namespace,
-      excludeRunId: input.excludeRunId,
-      tags,
-    });
+    const response = await fetchImpl(url, { headers });
+    if (!response.ok) return null;
+    return await response.json() as unknown;
   } catch {
-    return { readable: false };
+    return null;
   }
+}
+
+/**
+ * Everything one classification needs, read from GitHub for exactly the run
+ * and attempt the binding names. Each read that fails is null. The evidence
+ * zips are fetched only when proof (a) does not already hold.
+ */
+export async function observeJuliusWorkflowRun(input: {
+  readonly repository: string;
+  readonly headers: Readonly<Record<string, string>>;
+  readonly fetchImpl: typeof fetch;
+  readonly binding: JuliusWorkflowRunBinding;
+  readonly juliusRunId: string;
+}): Promise<JuliusPriorRunObservation> {
+  const { binding, fetchImpl, headers } = input;
+  const runUrl = `https://api.github.com/repos/${input.repository}/actions/runs/${binding.workflowRunId}`;
+  const empty: JuliusPriorRunObservation = { binding, run: null, jobs: null, artifacts: null, liveEvidence: null, verdict: null };
+  if (!/^[1-9][0-9]{0,19}$/u.test(binding.workflowRunId) || !/^[1-9][0-9]{0,9}$/u.test(binding.workflowRunAttempt)) return empty;
+  const run = await readJson(fetchImpl, runUrl, headers);
+  const jobs = await readJson(fetchImpl, `${runUrl}/attempts/${binding.workflowRunAttempt}/jobs?per_page=100`, headers);
+  const shallow: JuliusPriorRunObservation = { ...empty, run, jobs };
+  // Proof (a) decided it, or the run itself could not be bound: no artifact can change that.
+  if (classifyJuliusPriorRun(shallow, input.juliusRunId).basis !== 'evidence_unreadable') return shallow;
+  const artifacts = await readJson(fetchImpl, `${runUrl}/artifacts?per_page=100`, headers);
+  const evidenceId = juliusBoundArtifactId(artifacts, JULIUS_LIVE_EVIDENCE_ARTIFACT, binding);
+  const verdictId = juliusBoundArtifactId(artifacts, JULIUS_INWORLD_VERDICT_ARTIFACT, binding);
+  const liveEvidence = evidenceId === null
+    ? null
+    : await readArtifactFiles(input.repository, evidenceId, headers, fetchImpl, [JULIUS_EVIDENCE_MANIFEST_FILE, ...JULIUS_ZERO_ROW_EVIDENCE_FILES]);
+  const verdict = verdictId === null
+    ? null
+    : await readArtifactFiles(input.repository, verdictId, headers, fetchImpl, [JULIUS_INWORLD_VERDICT_FILE]);
+  return { binding, run, jobs, artifacts, liveEvidence, verdict };
 }
 
 async function readOneSpentTag(
@@ -186,4 +330,93 @@ function nextGitHubPage(header: string | null): string | null | 'rejected' {
     return next;
   }
   return null;
+}
+
+const ARTIFACT_ZIP_MAX_BYTES = 64 * 1024 * 1024;
+const ARTIFACT_FILE_MAX_BYTES = 16 * 1024 * 1024;
+
+/**
+ * The named files of one artifact, or null. GitHub answers the zip request
+ * with a redirect to a signed URL; it is followed by hand, over https, and
+ * WITHOUT the token, so the credential never leaves api.github.com.
+ */
+async function readArtifactFiles(
+  repository: string,
+  artifactId: number,
+  headers: Readonly<Record<string, string>>,
+  fetchImpl: typeof fetch,
+  names: readonly string[],
+): Promise<ReadonlyMap<string, string> | null> {
+  try {
+    let response = await fetchImpl(
+      `https://api.github.com/repos/${repository}/actions/artifacts/${String(artifactId)}/zip`,
+      { headers, redirect: 'manual' },
+    );
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get('location');
+      if (location === null || !location.startsWith('https://')) return null;
+      response = await fetchImpl(location, { headers: { 'User-Agent': 'sunday-relay' } });
+    }
+    if (!response.ok) return null;
+    const declared = Number(response.headers.get('content-length') ?? '0');
+    if (Number.isFinite(declared) && declared > ARTIFACT_ZIP_MAX_BYTES) return null;
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.length > ARTIFACT_ZIP_MAX_BYTES) return null;
+    return readZipTextFiles(bytes, names);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A minimal, strict zip reader for the entries named. Stored and deflated
+ * entries only; zip64, encryption, a duplicate name, a size that disagrees,
+ * or bytes that are not UTF-8 make the whole read null. A name that is not in
+ * the archive is simply absent from the map, and the classifier decides.
+ */
+export function readZipTextFiles(bytes: Uint8Array, names: readonly string[]): ReadonlyMap<string, string> | null {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const wanted = new Set(names);
+  let eocd = -1;
+  for (let at = bytes.length - 22; at >= 0 && at >= bytes.length - 22 - 0xffff; at -= 1) {
+    if (view.getUint32(at, true) === 0x06054b50) { eocd = at; break; }
+  }
+  if (eocd < 0) return null;
+  const count = view.getUint16(eocd + 10, true);
+  const directoryOffset = view.getUint32(eocd + 16, true);
+  if (count === 0xffff || directoryOffset === 0xffffffff) return null;
+  const decoder = new TextDecoder('utf-8', { fatal: true });
+  const seen = new Set<string>();
+  const files = new Map<string, string>();
+  let at = directoryOffset;
+  for (let index = 0; index < count; index += 1) {
+    if (at + 46 > bytes.length || view.getUint32(at, true) !== 0x02014b50) return null;
+    const flags = view.getUint16(at + 8, true);
+    const method = view.getUint16(at + 10, true);
+    const compressedSize = view.getUint32(at + 20, true);
+    const size = view.getUint32(at + 24, true);
+    const nameLength = view.getUint16(at + 28, true);
+    const extraLength = view.getUint16(at + 30, true);
+    const commentLength = view.getUint16(at + 32, true);
+    const localOffset = view.getUint32(at + 42, true);
+    if (at + 46 + nameLength > bytes.length) return null;
+    const name = decoder.decode(bytes.subarray(at + 46, at + 46 + nameLength));
+    at += 46 + nameLength + extraLength + commentLength;
+    if (seen.has(name)) return null;
+    seen.add(name);
+    if (!wanted.has(name)) continue;
+    if ((flags & 0x1) !== 0 || compressedSize === 0xffffffff || size === 0xffffffff || localOffset === 0xffffffff) return null;
+    if (size > ARTIFACT_FILE_MAX_BYTES) return null;
+    if (localOffset + 30 > bytes.length || view.getUint32(localOffset, true) !== 0x04034b50) return null;
+    const dataStart = localOffset + 30 + view.getUint16(localOffset + 26, true) + view.getUint16(localOffset + 28, true);
+    if (dataStart + compressedSize > bytes.length) return null;
+    const data = bytes.subarray(dataStart, dataStart + compressedSize);
+    let content: Uint8Array;
+    if (method === 0) content = data;
+    else if (method === 8) content = inflateRawSync(data, { maxOutputLength: ARTIFACT_FILE_MAX_BYTES });
+    else return null;
+    if (content.length !== size) return null;
+    files.set(name, decoder.decode(content));
+  }
+  return files;
 }
