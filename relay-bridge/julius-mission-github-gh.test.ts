@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { createGhMissionGitHub, EVIDENCE_ARTIFACT_NAMES, GithubUnreadableError, type GhReadRunner } from './julius-mission-github-gh';
+import { createGhMissionGitHub, EVIDENCE_ARTIFACT_NAMES, GithubUnreadableError, STATUS_PAGES_MAX, type GhReadRunner } from './julius-mission-github-gh';
 import { cachedEvidenceReader, EVIDENCE_RECHECK_MS, wonderlandLiveReadsFrom } from './wonderland-live-wiring';
 
 const REPO = 'ohdieyuh-glitch/sunday-relay';
@@ -20,7 +20,7 @@ const ALLOWED_API = [
   /^repos\/ohdieyuh-glitch\/sunday-relay\/actions\/runs\/\d+\/attempts\/\d+$/u,
   /^repos\/ohdieyuh-glitch\/sunday-relay\/actions\/runs\/\d+\/attempts\/\d+\/jobs\?per_page=100$/u,
   /^repos\/ohdieyuh-glitch\/sunday-relay\/actions\/runs\/\d+\/artifacts\?per_page=100$/u,
-  /^repos\/ohdieyuh-glitch\/sunday-relay\/commits\/[0-9a-f]{40}\/statuses\?per_page=100$/u,
+  /^repos\/ohdieyuh-glitch\/sunday-relay\/commits\/[0-9a-f]{40}\/statuses\?per_page=100(?:&page=(?:[2-9]|10))?$/u,
 ];
 
 function expectReadOnly(calls: readonly (readonly string[])[]): void {
@@ -95,6 +95,33 @@ describe('the read-only gh port', () => {
     }) });
     await expect(broken.readAnnotatedTagMessage(TAG)).rejects.toBeInstanceOf(GithubUnreadableError);
     expectReadOnly(runner.calls);
+  });
+
+  it('D-e: commit statuses are read across pages; a short page ends the walk, an unreadable page makes the read unreadable', async () => {
+    const at = (page: number) => `${base}/commits/${SHA}/statuses?per_page=100${page === 1 ? '' : `&page=${String(page)}`}`;
+    const progress = (n: number) => Array.from({ length: n }, (_, i) => ({ id: 1000 + i, context: 'julius-live-progress', state: 'pending', description: 'v1', creator: { login: 'github-actions[bot]' } }));
+    const result = { id: 7, context: 'julius-run-result', state: 'success', description: 'v1 sha256:x', creator: { login: 'github-actions[bot]' }, target_url: 'https://github.com/x/y/actions/runs/1' };
+    const runner = fake({ [at(1)]: json(progress(100)), [at(2)]: json(progress(100)), [at(3)]: json([...progress(20), result]) });
+    const statuses = await createGhMissionGitHub({ repo: REPO, runner }).readCommitStatuses(SHA);
+    expect(statuses?.length).toBe(221);
+    expect(statuses?.filter((status) => status.context === 'julius-run-result')).toHaveLength(1);
+    expect(runner.calls.map((call) => call[3])).toEqual([at(1), at(2), at(3)]);
+    expectReadOnly(runner.calls);
+    const broken = fake({ [at(1)]: json(progress(100)), [at(2)]: { code: 0, stdout: '{"message":"not a list"}' } });
+    expect(await createGhMissionGitHub({ repo: REPO, runner: broken }).readCommitStatuses(SHA)).toBeNull();
+  });
+
+  it('D-e: the walk stops at STATUS_PAGES_MAX (10) pages; a result past the cap is not read', async () => {
+    expect(STATUS_PAGES_MAX).toBe(10);
+    const at = (page: number) => `${base}/commits/${SHA}/statuses?per_page=100${page === 1 ? '' : `&page=${String(page)}`}`;
+    const full = Array.from({ length: 100 }, (_, i) => ({ id: 1 + i, context: 'julius-live-progress', state: 'pending', description: 'v1', creator: { login: 'github-actions[bot]' } }));
+    const routes: Record<string, { code: number; stdout: string }> = {};
+    for (let page = 1; page <= 10; page += 1) routes[at(page)] = json(full);
+    routes[at(11)] = json([{ id: 9, context: 'julius-run-result', state: 'success', description: 'v1', creator: { login: 'github-actions[bot]' } }]);
+    const runner = fake(routes);
+    const statuses = await createGhMissionGitHub({ repo: REPO, runner }).readCommitStatuses(SHA);
+    expect(runner.calls).toHaveLength(10);
+    expect(statuses?.some((status) => status.context === 'julius-run-result')).toBe(false);
   });
 
   it('X′ §4: reads the result record tag the same way; no other record ref is read', async () => {
