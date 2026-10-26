@@ -139,7 +139,7 @@ jobs:
   # the paid job's first step (a re-run of failed jobs skips this one).
   spend-tag:
     name: spend-tag
-    runs-on: ubuntu-24.04
+    runs-on: julius-paid
     timeout-minutes: 5
     permissions:
       contents: write
@@ -341,7 +341,7 @@ jobs:
     name: paid-slot
     needs: spend-tag
     if: needs.spend-tag.result == 'success' && inputs.confirm_live == 'RUN LIVE MISSION'
-    runs-on: ubuntu-24.04
+    runs-on: julius-paid
     timeout-minutes: 350
     defaults:
       run:
@@ -439,7 +439,7 @@ jobs:
     concurrency:
       group: ${{ inputs.confirm_live == 'RUN LIVE MISSION' && 'julius-paid-provider-slot' || format('julius-preflight-{0}', github.run_id) }}
       cancel-in-progress: false
-    runs-on: ubuntu-24.04
+    runs-on: julius-paid
     # THE J1 HAND-OFF. The grade job takes the coder's final message from this
     # upload's id and deletes the artifact once it has graded it.
     outputs:
@@ -491,6 +491,7 @@ jobs:
       run:
         shell: bash
     env:
+      JULIUS_LIVE_PG_PORT: '55433'
       JULIUS_CALLER_ID: julius-live
       JULIUS_TENANT_ID: tenant
       JULIUS_PROJECT_ID: prj-julius-first-live
@@ -2121,7 +2122,7 @@ jobs:
     name: 'J1: grade the final message with the pinned hidden checker'
     needs: [first-live-mission]
     if: ${{ always() && inputs.mission == 'julius-inworld-data-1' && inputs.confirm_live == 'RUN LIVE MISSION' && needs.first-live-mission.result != 'skipped' }}
-    runs-on: ubuntu-24.04
+    runs-on: julius-paid
     timeout-minutes: 15
     permissions:
       contents: read
@@ -2176,7 +2177,7 @@ jobs:
     name: 'J1: delete the graded final message'
     needs: [first-live-mission, grade-inworld]
     if: ${{ always() && needs.first-live-mission.outputs.final_message_artifact_id != '' }}
-    runs-on: ubuntu-24.04
+    runs-on: julius-paid
     timeout-minutes: 5
     permissions:
       actions: write

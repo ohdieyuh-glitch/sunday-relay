@@ -101,7 +101,7 @@ concurrency:
 
 jobs:
   accept:
-    runs-on: ubuntu-latest
+    runs-on: julius-paid
     timeout-minutes: 15
     steps:
       - name: 'Gate: the operator typed the exact phrase'

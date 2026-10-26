@@ -21,8 +21,8 @@ concurrency:
 jobs:
   verify:
     name: Verify Relay
-    if: ${{ !startsWith(github.ref, 'refs/heads/julius-governed-audit/') && !startsWith(github.head_ref, 'julius-governed-audit/') && !startsWith(github.base_ref, 'julius-governed-audit/') }}
-    runs-on: ubuntu-latest
+    if: ${{ !startsWith(github.ref, 'refs/heads/julius-governed-audit/') && !startsWith(github.head_ref, 'julius-governed-audit/') && !startsWith(github.base_ref, 'julius-governed-audit/') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: julius-ci
     timeout-minutes: 30
     steps:
       # Pinned to an immutable commit SHA. A mutable tag can be repointed by
