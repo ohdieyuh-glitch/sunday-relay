@@ -656,7 +656,8 @@ gate. So a client drives "Julius executing" from `execution`, never from
 | `null` | No run is bound (`source: "none"`). Unknown, not "not started". | /status alone |
 | `starting` | The run is live. The LIVE step (`LIVE: run the first real Julius mission` in job `Preflight, then the live mission`) has not been seen, and no task sample has arrived. | the activation sequence, never "executing" |
 | `executing` | The LIVE step was seen in progress, or a phase sample with a task (`marker: null`) arrived, and the run is live. An `idle` marker alone is not execution. | Julius at work: phases drive the beats |
-| `finished` | Julius ran, and the LIVE step or the run has finished. **Not an outcome.** | "grading": the outcome is /result `checkerVerdict` only |
+| `finished` | The LIVE step succeeded. **Not an outcome.** | "grading": the outcome is /result `checkerVerdict` only |
+| `interrupted` | Julius started, then the LIVE step failed, was cancelled or timed out, or the run ended without the LIVE step succeeding: a **confirmed** failure or cancellation, reported as soon as GitHub does. `stoppedAt` names the step. | stop the mission presentation now; no success sequence |
 | `did_not_start` | The run finished and the LIVE step never ran. `stoppedAt: {job, step}` names the first step that failed, was cancelled or timed out (or else the job; `null` if none did). | "Mission did not start", never "Julius failed" |
 
 `executionStartedAt` is when the LIVE step, or else the first task sample,

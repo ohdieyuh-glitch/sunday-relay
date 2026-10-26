@@ -525,6 +525,29 @@ describe('execution is read from the LIVE step and task samples, never from the 
     });
   });
 
+  it('a LIVE step that fails or is cancelled is interrupted at once, even while the run still runs', async () => {
+    for (const conclusion of ['failure', 'cancelled', 'timed_out']) {
+      await withAdmission(async (ctx) => {
+        claim(ctx.storePath);
+        const jobs = [job(LIVE_MISSION_JOB, 'in_progress', null, [step(32, LIVE_MISSION_STEP, 'completed', conclusion)])];
+        const body = await read(ctx, { run: summary(ctx.keyHash), jobs });
+        expect(body, conclusion).toMatchObject({ live: true, execution: 'interrupted', stoppedAt: { job: LIVE_MISSION_JOB, step: LIVE_MISSION_STEP } });
+      });
+    }
+  });
+
+  it('a run that ends while Julius runs, with no LIVE success, is interrupted, naming what stopped', async () => {
+    await withAdmission(async (ctx) => {
+      claim(ctx.storePath);
+      const bridge = createWonderlandMissionEventsBridge(ctx.ports, fakeReader({
+        run: summary(ctx.keyHash, { status: 'completed', conclusion: 'cancelled' }),
+        jobs: [job(LIVE_MISSION_JOB, 'completed', 'cancelled', [step(32, LIVE_MISSION_STEP, 'in_progress', null)])],
+      }));
+      const body = (await bridge.handle(request()))?.body as Body;
+      expect(body).toMatchObject({ live: false, execution: 'interrupted', stoppedAt: { job: LIVE_MISSION_JOB, step: null } });
+    });
+  });
+
   it('the in-progress sighting is kept after the step completes, so executionStartedAt survives', async () => {
     await withAdmission(async (ctx) => {
       claim(ctx.storePath);

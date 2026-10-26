@@ -29,8 +29,12 @@
  * - `executing`: the LIVE step ("LIVE: run the first real Julius mission" in
  *   the job "Preflight, then the live mission") has been seen in progress, or a
  *   phase sample with a task (marker null) has arrived, and the run is live;
- * - `finished`: Julius ran and the run, or its LIVE step, has finished. This is
- *   not an outcome: /result's checkerVerdict is;
+ * - `finished`: the LIVE step succeeded. This is not an outcome: /result's
+ *   checkerVerdict is;
+ * - `interrupted`: Julius started and then its LIVE step failed, was cancelled
+ *   or timed out, or the run ended without the LIVE step succeeding. This is a
+ *   confirmed failure or cancellation, reported as soon as GitHub does;
+ *   `stoppedAt` names the step (the LIVE step itself when that is what stopped);
  * - `did_not_start`: the run finished and the LIVE step never ran. `stoppedAt`
  *   names the first job or step that failed, was cancelled, or timed out (null
  *   when none did), so a gate refusal is never shown as a Julius failure.
@@ -84,7 +88,7 @@ const EVENTS_PER_RUN = 5_000;
 export const LIVE_MISSION_JOB = 'Preflight, then the live mission';
 export const LIVE_MISSION_STEP = 'LIVE: run the first real Julius mission';
 
-export type WonderlandExecution = 'starting' | 'executing' | 'finished' | 'did_not_start';
+export type WonderlandExecution = 'starting' | 'executing' | 'finished' | 'interrupted' | 'did_not_start';
 
 export type WonderlandEventsReason = 'not_dispatched' | 'run_unbound' | 'run_mismatch' | 'github_unreadable' | 'live_view_unconfigured';
 
@@ -413,23 +417,28 @@ export function executionOf(events: readonly WonderlandMissionEvent[], running: 
   const live = events.filter((event) => event.kind === 'step' && event.job === LIVE_MISSION_JOB && event.name === LIVE_MISSION_STEP);
   const stepStarted = live.find((event) => event.status === 'in_progress') ?? null;
   const stepRan = live.some((event) => event.status === 'in_progress' || (event.status === 'completed' && event.conclusion !== 'skipped'));
-  const stepFinished = live.some((event) => event.status === 'completed' && event.conclusion !== 'skipped');
+  const stepSucceeded = live.some((event) => event.status === 'completed' && event.conclusion === 'success');
+  const stepStopped = live.some((event) => event.status === 'completed' && typeof event.conclusion === 'string' && STOPPED.has(event.conclusion));
   const task = events.find((event) => event.kind === 'phase' && event.marker === null) ?? null;
   const started = stepRan || task !== null;
   const executionStartedAt = stepStarted?.at ?? task?.at ?? null;
+  const halted = (kind: 'step' | 'job') => events.find((event) => event.kind === kind
+    && event.status === 'completed' && typeof event.conclusion === 'string' && STOPPED.has(event.conclusion)) ?? null;
+  // The step that stopped, when GitHub names one; else the job.
+  const stoppedAt = () => {
+    const stopped = halted('step') ?? halted('job');
+    return stopped === null ? null : { job: stopped.job ?? '', step: stopped.kind === 'step' ? stopped.name ?? null : null };
+  };
   if (!started) {
     if (running) return { execution: 'starting', executionStartedAt: null, stoppedAt: null };
-    const halted = (kind: 'step' | 'job') => events.find((event) => event.kind === kind
-      && event.status === 'completed' && typeof event.conclusion === 'string' && STOPPED.has(event.conclusion)) ?? null;
-    // The step that stopped, when GitHub names one; else the job.
-    const stopped = halted('step') ?? halted('job');
-    return {
-      execution: 'did_not_start',
-      executionStartedAt: null,
-      stoppedAt: stopped === null ? null : { job: stopped.job ?? '', step: stopped.kind === 'step' ? stopped.name ?? null : null },
-    };
+    return { execution: 'did_not_start', executionStartedAt: null, stoppedAt: stoppedAt() };
   }
-  return { execution: stepFinished || !running ? 'finished' : 'executing', executionStartedAt, stoppedAt: null };
+  // A confirmed failure or cancellation of Julius itself, as soon as GitHub reports it.
+  if (stepStopped) return { execution: 'interrupted', executionStartedAt, stoppedAt: { job: LIVE_MISSION_JOB, step: LIVE_MISSION_STEP } };
+  if (stepSucceeded) return { execution: 'finished', executionStartedAt, stoppedAt: null };
+  if (running) return { execution: 'executing', executionStartedAt, stoppedAt: null };
+  // The run ended while Julius was running and the LIVE step never reported success.
+  return { execution: 'interrupted', executionStartedAt, stoppedAt: stoppedAt() };
 }
 
 function noneBody(wlj: string, reason: WonderlandEventsReason, nowMs: number) {
