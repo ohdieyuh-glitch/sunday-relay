@@ -1560,3 +1560,56 @@ describe('X′ §5 (e): a private host copy of the scanned evidence, with SHA256
     }
   });
 });
+
+describe('Branch S X: bare self-hosted labels, fork guards on every pull_request job, an explicit PostgreSQL port', () => {
+  const read = (file: string): string => readFileSync(join(ROOT, '.github/workflows', file), 'utf8');
+  /** Every top-level job of a workflow: its key and its text. */
+  const jobsOf = (text: string): { name: string; text: string }[] => {
+    const body = text.slice(text.indexOf('\njobs:\n'));
+    const keys = [...body.matchAll(/\n {2}([a-z][a-z0-9-]*):\n/gu)];
+    return keys.map((match, index) => ({ name: match[1] ?? '', text: body.slice(match.index ?? 0, keys[index + 1]?.index ?? body.length) }));
+  };
+  const LABELS: Readonly<Record<string, string>> = {
+    'relay-ci.yml': 'julius-ci', 'julius-real-infra.yml': 'julius-ci', 'julius-governed-evidence.yml': 'julius-ci',
+    'julius-first-live-mission.yml': 'julius-paid', 'julius-governed-land.yml': 'julius-paid', 'julius-land.yml': 'julius-paid', 'julius-accept-main.yml': 'julius-paid',
+  };
+  const GUARD = "(github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)";
+
+  it('every job of the seven workflows runs on its bare label, and nothing asks for a hosted or generic self-hosted runner', () => {
+    expect(readdirSync(join(ROOT, '.github/workflows')).sort()).toEqual(Object.keys(LABELS).sort());
+    for (const [file, label] of Object.entries(LABELS)) {
+      const jobs = jobsOf(read(file));
+      expect(jobs.length, file).toBeGreaterThan(0);
+      for (const entry of jobs) expect(/\n {4}runs-on: ([^\n]+)\n/u.exec(entry.text)?.[1], `${file} ${entry.name}`).toBe(label);
+      expect(read(file), file).not.toMatch(/runs-on:[^\n]*(ubuntu|self-hosted|windows|macos)/u);
+    }
+  });
+
+  it('every job of a pull_request-triggered workflow carries the head-repo guard, inert for push and dispatch', () => {
+    const triggers = (file: string): string => read(file).slice(0, read(file).indexOf('\njobs:\n'));
+    const triggered = Object.keys(LABELS).filter((file) => /\n {2}pull_request:/u.test(triggers(file)));
+    expect(triggered.sort()).toEqual(['julius-governed-evidence.yml', 'julius-real-infra.yml', 'relay-ci.yml']);
+    for (const file of triggered) {
+      for (const entry of jobsOf(read(file))) {
+        const condition = /\n {4}if: ([^\n]+)\n/u.exec(entry.text)?.[1] ?? '';
+        expect(condition, `${file} ${entry.name}`).toContain(` && ${GUARD} }}`);
+        expect(condition.startsWith("${{ !startsWith(github.ref, 'refs/heads/julius-governed-audit/')"), `${file} ${entry.name}: the audit-branch condition is kept`).toBe(true);
+      }
+    }
+    // The paid and landing workflows have no pull_request trigger at all.
+    for (const file of ['julius-first-live-mission.yml', 'julius-governed-land.yml', 'julius-land.yml', 'julius-accept-main.yml']) {
+      expect(read(file).slice(0, read(file).indexOf('\njobs:\n')), file).not.toMatch(/\n {2}pull_request(_target)?:/u);
+    }
+  });
+
+  it('the jobs that publish PostgreSQL through the executor\'s lines name JULIUS_LIVE_PG_PORT=55433, which the executor reads', () => {
+    const port = "      JULIUS_LIVE_PG_PORT: '55433'\n";
+    const realInfra = Object.fromEntries(jobsOf(read('julius-real-infra.yml')).map((entry) => [entry.name, entry.text]));
+    expect(realInfra['first-live-topology']).toContain(port);
+    expect(realInfra['learning-store-container']).toContain(port);
+    expect(job('first-live-mission')).toContain(port);
+    const executor = readFileSync(join(ROOT, '.github/julius-live-executor.sh'), 'utf8');
+    expect(executor).toContain('pg_port=${JULIUS_LIVE_PG_PORT:-5432}');
+    expect(executor).toContain('-p "127.0.0.1:${pg_port}:5432"');
+  });
+});
