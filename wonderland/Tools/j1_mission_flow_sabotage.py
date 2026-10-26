@@ -578,6 +578,26 @@ MUTATIONS = [
         "Out.bOutcomeUnknown = true; // FLOW_OUTCOME_UNKNOWN_ANY_OBJECT",
         "Out.bOutcomeUnknown = false; // FLOW_OUTCOME_UNKNOWN_ANY_OBJECT",
     ),
+    (
+        "contract_repair_required_never_shown",
+        'Out.push_back(FContractBeat{"review.repair_required", View.Role, Round}); // FLOW_CONTRACT_REPAIR_REQUIRED_ON_ROUND_START',
+        'Out.push_back(FContractBeat{"repair.started", View.Role, Round}); // FLOW_CONTRACT_REPAIR_REQUIRED_ON_ROUND_START',
+    ),
+    (
+        "contract_research_shown_as_architect",
+        'else if (View.TaskType == "research") { Out.push_back(FContractBeat{"research.requested", View.Role, Round}); } // FLOW_CONTRACT_RESEARCH_ONLY_WHEN_REPORTED',
+        'else if (View.TaskType == "research") { Out.push_back(FContractBeat{"architect.started", View.Role, Round}); } // FLOW_CONTRACT_RESEARCH_ONLY_WHEN_REPORTED',
+    ),
+    (
+        "contract_guidance_shown_as_repair",
+        'else if (View.TaskType == "repair_guidance") { Out.push_back(FContractBeat{"architect.guidance", View.Role, Round}); } // FLOW_CONTRACT_GUIDANCE_ONLY_WHEN_REPORTED',
+        'else if (View.TaskType == "repair_guidance") { Out.push_back(FContractBeat{"repair.started", View.Role, Round}); } // FLOW_CONTRACT_GUIDANCE_ONLY_WHEN_REPORTED',
+    ),
+    (
+        "contract_verifying_shown_as_review",
+        'Out.push_back(FContractBeat{"repair.completed", View.Role, Round}); // FLOW_CONTRACT_VERIFYING_IS_REVIEWER_ON_REPAIR',
+        'Out.push_back(FContractBeat{"review.started", View.Role, Round}); // FLOW_CONTRACT_VERIFYING_IS_REVIEWER_ON_REPAIR',
+    ),
 ]
 
 

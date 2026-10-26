@@ -669,6 +669,8 @@ namespace WonderlandJuliusMissionFlow
 		bool bStarted = false;
 		bool bEnded = false;
 		bool bReleased = false;
+		/** A repair round is open: the first repair task after other work showed REPAIR REQUIRED; non-repair work closes it. */
+		bool bInRepairRound = false;
 		std::string LastBeatKey;
 	};
 

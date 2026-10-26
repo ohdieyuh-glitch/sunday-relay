@@ -850,9 +850,39 @@ const ABSENT_PHASE = {
 		Expect(Cursor.Advance(Seq).empty(), "the same sample is not a new beat");
 		Seq.Role = "reviewer"; Seq.TaskType = "review";
 		Expect(Cursor.Advance(Seq).at(0).Type == "review.started", "reviewer beat");
+		// FOUNDER 2026-10-26: the §04 beats only when Julius reports them (JUDEV's publisher vocabulary: the ACTIVE task only).
+		// A repair round: its FIRST repair task is REPAIR REQUIRED (the reviewer's decision is not published live; the round
+		// starting proves it), then guidance / repair / the reviewer's audit, then a non-repair task closes the round.
 		Seq.Role = "coder"; Seq.TaskType = "repair_build"; Seq.RepairCycle = 1;
 		B = Cursor.Advance(Seq);
-		Expect(B.size() == 1 && B[0].Type == "repair.started" && B[0].RepairRound == 1, "repair beat with its round");
+		Expect(B.size() == 1 && B[0].Type == "review.repair_required" && B[0].RepairRound == 1, "first repair task: REPAIR REQUIRED with its round");
+		Seq.Role = "architect"; Seq.TaskType = "repair_guidance"; Seq.RepairCycle = 2;
+		B = Cursor.Advance(Seq);
+		Expect(B.size() == 1 && B[0].Type == "architect.guidance", "repair_guidance (architect): GUIDANCE");
+		Seq.Role = "coder"; Seq.TaskType = "repair_build"; Seq.RepairCycle = 3;
+		B = Cursor.Advance(Seq);
+		Expect(B.size() == 1 && B[0].Type == "repair.started" && B[0].RepairRound == 3, "a later repair task in the round: REPAIRING");
+		Seq.Role = "reviewer"; Seq.TaskType = "repair_audit"; Seq.RepairCycle = -1;
+		B = Cursor.Advance(Seq);
+		Expect(B.size() == 1 && B[0].Type == "repair.completed", "the reviewer auditing the repair: VERIFYING");
+		Seq.Role = "reviewer"; Seq.TaskType = "review"; Seq.RepairCycle = 3;
+		B = Cursor.Advance(Seq);
+		Expect(B.size() == 1 && B[0].Type == "repair.completed", "a review after repairs: VERIFYING");
+		Seq.Role = "coder"; Seq.TaskType = "repair_plan"; Seq.RepairCycle = -1;
+		B = Cursor.Advance(Seq);
+		Expect(B.size() == 1 && B[0].Type == "review.repair_required", "the next round after other work: REPAIR REQUIRED again");
+		{
+			FContractCursor Research;
+			FExecutionView R; R.Phase = EExecutionPhase::Executing;
+			(void)Research.Advance(R);
+			R.Role = "architect"; R.TaskType = "research";
+			const std::vector<FContractBeat> Rb = Research.Advance(R);
+			Expect(Rb.size() == 1 && Rb[0].Type == "research.requested", "a reported research task: RESEARCHING");
+			R.TaskType = "plan";
+			Expect(Research.Advance(R).at(0).Type == "architect.started", "plan is PROMPT ARCHITECT, never research");
+			R.Role = "reviewer"; R.TaskType = "review"; R.RepairCycle = 0;
+			Expect(Research.Advance(R).at(0).Type == "review.started", "a first review (no repairs) is INDEPENDENT REVIEWER, not VERIFYING");
+		}
 		FExecutionView Stale = Seq; Stale.bStale = true; Stale.Phase = EExecutionPhase::Completed;
 		Expect(Cursor.Advance(Stale).empty() && !Cursor.Ended(), "stale moves nothing");
 		Seq.Phase = EExecutionPhase::Completed;

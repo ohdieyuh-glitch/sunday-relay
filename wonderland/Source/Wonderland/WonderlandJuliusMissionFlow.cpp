@@ -1865,10 +1865,29 @@ namespace WonderlandJuliusMissionFlow
 				LastBeatKey = Key;
 				const bool bRepair = View.TaskType.rfind("repair_", 0) == 0;
 				const std::int64_t Round = View.RepairCycle > 0 ? View.RepairCycle : 0;
-				if (bRepair) { Out.push_back(FContractBeat{"repair.started", View.Role, Round}); }
+				// ONLY WHAT JULIUS REPORTS (founder 2026-10-26: "only be shown if Julius ever reports that it's doing it"). The
+				// publisher samples the one ACTIVE task (JUDEV, julius-live-progress.mjs); each beat below is keyed to a task
+				// type Julius actually publishes, never to timing. WAITING / CHECKPOINT has no live signal in J1 (autonomous,
+				// no approvals), so it is never emitted here.
+				if (bRepair && !bInRepairRound)
+				{
+					// The reviewer's decision is not published live; the first repair task after other work IS the proof the
+					// work was sent back. REPAIR REQUIRED is shown on that sample, once per round.
+					bInRepairRound = true;
+					Out.push_back(FContractBeat{"review.repair_required", View.Role, Round}); // FLOW_CONTRACT_REPAIR_REQUIRED_ON_ROUND_START
+				}
+				else if (View.TaskType == "research") { Out.push_back(FContractBeat{"research.requested", View.Role, Round}); } // FLOW_CONTRACT_RESEARCH_ONLY_WHEN_REPORTED
+				else if (View.TaskType == "repair_guidance") { Out.push_back(FContractBeat{"architect.guidance", View.Role, Round}); } // FLOW_CONTRACT_GUIDANCE_ONLY_WHEN_REPORTED
+				else if (View.Role == "reviewer" && (View.TaskType == "repair_audit" || View.RepairCycle != 0))
+				{
+					// The Independent Reviewer checking repaired work: VERIFYING ("the repair is being checked against the contract").
+					Out.push_back(FContractBeat{"repair.completed", View.Role, Round}); // FLOW_CONTRACT_VERIFYING_IS_REVIEWER_ON_REPAIR
+				}
+				else if (bRepair) { Out.push_back(FContractBeat{"repair.started", View.Role, Round}); }
 				else if (View.Role == "reviewer") { Out.push_back(FContractBeat{"review.started", View.Role, Round}); }
 				else if (View.Role == "coder") { Out.push_back(FContractBeat{"coder.started", View.Role, Round}); }
 				else if (View.Role == "architect") { Out.push_back(FContractBeat{"architect.started", View.Role, Round}); }
+				if (!bRepair) { bInRepairRound = false; } // a non-repair task closes the round; the next repair task opens a new one
 			}
 		}
 		if (View.Phase == EExecutionPhase::Completed)
