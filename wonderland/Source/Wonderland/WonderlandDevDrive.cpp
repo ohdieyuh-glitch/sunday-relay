@@ -116,7 +116,15 @@ namespace WonderlandDevDriveDetail
 			S.Partial.RightChopInline(Newline + 1);
 			if (!Line.IsEmpty() && !Line.StartsWith(TEXT("#")))
 			{
-				UE_LOG(LogTemp, Display, TEXT("WLDEV exec: %s"), *Line);
+				// A wl.Dev.Say line carries free text (it once carried a founder pairing code): log its length, never the text.
+				if (Line.StartsWith(TEXT("wl.Dev.Say"), ESearchCase::IgnoreCase))
+				{
+					UE_LOG(LogTemp, Display, TEXT("WLDEV exec: wl.Dev.Say <%d chars, not logged>"), Line.Len());
+				}
+				else
+				{
+					UE_LOG(LogTemp, Display, TEXT("WLDEV exec: %s"), *Line);
+				}
 				GEngine->Exec(World, *Line);
 			}
 		}
@@ -364,7 +372,8 @@ namespace WonderlandDevDriveDetail
 			if (UWonderlandUiSubsystem* Ui = DriveUi())
 			{
 				const FString Text = FString::Join(Args, TEXT(" "));
-				UE_LOG(LogTemp, Display, TEXT("WLDEV say: %s"), *Text.Left(80));
+				// Never the text itself: the terminal shows it in-game, and a pairing code once reached the log this way.
+				UE_LOG(LogTemp, Display, TEXT("WLDEV say: <%d chars, not logged>"), Text.Len());
 				Ui->SubmitTerminalLine(Text);
 			}
 		}));
