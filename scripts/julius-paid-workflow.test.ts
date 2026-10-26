@@ -1131,7 +1131,7 @@ describe('X′ §2: the attempted marker is a job-token tag, and LIVE waits for 
       expect(refused.status, JSON.stringify(failure)).not.toBe(0);
       expect(refused.stderr, JSON.stringify(failure)).toContain('ATTEMPT_TAG_UNVERIFIED');
     }
-    for (const bad of [{ JULIUS_RUN_ID: 'not-an-id' }, { MARKER_NAMESPACE: 'Bad Namespace' }, { MARKER_NAMESPACE: 'julius-inworld-data-1\nnamespace=other-ns' }, { GITHUB_SHA: 'z'.repeat(40) }]) {
+    for (const bad of [{ JULIUS_RUN_ID: 'not-an-id' }, { MARKER_NAMESPACE: 'Bad Namespace' }, { MARKER_NAMESPACE: 'julius-inworld-data-1\nnamespace=other-ns' }, { GITHUB_SHA: 'z'.repeat(40) }] as readonly Record<string, string>[]) {
       const refused = runWithFakeCurl(tagScript, { ...env, ...bad });
       expect(refused.status, JSON.stringify(bad)).not.toBe(0);
       expect(refused.curlLog, JSON.stringify(bad)).toBe('');
