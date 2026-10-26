@@ -624,10 +624,11 @@ namespace WonderlandJuliusMissionFlow
 	};
 
 	/**
-	 * Turns execution views into the contract's events, each emitted ONCE and in order: run.started, then a role beat
-	 * per new task sample (architect/coder/review/repair .started), then exactly one ending (run.completed or
-	 * run.failed). A cancel ends the presentation without a fold event (the fold has no cancelled beat). A stale view
-	 * emits nothing. Restarting the client starts a fresh cursor, and the views rebuild the same sequence.
+	 * Turns execution views into the contract's events, each emitted ONCE and in order (founder acceptance 2026-10-26):
+	 * NOTHING while starting/committing (dispatch is not execution); run.started -- the existing activation sequence --
+	 * only once execution is CONFIRMED, then a role beat per new task sample (architect/coder/review/repair .started);
+	 * success ends with run.completed. Failure, did-not-start and cancel play NO ending: the cursor RELEASES, and the
+	 * caller interrupts the sequence at once (no beat, the Dog back to idle/follow). A stale view emits nothing.
 	 */
 	class FContractCursor
 	{
@@ -635,15 +636,22 @@ namespace WonderlandJuliusMissionFlow
 		std::vector<FContractBeat> Advance(const FExecutionView& View);
 		bool Started() const { return bStarted; }
 		bool Ended() const { return bEnded; }
-		/** True once a cancel was seen: the caller releases the beat so the headline reads the task state. */
-		bool ReleasedForCancel() const { return bCancelled; }
+		/** True once failure/did-not-start/cancel was seen: the caller interrupts the presentation immediately. */
+		bool Released() const { return bReleased; }
 
 	private:
 		bool bStarted = false;
 		bool bEnded = false;
-		bool bCancelled = false;
+		bool bReleased = false;
 		std::string LastBeatKey;
 	};
+
+	/**
+	 * CONNECTION UNCERTAINTY (founder acceptance): the run's state cannot be verified right now -- the server said stale,
+	 * the paired session is gone, or no good /events read for LiveNoReadAfterMs after one had arrived. The caller
+	 * suspends the presentation (never invents an outcome) until a verified read returns.
+	 */
+	bool ConnectionUncertain(bool bStale, bool bHasSession, bool bEverRead, std::uint64_t MsSinceLastGoodRead);
 
 	/** The contract task state word for a view ("queued", "preparation", "implementation", "review", "repair",
 	 *  "verification", "completed", "failed", "cancelled") or empty for none. */

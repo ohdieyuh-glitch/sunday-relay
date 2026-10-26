@@ -533,6 +533,21 @@ MUTATIONS = [
         "if (View.bStale || View.Phase == EExecutionPhase::None || bEnded) { return Out; } // FLOW_CONTRACT_STALE_MOVES_NOTHING",
         "if (View.Phase == EExecutionPhase::None || bEnded) { return Out; } // FLOW_CONTRACT_STALE_MOVES_NOTHING",
     ),
+    (
+        "contract_failure_plays_an_ending",
+        "bReleased = true; // FLOW_CONTRACT_FAILURE_INTERRUPTS",
+        "bReleased = false; // FLOW_CONTRACT_FAILURE_INTERRUPTS",
+    ),
+    (
+        "contract_presents_before_execution",
+        "return Out; // FLOW_CONTRACT_NOTHING_BEFORE_EXECUTION",
+        "break; // FLOW_CONTRACT_NOTHING_BEFORE_EXECUTION",
+    ),
+    (
+        "contract_uncertainty_ignored",
+        "return bStale || !bHasSession || (bEverRead && MsSinceLastGoodRead > LiveNoReadAfterMs); // FLOW_CONTRACT_UNCERTAIN_SUSPENDS",
+        "return false; // FLOW_CONTRACT_UNCERTAIN_SUSPENDS",
+    ),
 ]
 
 

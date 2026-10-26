@@ -773,15 +773,17 @@ const ABSENT_PHASE = {
 			Expect(ExecutionViewFor(None, false, "", ECheckerVerdict::NotRun, false).Phase == EExecutionPhase::None, "nothing started: NONE");
 		}
 		++ExecCases;
-		// The contract cursor: each beat once, in order; stale moves nothing; one ending.
+		// The contract cursor (founder acceptance 2026-10-26): nothing before execution; activation only on CONFIRMED
+		// execution; each beat once; success ends with run.completed; failure/did-not-start/cancel INTERRUPT (no ending).
 		FContractCursor Cursor;
 		FExecutionView Seq;
 		Seq.Phase = EExecutionPhase::Starting;
-		std::vector<FContractBeat> B = Cursor.Advance(Seq);
-		Expect(B.size() == 1 && B[0].Type == "run.started", "starting: run.started");
-		Expect(Cursor.Advance(Seq).empty(), "run.started once");
+		Expect(Cursor.Advance(Seq).empty() && !Cursor.Started(), "B1 starting: no presentation");
+		Seq.Phase = EExecutionPhase::Committing;
+		Expect(Cursor.Advance(Seq).empty() && !Cursor.Started(), "B1 committing: no presentation");
 		Seq.Phase = EExecutionPhase::Executing;
-		Expect(Cursor.Advance(Seq).empty(), "executing without a sample: no role beat");
+		std::vector<FContractBeat> B = Cursor.Advance(Seq);
+		Expect(B.size() == 1 && B[0].Type == "run.started", "B2 confirmed execution: the activation sequence");
 		Seq.Role = "coder"; Seq.TaskType = "build";
 		B = Cursor.Advance(Seq);
 		Expect(B.size() == 1 && B[0].Type == "coder.started", "coder beat");
@@ -795,17 +797,33 @@ const ABSENT_PHASE = {
 		Expect(Cursor.Advance(Stale).empty() && !Cursor.Ended(), "stale moves nothing");
 		Seq.Phase = EExecutionPhase::Completed;
 		B = Cursor.Advance(Seq);
-		Expect(!B.empty() && B.back().Type == "run.completed" && Cursor.Ended(), "one ending");
+		Expect(!B.empty() && B.back().Type == "run.completed" && Cursor.Ended() && !Cursor.Released(), "success ends with run.completed");
 		Expect(Cursor.Advance(Seq).empty(), "nothing after the ending");
+		for (const EExecutionPhase Bad : {EExecutionPhase::Failed, EExecutionPhase::FailedUnverified, EExecutionPhase::DidNotStart, EExecutionPhase::Cancelled})
+		{
+			FContractCursor Live;
+			FExecutionView Running; Running.Phase = EExecutionPhase::Executing; Running.Role = "coder"; Running.TaskType = "build";
+			(void)Live.Advance(Running);
+			FExecutionView End; End.Phase = Bad;
+			const std::vector<FContractBeat> Ending = Live.Advance(End);
+			Expect(Ending.empty() && Live.Released() && Live.Ended(), "B3 failure/cancel: interrupt, no ending sequence, no success");
+		}
 		FContractCursor Gate;
 		FExecutionView Dns; Dns.Phase = EExecutionPhase::DidNotStart;
-		B = Gate.Advance(Dns);
-		Expect(B.size() == 2 && B[0].Type == "run.started" && B[1].Type == "run.failed", "restored did-not-start: started then failed, no role beats");
-		FContractCursor Cancel;
-		FExecutionView Can; Can.Phase = EExecutionPhase::Cancelled;
-		B = Cancel.Advance(Can);
-		Expect(B.size() == 1 && Cancel.ReleasedForCancel() && Cancel.Ended(), "cancel releases the beat, no fold ending");
-		Expect(std::string(ContractTaskStateFor(Seq)) == "completed" && std::string(ContractTaskStateFor(Dns)) == "failed", "task states");
+		Expect(Gate.Advance(Dns).empty() && !Gate.Started() && Gate.Released(), "B4 did not start: never live, never activated");
+		FContractCursor Restored;
+		FExecutionView Done; Done.Phase = EExecutionPhase::Completed;
+		B = Restored.Advance(Done);
+		Expect(B.size() == 2 && B[0].Type == "run.started" && B[1].Type == "run.completed", "restored success: start then completion");
+		Expect(std::string(ContractTaskStateFor(Done)) == "completed" && std::string(ContractTaskStateFor(Dns)) == "failed", "task states");
+		FExecutionView Committing; Committing.Phase = EExecutionPhase::Committing;
+		Expect(std::string(ContractTaskStateFor(Committing)) == "queued", "committing is queued (no Dog performance)");
+		++ExecCases;
+		// B5: connection uncertainty suspends; a fresh good read clears it; nothing is invented.
+		Expect(ConnectionUncertain(true, true, true, 0), "stale is uncertain");
+		Expect(ConnectionUncertain(false, false, true, 0), "no session is uncertain");
+		Expect(ConnectionUncertain(false, true, true, LiveNoReadAfterMs + 1), "no good read for too long is uncertain");
+		Expect(!ConnectionUncertain(false, true, true, 1000) && !ConnectionUncertain(false, true, false, 999999), "a fresh read (or none yet) is not");
 		++ExecCases;
 	}
 

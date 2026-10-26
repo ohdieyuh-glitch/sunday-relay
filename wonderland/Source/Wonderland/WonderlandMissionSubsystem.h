@@ -215,8 +215,11 @@ public:
 	 * plays: a simulation and a real run never share the stage. True when the fold applied it.
 	 */
 	bool OfferRealJuliusEvent(FName Type, FName InMissionId, FName InRunId, EWonderlandMissionRole Role, int32 RepairRound);
-	/** A real run that ended with no fold ending (a cancel): the stage releases so the headline reads the task state. */
+	/** A real run's presentation is interrupted (failure, cancel) or suspended (connection lost): the stage releases
+	 *  at once -- no ending sequence -- and the headline reads the task state; the Dog returns to idle/follow. */
 	void ReleaseRealRunBeat();
+	/** A suspended real run whose state was verified again: the stage shows the fold's current beat. */
+	void ResumeRealRunBeat();
 
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	FName GetFixtureId() const;

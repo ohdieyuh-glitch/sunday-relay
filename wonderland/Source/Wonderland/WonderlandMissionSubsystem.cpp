@@ -1479,6 +1479,12 @@ void UWonderlandMissionSubsystem::ReleaseRealRunBeat()
 	ShowBeat(EWonderlandMissionBeat::Unobserved);
 }
 
+void UWonderlandMissionSubsystem::ResumeRealRunBeat()
+{
+	if (IsFixtureRunning() || !WonderlandBeatShowsContract(Fold.Beat)) { return; }
+	ShowBeat(Fold.Beat);
+}
+
 void UWonderlandMissionSubsystem::OfferEvent(const FWonderlandMissionEvent& Event)
 {
 	FWonderlandMissionHandoff::NoteMutation(TEXT("UWonderlandMissionSubsystem::OfferEvent"));

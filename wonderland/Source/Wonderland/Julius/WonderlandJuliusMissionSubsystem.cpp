@@ -411,6 +411,7 @@ void UWonderlandJuliusMissionSubsystem::SyncMissionContract()
 		ContractTaskWord.Reset();
 		ContractPhaseWord.Reset();
 		bContractReleased = false;
+		bContractSuspended = false;
 	}
 	FResultRead Result;
 	if (ResultRead.Status != 0)
@@ -423,7 +424,6 @@ void UWonderlandJuliusMissionSubsystem::SyncMissionContract()
 	const ECheckerVerdict Verdict = Result.bCheckerReported && !(Result.Checker == ECheckerVerdict::Pass && Result.bCheckerUnbound)
 		? Result.Checker : ECheckerVerdict::NotRun;
 	const FExecutionView View = ExecutionViewFor(Host->LiveFeed, true, ToStd(StartWorkflowRunId), Verdict, Result.bVerified && !Result.bCheckerUnbound);
-	if (View.bStale) { return; } // never advance or regress on a stale read
 	UGameInstance* Instance = GetGameInstance();
 	ULocalPlayer* Player = Instance != nullptr ? Instance->GetFirstGamePlayer() : nullptr;
 	UWonderlandMissionTaskSubsystem* Tasks = Player != nullptr ? Player->GetSubsystem<UWonderlandMissionTaskSubsystem>() : nullptr;
@@ -433,6 +433,37 @@ void UWonderlandJuliusMissionSubsystem::SyncMissionContract()
 	FWonderlandText RunText;
 	RunText.bKnown = true;
 	RunText.Value = Run;
+	// CONNECTION UNCERTAINTY (founder acceptance): the state cannot be verified -> SUSPEND the presentation (contract
+	// WAITING, the Dog back to idle/follow), never invent an outcome. A verified read resumes it from the real state.
+	if (!ContractCursor->Ended())
+	{
+		const uint64 NowMs = Host->Clock.NowUtcMs();
+		const bool bEverRead = LastLiveOkUtcMs != 0;
+		const uint64 SinceOk = bEverRead && NowMs > LastLiveOkUtcMs ? NowMs - LastLiveOkUtcMs : 0;
+		if (ConnectionUncertain(View.bStale, HasNativeSession(), bEverRead, SinceOk))
+		{
+			if (!bContractSuspended && ContractCursor->Started())
+			{
+				bContractSuspended = true;
+				Tasks->FollowJuliusRun(MissionId, RunText);
+				FWonderlandText Uncertain;
+				Uncertain.bKnown = true;
+				Uncertain.Value = TEXT("CONNECTION LOST - verifying the run's state");
+				Tasks->ApplySchedulerState(MissionId, EWonderlandTaskState::Waiting, FWonderlandTally(), FWonderlandTally(), RunText, Uncertain);
+				Contract->ReleaseRealRunBeat();
+				UE_LOG(LogJuliusJ1, Display, TEXT("{\"event\":\"contract_suspended\",\"wlj_run_id\":\"%s\",\"stale\":%s,\"session\":%s,\"ms_since_good_read\":%llu}"),
+					*Run, View.bStale ? TEXT("true") : TEXT("false"), HasNativeSession() ? TEXT("true") : TEXT("false"), static_cast<unsigned long long>(SinceOk));
+			}
+			return; // never advance or regress while unverified
+		}
+		if (bContractSuspended)
+		{
+			bContractSuspended = false;
+			ContractTaskWord.Reset(); // re-apply the verified state below
+			Contract->ResumeRealRunBeat();
+			UE_LOG(LogJuliusJ1, Display, TEXT("{\"event\":\"contract_resumed\",\"wlj_run_id\":\"%s\",\"phase\":\"%s\"}"), *Run, UTF8_TO_TCHAR(ExecutionPhaseWord(View.Phase)));
+		}
+	}
 	const FString TaskWord = UTF8_TO_TCHAR(ContractTaskStateFor(View));
 	const FString PhaseWord = UTF8_TO_TCHAR(ExecutionPhaseWord(View.Phase));
 	if (!TaskWord.IsEmpty() && (TaskWord != ContractTaskWord || PhaseWord != ContractPhaseWord))
@@ -442,8 +473,11 @@ void UWonderlandJuliusMissionSubsystem::SyncMissionContract()
 		Tasks->FollowJuliusRun(MissionId, RunText);
 		FWonderlandText JuliusState;
 		JuliusState.bKnown = true;
-		JuliusState.Value = View.Phase == EExecutionPhase::DidNotStart
-			? FString::Printf(TEXT("DID NOT START (%s)"), *ToF(View.Detail))
+		// THE BRIEF, ACCURATE MESSAGE that stays available after an interrupt (the contract's task line and banner).
+		JuliusState.Value = View.Phase == EExecutionPhase::DidNotStart ? FString::Printf(TEXT("MISSION DID NOT START (%s)"), *ToF(View.Detail))
+			: View.Phase == EExecutionPhase::Failed ? FString(TEXT("MISSION FAILED (checker FAIL)"))
+			: View.Phase == EExecutionPhase::FailedUnverified ? FString(TEXT("MISSION FAILED (no verdict; not verified)"))
+			: View.Phase == EExecutionPhase::Cancelled ? FString(TEXT("MISSION CANCELLED"))
 			: PhaseWord;
 		Tasks->ApplySchedulerState(MissionId, ContractTaskState(TaskWord), FWonderlandTally(), FWonderlandTally(), RunText, JuliusState);
 		UE_LOG(LogJuliusJ1, Display, TEXT("{\"event\":\"contract_state\",\"wlj_run_id\":\"%s\",\"workflow_run_id\":\"%s\",\"phase\":\"%s\",\"task\":\"%s\",\"recorded\":%s,\"detail\":\"%s\"}"),
@@ -456,10 +490,14 @@ void UWonderlandJuliusMissionSubsystem::SyncMissionContract()
 		UE_LOG(LogJuliusJ1, Display, TEXT("{\"event\":\"contract_beat\",\"wlj_run_id\":\"%s\",\"type\":\"%s\",\"applied\":%s,\"beat\":\"%s\"}"),
 			*Run, *ToF(Beat.Type), bApplied ? TEXT("true") : TEXT("false"), *Contract->GetBeatLabel());
 	}
-	if (ContractCursor->ReleasedForCancel() && !bContractReleased)
+	if (ContractCursor->Released() && !bContractReleased)
 	{
+		// INTERRUPT AT ONCE (founder acceptance): no ending sequence, no loop, no success; the beat leaves the stage and
+		// the task is terminal, so the Dog returns to idle/follow. The message stays on the contract's task line.
 		bContractReleased = true;
 		Contract->ReleaseRealRunBeat();
+		UE_LOG(LogJuliusJ1, Display, TEXT("{\"event\":\"contract_interrupted\",\"wlj_run_id\":\"%s\",\"phase\":\"%s\",\"beat\":\"%s\"}"),
+			*Run, *PhaseWord, *Contract->GetBeatLabel());
 	}
 }
 

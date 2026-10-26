@@ -1794,6 +1794,22 @@ namespace WonderlandJuliusMissionFlow
 	{
 		std::vector<FContractBeat> Out;
 		if (View.bStale || View.Phase == EExecutionPhase::None || bEnded) { return Out; } // FLOW_CONTRACT_STALE_MOVES_NOTHING
+		switch (View.Phase)
+		{
+		case EExecutionPhase::Failed:
+		case EExecutionPhase::FailedUnverified:
+		case EExecutionPhase::DidNotStart:
+		case EExecutionPhase::Cancelled:
+			// No ending is played, nothing finishes or loops: the presentation is interrupted by the caller.
+			bReleased = true; // FLOW_CONTRACT_FAILURE_INTERRUPTS
+			bEnded = true;
+			return Out;
+		case EExecutionPhase::Starting:
+		case EExecutionPhase::Committing:
+			return Out; // FLOW_CONTRACT_NOTHING_BEFORE_EXECUTION
+		default:
+			break;
+		}
 		if (!bStarted)
 		{
 			Out.push_back(FContractBeat{"run.started", std::string(), 0});
@@ -1813,34 +1829,25 @@ namespace WonderlandJuliusMissionFlow
 				else if (View.Role == "architect") { Out.push_back(FContractBeat{"architect.started", View.Role, Round}); }
 			}
 		}
-		switch (View.Phase)
+		if (View.Phase == EExecutionPhase::Completed)
 		{
-		case EExecutionPhase::Completed:
-			Out.push_back(FContractBeat{"run.completed", std::string(), 0});
+			Out.push_back(FContractBeat{"run.completed", std::string(), 0}); // FLOW_CONTRACT_SUCCESS_ONLY_ON_COMPLETED
 			bEnded = true;
-			break;
-		case EExecutionPhase::Failed:
-		case EExecutionPhase::FailedUnverified:
-		case EExecutionPhase::DidNotStart:
-			Out.push_back(FContractBeat{"run.failed", std::string(), 0}); // FLOW_CONTRACT_ONE_ENDING
-			bEnded = true;
-			break;
-		case EExecutionPhase::Cancelled:
-			bCancelled = true;
-			bEnded = true;
-			break;
-		default:
-			break;
 		}
 		return Out;
+	}
+
+	bool ConnectionUncertain(bool bStale, bool bHasSession, bool bEverRead, std::uint64_t MsSinceLastGoodRead)
+	{
+		return bStale || !bHasSession || (bEverRead && MsSinceLastGoodRead > LiveNoReadAfterMs); // FLOW_CONTRACT_UNCERTAIN_SUSPENDS
 	}
 
 	const char* ContractTaskStateFor(const FExecutionView& View)
 	{
 		switch (View.Phase)
 		{
-		case EExecutionPhase::Starting: return "queued";
-		case EExecutionPhase::Committing: return "preparation";
+		case EExecutionPhase::Starting:
+		case EExecutionPhase::Committing: return "queued"; // not a performance: the Dog does not act before execution
 		case EExecutionPhase::Executing:
 			if (View.TaskType.rfind("repair_", 0) == 0) { return "repair"; }
 			if (View.Role == "reviewer") { return "review"; }
