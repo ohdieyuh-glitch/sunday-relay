@@ -508,6 +508,31 @@ MUTATIONS = [
         "if (!Run.bKnown || !SameText(Run.Text, WljRunId)) { return Out; } // FLOW_START_OWN_RUN_ONLY",
         "// FLOW_START_OWN_RUN_ONLY",
     ),
+    (
+        "exec_gates_count_as_execution",
+        "Out.Phase = Feed.AttemptRecorded() ? EExecutionPhase::Committing : EExecutionPhase::Starting; // FLOW_EXEC_GATES_ARE_NOT_EXECUTION",
+        "Out.Phase = EExecutionPhase::Executing; // FLOW_EXEC_GATES_ARE_NOT_EXECUTION",
+    ),
+    (
+        "exec_gate_failure_called_julius_failure",
+        "Out.Phase = EExecutionPhase::DidNotStart; // FLOW_EXEC_NO_LIVE_STEP_IS_DID_NOT_START",
+        "Out.Phase = EExecutionPhase::Failed; // FLOW_EXEC_NO_LIVE_STEP_IS_DID_NOT_START",
+    ),
+    (
+        "exec_success_without_verified_completion",
+        "if (Verdict == ECheckerVerdict::Pass && bHasCompletion) { Out.Phase = EExecutionPhase::Completed; return Out; } // FLOW_EXEC_SUCCESS_ONLY_FROM_RESULT",
+        "if (Verdict == ECheckerVerdict::Pass || Feed.RunConclusion() == \"success\") { Out.Phase = EExecutionPhase::Completed; return Out; } // FLOW_EXEC_SUCCESS_ONLY_FROM_RESULT",
+    ),
+    (
+        "exec_binds_any_run",
+        "if (!bSource || Feed.Mode() != ELiveMode::Paid || !bBoundRun) { return Out; } // FLOW_EXEC_BIND_PAID_BOUND_RUN_ONLY",
+        "// FLOW_EXEC_BIND_PAID_BOUND_RUN_ONLY",
+    ),
+    (
+        "contract_moves_on_stale",
+        "if (View.bStale || View.Phase == EExecutionPhase::None || bEnded) { return Out; } // FLOW_CONTRACT_STALE_MOVES_NOTHING",
+        "if (View.Phase == EExecutionPhase::None || bEnded) { return Out; } // FLOW_CONTRACT_STALE_MOVES_NOTHING",
+    ),
 ]
 
 
