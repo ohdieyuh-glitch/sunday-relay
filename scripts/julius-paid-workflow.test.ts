@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { execFileSync } from 'node:child_process';
+import { describe, expect, it, vi } from 'vitest';
+import { execFileSync, type ExecFileSyncOptions, type ExecFileSyncOptionsWithStringEncoding } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -9,6 +9,49 @@ import { LEGACY_RUN_ID_PATTERN, parseJuliusAdmissionRunId, WLJ_RUN_ID_PATTERN } 
 import { preflightIdentityFor } from './julius-live-preflight-identity';
 import { parseJuliusAttemptRecordTag } from '../src/relay/mission/julius/julius-spend-ceiling';
 import { juliusRunResultBodyIsExact, parseJuliusRunResultRecord } from '../relay-bridge/julius-mission-evidence-reader';
+
+/**
+ * THE BASH A STAND-IN RUNS UNDER, ON EVERY HOST. GitHub runs these steps in
+ * Linux bash, and on Linux so does this file: plain `bash`, the env as given.
+ * On Windows three things go wrong. A bare `bash` can resolve to
+ * C:\Windows\System32\bash.exe, the WSL launcher, which runs none of it.
+ * Git's `bin\bash.exe` wrapper puts Git's own `curl`, `gh` and `git` AHEAD
+ * of the stand-ins. Git's real `usr\bin\bash.exe` finds no coreutils, and no
+ * `bash` for a `#!/usr/bin/env bash` stand-in, unless `usr\bin` is on PATH.
+ * So on Windows this runs Git's `usr\bin\bash.exe`, with ONE `PATH` key that
+ * has `usr\bin` right after the test's own stand-in directories and ahead of
+ * System32, whose `find` and `sort` are not coreutils. MSYS forks are slow
+ * too: a step that takes one second on Linux takes up to twenty here, so the
+ * time budgets scale on Windows only. Nothing changes on Linux.
+ */
+const GIT_FOR_WINDOWS = process.platform === 'win32'
+  ? resolve(execFileSync('git', ['--exec-path'], { encoding: 'utf8' }).trim(), '..', '..', '..')
+  : null;
+const BASH = GIT_FOR_WINDOWS === null ? 'bash' : join(GIT_FOR_WINDOWS, 'usr', 'bin', 'bash.exe');
+const bashEnv = (env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv => {
+  if (GIT_FOR_WINDOWS === null) return env;
+  const out: NodeJS.ProcessEnv = { ...env };
+  let given: string | undefined;
+  for (const key of Object.keys(out)) {
+    if (key.toUpperCase() !== 'PATH') continue;
+    if (key === 'PATH' || given === undefined) given = out[key];
+    delete out[key];
+  }
+  const base = process.env.PATH ?? '';
+  const tools = join(GIT_FOR_WINDOWS, 'usr', 'bin');
+  const value = given ?? base;
+  out.PATH = value.endsWith(base)
+    ? `${value.slice(0, value.length - base.length)}${tools}${delimiter}${base}`
+    : `${value}${delimiter}${tools}`;
+  return out;
+};
+const execBash = ((args: readonly string[], options: ExecFileSyncOptions = {}) =>
+  execFileSync(BASH, args, { ...options, env: bashEnv(options.env) })) as {
+  (args: readonly string[], options: ExecFileSyncOptionsWithStringEncoding): string;
+  (args: readonly string[], options?: ExecFileSyncOptions): string | Buffer;
+};
+const standInBudget = (ms: number): number => (GIT_FOR_WINDOWS === null ? ms : ms * 6);
+if (GIT_FOR_WINDOWS !== null) vi.setConfig({ testTimeout: standInBudget(5_000) });
 
 /**
  * ONE SPENDING PATH, ONE SLOT, NO WAY AROUND EITHER.
@@ -162,7 +205,7 @@ describe('a lane is a grant, not a word typed at dispatch', () => {
     expect(check('julius-live-mission-5', 'regression')).toBe(0);
     expect(check('julius-continuous-1', 'urgent'), 'outside the vocabulary').not.toBe(0);
     expect(check('julius-continuous-1', ''), 'an empty claim is malformed, not absent').not.toBe(0);
-  }, 30_000);
+  }, standInBudget(30_000));
 });
 
 describe('no second spending path', () => {
@@ -300,7 +343,7 @@ describe('provider readiness fails before spending, and never exposes a key', ()
     let output = '';
     let stderr = '';
     try {
-      output = execFileSync('bash', [...GITHUB_BASH, script(readiness)], {
+      output = execBash([...GITHUB_BASH, script(readiness)], {
         cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
         env: {
           ...process.env,
@@ -403,7 +446,7 @@ describe('the coder stops before a provider call unless the user-owned API key i
 
   const runGate = (apiKey: string): { status: number; stderr: string; stdout: string } => {
     try {
-      const stdout = execFileSync('bash', [...GITHUB_BASH, body], {
+      const stdout = execBash([...GITHUB_BASH, body], {
         encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
         env: { ...process.env, ANTHROPIC_API_KEY: apiKey, CLAUDE_CODE_OAUTH_TOKEN: loginStandIn },
       });
@@ -452,7 +495,7 @@ describe('a paid run is attempt 1 only', () => {
   const RERUN_GATE = "'Gate: a paid run is attempt 1 only'";
   const runGate = (text: string, env: Record<string, string>): { status: number; stderr: string } => {
     try {
-      execFileSync('bash', [...GITHUB_BASH, text], { cwd: ROOT, env: { ...process.env, ...env }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+      execBash([...GITHUB_BASH, text], { cwd: ROOT, env: { ...process.env, ...env }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
       return { status: 0, stderr: '' };
     } catch (error) {
       const failed = error as { status?: number; stderr?: string };
@@ -552,7 +595,7 @@ describe('one spent tag per admission run id, before any provider call', () => {
     const output = join(bin, 'github-output.txt');
     writeFileSync(output, '');
     try {
-      execFileSync('bash', [...GITHUB_BASH, tagScript], {
+      execBash([...GITHUB_BASH, tagScript], {
         cwd: ROOT,
         env: {
           ...process.env,
@@ -704,7 +747,7 @@ describe('one spent tag per admission run id, before any provider call', () => {
       const output = join(bin, 'github-output.txt');
       writeFileSync(output, '');
       try {
-        execFileSync('bash', [...GITHUB_BASH, tagScript], {
+        execBash([...GITHUB_BASH, tagScript], {
           cwd: ROOT,
           env: {
             ...process.env,
@@ -800,7 +843,7 @@ describe('the WITHOUT-arm log parser admits one id through the shared module', (
     const logPath = join(ROOT, 'live-mission.log');
     writeFileSync(logPath, log);
     try {
-      const stdout = execFileSync('bash', [...GITHUB_BASH, `set -euo pipefail\n${full.slice(from, at)}\nprintf '%s\\n' "$run_id"\n`], {
+      const stdout = execBash([...GITHUB_BASH, `set -euo pipefail\n${full.slice(from, at)}\nprintf '%s\\n' "$run_id"\n`], {
         cwd: ROOT, encoding: 'utf8',
       });
       return { status: 0, stdout, stderr: '' };

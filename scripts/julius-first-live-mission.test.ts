@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { describe, expect, it, vi } from 'vitest';
+import { execFileSync, spawnSync, type ExecFileSyncOptions, type ExecFileSyncOptionsWithStringEncoding } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { appendFileSync, chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -24,6 +24,49 @@ import {
 } from '../relay-bridge/hosted-coding-agent/hosted-envelope';
 import { claudeAuthLine, claudeAuthSourceLine, resolveClaudeAuthMode, type ClaudeAuthProvenance } from '../relay-bridge/hosted-coding-agent/hosted-auth';
 import { PREFLIGHT_LIMITS, PREFLIGHT_POLICY } from './julius-live-preflight';
+
+/**
+ * THE BASH A STAND-IN RUNS UNDER, ON EVERY HOST. GitHub runs these steps in
+ * Linux bash, and on Linux so does this file: plain `bash`, the env as given.
+ * On Windows three things go wrong. A bare `bash` can resolve to
+ * C:\Windows\System32\bash.exe, the WSL launcher, which runs none of it.
+ * Git's `bin\bash.exe` wrapper puts Git's own `curl`, `gh` and `git` AHEAD
+ * of the stand-ins. Git's real `usr\bin\bash.exe` finds no coreutils, and no
+ * `bash` for a `#!/usr/bin/env bash` stand-in, unless `usr\bin` is on PATH.
+ * So on Windows this runs Git's `usr\bin\bash.exe`, with ONE `PATH` key that
+ * has `usr\bin` right after the test's own stand-in directories and ahead of
+ * System32, whose `find` and `sort` are not coreutils. MSYS forks are slow
+ * too: a step that takes one second on Linux takes up to twenty here, so the
+ * time budgets scale on Windows only. Nothing changes on Linux.
+ */
+const GIT_FOR_WINDOWS = process.platform === 'win32'
+  ? resolve(execFileSync('git', ['--exec-path'], { encoding: 'utf8' }).trim(), '..', '..', '..')
+  : null;
+const BASH = GIT_FOR_WINDOWS === null ? 'bash' : join(GIT_FOR_WINDOWS, 'usr', 'bin', 'bash.exe');
+const bashEnv = (env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv => {
+  if (GIT_FOR_WINDOWS === null) return env;
+  const out: NodeJS.ProcessEnv = { ...env };
+  let given: string | undefined;
+  for (const key of Object.keys(out)) {
+    if (key.toUpperCase() !== 'PATH') continue;
+    if (key === 'PATH' || given === undefined) given = out[key];
+    delete out[key];
+  }
+  const base = process.env.PATH ?? '';
+  const tools = join(GIT_FOR_WINDOWS, 'usr', 'bin');
+  const value = given ?? base;
+  out.PATH = value.endsWith(base)
+    ? `${value.slice(0, value.length - base.length)}${tools}${delimiter}${base}`
+    : `${value}${delimiter}${tools}`;
+  return out;
+};
+const execBash = ((args: readonly string[], options: ExecFileSyncOptions = {}) =>
+  execFileSync(BASH, args, { ...options, env: bashEnv(options.env) })) as {
+  (args: readonly string[], options: ExecFileSyncOptionsWithStringEncoding): string;
+  (args: readonly string[], options?: ExecFileSyncOptions): string | Buffer;
+};
+const standInBudget = (ms: number): number => (GIT_FOR_WINDOWS === null ? ms : ms * 6);
+if (GIT_FOR_WINDOWS !== null) vi.setConfig({ testTimeout: standInBudget(5_000) });
 
 /**
  * THE FIRST LIVE MISSION'S SAFETY CONTRACT.
@@ -731,7 +774,7 @@ describe('every mission declares its own durable accounting namespace', () => {
       const contract = missionTwo();
       expect(contract.limits).toEqual({ spendUsd: 20, repairCycles: 3 });
       expect(checkContract(contract).code, 'the committed contract must pass').toBe(0);
-    }, 30_000);
+    }, standInBudget(30_000));
 
     it('and is still refused above that grant', () => {
       // A ceiling that cannot be exceeded is not a ceiling anyone tested.
@@ -742,7 +785,7 @@ describe('every mission declares its own durable accounting namespace', () => {
       const overRepair = checkContract({ ...missionTwo(), limits: { spendUsd: 20, repairCycles: 4 } });
       expect(overRepair.code).toBe(1);
       expect(overRepair.output).toContain('above the 3 allowed for julius-live-mission-2');
-    }, 30_000);
+    }, standInBudget(30_000));
 
     it('the default did NOT move: mission 1 is still bounded at five dollars', () => {
       // The whole point. If this passes with mission 2's numbers, the grant
@@ -751,7 +794,7 @@ describe('every mission declares its own durable accounting namespace', () => {
       expect(leaked.code, 'mission 1 must not inherit mission 2\'s grant').toBe(1);
       expect(leaked.output).toContain('above the 5 ceiling for julius-first-live');
       expect(leaked.output).toContain('above the 1 allowed for julius-first-live');
-    }, 30_000);
+    }, standInBudget(30_000));
 
     it('and a namespace nobody granted anything to gets the default', () => {
       // A new mission is bounded until someone says otherwise, rather than
@@ -761,7 +804,7 @@ describe('every mission declares its own durable accounting namespace', () => {
       });
       expect(invented.code).toBe(1);
       expect(invented.output).toContain('above the 5 ceiling for julius-some-future-mission');
-    }, 30_000);
+    }, standInBudget(30_000));
 
     it('an unreadable namespace falls to the default, not to the most permissive grant', () => {
       const nameless: Record<string, unknown> = { ...missionTwo(), limits: { spendUsd: 20, repairCycles: 3 } };
@@ -769,13 +812,13 @@ describe('every mission declares its own durable accounting namespace', () => {
       const result = checkContract(nameless);
       expect(result.code).toBe(1);
       expect(result.output).toContain('above the 5 ceiling for a mission with no declared namespace');
-    }, 30_000);
+    }, standInBudget(30_000));
 
     it('mission 3 carries its granted budget and passes its own checker', () => {
       const contract = JSON.parse(read(`${MISSIONS_DIR}/julius-live-mission-3/contract.json`)) as Record<string, unknown>;
       expect(contract.limits).toEqual({ spendUsd: 20, repairCycles: 3 });
       expect(checkContract(contract).code, 'the committed contract must pass').toBe(0);
-    }, 30_000);
+    }, standInBudget(30_000));
 
     it('and mission 3 is still refused above its grant', () => {
       const base = JSON.parse(read(`${MISSIONS_DIR}/julius-live-mission-3/contract.json`)) as Record<string, unknown>;
@@ -786,7 +829,7 @@ describe('every mission declares its own durable accounting namespace', () => {
       const overRepair = checkContract({ ...base, limits: { spendUsd: 20, repairCycles: 4 } });
       expect(overRepair.code).toBe(1);
       expect(overRepair.output).toContain('above the 3 allowed for julius-live-mission-3');
-    }, 30_000);
+    }, standInBudget(30_000));
 
     /**
      * THE TEST THAT WOULD HAVE CAUGHT IT.
@@ -808,7 +851,7 @@ describe('every mission declares its own durable accounting namespace', () => {
         const result = checkContract(contract);
         expect(result.code, `${mission}/contract.json is refused by its own checker:\n${result.output}`).toBe(0);
       }
-    }, 60_000);
+    }, standInBudget(60_000));
   });
 
   it('a contract without a namespace is refused, rather than defaulted', () => {
@@ -990,7 +1033,7 @@ describe('the mission itself is bounded and aimed away from this repository', ()
     }
     // ONE SPAWNED TEST RUN PER MISSION, so the cost grows with every mission added; the default 5 s timeout stopped fitting once the second diagnostic
     // mission (whose seeded specification starts real child processes) was added, on a CI runner. A budget for the sum, not a weaker assertion.
-  }, 60_000);
+  }, standInBudget(60_000));
 
   it("reads slice.txt by the rig's own rule, and fails the day the rig's rule changes", () => {
     // `rigSlicePaths` mirrors these lines; if they change, the mirror must change with them.
@@ -1216,9 +1259,9 @@ describe('the evidence dump names only tables and columns the migrations create'
       // docker: the store's container, as the block reaches it; it keeps what it was asked and was handed.
       writeFileSync(join(bin, 'docker'), ['#!/usr/bin/env bash', 'echo "$*" > "$STUB/args"', 'cat > "$STUB/stdin.sql"', `printf '%s\\n' '${exported}'`].join('\n'), { mode: 0o755 });
       // $0 is the dump script itself, so the block reads the export SQL beside it, as in the job.
-      execFileSync('bash', ['--noprofile', '--norc', '-eo', 'pipefail', '-c', script.slice(start, end + '\nfi\n'.length), join(ROOT, '.github', 'julius-live-evidence-dump.sh')], {
+      execBash(['--noprofile', '--norc', '-eo', 'pipefail', '-c', script.slice(start, end + '\nfi\n'.length), join(ROOT, '.github', 'julius-live-evidence-dump.sh')], {
         cwd: job, stdio: 'ignore',
-        env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}`, STUB: job, out, container: 'julius-postgres', PGUSER: 'julius', PGDATABASE: 'julius' },
+        env: { ...process.env, PATH: `${bin}${delimiter}${process.env.PATH ?? ''}`, STUB: job, out, container: 'julius-postgres', PGUSER: 'julius', PGDATABASE: 'julius' },
       });
       const bytes = readFileSync(join(out, 'carry-sources.json'));
       expect(bytes.toString('utf8'), 'the export is what the store answered').toBe(`${exported}\n`);
@@ -2471,7 +2514,6 @@ describe('F5 — evidence is built by allowlist, and secrets cannot ride along',
    * recorded; anything else that trips it, a missing record, a grep error or a failing command deletes the bundle.
    */
   describe('the scan step, executed (decision A)', () => {
-    const bashBinary = process.platform === 'win32' && existsSync('C:\\Program Files\\Git\\bin\\bash.exe') ? 'C:\\Program Files\\Git\\bin\\bash.exe' : 'bash';
     const ids = ['julius-work-artifact.v1:run:5408584e00ffb49fd1c011a1:run:5408584e00ffb49fd1c011a1:build:g1:DIFF',
       'julius-work-artifact.v1:run:5408584e00ffb49fd1c011a1:run:5408584e00ffb49fd1c011a1:plan:g1:PLAN'];
     const hex = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -2494,7 +2536,7 @@ describe('F5 — evidence is built by allowlist, and secrets cannot ride along',
       writeFileSync(join(root, 'step.sh'), script);
       const env = { PATH: process.env.PATH ?? '', EXECUTOR_ROOT: LIVE, DB_PASSWORD: 'db-password-0123456789', SCOPED: '', OPENAI_API_KEY: '', ANTHROPIC_ARCHITECT_API_KEY: '', ANTHROPIC_API_KEY: '',
         CLAUDE_CODE_OAUTH_TOKEN: '', XAI_API_KEY: '', TMPDIR: root, SystemRoot: process.env.SystemRoot ?? '' };
-      const result = spawnSync(bashBinary, ['-eo', 'pipefail', 'step.sh'], { cwd: root, env, encoding: 'utf8' });
+      const result = spawnSync(BASH, ['-eo', 'pipefail', 'step.sh'], { cwd: root, env: bashEnv(env), encoding: 'utf8' });
       const kept = existsSync(bundle);
       const record = join(bundle, 'artifacts', 'DROPPED_BY_SCAN.tsv');
       return { status: result.status, stderr: result.stderr, kept, dropped: kept && existsSync(record) ? readFileSync(record, 'utf8').trim().split('\n').slice(1) : [],
@@ -2616,7 +2658,7 @@ describe('F9 — dispatch inputs are validated before anything is built', () => 
   const gate = (): string => stepScript("'Gate: the dispatch inputs are well formed'");
   const runGate = (env: Record<string, string>): number => {
     try {
-      execFileSync('bash', ['-c', gate()], {
+      execBash(['-c', gate()], {
         // The gate publishes the contract's accounting namespace as a step
         // output, so it needs somewhere to publish it.
         env: {
@@ -2910,7 +2952,7 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
       }
       const env = {
         ...process.env,
-        PATH: `${bin}:${process.env.PATH ?? ''}`,
+        PATH: `${bin}${delimiter}${process.env.PATH ?? ''}`,
         GITHUB_REPOSITORY: 'owner/repo',
         GH_TOKEN: 'stub',
         ACKNOWLEDGE_RERUN: input.acknowledge ?? '',
@@ -2920,8 +2962,8 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
       // Step 9, then the pre-marker step: together they are the guard.
       const built = fakeBuiltEntrypoint();
       try {
-        execFileSync('bash', ['-c', script], { cwd: ROOT, stdio: 'ignore', env });
-        execFileSync('bash', ['-c', stepScript(PRE_MARKER)], { cwd: built, stdio: 'ignore', env });
+        execBash(['-c', script], { cwd: ROOT, stdio: 'ignore', env });
+        execBash(['-c', stepScript(PRE_MARKER)], { cwd: built, stdio: 'ignore', env });
         return 0;
       } catch (error) {
         return (error as { status?: number }).status ?? 1;
@@ -3036,9 +3078,9 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
         expect(script, `the substitution must have replaced the arm for value "${value}"`)
           .toContain(`julius-first-live) RECORDED_PAID_ATTEMPTS=${value}`);
         try {
-          execFileSync('bash', ['-c', script], {
+          execBash(['-c', script], {
             cwd: ROOT, stdio: 'ignore',
-            env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}`, GITHUB_REPOSITORY: 'owner/repo', GH_TOKEN: 'stub', ACKNOWLEDGE_RERUN: 'RERUN PAID MISSION', MARKER_NAMESPACE: 'julius-first-live' },
+            env: { ...process.env, PATH: `${bin}${delimiter}${process.env.PATH ?? ''}`, GITHUB_REPOSITORY: 'owner/repo', GH_TOKEN: 'stub', ACKNOWLEDGE_RERUN: 'RERUN PAID MISSION', MARKER_NAMESPACE: 'julius-first-live' },
           });
           return 0;
         } catch (error) {
@@ -3195,7 +3237,7 @@ describe('the trust gate runs before anything the candidate controls', () => {
       ].join('\n'));
       for (const tool of ['gh', 'git', 'node']) chmodSync(join(bin, tool), 0o755);
       try {
-        const stdout = execFileSync('bash', ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', stepScript(gateName)], {
+        const stdout = execBash(['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', stepScript(gateName)], {
           env: { ...process.env, PATH: `${bin}${delimiter}${process.env.PATH ?? ''}`, BIN: bin, GITHUB_REF: over.ref ?? 'refs/heads/main', GITHUB_SHA: MAIN, GITHUB_REPOSITORY: 'o/r' },
           encoding: 'utf8',
           stdio: ['ignore', 'pipe', 'pipe'],
@@ -3953,7 +3995,7 @@ describe('the research a contract grants is observed before the run, through Rel
         .replace(INVOCATION, '{ cat "$STUB_OUT"; exit "$STUB_EXIT"; }');
       let code = 0;
       try {
-        execFileSync('bash', ['-c', script], {
+        execBash(['-c', script], {
           cwd: dir, stdio: 'ignore',
           env: {
             ...process.env,
@@ -3975,37 +4017,37 @@ describe('the research a contract grants is observed before the run, through Rel
       const result = runStep(`${ROW}research_observation_summary observed=1 of=1\n${CLAIM}`, 0);
       expect(result.code).toBe(0);
       expect(result.env).toBe(CLAIM);
-    }, 30_000);
+    }, standInBudget(30_000));
 
     it('fails the job when the entrypoint fails closed, and exports nothing', () => {
       const result = runStep(`${ROW.replace('result=observed', 'result=unreachable')}research_unobservable: nothing\n`, 1);
       expect(result.code).not.toBe(0);
       expect(result.env).toBe('');
-    }, 30_000);
+    }, standInBudget(30_000));
 
     it('exports nothing for a contract that grants no research, and passes', () => {
       const result = runStep('research_not_granted: the contract has no research clause, so there is nothing to observe.\n', 0);
       expect(result.code).toBe(0);
       expect(result.env).toBe('');
-    }, 30_000);
+    }, standInBudget(30_000));
 
     it('MUTATION: a line outside the claim grammar never reaches the job environment', () => {
       const result = runStep(`${CLAIM}NODE_OPTIONS=--require=/tmp/x\nJULIUS_RESEARCH_OBSERVED_BACKENDS=relay_http_fetch:read_item BASH_ENV=/tmp/x\n`, 0);
       expect(result.code).toBe(0);
       expect(result.env).toBe(CLAIM);
-    }, 30_000);
+    }, standInBudget(30_000));
 
     it('MUTATION: two claim lines are refused rather than both exported', () => {
       const result = runStep(`${CLAIM}JULIUS_RESEARCH_OBSERVED_BACKENDS=relay_rss_fetch:read_feed\n`, 0);
       expect(result.code).not.toBe(0);
       expect(result.env).toBe('');
-    }, 30_000);
+    }, standInBudget(30_000));
 
     it('MUTATION: an exit-0 output with neither a claim nor the not-granted line is refused', () => {
       const result = runStep(`${ROW}research_observation_summary observed=1 of=1\n`, 0);
       expect(result.code).not.toBe(0);
       expect(result.env).toBe('');
-    }, 30_000);
+    }, standInBudget(30_000));
   });
 
   it('the evidence bundle keeps the observation by allowlist, and never copies the log', () => {
@@ -4072,7 +4114,7 @@ describe('a learning pair is two jobs on one store: arm WITHOUT exports it, arm 
   /** The step script as GitHub runs it: `bash --noprofile --norc -eo pipefail`. */
   const run = (script: string, cwd: string, env: Record<string, string>): number => {
     try {
-      execFileSync('bash', ['--noprofile', '--norc', '-eo', 'pipefail', '-c', script], { cwd, stdio: 'ignore', env: { ...process.env, ...env } });
+      execBash(['--noprofile', '--norc', '-eo', 'pipefail', '-c', script], { cwd, stdio: 'ignore', env: { ...process.env, ...env } });
       return 0;
     } catch (error) {
       return (error as { status?: number }).status ?? 1;
@@ -4123,7 +4165,7 @@ describe('a learning pair is two jobs on one store: arm WITHOUT exports it, arm 
     ]) {
       expect(gate(clause, '4242').status, JSON.stringify(clause)).not.toBe(0);
     }
-  }, 30_000);
+  }, standInBudget(30_000));
 
   it('arm WITH restores into the fresh database: after PostgreSQL starts, before the preflight migrates, before LIVE, on a dry run too', () => {
     const restore = at(RESTORE);
@@ -4178,7 +4220,7 @@ describe('a learning pair is two jobs on one store: arm WITHOUT exports it, arm 
         '  *julius.learning.arm.recorded*) cat "$STUB/record";;', '  *) exit 9;;', 'esac'].join('\n'), { mode: 0o755 });
       mutate(stub);
       return run(stepScript(RESTORE), job, {
-        PATH: `${bin}:${process.env.PATH ?? ''}`, STUB: stub, GH_TOKEN: 'stub', PGPASSWORD: 'x', PGUSER: 'julius', PGDATABASE: 'julius',
+        PATH: `${bin}${delimiter}${process.env.PATH ?? ''}`, STUB: stub, GH_TOKEN: 'stub', PGPASSWORD: 'x', PGUSER: 'julius', PGDATABASE: 'julius',
         GITHUB_REPOSITORY: 'owner/repo', GITHUB_RUN_ID: '999', GITHUB_SHA: SHA, RUNNER_TEMP: mkdtempSync(join(tmpdir(), 'julius-rt-')),
         GITHUB_STEP_SUMMARY: join(job, 'summary.md'), WITHOUT_RUN: '4242', WITHOUT_JULIUS_RUN: WITHOUT, REGISTRATION_DIGEST: DIGEST,
       });
@@ -4203,7 +4245,7 @@ describe('a learning pair is two jobs on one store: arm WITHOUT exports it, arm 
       ['a WITHOUT run that did not complete', edit('state', /COMPLETED/u, 'FAILED')],
       ['no WITHOUT record under this registration', edit('record', /1/u, '0')],
     ] as const) expect(restoreWith(mutate), label).not.toBe(0);
-  }, 60_000);
+  }, standInBudget(60_000));
 
   it('arm WITHOUT exports only after LIVE succeeded, scans before it uploads, and records the digest in its evidence', () => {
     expect(header(DUMP)).toContain("\n        if: success() && inputs.confirm_live == 'RUN LIVE MISSION' && steps.live_mission.outcome == 'success' && steps.learning_arm.outputs.arm == 'WITHOUT'\n");
@@ -4263,7 +4305,7 @@ describe('a learning pair is two jobs on one store: arm WITHOUT exports it, arm 
     expect(scan('clean', 'a row naming db-password-value-0001'), 'an exact value the job holds').toEqual(refused);
     expect(scan('clean', 'Xk7Qm2Rv9TzLbN4pAeWs6YcHgJdF1uOi3ZrKxVtB0nM'), 'a derived scoped credential').toEqual(refused);
     expect(scan('clean', null), 'no rendering, no upload').toEqual(refused);
-  }, 30_000);
+  }, standInBudget(30_000));
 });
 
 describe('count only real spend: the combined cap and the attempted markers are decided BEFORE the attempted marker', () => {
