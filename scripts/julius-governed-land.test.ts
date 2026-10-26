@@ -339,6 +339,8 @@ describe('queue, record, and workflow', () => {
       { pr: 472, depends: [] },
       { pr: 473, depends: [] },
       { pr: 474, depends: [] },
+      { pr: 478, depends: [] },
+      { pr: 479, depends: [] },
     ]);
     expect(realGoverned.parseGovernedQueue('7\n7 depends: -\n').problems.join('\n')).toMatch(/listed twice/u);
     expect(realGoverned.parseGovernedQueue('9 depends: 8,7\n').problems.join('\n')).toMatch(/numerically sorted/u);
