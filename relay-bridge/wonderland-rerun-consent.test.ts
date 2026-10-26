@@ -19,6 +19,9 @@ import {
   decideRerun,
   legalTransition,
   missionContractPath,
+  parseRecordedPaidAttempts,
+  priorCompletedCount,
+  recordedPaidAttempts,
   workflowDispatchArgs,
   type GhResult,
   type GhSpawner,
@@ -54,7 +57,13 @@ const LANES = JSON.parse(readFileSync(join(__dirname, '../src/relay/integration/
   readonly laneGrantExcerpt: string;
   readonly contractMarkerNamespace: string;
 };
-const workflowYaml = (rerunInput: boolean) => `
+/** The step-9 recorded-attempts table exactly as main's workflow writes it today. */
+const RECORDED_CASE = `          case "$MARKER_NAMESPACE" in
+            julius-first-live) RECORDED_PAID_ATTEMPTS=1 ;;  # run 33697109210
+            *)                 RECORDED_PAID_ATTEMPTS=0 ;;
+          esac
+`;
+const workflowYaml = (rerunInput: boolean, recordedCase: string = RECORDED_CASE) => `
 name: fixture
 on:
   workflow_dispatch:
@@ -69,11 +78,15 @@ ${rerunInput ? "      acknowledge_rerun:\n        default: ''\n" : ''}      miss
         description: 'key'
       run_id:
         default: ''
-`;
+jobs:
+  paid:
+    steps:
+      - run: |
+${recordedCase}`;
 const ABSENT: GhResult = { code: 1, stdout: 'HTTP/2.0 404 Not Found\nDate: Fri, 23 Oct 2026 17:18:05 GMT\n\n{"message":"Not Found"}\n', stderr: '' };
 const CONTENTS = `repos/${REPO}/contents/`;
 
-function fakeGh(options: { rerunInput?: boolean; contract?: string } = {}): { spawn: GhSpawner; calls: string[][] } {
+function fakeGh(options: { rerunInput?: boolean; contract?: string; recordedCase?: string } = {}): { spawn: GhSpawner; calls: string[][] } {
   const calls: string[][] = [];
   return {
     calls,
@@ -83,7 +96,7 @@ function fakeGh(options: { rerunInput?: boolean; contract?: string } = {}): { sp
         const target = args.find((arg) => arg.startsWith(CONTENTS));
         if (args[0] === 'api' && target !== undefined) {
           const path = target.slice(CONTENTS.length).replace(/\?ref=main$/u, '');
-          const text = path === `.github/workflows/${PAID_WORKFLOW_FILE}` ? workflowYaml(options.rerunInput ?? true)
+          const text = path === `.github/workflows/${PAID_WORKFLOW_FILE}` ? workflowYaml(options.rerunInput ?? true, options.recordedCase)
             : path === missionContractPath(MISSION) ? (options.contract ?? JSON.stringify({ markerNamespace: LANES.contractMarkerNamespace }))
               : path === LANE_GRANT_SOURCE ? LANES.laneGrantExcerpt : null;
           return text === null ? { code: 1, stdout: '', stderr: 'HTTP 404' } : { code: 0, stdout: text, stderr: '' };
@@ -96,14 +109,28 @@ function fakeGh(options: { rerunInput?: boolean; contract?: string } = {}): { sp
   };
 }
 
-/** A reader that answers `read` and records each namespace it was asked for. */
-function reader(read: PriorAttemptRead | (() => never)): PriorAttemptReader & { asked: string[] } {
+/**
+ * A reader that answers `read` (attempted markers) and `readCompleted`
+ * (completed markers), and records each namespace it was asked for.
+ */
+function reader(
+  read: PriorAttemptRead | (() => never),
+  completed: PriorAttemptRead | (() => never) = { readable: true, counted: 0 },
+): PriorAttemptReader & { asked: string[]; askedCompleted: string[] } {
   const asked: string[] = [];
+  const askedCompleted: string[] = [];
+  const answer = (value: PriorAttemptRead | (() => never)) =>
+    (typeof value === 'function' ? Promise.reject(new Error('gh down')) : Promise.resolve(value));
   return {
     asked,
+    askedCompleted,
     read({ namespace }) {
       asked.push(namespace);
-      return typeof read === 'function' ? Promise.reject(new Error('gh down')) : Promise.resolve(read);
+      return answer(read);
+    },
+    readCompleted({ namespace }) {
+      askedCompleted.push(namespace);
+      return answer(completed);
     },
   };
 }
@@ -111,7 +138,7 @@ const ZERO: PriorAttemptRead = { readable: true, counted: 0 };
 const ONE: PriorAttemptRead = { readable: true, counted: 1 };
 const UNKNOWN: PriorAttemptRead = { readable: false };
 
-function env(storePath: string): Record<string, string | undefined> {
+function env(storePath: string, over: Record<string, string | undefined> = {}): Record<string, string | undefined> {
   return {
     JULIUS_WONDERLAND_ADMISSION: '1',
     JULIUS_J1_PROJECT_ID: PROJECT,
@@ -121,12 +148,13 @@ function env(storePath: string): Record<string, string | undefined> {
     JULIUS_WONDERLAND_START: '1',
     JULIUS_WONDERLAND_GITHUB_REPO: REPO,
     JULIUS_WONDERLAND_START_LANE: 'lab',
+    ...over,
   };
 }
 
-function service(storePath: string) {
+function service(storePath: string, over: Record<string, string | undefined> = {}) {
   return createWonderlandAdmissionService({
-    env: env(storePath),
+    env: env(storePath, over),
     operatorToken: 'operator-token',
     verifyNativeSession: ({ token }) => {
       if (token === 'native-token') return { playerId: 'founder', projectId: PROJECT, sessionId: 'sess-1' };
@@ -167,10 +195,10 @@ const statusRequest = (run: string) => base(run, {
   idempotencyKey: undefined,
 });
 
-async function admitted(run: string, prior: PriorAttemptReader, gh = fakeGh()) {
+async function admitted(run: string, prior: PriorAttemptReader, gh = fakeGh(), over: Record<string, string | undefined> = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'wlj-rerun-'));
   const storePath = join(dir, 'admission.json');
-  const ports = service(storePath);
+  const ports = service(storePath, over);
   const created = await handleWonderlandAdmissionRoute(base(run, {
     path: WONDERLAND_ADMISSION_PATH,
     url: `${WONDERLAND_ADMISSION_PATH}?projectId=${PROJECT}`,
@@ -213,6 +241,7 @@ describe('the rerun gate on a Wonderland Start', () => {
         for (const event of fx.journal()) {
           expect(event).not.toHaveProperty('acknowledgedRerun');
           expect(event).not.toHaveProperty('priorAttempted');
+          expect(event).not.toHaveProperty('priorCompleted');
         }
       } finally {
         fx.cleanup();
@@ -236,8 +265,8 @@ describe('the rerun gate on a Wonderland Start', () => {
       expect(workflowRuns(fx.gh.calls)).toEqual([]);
       // Not even the spent tag was read: the gate stands before it.
       expect(fx.gh.calls.some((args) => args.some((arg) => arg.includes('git/ref/tags')))).toBe(false);
-      const status = await handleWonderlandStatusRoute(statusRequest(RUN_A), fx.ports, () => Promise.resolve(1));
-      expect(status?.body).toMatchObject({ state: 'awaiting_operator', priorAttempted: 1, rerunConsentRequired: true });
+      const status = await handleWonderlandStatusRoute(statusRequest(RUN_A), fx.ports, () => Promise.resolve({ attempted: 1, completed: 0 }));
+      expect(status?.body).toMatchObject({ state: 'awaiting_operator', priorAttempted: 1, priorCompleted: 0, rerunConsentRequired: true });
 
       // The same admission, now with the founder's phrase: it dispatches once, carrying the flag exactly once.
       const accepted = await fx.start({ acknowledgeRerun: PHRASE });
@@ -247,7 +276,67 @@ describe('the rerun gate on a Wonderland Start', () => {
       expect(ackFlags(runs[0] ?? [])).toEqual([['-f', 'acknowledge_rerun=RERUN PAID MISSION']]);
       const events = fx.journal();
       expect(events.map((event) => event.state)).toEqual(['dispatching', 'dispatched']);
-      for (const event of events) expect(event).toMatchObject({ acknowledgedRerun: true, priorAttempted: 1 });
+      for (const event of events) expect(event).toMatchObject({ acknowledgedRerun: true, priorAttempted: 1, priorCompleted: 0 });
+    } finally {
+      fx.cleanup();
+    }
+  });
+
+  it('THE STEP-9 MIRROR: completed markers > 0 with attempted 0 need the phrase; with it, the flag is sent and the counts recorded', async () => {
+    const prior = reader(ZERO, ONE);
+    const fx = await admitted(RUN_A, prior);
+    try {
+      const refused = await fx.start();
+      expect(refused?.status).toBe(409);
+      expect(kindOf(refused?.body)).toBe('julius_rerun_consent_required');
+      expect(refused?.body).toMatchObject({ retry: false, priorAttempted: 0, priorCompleted: 1 });
+      expect(fx.journal()).toEqual([]);
+      expect(workflowRuns(fx.gh.calls)).toEqual([]);
+      expect(prior.askedCompleted).toEqual([LANES.contractMarkerNamespace]);
+      const accepted = await fx.start({ acknowledgeRerun: PHRASE });
+      expect(accepted?.status).toBe(202);
+      expect(ackFlags(workflowRuns(fx.gh.calls)[0] ?? [])).toEqual([['-f', 'acknowledge_rerun=RERUN PAID MISSION']]);
+      for (const event of fx.journal()) expect(event).toMatchObject({ acknowledgedRerun: true, priorAttempted: 0, priorCompleted: 1 });
+    } finally {
+      fx.cleanup();
+    }
+  });
+
+  it('THE STEP-9 MIRROR: an unreadable completed listing, or an unreadable recorded table on main, is UNKNOWN: 409, nothing written, phrase or not', async () => {
+    const cases: { prior: ReturnType<typeof reader>; gh?: () => ReturnType<typeof fakeGh> }[] = [
+      { prior: reader(ZERO, UNKNOWN) },
+      { prior: reader(ZERO, () => { throw new Error('x'); }) },
+      { prior: reader(ZERO, ZERO), gh: () => fakeGh({ recordedCase: '' }) },
+      { prior: reader(ZERO, ZERO), gh: () => fakeGh({ recordedCase: RECORDED_CASE.replace('RECORDED_PAID_ATTEMPTS=0', 'RECORDED_PAID_ATTEMPTS=zero') }) },
+    ];
+    for (const { prior, gh } of cases) {
+      for (const extra of [{}, { acknowledgeRerun: PHRASE }]) {
+        const fx = await admitted(RUN_A, prior, gh === undefined ? fakeGh() : gh());
+        try {
+          const refused = await fx.start(extra);
+          expect(refused?.status).toBe(409);
+          expect(kindOf(refused?.body)).toBe('julius_prior_attempts_unknown');
+          expect(refused?.body).toMatchObject({ retry: false, priorAttempted: 0, priorCompleted: 'UNKNOWN' });
+          expect(fx.journal()).toEqual([]);
+          expect(workflowRuns(fx.gh.calls)).toEqual([]);
+        } finally {
+          fx.cleanup();
+        }
+      }
+    }
+  });
+
+  it('THE STEP-9 MIRROR: julius-first-live carries a recorded paid attempt of 1 on main, so its Start needs the phrase with no marker at all', async () => {
+    const gh = fakeGh({ contract: JSON.stringify({ markerNamespace: 'julius-first-live' }) });
+    const fx = await admitted(RUN_A, reader(ZERO, ZERO), gh, { JULIUS_WONDERLAND_START_LANE: 'regression' });
+    try {
+      const refused = await fx.start();
+      expect(refused?.status).toBe(409);
+      expect(kindOf(refused?.body)).toBe('julius_rerun_consent_required');
+      expect(refused?.body).toMatchObject({ priorAttempted: 0, priorCompleted: 1 });
+      expect(fx.journal()).toEqual([]);
+      expect((await fx.start({ acknowledgeRerun: PHRASE }))?.status).toBe(202);
+      expect(ackFlags(workflowRuns(fx.gh.calls)[0] ?? [])).toEqual([['-f', 'acknowledge_rerun=RERUN PAID MISSION']]);
     } finally {
       fx.cleanup();
     }
@@ -371,16 +460,55 @@ describe('the rerun gate on a Wonderland Start', () => {
 });
 
 describe('the rerun decision and the journal', () => {
-  it('decideRerun: UNKNOWN never unlocks, 0 ignores the phrase, n>0 needs the exact phrase', () => {
-    expect(decideRerun(UNKNOWN, PHRASE)).toEqual({ ok: false, kind: 'julius_prior_attempts_unknown', priorAttempted: 'UNKNOWN' });
-    expect(decideRerun({ readable: true, counted: -1 }, PHRASE).ok).toBe(false);
-    expect(decideRerun({ readable: true, counted: 1.5 }, PHRASE).ok).toBe(false);
-    expect(decideRerun(ZERO, PHRASE)).toEqual({ ok: true, acknowledgedRerun: false, priorAttempted: 0 });
-    expect(decideRerun(ONE, null)).toEqual({ ok: false, kind: 'julius_rerun_consent_required', priorAttempted: 1 });
-    expect(decideRerun(ONE, undefined).ok).toBe(false);
-    expect(decideRerun(ONE, 'rerun paid mission').ok).toBe(false);
-    expect(decideRerun({ readable: true, counted: 2 }, PHRASE)).toEqual({ ok: true, acknowledgedRerun: true, priorAttempted: 2 });
+  it('decideRerun: either count UNKNOWN never unlocks, both 0 ignore the phrase, either above 0 needs the exact phrase', () => {
+    const d = (attempted: number | 'UNKNOWN', completed: number | 'UNKNOWN', phrase: string | null | undefined) => decideRerun({ attempted, completed }, phrase);
+    expect(d('UNKNOWN', 0, PHRASE)).toEqual({ ok: false, kind: 'julius_prior_attempts_unknown', priorAttempted: 'UNKNOWN', priorCompleted: 0 });
+    expect(d(0, 'UNKNOWN', PHRASE)).toEqual({ ok: false, kind: 'julius_prior_attempts_unknown', priorAttempted: 0, priorCompleted: 'UNKNOWN' });
+    expect(d(-1, 0, PHRASE).ok).toBe(false);
+    expect(d(0, 1.5, PHRASE).ok).toBe(false);
+    expect(d(0, 0, PHRASE)).toEqual({ ok: true, acknowledgedRerun: false, priorAttempted: 0, priorCompleted: 0 });
+    expect(d(1, 0, null)).toEqual({ ok: false, kind: 'julius_rerun_consent_required', priorAttempted: 1, priorCompleted: 0 });
+    expect(d(0, 1, null)).toEqual({ ok: false, kind: 'julius_rerun_consent_required', priorAttempted: 0, priorCompleted: 1 });
+    expect(d(1, 0, undefined).ok).toBe(false);
+    expect(d(1, 0, 'rerun paid mission').ok).toBe(false);
+    expect(d(2, 0, PHRASE)).toEqual({ ok: true, acknowledgedRerun: true, priorAttempted: 2, priorCompleted: 0 });
+    expect(d(0, 3, PHRASE)).toEqual({ ok: true, acknowledgedRerun: true, priorAttempted: 0, priorCompleted: 3 });
     expect(RERUN_PAID_MISSION_CONFIRMATION).toBe(PHRASE);
+    expect(priorCompletedCount(ONE, 1)).toBe(2);
+    expect(priorCompletedCount(ZERO, null)).toBe('UNKNOWN');
+    expect(priorCompletedCount(UNKNOWN, 0)).toBe('UNKNOWN');
+  });
+
+  it('the recorded table is read from main\'s workflow text, strictly: today\'s case list, a changed one, and unparseable ones', () => {
+    const live = readFileSync(join(__dirname, `../.github/workflows/${PAID_WORKFLOW_FILE}`), 'utf8');
+    // The case list in this checkout's workflow, exactly. A change there fails here, on purpose.
+    expect(parseRecordedPaidAttempts(live)).toEqual({ byNamespace: new Map([['julius-first-live', 1]]), fallback: 0 });
+    expect(recordedPaidAttempts(live, 'julius-first-live')).toBe(1);
+    expect(recordedPaidAttempts(live, 'julius-inworld-data-1')).toBe(0);
+    // Drift: a changed case list on main is what the parse reflects.
+    const drifted = workflowYaml(true, `          case "$MARKER_NAMESPACE" in
+            julius-first-live) RECORDED_PAID_ATTEMPTS=1 ;;  # run 33697109210
+            julius-inworld-data-1) RECORDED_PAID_ATTEMPTS=2 ;;
+            *)                 RECORDED_PAID_ATTEMPTS=0 ;;
+          esac
+`);
+    expect(recordedPaidAttempts(drifted, 'julius-inworld-data-1')).toBe(2);
+    expect(recordedPaidAttempts(drifted, 'julius-other-1')).toBe(0);
+    const arm = '            *)                 RECORDED_PAID_ATTEMPTS=0 ;;\n';
+    for (const broken of [
+      '',
+      RECORDED_CASE.replace('esac', 'done'),
+      RECORDED_CASE.replace(arm, ''),
+      RECORDED_CASE.replace(arm, '').replace('          esac', `${arm}            julius-x-1) RECORDED_PAID_ATTEMPTS=4 ;;\n          esac`),
+      RECORDED_CASE.replace('RECORDED_PAID_ATTEMPTS=1', 'RECORDED_PAID_ATTEMPTS=${N}'),
+      RECORDED_CASE.replace('julius-first-live)', 'julius-first-live|julius-x-1)'),
+      `${RECORDED_CASE}${RECORDED_CASE}`,
+      RECORDED_CASE.replace('julius-first-live) RECORDED_PAID_ATTEMPTS=1 ;;', 'julius-first-live) RECORDED_PAID_ATTEMPTS=1 ;;\n            julius-first-live) RECORDED_PAID_ATTEMPTS=0 ;;'),
+      `${RECORDED_CASE}          RECORDED_PAID_ATTEMPTS=0\n`,
+    ]) {
+      expect(parseRecordedPaidAttempts(workflowYaml(true, broken)), JSON.stringify(broken)).toBeNull();
+      expect(recordedPaidAttempts(workflowYaml(true, broken), 'julius-first-live')).toBeNull();
+    }
   });
 
   it('the argv carries acknowledge_rerun only with confirm_live and the acknowledged flag', () => {
@@ -399,16 +527,19 @@ describe('the rerun decision and the journal', () => {
   const outcome: ClaimEvent = { ...reservation, state: 'dispatched', dispatchAttempted: true, workflowRunId: WORKFLOW_RUN };
 
   it('legalTransition keeps the reservation\'s consent: an outcome cannot add, drop or change it', () => {
-    const acked = { ...reservation, acknowledgedRerun: true as const, priorAttempted: 1 };
+    const acked = { ...reservation, acknowledgedRerun: true as const, priorAttempted: 1, priorCompleted: 0 };
     expect(legalTransition(null, acked)).toBe(true);
-    expect(legalTransition(acked, { ...outcome, acknowledgedRerun: true, priorAttempted: 1 })).toBe(true);
+    expect(legalTransition(null, { ...acked, priorAttempted: 0, priorCompleted: 2 }), 'completed only').toBe(true);
+    expect(legalTransition(acked, { ...outcome, acknowledgedRerun: true, priorAttempted: 1, priorCompleted: 0 })).toBe(true);
     expect(legalTransition(reservation, outcome)).toBe(true);
     expect(legalTransition(acked, outcome), 'dropped').toBe(false);
-    expect(legalTransition(reservation, { ...outcome, acknowledgedRerun: true, priorAttempted: 1 }), 'added').toBe(false);
-    expect(legalTransition(acked, { ...outcome, acknowledgedRerun: true, priorAttempted: 2 }), 'count changed').toBe(false);
+    expect(legalTransition(reservation, { ...outcome, acknowledgedRerun: true, priorAttempted: 1, priorCompleted: 0 }), 'added').toBe(false);
+    expect(legalTransition(acked, { ...outcome, acknowledgedRerun: true, priorAttempted: 2, priorCompleted: 0 }), 'attempted changed').toBe(false);
+    expect(legalTransition(acked, { ...outcome, acknowledgedRerun: true, priorAttempted: 1, priorCompleted: 1 }), 'completed changed').toBe(false);
     expect(legalTransition(null, { ...reservation, acknowledgedRerun: true }), 'no count').toBe(false);
-    expect(legalTransition(null, { ...reservation, priorAttempted: 1 }), 'count without consent').toBe(false);
-    expect(legalTransition(null, { ...reservation, acknowledgedRerun: true, priorAttempted: 0 }), 'zero is not a rerun').toBe(false);
+    expect(legalTransition(null, { ...reservation, acknowledgedRerun: true, priorAttempted: 1 }), 'no completed count').toBe(false);
+    expect(legalTransition(null, { ...reservation, priorAttempted: 1, priorCompleted: 0 }), 'count without consent').toBe(false);
+    expect(legalTransition(null, { ...reservation, acknowledgedRerun: true, priorAttempted: 0, priorCompleted: 0 }), 'zero is not a rerun').toBe(false);
   });
 
   it('a tampered journal is refused: an outcome appended over a flipped reservation throws, a half record is corrupt, a legacy record parses', async () => {
@@ -422,13 +553,17 @@ describe('the rerun decision and the journal', () => {
       const original = JSON.stringify(journal);
       // Legacy: no rerun keys at all reads as no consent.
       const legacy = JSON.parse(original) as typeof journal;
-      for (const claim of legacy.claims) { delete claim.acknowledgedRerun; delete claim.priorAttempted; }
+      for (const claim of legacy.claims) { delete claim.acknowledgedRerun; delete claim.priorAttempted; delete claim.priorCompleted; }
       writeFileSync(path, `${JSON.stringify(legacy)}\n`);
       for (const event of readAdmissionDocument(fx.storePath).claims) expect(event.acknowledgedRerun).toBeUndefined();
       // Half a record is corrupt.
       const half = JSON.parse(original) as typeof journal;
       delete half.claims[1]?.priorAttempted;
       writeFileSync(path, `${JSON.stringify(half)}\n`);
+      expect(() => readAdmissionDocument(fx.storePath)).toThrow();
+      const halfCompleted = JSON.parse(original) as typeof journal;
+      delete halfCompleted.claims[1]?.priorCompleted;
+      writeFileSync(path, `${JSON.stringify(halfCompleted)}\n`);
       expect(() => readAdmissionDocument(fx.storePath)).toThrow();
       const flipped = JSON.parse(original) as typeof journal;
       if (flipped.claims[1] !== undefined) flipped.claims[1].acknowledgedRerun = 'yes';
@@ -438,7 +573,7 @@ describe('the rerun decision and the journal', () => {
       const parsed = JSON.parse(original) as typeof journal;
       const [stored, out] = parsed.claims as unknown as ClaimEvent[];
       expect(stored !== undefined && out !== undefined).toBe(true);
-      const { acknowledgedRerun: _a, priorAttempted: _p, ...stripped } = stored as ClaimEvent;
+      const { acknowledgedRerun: _a, priorAttempted: _p, priorCompleted: _c, ...stripped } = stored as ClaimEvent;
       expect(legalTransition(stripped as ClaimEvent, out as ClaimEvent)).toBe(false);
     } finally {
       fx.cleanup();
@@ -447,32 +582,44 @@ describe('the rerun decision and the journal', () => {
 });
 
 describe('/status before Start', () => {
-  const EXACT_KEYS = ['dispatchedAt', 'legacyRunId', 'priorAttempted', 'rerunConsentRequired', 'serverRunId', 'state', 'updatedAt', 'wljRunId', 'workflowRunId'];
+  const EXACT_KEYS = ['dispatchedAt', 'legacyRunId', 'priorAttempted', 'priorCompleted', 'rerunConsentRequired', 'serverRunId', 'state', 'updatedAt', 'wljRunId', 'workflowRunId'];
 
-  it('shows priorAttempted and rerunConsentRequired at top level, true only above zero, and never the phrase', async () => {
+  it('shows priorAttempted, priorCompleted and rerunConsentRequired at top level: required only when both are known and one is above zero, and never the phrase', async () => {
     const fx = await admitted(RUN_A, reader(ZERO));
     try {
       const shown: Record<string, unknown>[] = [];
-      for (const [counted, required] of [[0, false], [1, true], [3, true], ['UNKNOWN', false]] as const) {
+      const cases = [
+        [0, 0, false], [1, 0, true], [3, 0, true], [0, 1, true], [2, 2, true],
+        ['UNKNOWN', 0, false], [0, 'UNKNOWN', false], ['UNKNOWN', 1, false], [1, 'UNKNOWN', false], ['UNKNOWN', 'UNKNOWN', false],
+      ] as const;
+      for (const [attempted, completed, required] of cases) {
         const asked: string[] = [];
         const status = await handleWonderlandStatusRoute(statusRequest(RUN_A), fx.ports, (mission) => {
           asked.push(mission);
-          return Promise.resolve(counted);
+          return Promise.resolve({ attempted, completed });
         });
         expect(status?.status).toBe(200);
         const body = status?.body as Record<string, unknown>;
         shown.push(body);
         expect(Object.keys(body).sort()).toEqual(EXACT_KEYS);
-        expect(body).toEqual({
+        expect(body, `${String(attempted)}/${String(completed)}`).toEqual({
           wljRunId: RUN_A, serverRunId: RUN_A, legacyRunId: null, dispatchedAt: null, workflowRunId: null,
-          state: 'awaiting_operator', updatedAt: WHEN, priorAttempted: counted, rerunConsentRequired: required,
+          state: 'awaiting_operator', updatedAt: WHEN, priorAttempted: attempted, priorCompleted: completed, rerunConsentRequired: required,
         });
         expect(asked).toEqual([MISSION]);
       }
-      // No reader wired, a reader that throws, or a nonsense count: UNKNOWN and not required.
-      for (const port of [undefined, () => Promise.reject(new Error('x')), () => Promise.resolve(-1), () => Promise.resolve(Number.NaN)]) {
+      // No reader wired, a reader that throws, or nonsense counts: UNKNOWN and not required.
+      for (const port of [
+        undefined,
+        () => Promise.reject(new Error('x')),
+        () => Promise.resolve({ attempted: -1, completed: 0 }),
+        () => Promise.resolve({ attempted: 0, completed: Number.NaN }),
+        () => Promise.resolve(null),
+      ]) {
         const status = await handleWonderlandStatusRoute(statusRequest(RUN_A), fx.ports, port as never);
-        expect(status?.body).toMatchObject({ priorAttempted: 'UNKNOWN', rerunConsentRequired: false });
+        expect(status?.body).toMatchObject({ rerunConsentRequired: false });
+        const body = status?.body as Record<string, unknown>;
+        expect(body.priorAttempted === 'UNKNOWN' || body.priorCompleted === 'UNKNOWN').toBe(true);
       }
       expect(JSON.stringify(shown)).not.toMatch(/RERUN PAID MISSION|acknowledge/iu);
     } finally {
@@ -484,12 +631,14 @@ describe('/status before Start', () => {
     const fx = await admitted(RUN_A, reader(ZERO));
     try {
       const plain = await handleWonderlandStatusRoute(statusRequest(RUN_A), fx.ports);
-      const withCount = await handleWonderlandStatusRoute(statusRequest(RUN_A), fx.ports, () => Promise.resolve(2));
+      const withCount = await handleWonderlandStatusRoute(statusRequest(RUN_A), fx.ports, () => Promise.resolve({ attempted: 2, completed: 1 }));
       for (const body of [plain?.body, withCount?.body] as Record<string, unknown>[]) {
         for (const key of ['wljRunId', 'serverRunId', 'state', 'updatedAt']) expect(typeof body[key], key).toBe('string');
         for (const key of ['legacyRunId', 'dispatchedAt', 'workflowRunId']) expect(body[key], key).toBeNull();
         expect(typeof body.rerunConsentRequired).toBe('boolean');
-        expect(typeof body.priorAttempted === 'number' || body.priorAttempted === 'UNKNOWN').toBe(true);
+        for (const key of ['priorAttempted', 'priorCompleted']) {
+          expect(typeof body[key] === 'number' || body[key] === 'UNKNOWN', key).toBe(true);
+        }
       }
     } finally {
       fx.cleanup();
@@ -503,19 +652,21 @@ describe('/status before Start', () => {
       const asked: string[] = [];
       const status = await handleWonderlandStatusRoute(statusRequest(RUN_A), fx.ports, (mission) => {
         asked.push(mission);
-        return Promise.resolve(1);
+        return Promise.resolve({ attempted: 1, completed: 1 });
       });
-      expect(status?.body).toMatchObject({ state: 'dispatched', priorAttempted: 'UNKNOWN', rerunConsentRequired: false });
+      expect(status?.body).toMatchObject({ state: 'dispatched', priorAttempted: 'UNKNOWN', priorCompleted: 'UNKNOWN', rerunConsentRequired: false });
       expect(asked).toEqual([]);
     } finally {
       fx.cleanup();
     }
   });
 
-  it('withRerunConsent is true exactly above zero', () => {
-    expect(withRerunConsent({}, 0)).toEqual({ priorAttempted: 0, rerunConsentRequired: false });
-    expect(withRerunConsent({}, 1)).toEqual({ priorAttempted: 1, rerunConsentRequired: true });
-    expect(withRerunConsent({}, 'UNKNOWN')).toEqual({ priorAttempted: 'UNKNOWN', rerunConsentRequired: false });
+  it('withRerunConsent is true exactly when both are known and one is above zero', () => {
+    expect(withRerunConsent({}, 0, 0)).toEqual({ priorAttempted: 0, priorCompleted: 0, rerunConsentRequired: false });
+    expect(withRerunConsent({}, 1, 0)).toEqual({ priorAttempted: 1, priorCompleted: 0, rerunConsentRequired: true });
+    expect(withRerunConsent({}, 0, 1)).toEqual({ priorAttempted: 0, priorCompleted: 1, rerunConsentRequired: true });
+    expect(withRerunConsent({}, 'UNKNOWN', 1)).toEqual({ priorAttempted: 'UNKNOWN', priorCompleted: 1, rerunConsentRequired: false });
+    expect(withRerunConsent({}, 1, 'UNKNOWN')).toEqual({ priorAttempted: 1, priorCompleted: 'UNKNOWN', rerunConsentRequired: false });
   });
 });
 
@@ -567,38 +718,49 @@ describe('source scan: the phrase has one source, the founder\'s Start body', ()
 });
 
 describe('the /status prior-attempt reader', () => {
-  const contractRunner = (contract: string | null): GhBytesRunner & { calls: string[][] } => {
+  /** `gh` answering main's contract and workflow by path, recording every argv. */
+  const mainRunner = (files: { contract?: string | null; workflow?: string | null }): GhBytesRunner & { calls: string[][] } => {
     const calls: string[][] = [];
     const run = (async (args: readonly string[]) => {
       calls.push([...args]);
-      if (contract === null) return { code: 1, stdout: new Uint8Array() };
-      return { code: 0, stdout: new TextEncoder().encode(contract) };
+      const path = args.at(-1) ?? '';
+      const text = path.includes('/contract.json') ? files.contract : path.includes('/.github/workflows/') ? (files.workflow === undefined ? workflowYaml(true) : files.workflow) : null;
+      if (text === null || text === undefined) return { code: 1, stdout: new Uint8Array() };
+      return { code: 0, stdout: new TextEncoder().encode(text) };
     }) as GhBytesRunner & { calls: string[][] };
     run.calls = calls;
     return run;
   };
 
-  it('reads the contract namespace at main with a GET, then the same reader; caches a count, never UNKNOWN', async () => {
+  it('reads the contract and the workflow at main with GETs, then both counts; caches known counts, never UNKNOWN', async () => {
     let now = 0;
-    const prior = reader(ONE);
-    const run = contractRunner(JSON.stringify({ markerNamespace: MISSION }));
+    const prior = reader(ONE, ONE);
+    const run = mainRunner({ contract: JSON.stringify({ markerNamespace: MISSION }) });
     const status = createStatusPriorAttempts({ repo: REPO, run, reader: prior, nowMs: () => now, ttlMs: 1000 });
-    expect(await status(MISSION)).toBe(1);
-    expect(run.calls[0]?.slice(0, 3)).toEqual(['api', '-X', 'GET']);
-    expect(run.calls[0]?.at(-1)).toBe(`repos/${REPO}/contents/${missionContractPath(MISSION)}?ref=main`);
-    expect(await status(MISSION)).toBe(1);
+    expect(await status(MISSION)).toEqual({ attempted: 1, completed: 1 });
+    expect(run.calls.every((args) => args.slice(0, 3).join(' ') === 'api -X GET')).toBe(true);
+    expect(run.calls.map((args) => args.at(-1))).toEqual([
+      `repos/${REPO}/contents/${missionContractPath(MISSION)}?ref=main`,
+      `repos/${REPO}/contents/.github/workflows/${PAID_WORKFLOW_FILE}?ref=main`,
+    ]);
+    expect(await status(MISSION)).toEqual({ attempted: 1, completed: 1 });
     expect(prior.asked).toEqual([MISSION]);
     now = 1000;
-    expect(await status(MISSION)).toBe(1);
+    await status(MISSION);
     expect(prior.asked).toHaveLength(2);
+    const firstLive = createStatusPriorAttempts({ repo: REPO, run: mainRunner({ contract: JSON.stringify({ markerNamespace: 'julius-first-live' }) }), reader: reader(ZERO, ZERO) });
+    expect(await firstLive(MISSION), 'the recorded constant').toEqual({ attempted: 0, completed: 1 });
     const unknown = reader(UNKNOWN);
     const never = createStatusPriorAttempts({ repo: REPO, run, reader: unknown, nowMs: () => 0 });
-    expect(await never(MISSION)).toBe('UNKNOWN');
-    expect(await never(MISSION)).toBe('UNKNOWN');
+    expect(await never(MISSION)).toEqual({ attempted: 'UNKNOWN', completed: 0 });
+    await never(MISSION);
     expect(unknown.asked).toHaveLength(2);
+    const noTable = createStatusPriorAttempts({ repo: REPO, run: mainRunner({ contract: JSON.stringify({ markerNamespace: MISSION }), workflow: null }), reader: reader(ZERO, ZERO) });
+    expect(await noTable(MISSION)).toEqual({ attempted: 0, completed: 'UNKNOWN' });
     for (const contract of [null, '{}', 'not json', JSON.stringify({ markerNamespace: 'X' })]) {
       const asked = reader(ONE);
-      expect(await createStatusPriorAttempts({ repo: REPO, run: contractRunner(contract), reader: asked })(MISSION), String(contract)).toBe('UNKNOWN');
+      expect(await createStatusPriorAttempts({ repo: REPO, run: mainRunner({ contract }), reader: asked })(MISSION), String(contract))
+        .toEqual({ attempted: 'UNKNOWN', completed: 'UNKNOWN' });
       expect(asked.asked).toEqual([]);
     }
   });
@@ -625,14 +787,18 @@ describe('the rehearsal harness (test-only, simulated)', () => {
   });
 
   it('argv selects 0, 1 or UNKNOWN and nothing else', async () => {
-    expect(parseRehearsalArgv(['--prior', '0'])?.prior).toBe(0);
+    expect(parseRehearsalArgv(['--prior', '0'])).toMatchObject({ prior: 0, completed: 0 });
     expect(parseRehearsalArgv(['--prior', '1'])?.prior).toBe(1);
     expect(parseRehearsalArgv(['--prior', 'UNKNOWN'])?.prior).toBe('UNKNOWN');
-    for (const bad of [[], ['--prior', '2'], ['--prior', 'unknown'], ['--prior', '1', '--session-token', 'x']]) {
+    expect(parseRehearsalArgv(['--prior', '0', '--completed', '1'])).toMatchObject({ prior: 0, completed: 1 });
+    expect(parseRehearsalArgv(['--prior', '0', '--completed', 'UNKNOWN'])).toMatchObject({ prior: 0, completed: 'UNKNOWN' });
+    for (const bad of [[], ['--prior', '2'], ['--prior', 'unknown'], ['--prior', '1', '--session-token', 'x'], ['--prior', '0', '--completed'], ['--prior', '0', '--completed', '2']]) {
       expect(parseRehearsalArgv(bad), bad.join(' ')).toBeNull();
     }
     expect(await rehearsalPriorReader('UNKNOWN').read({ repo: REPO, namespace: MISSION })).toEqual({ readable: false });
     expect(await rehearsalPriorReader(1).read({ repo: REPO, namespace: MISSION })).toEqual({ readable: true, counted: 1 });
+    expect(await rehearsalPriorReader(0).readCompleted({ repo: REPO, namespace: MISSION })).toEqual({ readable: true, counted: 0 });
+    expect(await rehearsalPriorReader(0, 'UNKNOWN').readCompleted({ repo: REPO, namespace: MISSION })).toEqual({ readable: false });
   });
 
   it('its fake gh records a workflow run and logs it as simulated, never executed', () => {

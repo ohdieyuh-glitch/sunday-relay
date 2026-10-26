@@ -1,6 +1,11 @@
 /**
  * THE PRIOR-ATTEMPT READ FOR A WONDERLAND START, through the founder's own `gh`.
  *
+ * Two counts, because the paid workflow gates on two: its step-9 gate counts
+ * unexpired `<namespace>-completed` artifacts (plus a recorded constant read
+ * from main's workflow text by the claim core), and its pre-marker gate
+ * counts attempted markers as below.
+ *
  * The paid workflow's pre-marker gate counts `<namespace>-attempted` markers
  * with `julius-live-mission.cjs attempt-markers`, which is
  * {@link readJuliusAttemptMarkers}: every marker whose own run is not proven
@@ -28,12 +33,17 @@
 
 import { execFile } from 'node:child_process';
 
+import { PAID_WORKFLOW_FILE } from '../src/relay/integration/wonderland-admission/admission-contract';
 import {
   contractMarkerNamespace,
   mainContentsArgs,
   missionContractPath,
+  priorCompletedCount,
+  priorCount,
+  recordedPaidAttempts,
   type PriorAttemptRead,
   type PriorAttemptReader,
+  type PriorCount,
 } from '../src/relay/integration/wonderland-admission/operator-claim';
 import { readJuliusAttemptMarkers } from './julius/julius-prior-spend';
 
@@ -94,7 +104,33 @@ export function ghApiFetch(run: GhBytesRunner): typeof fetch {
   }) as typeof fetch;
 }
 
-/** The attempted-marker count the paid workflow would compute, read through `gh`. */
+/**
+ * The step-9 completed-marker count, exactly as the workflow's jq counts it:
+ * `[.artifacts[] | select(.expired == false)] | length`. Where that jq would
+ * fail (no object, `.artifacts` not an array, an entry jq cannot index) the
+ * answer is null, which is UNKNOWN. An entry counts only when its `expired`
+ * is literally `false`; a `null` entry or a missing `expired` does not count,
+ * as in jq.
+ */
+export function countUnexpiredArtifacts(body: unknown): number | null {
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) return null;
+  const artifacts = (body as Record<string, unknown>).artifacts;
+  if (!Array.isArray(artifacts)) return null;
+  let counted = 0;
+  for (const entry of artifacts) {
+    if (entry === null) continue;
+    if (typeof entry !== 'object' || Array.isArray(entry)) return null;
+    if ((entry as Record<string, unknown>).expired === false) counted += 1;
+  }
+  return counted;
+}
+
+/** `repos/<repo>/actions/artifacts?name=<ns>-completed&per_page=100`, the one page the workflow reads. */
+export function completedMarkersUrl(repo: string, namespace: string): string {
+  return `https://api.github.com/repos/${repo}/actions/artifacts?name=${namespace}-completed&per_page=100`;
+}
+
+/** The two counts the paid workflow gates on, read through `gh`. */
 export function createGhPriorAttemptReader(run: GhBytesRunner = ghBytesRunner): PriorAttemptReader {
   const fetchImpl = ghApiFetch(run);
   return {
@@ -107,25 +143,41 @@ export function createGhPriorAttemptReader(run: GhBytesRunner = ghBytesRunner): 
         return { readable: false };
       }
     },
+    async readCompleted({ repo, namespace }): Promise<PriorAttemptRead> {
+      if (!REPO.test(repo) || !NAMESPACE.test(namespace)) return { readable: false };
+      try {
+        const response = await fetchImpl(completedMarkersUrl(repo, namespace));
+        if (!response.ok) return { readable: false };
+        const counted = countUnexpiredArtifacts(await response.json() as unknown);
+        return counted === null ? { readable: false } : { readable: true, counted };
+      } catch {
+        return { readable: false };
+      }
+    },
   };
+}
+
+/** One file at `main`, as text, through `gh api -X GET`, or null. */
+async function readMainText(run: GhBytesRunner, repo: string, path: string): Promise<string | null> {
+  const contents = mainContentsArgs(repo, path);
+  // `mainContentsArgs` is `api -H <accept> <path>`: the same read, made explicitly a GET.
+  const result = await run(['api', '-X', 'GET', ...contents.slice(1)]);
+  if (result.code !== 0) return null;
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(result.stdout);
+  } catch {
+    return null;
+  }
 }
 
 /** The mission contract's `markerNamespace` at `main`, as the dispatch will run it, or null. */
 export async function readMainMarkerNamespace(run: GhBytesRunner, repo: string, mission: string): Promise<string | null> {
-  const contents = mainContentsArgs(repo, missionContractPath(mission));
-  // `mainContentsArgs` is `api -H <accept> <path>`: the same read, made explicitly a GET.
-  const result = await run(['api', '-X', 'GET', ...contents.slice(1)]);
-  if (result.code !== 0) return null;
-  let text: string;
-  try {
-    text = new TextDecoder('utf-8', { fatal: true }).decode(result.stdout);
-  } catch {
-    return null;
-  }
-  return contractMarkerNamespace(text);
+  const text = await readMainText(run, repo, missionContractPath(mission));
+  return text === null ? null : contractMarkerNamespace(text);
 }
 
 const REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
+const NAMESPACE = /^[a-z][a-z0-9-]{2,48}$/u;
 
 /**
  * The production `/status` reader, or undefined (then `/status` says UNKNOWN)
@@ -134,19 +186,24 @@ const REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
  */
 export function wonderlandStatusPriorAttemptsFrom(
   env: Readonly<Record<string, string | undefined>>,
-): ((missionId: string) => Promise<StatusPriorAttempted>) | undefined {
+): ((missionId: string) => Promise<StatusPriorCounts>) | undefined {
   const repo = (env.JULIUS_WONDERLAND_GITHUB_REPO ?? '').trim();
   if (env.JULIUS_WONDERLAND_START !== '1' || !REPO.test(repo)) return undefined;
   return createStatusPriorAttempts({ repo });
 }
 
-/** What `/status` shows before Start: the counted prior paid attempts, or UNKNOWN. */
-export type StatusPriorAttempted = number | 'UNKNOWN';
+/** What `/status` shows before Start: each count, or UNKNOWN. */
+export interface StatusPriorCounts {
+  readonly attempted: PriorCount;
+  readonly completed: PriorCount;
+}
 
 /**
- * The `/status` reader. The client polls, so one answer per repository and
- * mission is kept for `ttlMs`; the Start itself never uses this cache, it
- * reads fresh inside the claim core. UNKNOWN is not cached.
+ * The `/status` reader: main's contract (the namespace) and workflow (the
+ * recorded constant), then both counts, the same as the claim core. The
+ * client polls, so an answer with both counts known is kept per repository
+ * and mission for `ttlMs`; anything UNKNOWN is not cached. The Start itself
+ * never uses this cache: it reads fresh inside the claim core.
  */
 export function createStatusPriorAttempts(input: {
   readonly repo: string;
@@ -154,21 +211,35 @@ export function createStatusPriorAttempts(input: {
   readonly reader?: PriorAttemptReader;
   readonly nowMs?: () => number;
   readonly ttlMs?: number;
-}): (missionId: string) => Promise<StatusPriorAttempted> {
+}): (missionId: string) => Promise<StatusPriorCounts> {
   const run = input.run ?? ghBytesRunner;
   const reader = input.reader ?? createGhPriorAttemptReader(run);
   const nowMs = input.nowMs ?? (() => Date.now());
   const ttlMs = input.ttlMs ?? 30_000;
-  const cache = new Map<string, { readonly at: number; readonly value: number }>();
+  const unknown: StatusPriorCounts = { attempted: 'UNKNOWN', completed: 'UNKNOWN' };
+  const cache = new Map<string, { readonly at: number; readonly value: StatusPriorCounts }>();
+  const safely = async (read: () => Promise<PriorAttemptRead>): Promise<PriorAttemptRead> => {
+    try {
+      return await read();
+    } catch {
+      return { readable: false };
+    }
+  };
   return async (missionId) => {
     const key = `${input.repo}\0${missionId}`;
     const hit = cache.get(key);
     if (hit !== undefined && nowMs() - hit.at < ttlMs) return hit.value;
     const namespace = await readMainMarkerNamespace(run, input.repo, missionId);
-    if (namespace === null) return 'UNKNOWN';
-    const read = await reader.read({ repo: input.repo, namespace });
-    if (!read.readable || !Number.isSafeInteger(read.counted) || read.counted < 0) return 'UNKNOWN';
-    cache.set(key, { at: nowMs(), value: read.counted });
-    return read.counted;
+    if (namespace === null) return unknown;
+    const workflow = await readMainText(run, input.repo, `.github/workflows/${PAID_WORKFLOW_FILE}`);
+    const value: StatusPriorCounts = {
+      attempted: priorCount(await safely(() => reader.read({ repo: input.repo, namespace }))),
+      completed: priorCompletedCount(
+        await safely(() => reader.readCompleted({ repo: input.repo, namespace })),
+        workflow === null ? null : recordedPaidAttempts(workflow, namespace),
+      ),
+    };
+    if (value.attempted !== 'UNKNOWN' && value.completed !== 'UNKNOWN') cache.set(key, { at: nowMs(), value });
+    return value;
   };
 }

@@ -21,7 +21,7 @@ import {
   type SqlQueryable,
 } from './julius-prior-spend';
 import { attemptMarkersCommand, authorizeSpendCommand } from '../julius-live-mission';
-import { createGhPriorAttemptReader, ghApiFetch, ghApiGetArgs, type GhBytesRunner } from '../wonderland-prior-attempts';
+import { countUnexpiredArtifacts, createGhPriorAttemptReader, ghApiFetch, ghApiGetArgs, type GhBytesRunner } from '../wonderland-prior-attempts';
 
 function pool(handler: (sql: string, values: readonly unknown[] | undefined) => { rows: Record<string, unknown>[] }): SqlQueryable {
   return {
@@ -786,5 +786,36 @@ describe('the Wonderland Start reads the same markers through `gh api -X GET`', 
     expect(argv).toEqual([]);
     expect(ghApiGetArgs('https://api.github.com/repos/o/r/actions/artifacts?name=a-attempted&per_page=100'))
       .toEqual(['api', '-X', 'GET', 'repos/o/r/actions/artifacts?name=a-attempted&per_page=100']);
+  });
+});
+
+describe('the Wonderland Start reads the step-9 completed markers the way the workflow jq counts them', () => {
+  const runner = (code: number, body: unknown): { run: GhBytesRunner; argv: string[][] } => {
+    const argv: string[][] = [];
+    return {
+      argv,
+      run: async (args) => {
+        argv.push([...args]);
+        return { code, stdout: new TextEncoder().encode(typeof body === 'string' ? body : JSON.stringify(body)) };
+      },
+    };
+  };
+
+  it('counts unexpired entries only, from one GET of the named listing', async () => {
+    const ok = runner(0, { total_count: 5, artifacts: [{ expired: false }, { expired: true }, { expired: false }, null, {}, { expired: 'false' }] });
+    expect(await createGhPriorAttemptReader(ok.run).readCompleted({ repo: REPO, namespace: J1 })).toEqual({ readable: true, counted: 2 });
+    expect(ok.argv).toEqual([['api', '-X', 'GET', `repos/${REPO}/actions/artifacts?name=${J1}-completed&per_page=100`]]);
+    expect(await createGhPriorAttemptReader(runner(0, { artifacts: [] }).run).readCompleted({ repo: REPO, namespace: J1 })).toEqual({ readable: true, counted: 0 });
+  });
+
+  it('anything the jq would fail on is UNKNOWN, never zero', async () => {
+    for (const [code, body] of [[1, { artifacts: [] }], [0, 'not json'], [0, []], [0, {}], [0, { artifacts: null }], [0, { artifacts: ['x'] }], [0, { artifacts: [[]] }], [0, { artifacts: [3] }]] as const) {
+      expect(await createGhPriorAttemptReader(runner(code, body).run).readCompleted({ repo: REPO, namespace: J1 }), JSON.stringify(body)).toEqual({ readable: false });
+    }
+    const never = runner(0, { artifacts: [] });
+    expect(await createGhPriorAttemptReader(never.run).readCompleted({ repo: REPO, namespace: 'X' })).toEqual({ readable: false });
+    expect(await createGhPriorAttemptReader(never.run).readCompleted({ repo: 'not a repo', namespace: J1 })).toEqual({ readable: false });
+    expect(never.argv).toEqual([]);
+    expect(countUnexpiredArtifacts({ artifacts: [{ expired: false }, null] })).toBe(1);
   });
 });

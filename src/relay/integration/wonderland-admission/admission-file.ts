@@ -494,13 +494,13 @@ const PROGRESS_CAUSE = /^[\x20-\x7e]{1,200}$/;
 const CLAIM_KEYS = [
   'wonderlandRunId', 'serverRunId', 'state', 'spentTag', 'spentTagState', 'at',
   'dispatchAttempted', 'dispatchError', 'halt', 'workflowRunId', 'githubDate',
-  'acknowledgedRerun', 'priorAttempted',
+  'acknowledgedRerun', 'priorAttempted', 'priorCompleted',
 ] as const;
 /**
  * Keys a claim written before they existed may lack. Absent `workflowRunId`
  * and `githubDate` read as null; absent `acknowledgedRerun` reads as false.
  */
-const OPTIONAL_CLAIM_KEYS: readonly string[] = ['workflowRunId', 'githubDate', 'acknowledgedRerun', 'priorAttempted'];
+const OPTIONAL_CLAIM_KEYS: readonly string[] = ['workflowRunId', 'githubDate', 'acknowledgedRerun', 'priorAttempted', 'priorCompleted'];
 /** GitHub's `Date:` header as ISO UTC, second precision. */
 const GITHUB_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 /** A GitHub Actions workflow run id. Null until dispatch learns one. */
@@ -553,6 +553,11 @@ export interface ClaimEvent {
   readonly acknowledgedRerun?: true;
   /** The counted prior paid attempts the consent was given over. Present exactly when `acknowledgedRerun` is. */
   readonly priorAttempted?: number;
+  /**
+   * The step-9 count the consent was given over: `<ns>-completed` markers plus
+   * main's recorded constant. Present exactly when `acknowledgedRerun` is.
+   */
+  readonly priorCompleted?: number;
 }
 
 /** True for a decimal GitHub workflow run id that fits in a signed 64-bit integer. */
@@ -952,7 +957,7 @@ function claimStamp(claim: ClaimEvent): string {
     claim.halt ?? '',
     claim.workflowRunId ?? '',
     claim.githubDate ?? '',
-    claim.acknowledgedRerun === true ? `rerun:${String(claim.priorAttempted ?? '')}` : '',
+    claim.acknowledgedRerun === true ? `rerun:${String(claim.priorAttempted ?? '')}:${String(claim.priorCompleted ?? '')}` : '',
   ].join('\0');
 }
 
@@ -1048,18 +1053,21 @@ function parseClaim(value: unknown, schemaVersion: OperatorJournal['schemaVersio
 }
 
 /**
- * `acknowledgedRerun` and `priorAttempted` travel together: both absent (or
- * an explicit `false` with no count) is no rerun consent; `true` needs a
- * whole count of at least one. Anything else is corrupt.
+ * `acknowledgedRerun`, `priorAttempted` and `priorCompleted` travel together:
+ * all absent (or an explicit `false` with no count) is no rerun consent;
+ * `true` needs both counts whole, at least one of them above 0. Anything else
+ * is corrupt.
  */
-function storedRerun(claim: Record<string, unknown>): { readonly acknowledgedRerun?: true; readonly priorAttempted?: number } {
+function storedRerun(claim: Record<string, unknown>): { readonly acknowledgedRerun?: true; readonly priorAttempted?: number; readonly priorCompleted?: number } {
   const hasAck = Object.hasOwn(claim, 'acknowledgedRerun');
-  const hasCount = Object.hasOwn(claim, 'priorAttempted');
+  const hasCount = Object.hasOwn(claim, 'priorAttempted') || Object.hasOwn(claim, 'priorCompleted');
   if (!hasAck && !hasCount) return {};
   if (hasAck && claim.acknowledgedRerun === false && !hasCount) return {};
-  const count = claim.priorAttempted;
-  if (claim.acknowledgedRerun === true && typeof count === 'number' && Number.isSafeInteger(count) && count >= 1) {
-    return { acknowledgedRerun: true, priorAttempted: count };
+  const whole = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+  const attempted = claim.priorAttempted;
+  const completed = claim.priorCompleted;
+  if (claim.acknowledgedRerun === true && whole(attempted) && whole(completed) && attempted + completed >= 1) {
+    return { acknowledgedRerun: true, priorAttempted: attempted, priorCompleted: completed };
   }
   throw new AdmissionFileClosedError('corrupt');
 }

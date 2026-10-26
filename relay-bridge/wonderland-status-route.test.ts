@@ -156,6 +156,7 @@ describe('wonderland status', () => {
           state: 'awaiting_operator',
           updatedAt: WHEN,
           priorAttempted: 'UNKNOWN',
+          priorCompleted: 'UNKNOWN',
           rerunConsentRequired: false,
         },
       });
@@ -192,6 +193,7 @@ describe('wonderland status', () => {
         state: 'awaiting_operator',
         updatedAt: WHEN,
         priorAttempted: 'UNKNOWN',
+        priorCompleted: 'UNKNOWN',
         rerunConsentRequired: false,
       });
       expect(readFileSync(storePath, 'utf8')).toBe(before);
@@ -213,6 +215,7 @@ describe('wonderland status', () => {
         cause: 'AWAITING_OPERATOR_EXPIRED',
         updatedAt: new Date(expiredAtMs).toISOString(),
         priorAttempted: 'UNKNOWN',
+        priorCompleted: 'UNKNOWN',
         rerunConsentRequired: false,
       };
       expect(closed?.body).toEqual(expiredBody);
@@ -425,7 +428,7 @@ describe('wonderland status', () => {
     const workflowSource = [
       'on:', '  workflow_dispatch:', '    inputs:',
       ...['confirm_live', 'mission', 'lane', 'dispatch_key', 'run_id'].map((name) => `      ${name}:\n        default: ''`),
-      '',
+      'jobs:\n  paid:\n    steps:\n      - run: |\n          case "$MARKER_NAMESPACE" in\n            julius-first-live) RECORDED_PAID_ATTEMPTS=1 ;;  # run 33697109210\n            *)                 RECORDED_PAID_ATTEMPTS=0 ;;\n          esac\n',
     ].join('\n');
     const input = {
       wonderlandRunId: RUN, serverRunId: SERVER, repo: 'founder/sunday-relay', lane: 'lab', workflowSource,
@@ -450,7 +453,7 @@ describe('wonderland status', () => {
           if (args[0] === 'api') return { code: 1, stdout: 'HTTP/2.0 404 Not Found\nDate: Fri, 23 Oct 2026 17:18:05 GMT\n', stderr: '' };
           throw new Error('operator_process_killed');
         },
-      }, { nowIso: () => WHEN }, { read: () => Promise.resolve({ readable: true, counted: 0 }) });
+      }, { nowIso: () => WHEN }, { read: () => Promise.resolve({ readable: true, counted: 0 }), readCompleted: () => Promise.resolve({ readable: true, counted: 0 }) });
       const dry = await tool.claim({ ...input, dispatch: false, confirmation: null });
       expect(dry.ok && dry.claimed).toBe(false);
       const afterDry = await handleWonderlandStatusRoute(statusRequest(SERVER), ports);
@@ -569,6 +572,7 @@ describe('wonderland status', () => {
           state: 'unknown',
           updatedAt: '2026-10-23T18:00:00.000Z',
           priorAttempted: 'UNKNOWN',
+          priorCompleted: 'UNKNOWN',
           rerunConsentRequired: false,
         },
       });
@@ -645,6 +649,7 @@ describe('wonderland status', () => {
             state,
             updatedAt: '2026-10-23T18:00:00.000Z',
             priorAttempted: 'UNKNOWN',
+            priorCompleted: 'UNKNOWN',
             rerunConsentRequired: false,
           },
         });
@@ -667,6 +672,7 @@ describe('wonderland status', () => {
             cause,
             updatedAt: '2026-10-23T18:00:00.000Z',
             priorAttempted: 'UNKNOWN',
+            priorCompleted: 'UNKNOWN',
             rerunConsentRequired: false,
           },
         });
@@ -683,6 +689,7 @@ describe('wonderland status', () => {
         state: 'unknown',
         updatedAt: '2026-10-23T18:00:00.000Z',
         priorAttempted: 'UNKNOWN',
+        priorCompleted: 'UNKNOWN',
         rerunConsentRequired: false,
       });
       expect(badCause?.body).not.toHaveProperty('cause');

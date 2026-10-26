@@ -26,8 +26,9 @@
  * read here, and none is sent to or from the client. The response carries only
  * the wlj, the state, the workflowRunId, dispatchedAt and replayed.
  *
- * THE SECOND PHRASE. When the paid workflow's own attempted-marker count for
- * this mission is PROVEN above zero, the claim core refuses
+ * THE SECOND PHRASE. When either count the paid workflow gates on for this
+ * mission (its attempted markers, or its step-9 completed markers plus the
+ * recorded constant) is PROVEN above zero, the claim core refuses
  * (`julius_rerun_consent_required`, 409, nothing claimed or dispatched, the
  * admission still held) unless this body also carries
  * `acknowledgeRerun: "RERUN PAID MISSION"`, typed by the founder for THIS
@@ -235,5 +236,6 @@ export function startHttp(wljRunId: string, result: ClaimResult): { status: numb
   const body: Record<string, unknown> = { error: { kind: result.kind, message: result.message }, retry: false };
   if (result.record !== null) Object.assign(body, startBody(wljRunId, result.record, false));
   if (result.priorAttempted !== undefined) body.priorAttempted = result.priorAttempted;
+  if (result.priorCompleted !== undefined) body.priorCompleted = result.priorCompleted;
   return { status: 409, body };
 }

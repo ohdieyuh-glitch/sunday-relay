@@ -70,6 +70,14 @@ on:
         description: 'Julius bootstrap run id'
         required: false
         default: ''
+jobs:
+  paid:
+    steps:
+      - run: |
+          case "$MARKER_NAMESPACE" in
+            julius-first-live) RECORDED_PAID_ATTEMPTS=1 ;;  # run 33697109210
+            *)                 RECORDED_PAID_ATTEMPTS=0 ;;
+          esac
 `;
 
 const WORKFLOW_WITHOUT_INPUT = `
@@ -134,7 +142,7 @@ function claimInput(over: Partial<ClaimInput> = {}): ClaimInput {
 }
 
 /** The paid workflow's attempted-marker count, proven zero: a first run. */
-const ZERO_PRIOR: PriorAttemptReader = { read: () => Promise.resolve({ readable: true, counted: 0 }) };
+const ZERO_PRIOR: PriorAttemptReader = { read: () => Promise.resolve({ readable: true, counted: 0 }), readCompleted: () => Promise.resolve({ readable: true, counted: 0 }) };
 
 function claimTool(path: string, spawn: GhSpawner, nowIso: () => string = () => WHEN) {
   return createOperatorClaimTool(openAdmissionFile(path), spawn, { nowIso }, ZERO_PRIOR);
@@ -257,6 +265,9 @@ const PR459_INPUTS = JSON.parse(readFileSync(join(__dirname, 'fixtures/pr459-wor
   readonly workflowDispatchInputs: readonly string[];
 };
 
+/** The step-9 recorded-attempts table, as main's workflow carries it. */
+const RECORDED_BLOCK_LINES = ['jobs:', '  paid:', '    steps:', '      - run: |', '          case "$MARKER_NAMESPACE" in', '            julius-first-live) RECORDED_PAID_ATTEMPTS=1 ;;  # run 33697109210', '            *)                 RECORDED_PAID_ATTEMPTS=0 ;;', '          esac', ''];
+
 /** A workflow that declares exactly the fixture's inputs, so a claim reads #459's surface. */
 function workflowFromFixture(names: readonly string[]): string {
   return [
@@ -265,8 +276,7 @@ function workflowFromFixture(names: readonly string[]): string {
     '  workflow_dispatch:',
     '    inputs:',
     ...names.flatMap((name) => [`      ${name}:`, `        description: '${name}'`, '        required: false', "        default: ''"]),
-    'jobs: {}',
-    '',
+    ...RECORDED_BLOCK_LINES,
   ].join('\n');
 }
 

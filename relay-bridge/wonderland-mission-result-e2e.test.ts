@@ -76,6 +76,14 @@ on:
         description: 'Julius bootstrap run id'
         required: false
         default: ''
+jobs:
+  paid:
+    steps:
+      - run: |
+          case "$MARKER_NAMESPACE" in
+            julius-first-live) RECORDED_PAID_ATTEMPTS=1 ;;  # run 33697109210
+            *)                 RECORDED_PAID_ATTEMPTS=0 ;;
+          esac
 `;
 
 /** The spent-tag read: absent, with GitHub's clock, which the claim keeps as its dispatch time. */
@@ -261,7 +269,7 @@ describe('OFFLINE / NOT A PAID RUN — wonderland mission result end to end', ()
       ports.close();
 
       const { calls, spawn } = fakeDispatcher();
-      const claimed = await createOperatorClaimTool(openAdmissionFile(storePath), spawn, { nowIso: () => WHEN }, { read: () => Promise.resolve({ readable: true, counted: 0 }) }).claim({
+      const claimed = await createOperatorClaimTool(openAdmissionFile(storePath), spawn, { nowIso: () => WHEN }, { read: () => Promise.resolve({ readable: true, counted: 0 }), readCompleted: () => Promise.resolve({ readable: true, counted: 0 }) }).claim({
         wonderlandRunId: RUN,
         serverRunId: RUN,
         repo: 'founder/sunday-relay',
@@ -380,7 +388,7 @@ describe('OFFLINE / NOT A PAID RUN — wonderland mission result end to end', ()
 
     const { dir, storePath } = await admittedStore();
     const { calls, spawn } = fakeDispatcher();
-    const claimed = await createOperatorClaimTool(openAdmissionFile(storePath), spawn, { nowIso: () => WHEN }, { read: () => Promise.resolve({ readable: true, counted: 0 }) }).claim({
+    const claimed = await createOperatorClaimTool(openAdmissionFile(storePath), spawn, { nowIso: () => WHEN }, { read: () => Promise.resolve({ readable: true, counted: 0 }), readCompleted: () => Promise.resolve({ readable: true, counted: 0 }) }).claim({
       wonderlandRunId: RUN,
       serverRunId: RUN,
       repo: 'founder/sunday-relay',

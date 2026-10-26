@@ -5,8 +5,12 @@
  * 127.0.0.1:8793 so the client can rehearse the second phrase
  * (`acknowledgeRerun: "RERUN PAID MISSION"`) against the bridge change.
  * Everything behind the routes is fake:
- * - the prior-attempt count is chosen by this harness's own argv
- *   (`--prior 0 | 1 | UNKNOWN`), for both /status and the Start's claim core;
+ * - the two prior-run counts are chosen by this harness's own argv, for both
+ *   /status and the Start's claim core: `--prior 0 | 1 | UNKNOWN` is the
+ *   attempted-marker count (`priorAttempted`), and `--completed 0 | 1 |
+ *   UNKNOWN` (default 0) is the step-9 completed-marker count, which with the
+ *   fixture workflow's recorded constant (0 for this namespace) is
+ *   `priorCompleted`;
  * - `gh` is a recording fake: it answers main's workflow, contract and lane
  *   grant from fixtures, answers the spent tag as absent, and NEVER runs
  *   `gh workflow run` or any other process. A "dispatch" is a logged argv.
@@ -20,7 +24,7 @@
  *
  * Launch (from the repository root, no npm):
  *   node node_modules/esbuild/bin/esbuild relay-bridge/rehearsal/rerun-consent-harness.ts --bundle --platform=node --format=cjs --outfile=dist/rehearsal/rerun-consent-harness.cjs --log-level=warning
- *   node dist/rehearsal/rerun-consent-harness.cjs --prior 1
+ *   node dist/rehearsal/rerun-consent-harness.cjs --prior 1 [--completed 0|1|UNKNOWN]
  */
 
 import { mkdtempSync } from 'node:fs';
@@ -73,21 +77,34 @@ on:
         description: 'key'
       run_id:
         default: ''
+jobs:
+  paid:
+    steps:
+      - run: |
+          case "$MARKER_NAMESPACE" in
+            julius-first-live) RECORDED_PAID_ATTEMPTS=1 ;;  # run 33697109210
+            *)                 RECORDED_PAID_ATTEMPTS=0 ;;
+          esac
 `;
 const LANE_GRANT = "const DEFAULT_LANES = Object.freeze(['lab']);\nconst MISSION_LANES = Object.freeze({\n  'julius-first-live': Object.freeze(['regression']),\n});\n";
 
 export type RehearsalPrior = 0 | 1 | 'UNKNOWN';
 
-export function parseRehearsalArgv(argv: readonly string[]): { readonly prior: RehearsalPrior; readonly sessionToken: string } | null {
+export function parseRehearsalArgv(argv: readonly string[]): {
+  readonly prior: RehearsalPrior;
+  readonly completed: RehearsalPrior;
+  readonly sessionToken: string;
+} | null {
   const option = (name: string): string | null => {
     const index = argv.indexOf(`--${name}`);
     return index >= 0 && argv[index + 1] !== undefined ? argv[index + 1] ?? null : null;
   };
-  const raw = option('prior');
-  const prior: RehearsalPrior | null = raw === '0' ? 0 : raw === '1' ? 1 : raw === 'UNKNOWN' ? 'UNKNOWN' : null;
+  const count = (raw: string | null): RehearsalPrior | null => (raw === '0' ? 0 : raw === '1' ? 1 : raw === 'UNKNOWN' ? 'UNKNOWN' : null);
+  const prior = count(option('prior'));
+  const completed = argv.includes('--completed') ? count(option('completed')) : 0;
   const sessionToken = option('session-token') ?? 'rehearsal-session';
-  if (prior === null || !/^[A-Za-z0-9_-]{8,128}$/u.test(sessionToken)) return null;
-  return { prior, sessionToken };
+  if (prior === null || completed === null || !/^[A-Za-z0-9_-]{8,128}$/u.test(sessionToken)) return null;
+  return { prior, completed, sessionToken };
 }
 
 /** The recording fake `gh`. It never starts a process. */
@@ -118,9 +135,9 @@ export function rehearsalGh(log: (line: string) => void): GhSpawner & { readonly
   };
 }
 
-export function rehearsalPriorReader(prior: RehearsalPrior): PriorAttemptReader {
-  const read: PriorAttemptRead = prior === 'UNKNOWN' ? { readable: false } : { readable: true, counted: prior };
-  return { read: () => Promise.resolve(read) };
+export function rehearsalPriorReader(prior: RehearsalPrior, completed: RehearsalPrior = 0): PriorAttemptReader {
+  const of = (value: RehearsalPrior): PriorAttemptRead => (value === 'UNKNOWN' ? { readable: false } : { readable: true, counted: value });
+  return { read: () => Promise.resolve(of(prior)), readCompleted: () => Promise.resolve(of(completed)) };
 }
 
 function readBody(req: IncomingMessage): Promise<string> {
@@ -139,7 +156,12 @@ function readBody(req: IncomingMessage): Promise<string> {
 
 const header = (value: string | string[] | undefined): string | undefined => (Array.isArray(value) ? value[0] : value);
 
-export function startRehearsal(input: { readonly prior: RehearsalPrior; readonly sessionToken: string; readonly log?: (line: string) => void }) {
+export function startRehearsal(input: {
+  readonly prior: RehearsalPrior;
+  readonly completed: RehearsalPrior;
+  readonly sessionToken: string;
+  readonly log?: (line: string) => void;
+}) {
   const log = input.log ?? ((line: string) => { process.stdout.write(`${line}\n`); });
   const storePath = join(mkdtempSync(join(tmpdir(), 'relay-rerun-rehearsal-')), 'admission.json');
   const env: Record<string, string | undefined> = {
@@ -159,9 +181,10 @@ export function startRehearsal(input: { readonly prior: RehearsalPrior; readonly
     readWorkflowText: () => null,
   });
   const gh = rehearsalGh(log);
-  const prior = rehearsalPriorReader(input.prior);
+  const prior = rehearsalPriorReader(input.prior, input.completed);
   const tool = createOperatorClaimTool(openAdmissionFile(storePath), gh, undefined, prior);
-  const statusCount = (): Promise<number | 'UNKNOWN'> => Promise.resolve(input.prior);
+  // The fixture workflow records 0 prior paid attempts for this namespace, so priorCompleted is the completed count.
+  const statusCount = () => Promise.resolve({ attempted: input.prior, completed: input.completed });
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     void (async () => {
       const send = (status: number, body: unknown): void => {
@@ -200,7 +223,7 @@ export function startRehearsal(input: { readonly prior: RehearsalPrior; readonly
     })();
   });
   server.listen(REHEARSAL_PORT, REHEARSAL_HOST, () => {
-    log(`${TAG} listening on http://${REHEARSAL_HOST}:${String(REHEARSAL_PORT)} ONLY. prior=${String(input.prior)}. project=${PROJECT} founder=${FOUNDER}.`);
+    log(`${TAG} listening on http://${REHEARSAL_HOST}:${String(REHEARSAL_PORT)} ONLY. prior=${String(input.prior)} completed=${String(input.completed)}. project=${PROJECT} founder=${FOUNDER}.`);
     log(`${TAG} every answer is simulated; no gh process is started and no workflow can run. Store: ${storePath}`);
   });
   return { server, gh, storePath, close: () => { server.close(); ports.close(); } };
@@ -209,7 +232,7 @@ export function startRehearsal(input: { readonly prior: RehearsalPrior; readonly
 if (require.main === module) {
   const parsed = parseRehearsalArgv(process.argv.slice(2));
   if (parsed === null) {
-    process.stderr.write('Usage: node dist/rehearsal/rerun-consent-harness.cjs --prior 0|1|UNKNOWN [--session-token <8-128 chars>]\n');
+    process.stderr.write('Usage: node dist/rehearsal/rerun-consent-harness.cjs --prior 0|1|UNKNOWN [--completed 0|1|UNKNOWN] [--session-token <8-128 chars>]\n');
     process.exitCode = 2;
   } else {
     startRehearsal(parsed);

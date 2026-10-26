@@ -251,6 +251,7 @@ describe('admission through createBridgeServer', () => {
       updatedAt: expect.any(String),
       // Start is off in this server's env, so no prior-attempt reader is wired: UNKNOWN, not required.
       priorAttempted: 'UNKNOWN',
+      priorCompleted: 'UNKNOWN',
       rerunConsentRequired: false,
     });
     expect(JSON.stringify(ok.body)).not.toMatch(/gh|operator-claim|child_process|api_key|token/i);
@@ -419,6 +420,7 @@ describe('admission through createBridgeServer', () => {
       state: 'unknown',
       updatedAt: '2026-10-23T18:00:00.000Z',
       priorAttempted: 'UNKNOWN',
+      priorCompleted: 'UNKNOWN',
       rerunConsentRequired: false,
     });
     expect(running.body).not.toHaveProperty('cause');

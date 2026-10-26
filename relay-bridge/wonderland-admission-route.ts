@@ -118,11 +118,16 @@ export function wonderlandAdmissionRequestFrom(request: {
 }
 
 /**
- * The counted prior paid attempts for one admitted mission, as the paid
- * workflow's attempted-marker gate would count them, or UNKNOWN. Injected by
- * the composition root; this module starts no process and reads no network.
+ * The two prior-run counts the paid workflow gates on for one admitted
+ * mission, each an integer or UNKNOWN: `attempted` (the attempted-marker
+ * gate) and `completed` (the step-9 gate: completed markers plus the recorded
+ * constant). Injected by the composition root; this module starts no process
+ * and reads no network.
  */
-export type WonderlandStatusPriorAttempts = (missionId: string) => Promise<number | 'UNKNOWN'>;
+export type WonderlandStatusPriorAttempts = (missionId: string) => Promise<{
+  readonly attempted: number | 'UNKNOWN';
+  readonly completed: number | 'UNKNOWN';
+}>;
 
 export function createWonderlandStatusBridge(ports: WonderlandAdmissionRoutePorts, priorAttempts?: WonderlandStatusPriorAttempts): {
   readonly path: string;
@@ -378,13 +383,14 @@ export function handleWonderlandAdmissionRoute(
  * stays held. A stored state or cause outside the closed unions is returned
  * as `state: "unknown"` with no cause. `unknown` is never terminal.
  *
- * Every 200 also carries, at top level, `priorAttempted` (the counted prior
- * paid attempts for the admitted mission: an integer >= 0, or "UNKNOWN") and
- * `rerunConsentRequired` (true exactly when `priorAttempted` is an integer
- * above 0), so the client shows the second phrase field only then. They are
- * read only while the admission is startable (`awaiting_operator`); in any
- * other state nothing is read and they are "UNKNOWN" and false. The phrase
- * itself is never in this body.
+ * Every 200 also carries, at top level, `priorAttempted` (the counted
+ * attempted markers: an integer >= 0, or "UNKNOWN"), `priorCompleted` (the
+ * step-9 count, completed markers plus the recorded constant: an integer >= 0,
+ * or "UNKNOWN") and `rerunConsentRequired` (true exactly when both are
+ * integers and at least one is above 0), so the client shows the second
+ * phrase field only then. They are read only while the admission is startable
+ * (`awaiting_operator`); in any other state nothing is read and they are
+ * "UNKNOWN", "UNKNOWN" and false. The phrase itself is never in this body.
  */
 export function handleWonderlandStatusRoute(
   request: WonderlandAdmissionRouteRequest,
@@ -404,23 +410,41 @@ export function handleWonderlandStatusRoute(
   return readAdmittedStatusWithMission(request, ports, runId, guarded.native.playerId).then(async (read) => {
     if (read.status !== 200 || read.body === null || typeof read.body !== 'object') return { status: read.status, body: read.body };
     const view = read.body as Record<string, unknown>;
+    const whole = (value: unknown): number | 'UNKNOWN' => (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 'UNKNOWN');
     let priorAttempted: number | 'UNKNOWN' = 'UNKNOWN';
+    let priorCompleted: number | 'UNKNOWN' = 'UNKNOWN';
     const missionId = read.missionId ?? null;
     if (view.state === 'awaiting_operator' && missionId !== null && priorAttempts !== undefined) {
       try {
-        const counted = await priorAttempts(missionId);
-        priorAttempted = typeof counted === 'number' && Number.isSafeInteger(counted) && counted >= 0 ? counted : 'UNKNOWN';
+        const counts = await priorAttempts(missionId);
+        priorAttempted = whole(counts?.attempted);
+        priorCompleted = whole(counts?.completed);
       } catch {
         priorAttempted = 'UNKNOWN';
+        priorCompleted = 'UNKNOWN';
       }
     }
-    return { status: 200, body: withRerunConsent(view, priorAttempted) };
+    return { status: 200, body: withRerunConsent(view, priorAttempted, priorCompleted) };
   });
 }
 
-/** The status body plus the two rerun fields, at top level. Existing fields are untouched. */
-export function withRerunConsent(view: Record<string, unknown>, priorAttempted: number | 'UNKNOWN'): Record<string, unknown> {
-  return { ...view, priorAttempted, rerunConsentRequired: typeof priorAttempted === 'number' && priorAttempted > 0 };
+/**
+ * The status body plus the three rerun fields, at top level. Existing fields
+ * are untouched. Consent is required only when both counts are known and at
+ * least one is above 0; either UNKNOWN means not required (Start is refused).
+ */
+export function withRerunConsent(
+  view: Record<string, unknown>,
+  priorAttempted: number | 'UNKNOWN',
+  priorCompleted: number | 'UNKNOWN',
+): Record<string, unknown> {
+  const known = typeof priorAttempted === 'number' && typeof priorCompleted === 'number';
+  return {
+    ...view,
+    priorAttempted,
+    priorCompleted,
+    rerunConsentRequired: known && (priorAttempted > 0 || priorCompleted > 0),
+  };
 }
 
 /**

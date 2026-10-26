@@ -53,6 +53,14 @@ on:
         description: 'key'
       run_id:
         default: ''
+jobs:
+  paid:
+    steps:
+      - run: |
+          case "$MARKER_NAMESPACE" in
+            julius-first-live) RECORDED_PAID_ATTEMPTS=1 ;;  # run 33697109210
+            *)                 RECORDED_PAID_ATTEMPTS=0 ;;
+          esac
 `;
 const ABSENT: GhResult = { code: 1, stdout: 'HTTP/2.0 404 Not Found\nDate: Fri, 23 Oct 2026 17:18:05 GMT\n\n{"message":"Not Found"}\n', stderr: '' };
 const CONTENTS = `repos/${REPO}/contents/`;
@@ -140,7 +148,7 @@ const startRequest = (over: Partial<WonderlandAdmissionRouteRequest> = {}) => ba
 
 /** An admitted, held J1 row on a real admission file, and the real claim core over a fake `gh`. */
 /** The paid workflow's attempted-marker count, proven zero: a first run. */
-const ZERO_PRIOR: PriorAttemptReader = { read: () => Promise.resolve({ readable: true, counted: 0 }) };
+const ZERO_PRIOR: PriorAttemptReader = { read: () => Promise.resolve({ readable: true, counted: 0 }), readCompleted: () => Promise.resolve({ readable: true, counted: 0 }) };
 
 async function admitted(over: Record<string, string | undefined> = {}, nowIso: () => string = () => WHEN, prior: PriorAttemptReader = ZERO_PRIOR) {
   const dir = mkdtempSync(join(tmpdir(), 'wlj-start-'));
