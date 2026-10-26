@@ -34,6 +34,7 @@ import { CANONICAL_UUID_V4, CLIENT_TRIGGER_ID, J1_IDEMPOTENCY_KEY } from '../src
 import { parseJuliusAdmissionRunId } from '../src/relay/integration/wonderland-admission/admission-run-id';
 import {
   GH_CLAIM_TIMEOUT_MS,
+  ghResultFromExecFile,
   OPERATOR_DISPATCH_CONFIRMATION,
   OPERATOR_LANES,
   openOperatorClaimTool,
@@ -82,8 +83,7 @@ export const ghClaimSpawner: GhSpawner = {
     return new Promise((resolve) => {
       try {
         const child = execFile('gh', [...args], { timeout: GH_CLAIM_TIMEOUT_MS, windowsHide: true }, (error, stdout, stderr) => {
-          const code = error === null ? 0 : typeof (error as { code?: unknown }).code === 'number' ? (error as { code: number }).code : 1;
-          resolve({ code, stdout: String(stdout ?? ''), stderr: String(stderr ?? '') });
+          resolve(ghResultFromExecFile(error, stdout, stderr));
         });
         // No input, as before: `gh` reads nothing from this process.
         child.stdin?.end();

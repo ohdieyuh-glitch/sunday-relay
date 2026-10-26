@@ -128,6 +128,28 @@ export interface GhResult {
   readonly code: number;
   readonly stdout: string;
   readonly stderr: string;
+  /**
+   * True when `gh` was killed (its timeout or a signal) instead of exiting, so
+   * whatever it was doing may already have reached GitHub. Absent otherwise.
+   */
+  readonly outcomeUnknown?: true;
+}
+
+/**
+ * The callback of node's execFile for `gh`, as a GhResult. A child that exited gives its
+ * exit code. One killed by the timeout or a signal gives code 1 and
+ * `outcomeUnknown`. `gh` missing (ENOENT, never started) gives code 1 and is
+ * known not to have run.
+ */
+export function ghResultFromExecFile(error: unknown, stdout: unknown, stderr: unknown): GhResult {
+  const out = { stdout: String(stdout ?? ''), stderr: String(stderr ?? '') };
+  if (error === null || error === undefined) return { code: 0, ...out };
+  const failure = error as { code?: unknown; killed?: unknown; signal?: unknown };
+  if (typeof failure.code === 'number' && failure.killed !== true && (failure.signal === null || failure.signal === undefined)) {
+    return { code: failure.code, ...out };
+  }
+  if (failure.code === 'ENOENT') return { code: 1, ...out };
+  return { code: 1, ...out, outcomeUnknown: true };
 }
 
 /**
@@ -678,7 +700,29 @@ async function claimPhased(
   const reserved = await file.exclusive((io) => Promise.resolve(reserveClaim(io, file.path, input, clock, tag, githubDate)));
   if (reserved.kind === 'done') return reserved.result;
   const ran = await spawn.run(reserved.liveArgs);
+  // A `gh workflow run` that was killed may already have been accepted by GitHub, so a
+  // paid run may be live. Write no outcome: the record stays `dispatching`, which is
+  // what it is (unknown), and only `reconcile` moves it, from GitHub evidence.
+  if (ran.outcomeUnknown === true) return dispatchOutcomeUnknown(reserved);
   return file.exclusive((io) => Promise.resolve(recordDispatchOutcome(io, input, reserved, ran)));
+}
+
+function dispatchOutcomeUnknown(reserved: Reservation): ClaimResult {
+  const { admission, at, githubDate, startBinding } = reserved;
+  const stillDispatching = baseEvent(admission, at, {
+    state: 'dispatching',
+    spentTagState: 'absent',
+    dispatchAttempted: false,
+    dispatchError: null,
+    halt: null,
+    githubDate,
+    startBinding,
+  });
+  return fail(
+    'dispatch_outcome_unknown',
+    'gh workflow run was stopped before it answered, so whether the paid run started is unknown. The record stays dispatching. Do not claim again: run reconcile.',
+    toView(admission, stillDispatching),
+  );
 }
 
 /**

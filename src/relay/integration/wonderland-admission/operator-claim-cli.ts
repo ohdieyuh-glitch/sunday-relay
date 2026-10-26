@@ -24,6 +24,7 @@ import { isLocalStorePath, openAdmissionFile } from './admission-file';
 import {
   createOperatorClaimTool,
   GH_CLAIM_TIMEOUT_MS,
+  ghResultFromExecFile,
   type ClaimResult,
   type GhResult,
   type GhSpawner,
@@ -182,6 +183,7 @@ function emitClaim(io: OperatorClaimCliIo, result: ClaimResult): number {
     || result.kind === 'RUN_ID_ALREADY_SPENT'
     || result.kind === 'SPENT_TAG_UNVERIFIED'
     || result.kind === 'AWAITING_OPERATOR_EXPIRED'
+    || result.kind === 'dispatch_outcome_unknown'
   ) {
     body.retry = false;
   }
@@ -298,8 +300,7 @@ function ghSpawn(args: readonly string[]): Promise<GhResult> {
   return new Promise((resolve) => {
     try {
       const child = execFile('gh', [...args], { timeout: GH_CLAIM_TIMEOUT_MS, windowsHide: true }, (error, stdout, stderr) => {
-        const code = error === null ? 0 : typeof (error as { code?: unknown }).code === 'number' ? (error as { code: number }).code : 1;
-        resolve({ code, stdout: String(stdout ?? ''), stderr: String(stderr ?? '') });
+        resolve(ghResultFromExecFile(error, stdout, stderr));
       });
       // No input, as before: `gh` reads nothing from this process.
       child.stdin?.end();

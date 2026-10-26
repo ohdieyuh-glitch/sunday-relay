@@ -1,3 +1,4 @@
+import { execFile } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -14,6 +15,7 @@ import {
   undeclaredDispatchInputs,
   concurrencyGroupName,
   createOperatorClaimTool,
+  ghResultFromExecFile,
   formatGhCommand,
   interpretSpentTagResponse,
   interpretWorkflowHalt,
@@ -698,6 +700,48 @@ describe('operator claim', () => {
       expect(readFileSync(`${path}.operator.json`, 'utf8')).toBe(before);
     });
   });
+
+  it('F1: a killed gh workflow run writes no outcome: the record stays dispatching, a later claim replays without spawning', async () => {
+    await withStore(async (path) => {
+      await admit(path);
+      const fake = scripted(ABSENT, { code: 1, stdout: '', stderr: '', outcomeUnknown: true });
+      const claims = claimTool(path, fake.spawn);
+      const stopped = await claims.claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
+      expect(stopped.ok).toBe(false);
+      if (stopped.ok) return;
+      expect(stopped.kind).toBe('dispatch_outcome_unknown');
+      expect(stopped.record?.state).toBe('dispatching');
+      expect(readAdmissionDocument(path).claims.map((event) => event.state)).toEqual(['dispatching']);
+      const spawned = fake.calls.length;
+      const again = await claims.claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
+      expect(again.ok && again.replayed).toBe(true);
+      expect(again.ok && again.record.state).toBe('dispatching');
+      const fresh = await claimTool(path, { async run() { throw new Error('spawned'); } })
+        .claim(claimInput({ dispatch: true, confirmation: OPERATOR_DISPATCH_CONFIRMATION }));
+      expect(fresh.ok && fresh.replayed).toBe(true);
+      expect(fake.calls.length).toBe(spawned);
+      expect(ghKinds(fake.calls)).toEqual([...MAIN_READS, 'tag', 'workflow']);
+      expect(readAdmissionDocument(path).claims.map((event) => event.state)).toEqual(['dispatching']);
+    });
+  });
+
+  it('F1: a child really killed by the execFile timeout maps to outcomeUnknown; an exit, a missing binary and success do not', async () => {
+    const run = (args: string[], timeout: number) => new Promise<GhResult>((resolve) => {
+      execFile(process.execPath, args, { timeout, windowsHide: true }, (error, stdout, stderr) => resolve(ghResultFromExecFile(error, stdout, stderr)));
+    });
+    const hung = await run(['-e', 'setInterval(() => {}, 1000)'], 300);
+    expect(hung).toMatchObject({ code: 1, outcomeUnknown: true });
+    const exited = await run(['-e', 'process.exit(3)'], 30_000);
+    expect(exited.code).toBe(3);
+    expect(exited.outcomeUnknown).toBeUndefined();
+    const ok = await run(['-e', 'process.stdout.write("x")'], 30_000);
+    expect(ok).toEqual({ code: 0, stdout: 'x', stderr: '' });
+    const missing = await new Promise<GhResult>((resolve) => {
+      execFile('julius-no-such-binary-f1', [], { timeout: 30_000, windowsHide: true }, (error, stdout, stderr) => resolve(ghResultFromExecFile(error, stdout, stderr)));
+    });
+    expect(missing.code).toBe(1);
+    expect(missing.outcomeUnknown).toBeUndefined();
+  }, 60_000);
 
   it('a dispatch failure moves the record to dispatch_failed and does not retry', async () => {
     await withStore(async (path) => {
