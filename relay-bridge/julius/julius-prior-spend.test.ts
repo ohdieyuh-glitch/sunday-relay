@@ -676,3 +676,61 @@ describe('the two pre-marker commands the paid workflow runs', () => {
     expect(down).toEqual({ code: 1, lines: ['attempt_markers_counted=UNKNOWN'] });
   });
 });
+
+describe('REVIEW pins: the classified listing never drops or zeroes a run it cannot prove', () => {
+  const real = run40242149156();
+  const realProof = () => classifyJuliusPriorRun({
+    binding: { workflowRunId: String(real.runId), workflowRunAttempt: '1', headSha: real.head },
+    run: real.run, jobs: real.jobs, artifacts: real.artifacts, liveEvidence: null, verdict: null,
+  }, real.wlj);
+
+  it('(a) an unreadable base listing stays unreadable, never a readable empty ledger', () => {
+    const result = classifyJuliusSpentTags({ namespace: J1, tags: [{ ref: 'refs/tags/julius-run-spent-not-hex', message: null }] });
+    expect(result).toEqual({ ledger: { readable: false }, audit: [] });
+    expect(authorizeJuliusLiveSpend({ namespace: J1, spendUsd: 30, repairCycles: 3, ledger: result.ledger }))
+      .toMatchObject({ authorized: false, reasonCode: 'spend_ledger_unreadable' });
+  });
+
+  it('(b) an unverified tag is kept as UNKNOWN and counted, never dropped', () => {
+    // A lightweight (commit) tag carries no message, so the record cannot verify it.
+    const tag = { ref: spentTag(real).ref, message: null };
+    const result = classifyJuliusSpentTags({ namespace: J1, tags: [tag], proofs: new Map([[real.wlj, realProof()]]) });
+    expect(result.audit).toEqual([expect.objectContaining({ runId: real.wlj, classification: 'UNKNOWN', basis: 'tag_unverified', counted: true })]);
+    expect(result.ledger.readable && result.ledger.priorRuns).toEqual([expect.objectContaining({ runId: real.wlj, spendVerified: false })]);
+    expect(authorizeJuliusLiveSpend({ namespace: J1, spendUsd: 30, repairCycles: 3, ledger: result.ledger }))
+      .toMatchObject({ authorized: false, reasonCode: 'qualifying_pair_spend_unverified' });
+  });
+
+  it('(c) a verified tag whose audit lines cannot be re-read stays counted at its full reservation', () => {
+    // The four-line reservation alone: verified spend, but no binding to read a proof against.
+    const fourLines = spentTag(real).message.split('\n').slice(0, 4).join('\n') + '\n';
+    const result = classifyJuliusSpentTags({ namespace: J1, tags: [{ ref: spentTag(real).ref, message: fourLines }], proofs: new Map([[real.wlj, realProof()]]) });
+    expect(result.audit).toEqual([expect.objectContaining({ classification: 'UNKNOWN', basis: 'tag_unbound', counted: true, reservedUsdMicros: RESERVED })]);
+    expect(result.ledger.readable && result.ledger.priorRuns).toEqual([expect.objectContaining({ runId: real.wlj, knownUsdMicros: RESERVED, spendVerified: true })]);
+  });
+
+  it('(d) a proof whose run id OR attempt differs, on the matching head, does not remove the tag', () => {
+    const proof = realProof();
+    expect(proof.classification).toBe('NOT_EXECUTED');
+    for (const binding of [
+      { ...proof.binding, workflowRunId: '40242149157' },
+      { ...proof.binding, workflowRunAttempt: '2' },
+    ]) {
+      const result = classifyJuliusSpentTags({ namespace: J1, tags: [spentTag(real)], proofs: new Map([[real.wlj, { ...proof, binding }]]) });
+      expect(result.audit[0], JSON.stringify(binding)).toMatchObject({ classification: 'UNKNOWN', basis: 'proof_binding_mismatch', counted: true });
+      expect(result.ledger.readable && result.ledger.priorRuns.length, JSON.stringify(binding)).toBe(1);
+    }
+  });
+
+  it('(e) a LIVE step that concluded cancelled ran, so proof (a) does not hold', () => {
+    const base = run40258482240();
+    const jobs = (base.jobs.jobs as Record<string, unknown>[]).map((entry) => (entry.name === MISSION
+      ? { ...entry, conclusion: 'cancelled', steps: [STEP(ATTEMPTED, 'success', 28), STEP(LIVE, 'cancelled', 32)] } : entry));
+    const proof = classifyJuliusPriorRun({
+      binding: { workflowRunId: String(base.runId), workflowRunAttempt: '1', headSha: base.head },
+      run: base.run, jobs: { total_count: jobs.length, jobs }, artifacts: base.artifacts, liveEvidence: null, verdict: null,
+    }, base.wlj);
+    expect(proof.basis).not.toBe('no_provider_execution_live_never_ran');
+    expect(proof.classification).toBe('UNKNOWN');
+  });
+});
