@@ -14,7 +14,7 @@
  * Loopback only. There is no listen socket and no remote store.
  */
 
-import { spawnSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -23,6 +23,7 @@ import { PAID_WORKFLOW_FILE } from './admission-contract';
 import { isLocalStorePath, openAdmissionFile } from './admission-file';
 import {
   createOperatorClaimTool,
+  GH_CLAIM_TIMEOUT_MS,
   type ClaimResult,
   type GhResult,
   type GhSpawner,
@@ -292,20 +293,20 @@ function flag(parsed: ParsedArgs, name: string): string | null {
   return value === undefined || value.trim() === '' ? null : value;
 }
 
-function ghSpawn(args: readonly string[]): GhResult {
-  try {
-    const result = spawnSync('gh', [...args], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    return {
-      code: typeof result.status === 'number' ? result.status : 1,
-      stdout: typeof result.stdout === 'string' ? result.stdout : '',
-      stderr: typeof result.stderr === 'string' ? result.stderr : '',
-    };
-  } catch {
-    return { code: 127, stdout: '', stderr: '' };
-  }
+/** `gh`, with the claim core's argv as given: no shell, a timeout, the founder's own login. */
+function ghSpawn(args: readonly string[]): Promise<GhResult> {
+  return new Promise((resolve) => {
+    try {
+      const child = execFile('gh', [...args], { timeout: GH_CLAIM_TIMEOUT_MS, windowsHide: true }, (error, stdout, stderr) => {
+        const code = error === null ? 0 : typeof (error as { code?: unknown }).code === 'number' ? (error as { code: number }).code : 1;
+        resolve({ code, stdout: String(stdout ?? ''), stderr: String(stderr ?? '') });
+      });
+      // No input, as before: `gh` reads nothing from this process.
+      child.stdin?.end();
+    } catch {
+      resolve({ code: 127, stdout: '', stderr: '' });
+    }
+  });
 }
 
 const entry = process.argv[1];

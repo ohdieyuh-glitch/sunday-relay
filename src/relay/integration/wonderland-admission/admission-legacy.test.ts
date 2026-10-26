@@ -152,7 +152,7 @@ describe('legacy schema v2 rows', () => {
     writeFileSync(file, text);
     const calls: string[][] = [];
     const spawn: GhSpawner = {
-      run(args) {
+      async run(args) {
         calls.push([...args]);
         return { code: 0, stdout: '', stderr: '' };
       },

@@ -27,11 +27,13 @@
  * the wlj, the state, the workflowRunId, dispatchedAt and replayed.
  */
 
-import { spawnSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 
 import { CANONICAL_UUID_V4, CLIENT_TRIGGER_ID, J1_IDEMPOTENCY_KEY } from '../src/relay/integration/wonderland-admission';
 import { parseJuliusAdmissionRunId } from '../src/relay/integration/wonderland-admission/admission-run-id';
 import {
+  GH_CLAIM_TIMEOUT_MS,
   OPERATOR_DISPATCH_CONFIRMATION,
   OPERATOR_LANES,
   openOperatorClaimTool,
@@ -55,7 +57,7 @@ const START_PATH = /^\/wonderland\/julius\/missions\/([^/]+)\/start$/u;
 const REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
 export const WONDERLAND_START_FLAG = 'JULIUS_WONDERLAND_START';
 /** A `gh` call from the claim core that takes longer than this is a failure, not waited on. */
-export const GH_CLAIM_TIMEOUT_MS = 120_000;
+export { GH_CLAIM_TIMEOUT_MS };
 
 /** The claim core's states that mean a paid dispatch was reserved or made: a start never runs `gh` past these. */
 const STARTED_STATES: ReadonlySet<string> = new Set(['dispatching', 'dispatched']);
@@ -70,24 +72,25 @@ export interface WonderlandMissionStartDeps {
   readonly claimTool: (storePath: string) => OperatorClaimTool;
 }
 
-/** `gh`, with the claim core's argv as given: no shell, a timeout, the founder's own login. */
+/**
+ * `gh`, with the claim core's argv as given: no shell, a timeout, the
+ * founder's own login. Asynchronous, so the bridge keeps serving while a
+ * Start's `gh` children run.
+ */
 export const ghClaimSpawner: GhSpawner = {
-  run(args): GhResult {
-    try {
-      const result = spawnSync('gh', [...args], {
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'pipe'],
-        timeout: GH_CLAIM_TIMEOUT_MS,
-        windowsHide: true,
-      });
-      return {
-        code: typeof result.status === 'number' ? result.status : 1,
-        stdout: typeof result.stdout === 'string' ? result.stdout : '',
-        stderr: typeof result.stderr === 'string' ? result.stderr : '',
-      };
-    } catch {
-      return { code: 127, stdout: '', stderr: '' };
-    }
+  run(args): Promise<GhResult> {
+    return new Promise((resolve) => {
+      try {
+        const child = execFile('gh', [...args], { timeout: GH_CLAIM_TIMEOUT_MS, windowsHide: true }, (error, stdout, stderr) => {
+          const code = error === null ? 0 : typeof (error as { code?: unknown }).code === 'number' ? (error as { code: number }).code : 1;
+          resolve({ code, stdout: String(stdout ?? ''), stderr: String(stderr ?? '') });
+        });
+        // No input, as before: `gh` reads nothing from this process.
+        child.stdin?.end();
+      } catch {
+        resolve({ code: 127, stdout: '', stderr: '' });
+      }
+    });
   },
 };
 
@@ -163,7 +166,8 @@ export async function handleWonderlandMissionStartRoute(
     return err(400, 'julius_start_confirmation_required', `The founder's Start must carry confirm: "${OPERATOR_DISPATCH_CONFIRMATION}". Nothing was dispatched.`);
   }
   if (typeof body.clientTriggerId !== 'string' || !CLIENT_TRIGGER_ID.test(body.clientTriggerId)
-    || typeof body.clientUiActionUtc !== 'string' || !Number.isFinite(Date.parse(body.clientUiActionUtc))) {
+    || typeof body.clientUiActionUtc !== 'string' || body.clientUiActionUtc.length > 80
+    || !Number.isFinite(Date.parse(body.clientUiActionUtc))) {
     return err(400, 'julius_start_client_binding_required', 'clientTriggerId and clientUiActionUtc are required.');
   }
   // The same existence and owner checks as /status: a run this player does not own is the uniform 404.
@@ -182,6 +186,12 @@ export async function handleWonderlandMissionStartRoute(
       workflowSource: '',
       dispatch: true,
       confirmation: OPERATOR_DISPATCH_CONFIRMATION,
+      // Evidence of this Start on the claim's journal events. The key is hashed, never stored.
+      startBinding: {
+        startKeyHash: createHash('sha256').update(startKey).digest('hex'),
+        clientTriggerId: body.clientTriggerId,
+        clientUiActionUtc: body.clientUiActionUtc,
+      },
     });
   } catch {
     return err(503, 'julius_start_unavailable', 'The claim could not run. Check /status before trying again.');

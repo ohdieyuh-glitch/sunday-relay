@@ -64,6 +64,7 @@ import type {
   AdmissionFile,
   AdmissionFileIo,
   ClaimEvent,
+  ClaimStartBinding,
   DispatchError,
   OperatorDocument,
   StoredAdmission,
@@ -72,6 +73,7 @@ import type {
 } from './admission-file';
 import {
   awaitingOperatorExpiryNote,
+  isClaimStartBinding,
   isStoredWorkflowRunId,
   openAdmissionFile,
   readAdmissionDocument,
@@ -128,10 +130,16 @@ export interface GhResult {
   readonly stderr: string;
 }
 
-/** The only process this tool is allowed to start. Tests pass a fake. */
+/**
+ * The only process this tool is allowed to start. Tests pass a fake. Async,
+ * so a caller serving requests (the bridge) is not blocked while `gh` runs.
+ */
 export interface GhSpawner {
-  run(args: readonly string[]): GhResult;
+  run(args: readonly string[]): Promise<GhResult>;
 }
+
+/** A `gh` call from the claim core that takes longer than this is a failure, not waited on. */
+export const GH_CLAIM_TIMEOUT_MS = 120_000;
 
 export type OperatorViewState =
   | 'admitted'
@@ -175,6 +183,13 @@ export interface ClaimInput {
   readonly workflowSource: string;
   readonly dispatch: boolean;
   readonly confirmation: string | null;
+  /**
+   * Set only by the bridge start route: the hash of its idempotency key and
+   * the client's trigger id and UI action time. Journaled on every event this
+   * claim writes. The CLI never sets it. A replay writes nothing, so a later
+   * start never rewrites a recorded binding.
+   */
+  readonly startBinding?: ClaimStartBinding;
 }
 
 /** Server clock. Tests inject this. Callers cannot pass it on a claim. */
@@ -641,9 +656,9 @@ async function claimPhased(
 ): Promise<ClaimResult> {
   const checked = await file.exclusive((io) => Promise.resolve(checkClaim(io, file.path, input, clock)));
   if (checked.kind === 'done') return checked.result;
-  const onMain = mainRefusal(spawn, input, checked.admission);
+  const onMain = await mainRefusal(spawn, input, checked.admission);
   if (onMain !== null) return onMain;
-  const tagRead = spawn.run(spentTagApiArgs(input.repo, checked.admission.serverRunId));
+  const tagRead = await spawn.run(spentTagApiArgs(input.repo, checked.admission.serverRunId));
   const tag = interpretSpentTagResponse(tagRead);
   if (tag === 'unreadable') {
     return fail(
@@ -662,7 +677,7 @@ async function claimPhased(
   }
   const reserved = await file.exclusive((io) => Promise.resolve(reserveClaim(io, file.path, input, clock, tag, githubDate)));
   if (reserved.kind === 'done') return reserved.result;
-  const ran = spawn.run(reserved.liveArgs);
+  const ran = await spawn.run(reserved.liveArgs);
   return file.exclusive((io) => Promise.resolve(recordDispatchOutcome(io, input, reserved, ran)));
 }
 
@@ -671,20 +686,20 @@ async function claimPhased(
  * declares every input the argv passes, and the mission's contract there is
  * granted the lane. Null when both hold.
  */
-function mainRefusal(spawn: GhSpawner, input: ClaimInput, admission: StoredAdmission): ClaimResult | null {
+async function mainRefusal(spawn: GhSpawner, input: ClaimInput, admission: StoredAdmission): Promise<ClaimResult | null> {
   const record = toView(admission, null);
-  const read = (path: string): string | null => {
-    const result = spawn.run(mainContentsArgs(input.repo, path));
+  const read = async (path: string): Promise<string | null> => {
+    const result = await spawn.run(mainContentsArgs(input.repo, path));
     return result.code === 0 && result.stdout.trim() !== '' ? result.stdout : null;
   };
-  const workflow = read(`.github/workflows/${PAID_WORKFLOW_FILE}`);
+  const workflow = await read(`.github/workflows/${PAID_WORKFLOW_FILE}`);
   if (workflow === null) {
     return fail('main_workflow_unreadable', 'The paid workflow could not be read at main. Nothing was claimed or dispatched.', record);
   }
   const inputs = workflowInputsRefusal(workflow, admission);
   if (inputs !== null) return inputs;
-  const contract = read(missionContractPath(admission.missionId ?? ''));
-  const checker = contract === null ? null : read(LANE_GRANT_SOURCE);
+  const contract = await read(missionContractPath(admission.missionId ?? ''));
+  const checker = contract === null ? null : await read(LANE_GRANT_SOURCE);
   const grants = checker === null ? null : parseLaneGrants(checker);
   const granted = contract === null || grants === null ? null : grantedLanes(contract, grants);
   if (granted === null) {
@@ -733,6 +748,7 @@ interface Reservation {
   readonly admission: StoredAdmission;
   readonly at: string;
   readonly githubDate: string | null;
+  readonly startBinding: ClaimStartBinding | undefined;
   readonly liveArgs: readonly string[];
   readonly command: string;
 }
@@ -860,6 +876,7 @@ function reserveClaim(
       dispatchError: null,
       halt: 'RUN_ID_ALREADY_SPENT',
       githubDate,
+      startBinding: input.startBinding,
     });
     io.write(appendClaim(document, event));
     if (!claimWasRecorded(storePath, event)) return { kind: 'done', result: expiredRefusal(admission) };
@@ -879,6 +896,7 @@ function reserveClaim(
     dispatchError: null,
     halt: null,
     githubDate,
+    startBinding: input.startBinding,
   });
   io.write(appendClaim(document, reservation));
   if (!claimWasRecorded(storePath, reservation)) return { kind: 'done', result: expiredRefusal(admission) };
@@ -893,7 +911,7 @@ function reserveClaim(
     storePath,
   });
   if (liveArgs === null) return { kind: 'done', result: expiredRefusal(admission) };
-  return { kind: 'reserved', admission, at: nowIso, githubDate, liveArgs, command };
+  return { kind: 'reserved', admission, at: nowIso, githubDate, startBinding: input.startBinding, liveArgs, command };
 }
 
 /**
@@ -907,7 +925,7 @@ function recordDispatchOutcome(
   reserved: Reservation,
   ran: GhResult,
 ): ClaimResult {
-  const { admission, at, githubDate, command } = reserved;
+  const { admission, at, githubDate, startBinding, command } = reserved;
   const document = io.read();
   const halt = interpretWorkflowHalt(ran);
   const workflowRunId = learnWorkflowRunId(ran, input.repo);
@@ -920,6 +938,7 @@ function recordDispatchOutcome(
       halt,
       workflowRunId,
       githubDate,
+      startBinding,
     });
     io.write(appendClaim(document, spent));
     return fail(
@@ -938,6 +957,7 @@ function recordDispatchOutcome(
       halt: unverified ? 'SPENT_TAG_UNVERIFIED' : null,
       workflowRunId,
       githubDate,
+      startBinding,
     });
     io.write(appendClaim(document, failed));
     return fail(
@@ -956,6 +976,7 @@ function recordDispatchOutcome(
     halt: null,
     workflowRunId,
     githubDate,
+    startBinding,
   });
   io.write(appendClaim(document, dispatched));
   return {
@@ -998,11 +1019,11 @@ async function reconcilePhased(file: AdmissionFile, input: ReconcileInput, spawn
   const record = toView(admission, reservation);
   const refused = (kind: string, message: string, evidence: ReconcileEvidence | null): ReconcileResult =>
     ({ ok: false, kind, message, record, evidence });
-  const matchedRuns = runsForDispatchKey(spawn.run(paidRunListArgs(input.repo)), admission.keyHash);
+  const matchedRuns = runsForDispatchKey(await spawn.run(paidRunListArgs(input.repo)), admission.keyHash);
   if (matchedRuns === null) {
     return refused('workflow_runs_unreadable', 'The paid workflow runs could not be listed. The record stays dispatching.', null);
   }
-  const tagRead = spawn.run(spentTagApiArgs(input.repo, admission.serverRunId));
+  const tagRead = await spawn.run(spentTagApiArgs(input.repo, admission.serverRunId));
   const tag = interpretSpentTagResponse(tagRead);
   if (tag === 'unreadable') return refused('spent_tag_unreadable', 'The spent tag could not be read. The record stays dispatching.', null);
   let tagWorkflowRunId: string | null = null;
@@ -1010,7 +1031,7 @@ async function reconcilePhased(file: AdmissionFile, input: ReconcileInput, spawn
     const objectSha = spentTagObjectSha(tagRead);
     tagWorkflowRunId = objectSha === null
       ? null
-      : spentTagWorkflowRunId(spawn.run(['api', `repos/${input.repo}/git/tags/${objectSha}`]), admission.serverRunId);
+      : spentTagWorkflowRunId(await spawn.run(['api', `repos/${input.repo}/git/tags/${objectSha}`]), admission.serverRunId);
     if (tagWorkflowRunId === null) {
       return refused(
         'spent_tag_unverified',
@@ -1032,6 +1053,7 @@ async function reconcilePhased(file: AdmissionFile, input: ReconcileInput, spawn
       halt: null,
       workflowRunId: firstAttempt.workflowRunId,
       githubDate: reservation.githubDate,
+      startBinding: reservation.startBinding,
     });
   } else if (tag === 'absent' && firstAttempt !== null && firstAttempt.status === 'completed' && firstAttempt.conclusion !== 'success') {
     outcome = baseEvent(admission, reservation.at, {
@@ -1042,6 +1064,7 @@ async function reconcilePhased(file: AdmissionFile, input: ReconcileInput, spawn
       halt: null,
       workflowRunId: firstAttempt.workflowRunId,
       githubDate: reservation.githubDate,
+      startBinding: reservation.startBinding,
     });
   }
   if (outcome === null) {
@@ -1272,6 +1295,9 @@ function validateShape(input: ClaimInput): ClaimResult | null {
   if (!OPERATOR_LANES.includes(input.lane as OperatorLane)) {
     return fail('lane_invalid', 'The lane must be qualification, qualification-repair, lab, or regression.', null);
   }
+  if (input.startBinding !== undefined && !isClaimStartBinding(input.startBinding)) {
+    return fail('start_binding_invalid', 'The start binding is not well formed. Nothing was claimed or dispatched.', null);
+  }
   return null;
 }
 
@@ -1334,6 +1360,8 @@ export function legalTransition(prior: ClaimEvent | null, event: ClaimEvent): bo
   if (!event.dispatchAttempted) return false;
   // The outcome keeps the reservation's GitHub clock: it is the dispatch's, not the outcome write's.
   if (event.githubDate !== prior.githubDate) return false;
+  // The same holds for the start binding: it is the reservation's, never rewritten.
+  if (startBindingKey(event) !== startBindingKey(prior)) return false;
   if (event.state === 'already_spent') return true;
   if (event.state === 'dispatch_failed') {
     if (event.halt === 'SPENT_TAG_UNVERIFIED') return event.dispatchError === 'SPENT_TAG_UNVERIFIED';
@@ -1351,6 +1379,7 @@ function baseEvent(admission: StoredAdmission, at: string, fields: {
   readonly halt: ClaimEvent['halt'];
   readonly workflowRunId?: string | null;
   readonly githubDate: string | null;
+  readonly startBinding?: ClaimStartBinding | undefined;
 }): ClaimEvent {
   return {
     wonderlandRunId: admission.runId,
@@ -1364,7 +1393,19 @@ function baseEvent(admission: StoredAdmission, at: string, fields: {
     halt: fields.halt,
     workflowRunId: fields.workflowRunId ?? null,
     githubDate: fields.githubDate,
+    ...(fields.startBinding === undefined ? {} : {
+      startBinding: {
+        startKeyHash: fields.startBinding.startKeyHash,
+        clientTriggerId: fields.startBinding.clientTriggerId,
+        clientUiActionUtc: fields.startBinding.clientUiActionUtc,
+      },
+    }),
   };
+}
+
+function startBindingKey(event: ClaimEvent): string {
+  const binding = event.startBinding;
+  return binding === undefined ? '' : JSON.stringify([binding.startKeyHash, binding.clientTriggerId, binding.clientUiActionUtc]);
 }
 
 function viewFromClaim(claim: ClaimEvent): OperatorView {

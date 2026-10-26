@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -62,7 +63,7 @@ function fakeGh(): { spawn: GhSpawner; calls: string[][] } {
   return {
     calls,
     spawn: {
-      run(args) {
+      async run(args) {
         calls.push([...args]);
         const target = args.find((arg) => arg.startsWith(CONTENTS));
         if (args[0] === 'api' && target !== undefined) {
@@ -205,6 +206,26 @@ describe('the in-Wonderland mission start route', () => {
     }
   });
 
+  it('journals the Start\'s binding (the key hashed, never raw) on the claim, and a replay does not rewrite it', async () => {
+    const fx = await admitted();
+    try {
+      expect((await handleWonderlandMissionStartRoute(startRequest(), fx.ports, fx.deps))?.status).toBe(202);
+      const binding = { startKeyHash: createHash('sha256').update(START_KEY).digest('hex'), clientTriggerId: 'c'.repeat(32), clientUiActionUtc: WHEN };
+      const claims = readAdmissionDocument(fx.storePath).claims;
+      expect(claims.map((event) => [event.state, event.startBinding])).toEqual([['dispatching', binding], ['dispatched', binding]]);
+      const journal = readFileSync(`${fx.storePath}.operator.json`, 'utf8');
+      expect(journal).not.toContain(START_KEY);
+      const again = await handleWonderlandMissionStartRoute(startRequest({
+        idempotencyKey: '12345678-1234-4234-8234-123456789abc',
+        rawBody: startBody({ clientTriggerId: 'd'.repeat(32), clientUiActionUtc: '2026-10-23T17:19:00.000Z' }),
+      }), fx.ports, fx.deps);
+      expect(again?.status).toBe(200);
+      expect(readFileSync(`${fx.storePath}.operator.json`, 'utf8')).toBe(journal);
+    } finally {
+      fx.cleanup();
+    }
+  });
+
   it('two Starts at once: one dispatches, the other replays', async () => {
     const fx = await admitted();
     try {
@@ -246,6 +267,7 @@ describe('the in-Wonderland mission start route', () => {
         startBody({ confirm: 'RUN LIVE MISSION ' }),
         startBody({ wljRunId: 'wlj_aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee' }),
         startBody({ clientTriggerId: undefined }),
+        startBody({ clientUiActionUtc: `${WHEN}${' '.repeat(80)}` }),
         'not json',
       ]) {
         const result = await handleWonderlandMissionStartRoute(startRequest({ rawBody }), fx.ports, fx.deps);

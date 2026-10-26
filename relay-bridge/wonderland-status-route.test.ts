@@ -430,7 +430,7 @@ describe('wonderland status', () => {
       expect(admitted?.status).toBe(202);
       const spawned: string[] = [];
       const tool = createOperatorClaimTool(openAdmissionFile(storePath), {
-        run(args) {
+        async run(args) {
           const path = args.find((arg) => arg.includes('/contents/'));
           if (path !== undefined) {
             // main: the workflow, the J1 contract, and a lane grant that leaves J1 on the lab default.

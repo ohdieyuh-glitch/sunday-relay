@@ -795,6 +795,31 @@ describe('the operator journal parse pins each claim state', () => {
     expectCorrupt([claim(), { ...failed, dispatchAttempted: false }], 'unattempted');
     expectCorrupt([claim(), { ...failed, dispatchError: 'workflow_run_lost' }], 'unknown error');
   });
+
+  it('startBinding is optional, absent stays absent, and a present one is a key hash, a trigger id and a UI time', () => {
+    const binding = { startKeyHash: 'e'.repeat(64), clientTriggerId: 'c'.repeat(32), clientUiActionUtc: WHEN };
+    withJournal([claim()], (file) => {
+      const read = readAdmissionDocument(file).claims[0];
+      expect(read !== undefined && Object.hasOwn(read, 'startBinding')).toBe(false);
+    });
+    withJournal([claim({ startBinding: binding })], (file) => {
+      expect(readAdmissionDocument(file).claims[0]?.startBinding).toEqual(binding);
+    });
+    const bad: readonly unknown[] = [
+      null,
+      'binding',
+      [],
+      {},
+      { ...binding, startKeyHash: '66666666-7777-4888-9999-aaaaaaaaaaaa' },
+      { ...binding, startKeyHash: 'E'.repeat(64) },
+      { ...binding, clientTriggerId: 'short' },
+      { ...binding, clientUiActionUtc: 'not a time' },
+      { ...binding, clientUiActionUtc: `${WHEN}${' '.repeat(80)}` },
+      { startKeyHash: binding.startKeyHash, clientTriggerId: binding.clientTriggerId },
+      { ...binding, idempotencyKey: '66666666-7777-4888-9999-aaaaaaaaaaaa' },
+    ];
+    for (const value of bad) expectCorrupt([claim({ startBinding: value })], JSON.stringify(value) ?? 'undefined');
+  });
 });
 
 describe('the bridge refuses rows that moved under it', () => {

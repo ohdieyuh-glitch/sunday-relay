@@ -28,7 +28,7 @@ import {
 import { dirname, isAbsolute, resolve } from 'node:path';
 
 import {
-  SHA256_HEX, type ReviewedModelPins,
+  CLIENT_TRIGGER_ID, SHA256_HEX, type ReviewedModelPins,
 } from './admission-contract';
 import { identifyAdmissionRun, parseJuliusAdmissionRunId, spentLockName } from './admission-run-id';
 import type { AdmissionLedger, AdmissionLedgerRow, AdmissionState } from './admission-store';
@@ -493,10 +493,15 @@ const PROGRESS_STATE = /^[a-z][a-z0-9_]{0,63}$/;
 const PROGRESS_CAUSE = /^[\x20-\x7e]{1,200}$/;
 const CLAIM_KEYS = [
   'wonderlandRunId', 'serverRunId', 'state', 'spentTag', 'spentTagState', 'at',
-  'dispatchAttempted', 'dispatchError', 'halt', 'workflowRunId', 'githubDate',
+  'dispatchAttempted', 'dispatchError', 'halt', 'workflowRunId', 'githubDate', 'startBinding',
 ] as const;
-/** Keys a claim written before they existed may lack. Absent reads as null. */
-const OPTIONAL_CLAIM_KEYS: readonly string[] = ['workflowRunId', 'githubDate'];
+/**
+ * Keys a claim written before they existed may lack. Absent `workflowRunId`
+ * and `githubDate` read as null. `startBinding` is absent on every claim that
+ * did not come from the Wonderland start route, and stays absent on read.
+ */
+const OPTIONAL_CLAIM_KEYS: readonly string[] = ['workflowRunId', 'githubDate', 'startBinding'];
+const START_BINDING_KEYS = ['startKeyHash', 'clientTriggerId', 'clientUiActionUtc'] as const;
 /** GitHub's `Date:` header as ISO UTC, second precision. */
 const GITHUB_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 /** A GitHub Actions workflow run id. Null until dispatch learns one. */
@@ -538,6 +543,35 @@ export interface ClaimEvent {
    * evidence.
    */
   readonly githubDate: string | null;
+  /**
+   * Evidence of the founder's Start in Wonderland, present only on a claim
+   * the bridge start route made: the SHA-256 of its `x-relay-idempotency-key`
+   * (never the key itself), and the client's trigger id and UI action time.
+   * A CLI claim writes none. Every event of one claim carries the
+   * reservation's binding unchanged; a replay writes nothing.
+   */
+  readonly startBinding?: ClaimStartBinding;
+}
+
+export interface ClaimStartBinding {
+  /** Lowercase hex SHA-256 of the start request's idempotency key. */
+  readonly startKeyHash: string;
+  readonly clientTriggerId: string;
+  readonly clientUiActionUtc: string;
+}
+
+/** The shape a stored start binding must have. The same bounds as an admission row's client fields. */
+export function isClaimStartBinding(value: unknown): value is ClaimStartBinding {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  const binding = value as Record<string, unknown>;
+  const keys = Object.keys(binding);
+  if (keys.length !== START_BINDING_KEYS.length || keys.some((key) => !(START_BINDING_KEYS as readonly string[]).includes(key))) {
+    return false;
+  }
+  return typeof binding.startKeyHash === 'string' && SHA256_HEX.test(binding.startKeyHash)
+    && typeof binding.clientTriggerId === 'string' && CLIENT_TRIGGER_ID.test(binding.clientTriggerId)
+    && typeof binding.clientUiActionUtc === 'string' && binding.clientUiActionUtc.length >= 1
+    && binding.clientUiActionUtc.length <= 80 && Number.isFinite(Date.parse(binding.clientUiActionUtc));
 }
 
 /** True for a decimal GitHub workflow run id that fits in a signed 64-bit integer. */
@@ -963,6 +997,8 @@ function parseClaim(value: unknown, schemaVersion: OperatorJournal['schemaVersio
     ? storedWorkflowRunId(claim.workflowRunId)
     : null;
   const githubDate = Object.hasOwn(claim, 'githubDate') ? storedGithubDate(claim.githubDate) : null;
+  if (Object.hasOwn(claim, 'startBinding') && !isClaimStartBinding(claim.startBinding)) throw new AdmissionFileClosedError('corrupt');
+  const startBinding = Object.hasOwn(claim, 'startBinding') ? claim.startBinding as ClaimStartBinding : null;
   const identity = identifyAdmissionRun(claim.wonderlandRunId, claim.serverRunId);
   const form = schemaVersion === LEGACY_ADMISSION_SCHEMA_VERSION ? 'legacy' : 'wlj';
   if (!identity.ok || identity.form !== form) throw new AdmissionFileClosedError('corrupt');
@@ -1026,6 +1062,13 @@ function parseClaim(value: unknown, schemaVersion: OperatorJournal['schemaVersio
     halt: state === 'dispatched' || state === 'dispatching' ? null : recordedHalt,
     workflowRunId,
     githubDate,
+    ...(startBinding === null ? {} : {
+      startBinding: {
+        startKeyHash: startBinding.startKeyHash,
+        clientTriggerId: startBinding.clientTriggerId,
+        clientUiActionUtc: startBinding.clientUiActionUtc,
+      },
+    }),
   };
 }
 
