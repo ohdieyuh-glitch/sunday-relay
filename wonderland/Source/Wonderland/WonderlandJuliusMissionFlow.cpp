@@ -1913,6 +1913,11 @@ namespace WonderlandJuliusMissionFlow
 		return !bRowHadRun || RowRunId != NewRunId; // FLOW_TASK_NEW_RUN_STARTS_QUEUED
 	}
 
+	bool UnmappedReportMayApply(bool bRowConfirmedThisSession)
+	{
+		return bRowConfirmedThisSession; // FLOW_TASK_UNMAPPED_REPORT_NEVER_CONFIRMS
+	}
+
 	bool ConnectionUncertain(bool bStale, bool bHasSession, bool bEverRead, std::uint64_t MsSinceLastGoodRead)
 	{
 		return bStale || !bHasSession || (bEverRead && MsSinceLastGoodRead > LiveNoReadAfterMs); // FLOW_CONTRACT_UNCERTAIN_SUSPENDS

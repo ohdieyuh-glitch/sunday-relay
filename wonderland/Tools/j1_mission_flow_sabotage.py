@@ -599,6 +599,11 @@ MUTATIONS = [
         "return true; // FLOW_TASK_RESTORED_ROW_IS_INERT",
     ),
     (
+        "task_unmapped_report_confirms",
+        "return bRowConfirmedThisSession; // FLOW_TASK_UNMAPPED_REPORT_NEVER_CONFIRMS",
+        "return true; // FLOW_TASK_UNMAPPED_REPORT_NEVER_CONFIRMS",
+    ),
+    (
         "task_new_run_keeps_old_state",
         "return !bRowHadRun || RowRunId != NewRunId; // FLOW_TASK_NEW_RUN_STARTS_QUEUED",
         "return !bRowHadRun; // FLOW_TASK_NEW_RUN_STARTS_QUEUED",

@@ -2,6 +2,7 @@
 #include "WonderlandCard.h"
 #include "Julius/WonderlandJuliusMissionSubsystem.h"
 #include "WonderlandJuliusMissionClient.h"
+#include "WonderlandJuliusMissionFlow.h"
 
 #include <string>
 
@@ -1216,7 +1217,14 @@ void UWonderlandJuliusStreamSubsystem::ShowOnMissionContract(bool bAfterHydratio
 	{
 		// No mapping: keep what the contract already shows and hand over the raw word, rather than guess a phase.
 		const FWonderlandMissionTask* Existing = Tasks->Find(Shown);
-		Mapped = Existing != nullptr ? Existing->State : EWonderlandTaskState::Queued;
+		// REVIEW #70: re-applying the state a row already shows is NOT a fresh scheduler state. Applying it would mark the
+		// row confirmed this session, and a restored row (e.g. REPAIR) would start to perform with nothing new from Julius.
+		if (!WonderlandJuliusMissionFlow::UnmappedReportMayApply(Existing != nullptr && Existing->bStateConfirmedThisSession))
+		{
+			ContractNote = TEXT("not applied: Julius's state word is unmapped and the contract's state is not confirmed this session");
+			return;
+		}
+		Mapped = Existing->State;
 	}
 	// Tokens and evidence go as UNKNOWN, which leaves any existing assertion alone: no read route serves tokens, and
 	// nothing the world reads carries an evidence total.

@@ -895,6 +895,8 @@ const ABSENT_PHASE = {
 			Expect(AdoptingRunResetsToQueued(true, "wlj_a", "wlj_b"), "adopting a DIFFERENT run resets the row to queued");
 			Expect(!AdoptingRunResetsToQueued(true, "wlj_a", "wlj_a"), "the same run (restore) keeps its state");
 			Expect(AdoptingRunResetsToQueued(false, "", "wlj_a"), "a row with no run yet starts queued");
+			Expect(!UnmappedReportMayApply(false), "REVIEW #70: an unmapped stream report never confirms an unconfirmed (restored) row");
+			Expect(UnmappedReportMayApply(true), "an unmapped report may re-show the state of a row Julius already confirmed");
 		}
 		{
 			// REVIEW 2026-10-26: a reconnect taken MID-repair-round never replays past beats and never shows a late REPAIR

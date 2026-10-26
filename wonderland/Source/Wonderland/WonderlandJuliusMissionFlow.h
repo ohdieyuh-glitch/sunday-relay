@@ -693,6 +693,13 @@ namespace WonderlandJuliusMissionFlow
 	/** Following a run: adopting a DIFFERENT run than the row held starts the row at queued (a new run starts queued). */
 	bool AdoptingRunResetsToQueued(bool bRowHadRun, std::string_view RowRunId, std::string_view NewRunId);
 
+	/**
+	 * A stream report whose Julius state word does not map to a task state may re-apply the row's CURRENT state only when
+	 * Julius already confirmed that row this session (REVIEW #70): re-applying is not a fresh state, so it must never be
+	 * what confirms a row.
+	 */
+	bool UnmappedReportMayApply(bool bRowConfirmedThisSession);
+
 	/** The contract task state word for a view ("queued", "preparation", "implementation", "review", "repair",
 	 *  "verification", "completed", "failed", "cancelled") or empty for none. */
 	const char* ContractTaskStateFor(const FExecutionView& View);
