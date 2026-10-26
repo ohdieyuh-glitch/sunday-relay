@@ -200,10 +200,12 @@ describe('the read-only gh port', () => {
     const workflow = readFileSync(join('.github', 'workflows', 'julius-first-live-mission.yml'), 'utf8');
     const lines = workflow.split('\n');
     const uploaded = new Set<string>();
+    // No bare early `return` here: ci-test-accounting reads one as a test that can end without asserting.
     lines.forEach((line, i) => {
-      if (!/^\s*- uses: actions\/upload-artifact@/u.test(line)) return;
-      const name = lines.slice(i + 1, i + 7).map((next) => /^\s+name:\s*(\S.*)$/u.exec(next)?.[1]).find((hit) => hit !== undefined);
-      if (name !== undefined) uploaded.add(name.trim());
+      if (/^\s*- uses: actions\/upload-artifact@/u.test(line)) {
+        const name = lines.slice(i + 1, i + 7).map((next) => /^\s+name:\s*(\S.*)$/u.exec(next)?.[1]).find((hit) => hit !== undefined);
+        if (name !== undefined) uploaded.add(name.trim());
+      }
     });
     expect(uploaded.has('julius-inworld-verdict')).toBe(true);
     for (const name of EVIDENCE_ARTIFACT_NAMES) expect(uploaded.has(name), name).toBe(true);
