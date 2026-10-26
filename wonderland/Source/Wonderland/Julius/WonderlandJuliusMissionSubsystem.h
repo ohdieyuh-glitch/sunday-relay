@@ -29,6 +29,8 @@
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "WonderlandJuliusMissionSubsystem.generated.h"
 
+namespace WonderlandJuliusMissionFlow { class FContractCursor; }
+
 DECLARE_LOG_CATEGORY_EXTERN(LogJuliusJ1, Log, All);
 
 class IHttpResponse;
@@ -164,6 +166,13 @@ private:
 	FString StartMessage;
 	uint8 StartRecord = 0;
 	void SyncStartRecord();
+	/** Drives the EXISTING mission contract from the started run's authoritative state (never sends anything). */
+	void SyncMissionContract();
+	FString ContractRunId;
+	FString ContractTaskWord;
+	FString ContractPhaseWord;
+	bool bContractReleased = false;
+	TUniquePtr<WonderlandJuliusMissionFlow::FContractCursor> ContractCursor;
 	void SaveStartRecord() const;
 	bool bLoggedNotConnected = false;
 	int32 LiveLastHttpStatus = 0;

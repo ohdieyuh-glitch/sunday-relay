@@ -4796,6 +4796,21 @@ void UWonderlandUiSubsystem::ShowCreationAnswer()
 
 bool UWonderlandUiSubsystem::TickLiveJulius(float DeltaSeconds)
 {
+	// IN-WONDERLAND START: once the bridge accepted the founder's start, the terminal steps aside (once per run) so the
+	// world -- the mission contract -- carries the run. Driven from this ticker, not the panel's paint tick (bug #15).
+	if (Open == EOverlay::JuliusMission)
+	{
+		const APlayerController* StartController = BoundController.Get();
+		UGameInstance* StartInstance = StartController != nullptr ? StartController->GetGameInstance() : nullptr;
+		const UWonderlandJuliusMissionSubsystem* J1 = StartInstance != nullptr ? StartInstance->GetSubsystem<UWonderlandJuliusMissionSubsystem>() : nullptr;
+		const FString StartedRun = J1 != nullptr && J1->HasStartedRun() ? J1->ClientRunId() : FString();
+		if (!StartedRun.IsEmpty() && StartedRun != JuliusTerminalClosedFor)
+		{
+			JuliusTerminalClosedFor = StartedRun;
+			UE_LOG(LogWonderlandUi, Display, TEXT("WLUI julius mission terminal closes for the started run %s"), *StartedRun);
+			CloseOverlay();
+		}
+	}
 	// A creation answer is shown whether or not a run is followed -- a refusal must never leave the world silent.
 	ShowCreationAnswer();
 	const UWonderlandMissionSubsystem* Mission = Missions();
@@ -6408,11 +6423,18 @@ void UWonderlandUiSubsystem::RefreshChrome()
 	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI chrome rebuilt for a colour change"));
 }
 
+namespace
+{
+	// FOUNDER P0 2026-10-26: the mission contract is the experience; the workflow log card is DIAGNOSTICS, off unless asked.
+	TAutoConsoleVariable<int32> CVarJuliusJ1Diagnostics(TEXT("wl.Julius.J1.Diagnostics"), 0,
+		TEXT("1 shows the J1 workflow/live-events diagnostic card in the world. 0 (default): the mission contract alone presents the run."));
+}
+
 bool UWonderlandUiSubsystem::JuliusLiveCard(FString& OutText, bool& bOutLive) const
 {
 	OutText.Reset();
 	bOutLive = false;
-	if (Open != EOverlay::None) { return false; }
+	if (Open != EOverlay::None || CVarJuliusJ1Diagnostics.GetValueOnGameThread() == 0) { return false; }
 	const APlayerController* Controller = BoundController.Get();
 	UGameInstance* Instance = Controller != nullptr ? Controller->GetGameInstance() : nullptr;
 	const UWonderlandJuliusMissionSubsystem* J1 = Instance != nullptr ? Instance->GetSubsystem<UWonderlandJuliusMissionSubsystem>() : nullptr;

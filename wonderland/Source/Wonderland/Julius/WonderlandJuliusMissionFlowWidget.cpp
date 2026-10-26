@@ -210,17 +210,7 @@ void SWonderlandJuliusMissionFlow::Tick(const FGeometry& AllottedGeometry, doubl
 	PullMissionReads();
 	PullWrapper();
 	Rebuild();
-	// IN-WONDERLAND START: once the bridge accepted the start, the terminal steps aside (once per run) and the run is
-	// watched in the world (the HUD's LIVE card). Reopening K shows the full terminal again.
-	if (const UWonderlandJuliusMissionSubsystem* Live = Session.Get())
-	{
-		const FString Run = Live->ClientRunId();
-		if (!Run.IsEmpty() && Live->HasStartedRun() && ClosedAfterStartFor != Run)
-		{
-			ClosedAfterStartFor = Run;
-			OnRequestClose.ExecuteIfBound();
-		}
-	}
+	// The close after an accepted start lives in UWonderlandUiSubsystem::TickLiveJulius (a ticker, not this paint tick).
 }
 
 void SWonderlandJuliusMissionFlow::PullMissionReads()

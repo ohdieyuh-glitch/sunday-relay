@@ -206,6 +206,18 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	bool IsFixtureRunning() const { return Playing != nullptr; }
 
+	/**
+	 * REAL JULIUS EVENTS FROM THE J1 PAID-MISSION PATH (founder P0 2026-10-26): the in-world Start's run drives THIS
+	 * contract -- the same fold, beats, orb, Dog act, companions and terminals the fixture uses -- instead of a log
+	 * panel. bSimulationOnly is false, so the fold resolves the type itself and refuses anything it does not model, a
+	 * stale order, another mission or progress after an ending. The sequence is the fold's next, so the caller only
+	 * guarantees ORDER (WonderlandJuliusMissionFlow::FContractCursor emits each beat once). Refused while a fixture
+	 * plays: a simulation and a real run never share the stage. True when the fold applied it.
+	 */
+	bool OfferRealJuliusEvent(FName Type, FName InMissionId, FName InRunId, EWonderlandMissionRole Role, int32 RepairRound);
+	/** A real run that ended with no fold ending (a cancel): the stage releases so the headline reads the task state. */
+	void ReleaseRealRunBeat();
+
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	FName GetFixtureId() const;
 

@@ -928,6 +928,8 @@ private:
 	void MountHudFurniture();
 	/** The in-world Julius LIVE card's text; false when there is nothing started or live to show. */
 	bool JuliusLiveCard(FString& OutText, bool& bOutLive) const;
+	/** The started run whose accepted start already closed the terminal once (reopening K later does not close it again). */
+	FString JuliusTerminalClosedFor;
 	void UnmountHudFurniture();
 
 	/**

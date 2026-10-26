@@ -2,6 +2,9 @@
 
 #include "Wonderland/WonderlandJuliusMissionClient.h"
 #include "Wonderland/WonderlandJuliusMissionFlow.h"
+#include "Wonderland/WonderlandMissionSubsystem.h"
+#include "Wonderland/WonderlandMissionTasks.h"
+#include "Engine/LocalPlayer.h"
 #include "Wonderland/WonderlandJuliusStream.h"
 #include "WonderlandJuliusRandomBytes.h"
 
@@ -27,6 +30,15 @@ static TAutoConsoleVariable<FString> CVarJuliusJ1Endpoint(
 	TEXT("Loopback-only base URL for Julius J1 admission. A non-loopback host refuses the dispatch and sends nothing. Compiled out of Shipping, which always uses http://127.0.0.1:8790."),
 	ECVF_Default);
 #endif
+
+namespace
+{
+	/** REVIEW LOW (c573b54e): a bridge-supplied string in a JSON log line is escaped, never spliced raw. */
+	FString JsonEscaped(const FString& In)
+	{
+		return In.Replace(TEXT("\\"), TEXT("\\\\")).Replace(TEXT("\""), TEXT("\\\""));
+	}
+}
 
 namespace
 {
@@ -356,6 +368,98 @@ void UWonderlandJuliusMissionSubsystem::SaveStartRecord() const
 	FFileHelper::SaveStringToFile(Text, *StartRecordPath());
 }
 
+namespace
+{
+	EWonderlandTaskState ContractTaskState(const FString& Word)
+	{
+		if (Word == TEXT("queued")) { return EWonderlandTaskState::Queued; }
+		if (Word == TEXT("preparation")) { return EWonderlandTaskState::Preparation; }
+		if (Word == TEXT("implementation")) { return EWonderlandTaskState::Implementation; }
+		if (Word == TEXT("review")) { return EWonderlandTaskState::Review; }
+		if (Word == TEXT("repair")) { return EWonderlandTaskState::Repair; }
+		if (Word == TEXT("verification")) { return EWonderlandTaskState::Verification; }
+		if (Word == TEXT("completed")) { return EWonderlandTaskState::Completed; }
+		if (Word == TEXT("cancelled")) { return EWonderlandTaskState::Cancelled; }
+		return EWonderlandTaskState::Failed;
+	}
+
+	EWonderlandMissionRole ContractRole(const std::string& Role)
+	{
+		if (Role == "architect") { return EWonderlandMissionRole::PromptArchitect; }
+		if (Role == "coder") { return EWonderlandMissionRole::CodingAgent; }
+		if (Role == "reviewer") { return EWonderlandMissionRole::IndependentReviewer; }
+		return EWonderlandMissionRole::None;
+	}
+}
+
+void UWonderlandJuliusMissionSubsystem::SyncMissionContract()
+{
+	using namespace WonderlandJuliusMissionFlow;
+	if (Host == nullptr) { return; }
+	SyncStartRecord();
+	const FString Run = ClientRunId();
+	// ONLY A RUN THE FOUNDER STARTED: the start record says "started" for this exact wlj_. Admission alone, a refused
+	// or unanswered start, or a restored run with no start never touches the contract.
+	if (Run.IsEmpty() || StartRecord != 2 || StartRunId != Run) { return; }
+	if (Run != ContractRunId)
+	{
+		ContractRunId = Run;
+		ContractCursor = MakeUnique<FContractCursor>();
+		ContractTaskWord.Reset();
+		ContractPhaseWord.Reset();
+		bContractReleased = false;
+	}
+	FResultRead Result;
+	if (ResultRead.Status != 0)
+	{
+		FBridgeMissionResultClient Reader;
+		Reader.SetResultResponse(ResultRead.Status, ToStd(ResultRead.Body));
+		Result = Reader.Read(ToStd(Run));
+	}
+	// A PASS that is not bound to what was graded is not a verdict; success needs the verified completion too.
+	const ECheckerVerdict Verdict = Result.bCheckerReported && !(Result.Checker == ECheckerVerdict::Pass && Result.bCheckerUnbound)
+		? Result.Checker : ECheckerVerdict::NotRun;
+	const FExecutionView View = ExecutionViewFor(Host->LiveFeed, true, ToStd(StartWorkflowRunId), Verdict, Result.bVerified && !Result.bCheckerUnbound);
+	if (View.bStale) { return; } // never advance or regress on a stale read
+	UGameInstance* Instance = GetGameInstance();
+	ULocalPlayer* Player = Instance != nullptr ? Instance->GetFirstGamePlayer() : nullptr;
+	UWonderlandMissionTaskSubsystem* Tasks = Player != nullptr ? Player->GetSubsystem<UWonderlandMissionTaskSubsystem>() : nullptr;
+	UWonderlandMissionSubsystem* Contract = Player != nullptr ? Player->GetSubsystem<UWonderlandMissionSubsystem>() : nullptr;
+	if (Tasks == nullptr || Contract == nullptr) { return; }
+	const FString MissionId = CurrentMissionId().IsEmpty() ? FString(TEXT("julius-inworld-data-1")) : CurrentMissionId();
+	FWonderlandText RunText;
+	RunText.bKnown = true;
+	RunText.Value = Run;
+	const FString TaskWord = UTF8_TO_TCHAR(ContractTaskStateFor(View));
+	const FString PhaseWord = UTF8_TO_TCHAR(ExecutionPhaseWord(View.Phase));
+	if (!TaskWord.IsEmpty() && (TaskWord != ContractTaskWord || PhaseWord != ContractPhaseWord))
+	{
+		ContractTaskWord = TaskWord;
+		ContractPhaseWord = PhaseWord;
+		Tasks->FollowJuliusRun(MissionId, RunText);
+		FWonderlandText JuliusState;
+		JuliusState.bKnown = true;
+		JuliusState.Value = View.Phase == EExecutionPhase::DidNotStart
+			? FString::Printf(TEXT("DID NOT START (%s)"), *ToF(View.Detail))
+			: PhaseWord;
+		Tasks->ApplySchedulerState(MissionId, ContractTaskState(TaskWord), FWonderlandTally(), FWonderlandTally(), RunText, JuliusState);
+		UE_LOG(LogJuliusJ1, Display, TEXT("{\"event\":\"contract_state\",\"wlj_run_id\":\"%s\",\"workflow_run_id\":\"%s\",\"phase\":\"%s\",\"task\":\"%s\",\"recorded\":%s,\"detail\":\"%s\"}"),
+			*Run, *ToF(View.WorkflowRunId), *PhaseWord, *TaskWord, View.bRecorded ? TEXT("true") : TEXT("false"), *JsonEscaped(ToF(View.Detail)));
+	}
+	for (const FContractBeat& Beat : ContractCursor->Advance(View))
+	{
+		const bool bApplied = Contract->OfferRealJuliusEvent(FName(*ToF(Beat.Type)), FName(*MissionId), FName(*Run),
+			ContractRole(Beat.Role), static_cast<int32>(Beat.RepairRound));
+		UE_LOG(LogJuliusJ1, Display, TEXT("{\"event\":\"contract_beat\",\"wlj_run_id\":\"%s\",\"type\":\"%s\",\"applied\":%s,\"beat\":\"%s\"}"),
+			*Run, *ToF(Beat.Type), bApplied ? TEXT("true") : TEXT("false"), *Contract->GetBeatLabel());
+	}
+	if (ContractCursor->ReleasedForCancel() && !bContractReleased)
+	{
+		bContractReleased = true;
+		Contract->ReleaseRealRunBeat();
+	}
+}
+
 bool UWonderlandJuliusMissionSubsystem::IsStartOffered() const
 {
 	if (Host == nullptr) { return false; }
@@ -556,6 +660,7 @@ bool UWonderlandJuliusMissionSubsystem::HandleTick(float DeltaSeconds)
 	if (Outcome.bSend) { (void)FJuliusJ1Transport::Send(*this, Outcome.Request); }
 	PollMissionReads();
 	PollLiveEvents();
+	SyncMissionContract();
 	if (!bAdoptedToken && !bLoggedNotConnected && !ClientRunId().IsEmpty() && !CanStartNewMission())
 	{
 		// A run restored from the save, before pairing: say so once, instead of polling into a 401.
@@ -747,15 +852,6 @@ void UWonderlandJuliusMissionSubsystem::CompleteMissionRead(
 	MissionReadFailures = Status == 200 ? 0 : MissionReadFailures + 1;
 	Slot.Status = Status;
 	Slot.Body = Body;
-}
-
-namespace
-{
-	/** REVIEW LOW (c573b54e): a bridge-supplied string in a JSON log line is escaped, never spliced raw. */
-	FString JsonEscaped(const FString& In)
-	{
-		return In.Replace(TEXT("\\"), TEXT("\\\\")).Replace(TEXT("\""), TEXT("\\\""));
-	}
 }
 
 void UWonderlandJuliusMissionSubsystem::PollLiveEvents()

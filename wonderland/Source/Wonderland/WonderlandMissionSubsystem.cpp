@@ -1452,6 +1452,33 @@ FString UWonderlandMissionSubsystem::GetLastEventVerdict() const
 	return WonderlandEventVerdictName(LastVerdict);
 }
 
+bool UWonderlandMissionSubsystem::OfferRealJuliusEvent(FName Type, FName InMissionId, FName InRunId, EWonderlandMissionRole Role, int32 RepairRound)
+{
+	if (IsFixtureRunning())
+	{
+		UE_LOG(LogWonderlandMissionUi, Display, TEXT("WLMISSION real event %s refused: a fixture is playing"), *Type.ToString());
+		return false;
+	}
+	FWonderlandMissionEvent Event;
+	Event.Type = Type;
+	Event.RunId = InRunId;
+	Event.MissionId = InMissionId;
+	Event.Role = Role;
+	Event.RepairRound = RepairRound;
+	Event.Sequence = Fold.Sequence + 1;
+	Event.bSimulationOnly = false;
+	OfferEvent(Event);
+	UE_LOG(LogWonderlandMissionUi, Display, TEXT("WLMISSION real event %s (%s) -> %s, beat %s"),
+		*Type.ToString(), *InRunId.ToString(), WonderlandEventVerdictName(LastVerdict), *GetBeatLabel());
+	return LastVerdict == EWonderlandEventVerdict::Applied;
+}
+
+void UWonderlandMissionSubsystem::ReleaseRealRunBeat()
+{
+	if (IsFixtureRunning()) { return; }
+	ShowBeat(EWonderlandMissionBeat::Unobserved);
+}
+
 void UWonderlandMissionSubsystem::OfferEvent(const FWonderlandMissionEvent& Event)
 {
 	FWonderlandMissionHandoff::NoteMutation(TEXT("UWonderlandMissionSubsystem::OfferEvent"));
