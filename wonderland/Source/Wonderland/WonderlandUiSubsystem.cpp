@@ -4803,7 +4803,8 @@ bool UWonderlandUiSubsystem::TickLiveJulius(float DeltaSeconds)
 		const APlayerController* StartController = BoundController.Get();
 		UGameInstance* StartInstance = StartController != nullptr ? StartController->GetGameInstance() : nullptr;
 		const UWonderlandJuliusMissionSubsystem* J1 = StartInstance != nullptr ? StartInstance->GetSubsystem<UWonderlandJuliusMissionSubsystem>() : nullptr;
-		const FString StartedRun = J1 != nullptr && J1->HasStartedRun() ? J1->ClientRunId() : FString();
+		// Only a start accepted in THIS session: after a restart, opening K on a started run must show it, not close.
+		const FString StartedRun = J1 != nullptr && J1->StartAcceptedThisSession() && J1->HasStartedRun() ? J1->ClientRunId() : FString();
 		if (!StartedRun.IsEmpty() && StartedRun != JuliusTerminalClosedFor)
 		{
 			JuliusTerminalClosedFor = StartedRun;

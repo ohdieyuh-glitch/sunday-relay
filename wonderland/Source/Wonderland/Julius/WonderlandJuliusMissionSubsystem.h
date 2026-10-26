@@ -78,6 +78,8 @@ public:
 	FString StartedWorkflowRunId() const { return StartWorkflowRunId; }
 	/** One line for the terminal: what happened to the start, or empty. */
 	FString StartStatusLine() const { return StartMessage; }
+	/** True only when THIS session's Start was accepted (a run restored from the save is not "just started"). */
+	bool StartAcceptedThisSession() const { return bStartAcceptedHere; }
 	void CompleteStart(const FString& ForRunId, bool bConnected, const TSharedPtr<IHttpResponse, ESPMode::ThreadSafe>& Response);
 	bool ResendOpenPair();
 
@@ -172,6 +174,7 @@ private:
 	FString ContractTaskWord;
 	FString ContractPhaseWord;
 	bool bContractReleased = false;
+	bool bStartAcceptedHere = false;
 	TUniquePtr<WonderlandJuliusMissionFlow::FContractCursor> ContractCursor;
 	void SaveStartRecord() const;
 	bool bLoggedNotConnected = false;

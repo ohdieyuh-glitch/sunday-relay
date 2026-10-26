@@ -401,6 +401,9 @@ void UWonderlandJuliusMissionSubsystem::SyncMissionContract()
 	// ONLY A RUN THE FOUNDER STARTED: the start record says "started" for this exact wlj_. Admission alone, a refused
 	// or unanswered start, or a restored run with no start never touches the contract.
 	if (Run.IsEmpty() || StartRecord != 2 || StartRunId != Run) { return; }
+	// A RUN RESTORED FROM THE SAVE waits for its first /events read: it never replays the activation of a run that may
+	// already have ended. A start accepted in this session shows STARTING at once (that is what just happened).
+	if (!bStartAcceptedHere && !Host->LiveFeed.HasRead()) { return; }
 	if (Run != ContractRunId)
 	{
 		ContractRunId = Run;
@@ -558,6 +561,7 @@ void UWonderlandJuliusMissionSubsystem::CompleteStart(
 	{
 	case EStartOutcome::Accepted:
 		StartRecord = 2;
+		bStartAcceptedHere = true;
 		StartWorkflowRunId = ToF(Answer.WorkflowRunId);
 		StartMessage = StartWorkflowRunId.IsEmpty()
 			? FString::Printf(TEXT("Started%s: the GitHub Actions run id is pending; watching the run."), Answer.bReplayed ? TEXT(" (already started)") : TEXT(""))
