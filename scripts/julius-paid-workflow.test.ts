@@ -913,3 +913,58 @@ describe('the live-progress publisher is best-effort, paid-only, and the job wri
     expect(step(paid, LIVE)).not.toContain('secrets.GITHUB_TOKEN');
   });
 });
+
+describe('the provider-readiness evidence allowlist admits closed lines only', () => {
+  /** The exact pipeline the evidence step runs, cut from the workflow text and executed over a fixture log. */
+  const start = workflow.indexOf("grep -E '^(provider_readiness provider=");
+  const end = workflow.indexOf('> julius-live-evidence/provider-readiness.txt 2>/dev/null || true', start);
+  const pipeline = workflow.slice(start, end + '> julius-live-evidence/provider-readiness.txt 2>/dev/null || true'.length)
+    .split('\n').map((line) => line.trim()).join('\n');
+  const admitted = (lines: readonly string[]): string[] => {
+    const dir = mkdtempSync(join(tmpdir(), 'julius-readiness-evidence-'));
+    try {
+      writeFileSync(join(dir, 'provider-readiness.log'), `${lines.join('\n')}\n`);
+      execFileSync('bash', ['-c', `mkdir -p julius-live-evidence\n${pipeline}`], { cwd: dir, encoding: 'utf8' });
+      return readFileSync(join(dir, 'julius-live-evidence/provider-readiness.txt'), 'utf8').split('\n').filter(Boolean);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+  /* Fixture ids only. The credential-shaped token is assembled so no key literal is committed. */
+  const ORG = 'aff8a85a-82c3-4ca7-afa7-8d3f63856dc4';
+  const CODER = 'be82739b-746c-4288-a91b-6a332816e790';
+  const token = ['sk', 'ant', 'api03', 'FAKETESTNOTREALFAKETESTNOTREAL'].join('-');
+
+  it('is one anchored pipeline over the readiness log', () => {
+    expect(start).toBeGreaterThan(-1);
+    expect(pipeline).toMatch(/^grep -E '\^\(/u);
+    expect(pipeline).toContain(")$' provider-readiness.log");
+    expect(pipeline).toContain("grep -viE '(sk-|xai-|ghp_|gho_|bearer|authorization|api[_-]?key|private[-_ ]?key)'");
+  });
+
+  it('keeps every closed line the gate prints', () => {
+    const good = [
+      'provider_readiness provider=anthropic role=architect model=claude-opus-5-5 http=200 result=AUTHENTICATED_MODEL_AVAILABLE',
+      'provider_readiness provider=xai model=grok-build-0.1 http=200 result=AUTHENTICATED_MODEL_AVAILABLE',
+      `org_attribution provider=anthropic role=architect model=claude-opus-5-5 http=200 result=VERIFIED organization_id=${ORG}`,
+      `org_attribution provider=anthropic role=coder model=claude-opus-5-5 http=200 result=ORG_ATTRIBUTION_UNVERIFIED reason=mismatch organization_id=org_other expected_organization_id=${CODER}`,
+      `org_attribution_distinct result=DISTINCT architect_organization_id=${ORG} coder_organization_id=${CODER}`,
+      `org_attribution_distinct result=REFUSED reason=architect_and_coder_share_an_organization organization_id=${CODER}`,
+      'provider_balance=UNKNOWN (no provider exposes a spend-free balance query; exhaustion surfaces as PROVIDER_BLOCKED when a provider refuses)',
+    ];
+    expect(admitted(good)).toEqual(good);
+  });
+
+  it('refuses a credential-shaped token in an organization-id slot or appended, and any role but architect|coder', () => {
+    const bad = [
+      `org_attribution provider=anthropic role=architect model=claude-opus-5-5 http=200 result=VERIFIED organization_id=${token}`,
+      `org_attribution provider=anthropic role=coder model=claude-opus-5-5 http=200 result=VERIFIED organization_id=${CODER} ${token}`,
+      `org_attribution_distinct result=DISTINCT architect_organization_id=${token} coder_organization_id=${CODER}`,
+      `org_attribution_distinct result=REFUSED reason=architect_and_coder_share_an_organization organization_id=${token}`,
+      `org_attribution provider=anthropic role=reviewer model=claude-opus-5-5 http=200 result=VERIFIED organization_id=${ORG}`,
+      `provider_readiness provider=anthropic role=${token} model=claude-opus-5-5 http=200 result=AUTHENTICATED_MODEL_AVAILABLE`,
+      `org_attribution provider=anthropic role=architect model=claude-opus-5-5 http=200 result=VERIFIED organization_id=_${ORG}`,
+    ];
+    expect(admitted(bad)).toEqual([]);
+  });
+});
