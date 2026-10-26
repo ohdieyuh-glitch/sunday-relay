@@ -15,7 +15,15 @@ import {
 import {
   JULIUS_HANDED_FAILURE_OUTCOME_UNKNOWN, juliusHandedOutcomeUnknown,
 } from '../../src/relay/mission/julius/julius-execution-coordinator';
-import { createJ1ArchitectRunner, type ArchitectRunner } from '../../src/relay/connectors/gpt-architect/anthropic-architect-runner';
+import {
+  ANTHROPIC_SCHEMA_KEYWORDS, anthropicStructuredOutputSchema, createJ1ArchitectRunner, runAnthropicArchitect, type ArchitectRunner,
+} from '../../src/relay/connectors/gpt-architect/anthropic-architect-runner';
+import { ARCHITECT_PLAN_SCHEMA } from '../../src/relay/connectors/gpt-architect/plan-schema';
+import { ARCHITECT_GUIDANCE_SCHEMA } from '../../src/relay/connectors/gpt-architect/guidance-schema';
+import { ARCHITECT_REBUTTAL_SCHEMA } from '../../src/relay/connectors/gpt-architect/rebuttal-schema';
+import { ARCHITECT_CONSULTATION_SCHEMA } from '../../src/relay/connectors/gpt-architect/architecture-schema';
+import { JULIUS_RESEARCH_ASK_LIMITS, sanitizeJuliusResearchAsks, withJuliusResearchAsks } from '../../src/relay/mission/julius/julius-research-protocol';
+import { LIVE_REACH_READ_CAPABILITIES, LIVE_REACH_SOURCES } from '../../src/relay/mission/live-reach';
 import { HOSTED_API_KEY_ENV, HOSTED_MODEL_ENV } from '../hosted-coding-agent/hosted-readiness';
 import type { ShellEffectPort } from './executor-effects';
 import { createInMemoryArtifactExchange } from './live-workers';
@@ -231,5 +239,115 @@ describe('a refused Anthropic architect request: classified, recorded in existin
     const everything = JSON.stringify({ message: error.message, safe: error.safeMessage, diagnostics: error.diagnostics, lines });
     expect(everything).not.toContain('FAKETESTNOTREAL');
     expect(everything).not.toContain(CODER_KEY);
+  });
+});
+
+describe('the answer schema Anthropic receives is the supported subset of every real architect schema', () => {
+  const WRAPPED = [
+    ['plan', withJuliusResearchAsks(ARCHITECT_PLAN_SCHEMA)],
+    ['guidance', withJuliusResearchAsks(ARCHITECT_GUIDANCE_SCHEMA)],
+    ['rebuttal', withJuliusResearchAsks(ARCHITECT_REBUTTAL_SCHEMA)],
+    ['consultation', withJuliusResearchAsks(ARCHITECT_CONSULTATION_SCHEMA)],
+  ] as const;
+
+  /** Every keyword at a schema position, recursively. Property NAMES are not keywords. */
+  const keywordsOf = (node: unknown, out = new Set<string>()): Set<string> => {
+    if (Array.isArray(node)) { for (const entry of node) keywordsOf(entry, out); return out; }
+    if (node === null || typeof node !== 'object') return out;
+    for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+      out.add(key);
+      if (key === 'properties' || key === '$defs' || key === 'definitions') for (const sub of Object.values(value as object)) keywordsOf(sub, out);
+      else if (key === 'items' || key === 'anyOf' || key === 'allOf') keywordsOf(value, out);
+    }
+    return out;
+  };
+
+  const sentSchema = async (schema: Record<string, unknown>): Promise<unknown> => {
+    const bodies: string[] = [];
+    const fetchImpl = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+      bodies.push(String(init?.body));
+      return new Response(JSON.stringify({ error: { type: 'api_error', message: 'x' } }), { status: 500 });
+    }) as typeof fetch;
+    await runAnthropicArchitect({ apiKey: ARCHITECT_KEY, config: resolveArchitectCredential(J1_ENV).config, instructions: 'C', input: 'P', schema: { name: 'n', schema } }, { fetch: fetchImpl });
+    expect(bodies).toHaveLength(1);
+    return (JSON.parse(bodies[0]!) as { output_config: { format: { schema: unknown } } }).output_config.format.schema;
+  };
+
+  it('the real wrapped schemas carry maxItems (the research ask), so the transform is needed', () => {
+    for (const [name, schema] of WRAPPED) expect(keywordsOf(schema).has('maxItems'), name).toBe(true);
+  });
+
+  it('MUTATION-CHECKED: what goes on the wire for each of the four real schemas holds only allowlisted keywords', async () => {
+    for (const [name, schema] of WRAPPED) {
+      const sent = await sentSchema(schema);
+      for (const keyword of keywordsOf(sent)) expect(ANTHROPIC_SCHEMA_KEYWORDS.has(keyword), `${name}: ${keyword}`).toBe(true);
+      expect(keywordsOf(sent).has('maxItems'), name).toBe(false);
+      // Nothing else moved: the transform only removes bounds.
+      expect(JSON.stringify(sent).length, name).toBeLessThan(JSON.stringify(schema).length);
+    }
+  });
+
+  it('the bound the schema no longer carries is still enforced after parse: an over-limit ask list is refused', () => {
+    const ask = { source: LIVE_REACH_SOURCES[0], capability: LIVE_REACH_READ_CAPABILITIES[0], reference: 'https://example.test/a', purpose: 'p' };
+    const limit = JULIUS_RESEARCH_ASK_LIMITS.asks;
+    expect(sanitizeJuliusResearchAsks(Array.from({ length: limit }, () => ({ ...ask })))?.length).toBe(limit);
+    expect(sanitizeJuliusResearchAsks(Array.from({ length: limit + 1 }, () => ({ ...ask }))), 'one over the limit is refused whole').toBeNull();
+    expect(sanitizeJuliusResearchAsks([{ ...ask, reference: 'x'.repeat(JULIUS_RESEARCH_ASK_LIMITS.referenceChars + 1) }])).toBeNull();
+    expect(sanitizeJuliusResearchAsks([{ ...ask, purpose: 'x'.repeat(JULIUS_RESEARCH_ASK_LIMITS.purposeChars + 1) }])).toBeNull();
+  });
+
+  it('an unsupported keyword is refused BEFORE any request: zero fetch calls, pre-send, non-retryable', async () => {
+    let calls = 0;
+    const fetchImpl = (async () => { calls += 1; return new Response('{}'); }) as unknown as typeof fetch;
+    const bads: Record<string, unknown>[] = [
+      { type: 'object', properties: {}, required: [], additionalProperties: false, patternProperties: {} },
+      { type: 'object', properties: { a: { oneOf: [{ type: 'string' }] } }, required: ['a'], additionalProperties: false },
+      { type: 'object', properties: { a: { type: 'string', format: 'credit-card' } }, required: ['a'], additionalProperties: false },
+      { type: 'object', properties: {}, required: [], additionalProperties: true },
+      { type: 'object', properties: {}, required: [] },
+      {
+        type: 'object', properties: { a: { $ref: '#/$defs/node' } }, required: ['a'], additionalProperties: false,
+        $defs: { node: { type: 'object', properties: { next: { $ref: '#/$defs/node' } }, required: ['next'], additionalProperties: false } },
+      },
+      { type: 'object', properties: { a: { $ref: 'https://example.test/schema' } }, required: ['a'], additionalProperties: false },
+      { type: 'object', properties: { a: { type: 'array', items: { type: 'string' }, contains: { type: 'string' } } }, required: ['a'], additionalProperties: false },
+      { type: 'object', properties: {}, required: [], additionalProperties: false, if: {}, then: {} },
+      { type: 'object', properties: {}, required: [], additionalProperties: false, somethingNew: 1 },
+    ];
+    for (const bad of bads) {
+      const outcome = await runAnthropicArchitect({ apiKey: ARCHITECT_KEY, config: resolveArchitectCredential(J1_ENV).config, instructions: 'C', input: 'P', schema: { name: 'n', schema: bad } }, { fetch: fetchImpl });
+      expect(outcome, JSON.stringify(bad)).toMatchObject({ ok: false, failureClass: 'architect_schema_unsupported' });
+    }
+    expect(calls).toBe(0);
+    // Through the adapter: INVALID_REQUEST, non-retryable, attested unsent, so the #479 gate has nothing to hold.
+    const resolution = resolve(J1_ENV, {
+      shell: SHELL, verifiedOrganizations: ORGS,
+      runners: { architect: (request) => runAnthropicArchitect({ ...request, schema: { name: 'n', schema: { type: 'object', not: {} } } }, { fetch: fetchImpl }) },
+    });
+    const architect = resolution.entries.find((entry) => entry.worker.role === 'PROMPT_ARCHITECT')!;
+    const error = await architect.adapter.dispatch(DISPATCH).then(() => null, (thrown: unknown) => thrown) as JuliusDispatchError;
+    expect(error).toMatchObject({ code: 'INVALID_REQUEST', retryable: false, failureClass: 'architect_schema_unsupported' });
+    expect(error.diagnostics?.runtimeStarted).toBe(false);
+    expect(juliusHandedOutcomeUnknown(error, true)).toBeNull();
+    expect(calls).toBe(0);
+  });
+
+  it('strips only the client-enforced bounds, and keeps minItems 0 or 1', () => {
+    const out = anthropicStructuredOutputSchema({
+      type: 'object', additionalProperties: false, required: ['a', 'b', 'c'],
+      properties: {
+        a: { type: 'array', minItems: 1, maxItems: 3, items: { type: 'string', minLength: 1, maxLength: 9, pattern: '^x$' } },
+        b: { type: 'array', minItems: 2, items: { type: 'integer', minimum: 0, maximum: 9 } },
+        c: { type: ['string', 'null'], format: 'uri', description: 'kept' },
+      },
+    });
+    expect(out).toEqual({
+      type: 'object', additionalProperties: false, required: ['a', 'b', 'c'],
+      properties: {
+        a: { type: 'array', minItems: 1, items: { type: 'string' } },
+        b: { type: 'array', items: { type: 'integer' } },
+        c: { type: ['string', 'null'], format: 'uri', description: 'kept' },
+      },
+    });
   });
 });

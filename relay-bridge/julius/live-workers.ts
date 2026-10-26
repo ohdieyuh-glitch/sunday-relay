@@ -1213,6 +1213,16 @@ export function createLiveArchitectAdapter(input: {
              * second call, whichever way the hold settles.
              */
             throw new JuliusDispatchError('AUTH_CONFIGURATION', false, 'Agentic Architect account has insufficient credit.', outcome.failureClass, failed);
+          case 'architect_schema_unsupported':
+            /*
+             * PRE-SEND, AND PROVABLY SO: the runner refused the answer schema
+             * before it built a request (`anthropicStructuredOutputSchema`), so
+             * this attempt reached no provider. A correction re-ask sends the
+             * same schema, so this class can only end the first attempt; the
+             * attestation is made only then. Never retryable: the schema is code.
+             */
+            throw new JuliusDispatchError('INVALID_REQUEST', false, 'The Agentic Architect answer schema is not one Anthropic structured outputs accept; nothing was sent.', outcome.failureClass,
+              { ...failed, ...(attempts === 1 ? { runtimeStarted: false } : {}) });
           case 'refused':
             // The provider declined the REQUEST, not the caller: INVALID_REQUEST,
             // the code the Coding Agent's CONTENT_REFUSED carries, so one

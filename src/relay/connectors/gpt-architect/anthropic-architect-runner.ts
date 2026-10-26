@@ -41,7 +41,158 @@ export const ANTHROPIC_API_VERSION = '2023-06-01';
  * own class so it can never be read as a transient fault: it maps to a
  * non-retryable code, and no amount of waiting changes it.
  */
-export type AnthropicArchitectFailureClass = GptFailureClass | 'insufficient_credit';
+export type AnthropicArchitectFailureClass = GptFailureClass | 'insufficient_credit' | 'architect_schema_unsupported';
+
+/**
+ * THE ANSWER SCHEMA, IN THE SUBSET ANTHROPIC STRUCTURED OUTPUTS ACCEPT.
+ *
+ * Source: https://platform.claude.com/docs/en/build-with-claude/structured-outputs
+ * ("JSON Schema limitations", read 2026-10-26).
+ *   - Supported: the basic types (type arrays count as unions), `enum`, `const`,
+ *     `anyOf`, `allOf` (not with `$ref`), local `$ref` / `$defs` / `definitions`,
+ *     `default`, `required`, `additionalProperties: false` (required for
+ *     objects), the string formats listed below, and `minItems` of 0 or 1.
+ *   - Not supported: recursive schemas, external `$ref`, numerical constraints,
+ *     `minLength` / `maxLength`, and array constraints beyond `minItems` 0 or 1.
+ *     "If you use an unsupported feature, you'll receive a 400 error."
+ * The official SDKs strip the unsupported bounds and re-validate client-side;
+ * this runner uses raw fetch, so it does the same here, before any request.
+ *
+ * STRIPPED (a bound Julius already enforces after parse: the domain sanitizers
+ * and validators read the answer, never the schema): maxItems, minItems other
+ * than 0/1, maxLength, minLength, minimum, maximum, exclusiveMinimum,
+ * exclusiveMaximum, multipleOf, uniqueItems, and `pattern`. The docs support
+ * simple patterns, but "complex patterns might result in 400 errors", and no
+ * architect schema uses one, so none is sent.
+ *
+ * REFUSED, before any fetch (`architect_schema_unsupported`): anything else,
+ * including `additionalProperties` other than false, an object without
+ * `additionalProperties: false`, `oneOf` (not listed), `not`, `if`/`then`/`else`,
+ * `patternProperties`, `propertyNames`, `prefixItems`, `contains`, an unlisted
+ * `format`, an external or unresolvable `$ref`, a recursive `$ref`, and any
+ * keyword this function does not know. A schema bug can never be a paid call.
+ */
+const SUPPORTED_FORMATS = new Set(['date-time', 'time', 'date', 'duration', 'email', 'hostname', 'uri', 'ipv4', 'ipv6', 'uuid']);
+const STRIPPED_BOUNDS = new Set([
+  'maxItems', 'maxLength', 'minLength', 'minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum',
+  'multipleOf', 'uniqueItems', 'pattern',
+]);
+const ANNOTATIONS = new Set(['description', 'title', 'default']);
+const BASIC_TYPES = new Set(['object', 'array', 'string', 'integer', 'number', 'boolean', 'null']);
+/** Every keyword the transformed schema may contain. A test walks the real schemas against it. */
+export const ANTHROPIC_SCHEMA_KEYWORDS: ReadonlySet<string> = new Set([
+  'type', 'properties', 'required', 'additionalProperties', 'items', 'enum', 'const', 'anyOf', 'allOf',
+  '$ref', '$defs', 'definitions', 'format', 'minItems', ...ANNOTATIONS,
+]);
+
+export class AnthropicSchemaUnsupported extends Error {
+  constructor(readonly keyword: string, readonly at: string) {
+    super(`architect_schema_unsupported:${keyword}`);
+  }
+}
+
+export function anthropicStructuredOutputSchema(schema: Record<string, unknown>): Record<string, unknown> {
+  const root = schema;
+  const defsOf = (name: '$defs' | 'definitions'): Record<string, unknown> =>
+    (root[name] !== null && typeof root[name] === 'object' && !Array.isArray(root[name]) ? root[name] as Record<string, unknown> : {});
+  const refTarget = (ref: string, at: string): { readonly key: string; readonly node: unknown } => {
+    const match = /^#\/(\$defs|definitions)\/([A-Za-z0-9_.-]+)$/u.exec(ref);
+    if (match === null) throw new AnthropicSchemaUnsupported('$ref', at);
+    const node = defsOf(match[1] as '$defs' | 'definitions')[match[2]!];
+    if (node === undefined) throw new AnthropicSchemaUnsupported('$ref', at);
+    return { key: ref, node };
+  };
+  const reachesRef = (node: unknown, ref: string, seen: Set<string>): boolean => {
+    if (Array.isArray(node)) return node.some((entry) => reachesRef(entry, ref, seen));
+    if (node === null || typeof node !== 'object') return false;
+    for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+      if (key === '$ref' && typeof value === 'string') {
+        if (value === ref) return true;
+        if (seen.has(value)) continue;
+        seen.add(value);
+        const target = /^#\/(\$defs|definitions)\/([A-Za-z0-9_.-]+)$/u.exec(value);
+        if (target !== null && reachesRef(defsOf(target[1] as '$defs' | 'definitions')[target[2]!], ref, seen)) return true;
+      } else if (key !== 'enum' && key !== 'const' && key !== 'default') {
+        if (reachesRef(value, ref, seen)) return true;
+      }
+    }
+    return false;
+  };
+  const walk = (node: unknown, at: string): Record<string, unknown> => {
+    if (node === null || typeof node !== 'object' || Array.isArray(node)) throw new AnthropicSchemaUnsupported('schema', at);
+    const source = node as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(source)) {
+      const here = `${at}/${key}`;
+      if (STRIPPED_BOUNDS.has(key)) continue;
+      switch (key) {
+        case 'type': {
+          const types = Array.isArray(value) ? value : [value];
+          if (types.length === 0 || types.some((entry) => typeof entry !== 'string' || !BASIC_TYPES.has(entry))) throw new AnthropicSchemaUnsupported('type', here);
+          out.type = Array.isArray(value) ? [...value] : value;
+          break;
+        }
+        case 'properties': {
+          if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new AnthropicSchemaUnsupported('properties', here);
+          out.properties = Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([name, sub]) => [name, walk(sub, `${here}/${name}`)]));
+          break;
+        }
+        case 'required':
+          if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string')) throw new AnthropicSchemaUnsupported('required', here);
+          out.required = [...value];
+          break;
+        case 'additionalProperties':
+          if (value !== false) throw new AnthropicSchemaUnsupported('additionalProperties', here);
+          out.additionalProperties = false;
+          break;
+        case 'items':
+          out.items = walk(value, here);
+          break;
+        case 'enum':
+          if (!Array.isArray(value) || value.some((entry) => entry !== null && typeof entry === 'object')) throw new AnthropicSchemaUnsupported('enum', here);
+          out.enum = [...value];
+          break;
+        case 'const':
+          if (value !== null && typeof value === 'object') throw new AnthropicSchemaUnsupported('const', here);
+          out.const = value;
+          break;
+        case 'anyOf':
+        case 'allOf':
+          if (!Array.isArray(value) || value.length === 0) throw new AnthropicSchemaUnsupported(key, here);
+          if (key === 'allOf' && value.some((entry) => entry !== null && typeof entry === 'object' && '$ref' in (entry as object))) throw new AnthropicSchemaUnsupported('allOf', here);
+          out[key] = value.map((entry, index) => walk(entry, `${here}/${index}`));
+          break;
+        case '$ref': {
+          if (typeof value !== 'string') throw new AnthropicSchemaUnsupported('$ref', here);
+          const target = refTarget(value, here);
+          if (reachesRef(target.node, value, new Set())) throw new AnthropicSchemaUnsupported('recursion', here);
+          out.$ref = value;
+          break;
+        }
+        case '$defs':
+        case 'definitions':
+          if (at !== '#' || value === null || typeof value !== 'object' || Array.isArray(value)) throw new AnthropicSchemaUnsupported(key, here);
+          out[key] = Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([name, sub]) => [name, walk(sub, `${here}/${name}`)]));
+          break;
+        case 'format':
+          if (typeof value !== 'string' || !SUPPORTED_FORMATS.has(value)) throw new AnthropicSchemaUnsupported('format', here);
+          out.format = value;
+          break;
+        case 'minItems':
+          // Only 0 and 1 are accepted by the API; any other floor is enforced after parse.
+          if (value === 0 || value === 1) out.minItems = value;
+          break;
+        default:
+          if (ANNOTATIONS.has(key)) { out[key] = value; break; }
+          throw new AnthropicSchemaUnsupported(key, here);
+      }
+    }
+    const isObject = source.type === 'object' || (Array.isArray(source.type) && source.type.includes('object'));
+    if (isObject && out.additionalProperties !== false) throw new AnthropicSchemaUnsupported('additionalProperties', at);
+    return out;
+  };
+  return walk(schema, '#');
+}
 
 /** The `anthropic-ratelimit-*` counts. Null is "not reported", never zero. */
 export interface AnthropicRateLimitEvidence {
@@ -209,6 +360,17 @@ export async function runAnthropicArchitect(
   if (typeof request.apiKey !== 'string' || request.apiKey.trim() === '') {
     return { ok: false, failureClass: 'authentication_failed', message: 'No architect credential is configured.' };
   }
+  /* THE SCHEMA IS TRANSFORMED BEFORE ANYTHING ELSE EXISTS: a refusal here is pre-send and spends nothing. */
+  let schema: Record<string, unknown>;
+  try {
+    schema = anthropicStructuredOutputSchema(request.schema?.schema ?? ARCHITECT_PLAN_SCHEMA);
+  } catch (error) {
+    const keyword = error instanceof AnthropicSchemaUnsupported ? error.keyword : 'schema';
+    return {
+      ok: false, failureClass: 'architect_schema_unsupported',
+      message: `The architect answer schema uses a feature Anthropic structured outputs do not support (${/^[A-Za-z$][A-Za-z0-9_$]{0,40}$/u.test(keyword) ? keyword : 'schema'}); nothing was sent.`,
+    };
+  }
   const fetchImpl = deps.fetch ?? globalThis.fetch;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), config.timeoutMs);
@@ -222,7 +384,7 @@ export async function runAnthropicArchitect(
     system: request.instructions,
     messages: [{ role: 'user', content: request.input }],
     output_config: {
-      format: { type: 'json_schema', schema: request.schema?.schema ?? ARCHITECT_PLAN_SCHEMA },
+      format: { type: 'json_schema', schema },
       // Only when the mission declared it; absent sends no effort.
       ...(config.reasoningEffort === undefined ? {} : { effort: config.reasoningEffort }),
     },
