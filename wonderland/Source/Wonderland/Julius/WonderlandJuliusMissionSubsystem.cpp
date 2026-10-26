@@ -488,6 +488,10 @@ void UWonderlandJuliusMissionSubsystem::SyncMissionContract()
 	}
 	for (const FContractBeat& Beat : ContractCursor->Advance(View))
 	{
+		// THE OUTCOME LANDS ON A CLEARED STAGE. A run restored already complete replays run.started and run.completed in
+		// one tick; the completion beat carries no act, so without this the Dog kept performing PREPARATION. Live, the
+		// grading release has already cleared it, so this changes nothing there.
+		if (Beat.Type == "run.completed") { Contract->ReleaseRealRunBeat(); }
 		const bool bApplied = Contract->OfferRealJuliusEvent(FName(*ToF(Beat.Type)), FName(*MissionId), FName(*Run),
 			ContractRole(Beat.Role), static_cast<int32>(Beat.RepairRound));
 		UE_LOG(LogJuliusJ1, Display, TEXT("{\"event\":\"contract_beat\",\"wlj_run_id\":\"%s\",\"type\":\"%s\",\"applied\":%s,\"beat\":\"%s\"}"),

@@ -5940,7 +5940,8 @@ namespace WonderlandJuliusMissionQa
 		Component->TextureTarget = Target;
 		Component->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
 		// A one-off capture has no eye-adaptation history and comes out blown white. Use the player camera's post process,
-		// keep the capture's history, and let exposure settle over a short burst of frames before reading it back.
+		// keep the capture's history, and let exposure settle over a burst of captures before reading it back. The captures
+		// are explicit: a parked QA window never draws its viewport, so an every-frame capture would never render.
 		if (Controller->PlayerCameraManager != nullptr)
 		{
 			const FMinimalViewInfo& View = Controller->PlayerCameraManager->GetCameraCacheView();
@@ -5952,16 +5953,25 @@ namespace WonderlandJuliusMissionQa
 		Component->PostProcessSettings.bOverride_AutoExposureSpeedDown = true;
 		Component->PostProcessSettings.AutoExposureSpeedDown = 20.0f;
 		Component->bAlwaysPersistRenderingState = true;
-		Component->bCaptureEveryFrame = true;
+		Component->bCaptureEveryFrame = false;
 		Component->bCaptureOnMovement = false;
 		const TWeakObjectPtr<ASceneCapture2D> WeakCapture(Capture);
-		FTimerHandle Settle;
-		World->GetTimerManager().SetTimer(Settle, FTimerDelegate::CreateLambda([WeakCapture, Name, Width, Height]()
+		const TWeakObjectPtr<UWorld> WeakWorld(World);
+		const TSharedRef<int32> Remaining = MakeShared<int32>(24);
+		const TSharedRef<FTimerHandle> Settle = MakeShared<FTimerHandle>();
+		World->GetTimerManager().SetTimer(*Settle, FTimerDelegate::CreateLambda([WeakCapture, WeakWorld, Remaining, Settle, Name, Width, Height]()
 		{
 			ASceneCapture2D* Done = WeakCapture.Get();
 			UTextureRenderTarget2D* Shot = Done != nullptr ? Done->GetCaptureComponent2D()->TextureTarget.Get() : nullptr;
-			if (Shot == nullptr) { UE_LOG(LogWonderlandUi, Warning, TEXT("WLJ1WORLD shot_error=capture_gone")); return; }
-			Done->GetCaptureComponent2D()->bCaptureEveryFrame = false;
+			if (Shot == nullptr)
+			{
+				if (UWorld* Here = WeakWorld.Get()) { Here->GetTimerManager().ClearTimer(*Settle); }
+				UE_LOG(LogWonderlandUi, Warning, TEXT("WLJ1WORLD shot_error=capture_gone"));
+				return;
+			}
+			Done->GetCaptureComponent2D()->CaptureScene();
+			if (--(*Remaining) > 0) { return; }
+			if (UWorld* Here = WeakWorld.Get()) { Here->GetTimerManager().ClearTimer(*Settle); }
 			FlushRenderingCommands();
 			TArray<FColor> Pixels;
 			FTextureRenderTargetResource* Resource = Shot->GameThread_GetRenderTargetResource();
@@ -5973,7 +5983,7 @@ namespace WonderlandJuliusMissionQa
 			IFileManager::Get().MakeDirectory(*FPaths::GetPath(Path), true);
 			const bool bSaved = FImageUtils::SaveImageByExtension(*Path, FImageView(Pixels.GetData(), Width, Height));
 			UE_LOG(LogWonderlandUi, Display, TEXT("WLJ1WORLD shot_path=%s saved=%d"), *Path, bSaved ? 1 : 0);
-		}), 1.0f, false);
+		}), 0.05f, true);
 	}
 
 	void ShotIn(const TArray<FString>& Args, UWorld* World, FOutputDevice& Ar)
