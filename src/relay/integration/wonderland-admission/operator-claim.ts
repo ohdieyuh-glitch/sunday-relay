@@ -150,8 +150,16 @@ export const UNWIRED_PRIOR_ATTEMPTS: PriorAttemptReader = {
 /** A prior-run count as shown and decided on: a whole number, or UNKNOWN. */
 export type PriorCount = number | 'UNKNOWN';
 
-export function priorCount(read: PriorAttemptRead): PriorCount {
-  return read.readable && Number.isSafeInteger(read.counted) && read.counted >= 0 ? read.counted : 'UNKNOWN';
+/**
+ * A reader's answer as a count. Only an object whose `readable` is exactly
+ * `true` and whose `counted` is a whole safe number is a count; `null`, a
+ * truthy non-boolean `readable`, a string, NaN, Infinity or an unsafe integer
+ * is UNKNOWN.
+ */
+export function priorCount(read: PriorAttemptRead | null | undefined): PriorCount {
+  if (read === null || typeof read !== 'object' || read.readable !== true) return 'UNKNOWN';
+  const counted: unknown = read.counted;
+  return typeof counted === 'number' && Number.isSafeInteger(counted) && counted >= 0 ? counted : 'UNKNOWN';
 }
 
 /** `markerNamespace` of a contract read at main, as the paid workflow's gate reads it, or null. */
@@ -819,7 +827,11 @@ async function claimPhased(
   const readOne = async (which: 'read' | 'readCompleted'): Promise<PriorAttemptRead> => {
     if (onMain.namespace === '') return { readable: false };
     try {
-      return await priorAttempts[which]({ repo: input.repo, namespace: onMain.namespace });
+      // Whatever the reader answers (null, a malformed object) is checked here, inside the try:
+      // anything that is not a count is UNKNOWN, a 409, never a throw.
+      const answer: unknown = await priorAttempts[which]({ repo: input.repo, namespace: onMain.namespace });
+      const counted = priorCount(answer as PriorAttemptRead | null);
+      return counted === 'UNKNOWN' ? { readable: false } : { readable: true, counted };
     } catch {
       return { readable: false };
     }

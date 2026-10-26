@@ -21,6 +21,7 @@ import {
   missionContractPath,
   parseRecordedPaidAttempts,
   priorCompletedCount,
+  priorCount,
   recordedPaidAttempts,
   workflowDispatchArgs,
   type GhResult,
@@ -808,5 +809,32 @@ describe('the rehearsal harness (test-only, simulated)', () => {
     expect(result.code).toBe(0);
     expect(gh.calls).toEqual([['workflow', 'run', 'x.yml', '-f', 'acknowledge_rerun=RERUN PAID MISSION']]);
     expect(lines.join('\n')).toMatch(/SIMULATED.*NOT EXECUTED/u);
+  });
+});
+
+describe('reader answers that are not a count are UNKNOWN, a 409, never a 503', () => {
+  it('null, a truthy non-boolean readable, or a malformed count, on either read', async () => {
+    const odd: unknown[] = [null, undefined, { readable: 1, counted: 1 }, { readable: 'true', counted: 1 }, { readable: true }, { readable: true, counted: '1' }, 7];
+    for (const value of odd) {
+      for (const which of ['read', 'readCompleted'] as const) {
+        const answer = () => Promise.resolve(value as PriorAttemptRead);
+        const prior: PriorAttemptReader = {
+          read: which === 'read' ? answer : () => Promise.resolve(ZERO),
+          readCompleted: which === 'readCompleted' ? answer : () => Promise.resolve(ZERO),
+        };
+        const fx = await admitted(RUN_A, prior);
+        try {
+          const refused = await fx.start({ acknowledgeRerun: PHRASE });
+          expect(refused?.status, `${which} ${JSON.stringify(value)}`).toBe(409);
+          expect(kindOf(refused?.body)).toBe('julius_prior_attempts_unknown');
+          expect(fx.journal()).toEqual([]);
+          expect(workflowRuns(fx.gh.calls)).toEqual([]);
+        } finally {
+          fx.cleanup();
+        }
+      }
+    }
+    expect(priorCount({ readable: 1, counted: 1 } as unknown as PriorAttemptRead)).toBe('UNKNOWN');
+    expect(priorCount(null)).toBe('UNKNOWN');
   });
 });

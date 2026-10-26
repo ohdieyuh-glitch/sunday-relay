@@ -220,7 +220,8 @@ export function createStatusPriorAttempts(input: {
   const cache = new Map<string, { readonly at: number; readonly value: StatusPriorCounts }>();
   const safely = async (read: () => Promise<PriorAttemptRead>): Promise<PriorAttemptRead> => {
     try {
-      return await read();
+      const counted = priorCount(await read());
+      return counted === 'UNKNOWN' ? { readable: false } : { readable: true, counted };
     } catch {
       return { readable: false };
     }
