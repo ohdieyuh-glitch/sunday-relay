@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { ARCHITECT_PLAN_SCHEMA } from './plan-schema';
 import type { GptArchitectConfig } from './config';
 import {
-  ANTHROPIC_MESSAGES_URL, anthropicPinnedFetch, anthropicRateLimitEvidence, anthropicRequestId,
+  ANTHROPIC_MESSAGES_URL, anthropicPinnedFetch, anthropicRateLimitEvidence, anthropicRequestId, anthropicStructuredOutputSchema,
   classifyAnthropicStatus, createJ1ArchitectRunner, runAnthropicArchitect,
 } from './anthropic-architect-runner';
 
@@ -71,7 +71,7 @@ describe('the request: one POST to the pinned Messages API, the key in one heade
     expect(body).toMatchObject({
       model: 'claude-opus-5-5', max_tokens: 20_000, system: 'CHARTER',
       messages: [{ role: 'user', content: 'PACKET' }],
-      output_config: { format: { type: 'json_schema', schema: ARCHITECT_PLAN_SCHEMA } },
+      output_config: { format: { type: 'json_schema', schema: anthropicStructuredOutputSchema(ARCHITECT_PLAN_SCHEMA) } },
     });
     expect(body.output_config.effort, 'no effort unless the mission declared one').toBeUndefined();
     expect(body.thinking, 'thinking is not sent').toBeUndefined();

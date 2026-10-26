@@ -84,6 +84,7 @@ export CONTRACT=.github/julius-missions/julius-live-mission-6/contract.json
 export RELAY_PROMPT_ARCHITECT_MODE=live
 export JULIUS_ARCHITECT_PROVIDER=openai
 export RELAY_ANTHROPIC_ARCHITECT_MODEL=claude-opus-5-5
+export RELAY_PROMPT_ARCHITECT_TIMEOUT_MS=540000
 export RELAY_HOSTED_CODING_MODEL=claude-opus-5-5
 export RELAY_HERMES_PROVIDER=xai
 export RELAY_HERMES_MODEL=grok-build-0.1

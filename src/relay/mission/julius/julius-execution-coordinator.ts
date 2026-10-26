@@ -143,9 +143,12 @@ const cancellationReasonOf=(signal:AbortSignal):string=>{
 async function dispatchWithinDeadline<T>(
  declaredTimeoutMs:number,
  externalSignal:AbortSignal|undefined,
- run:(signal:AbortSignal)=>Promise<T>,
+ run:(signal:AbortSignal,deadlineAtMs:number)=>Promise<T>,
 ):Promise<T>{
  const controller=new AbortController();
+ /* THE ONE DEADLINE: the instant this dispatch is cut. The timer below fires at it, and the adapter is handed the
+  * same number, so a worker that budgets a second call reads this window rather than estimating its own. */
+ const deadlineAtMs=Date.now()+declaredTimeoutMs;
  let cut:(error:Error)=>void=()=>undefined;
  const race=new Promise<never>((_resolve,reject)=>{cut=reject;});
  // Settle first, then tell the adapter: the reason recorded is the one that fired.
@@ -153,9 +156,9 @@ async function dispatchWithinDeadline<T>(
  const forward=():void=>{const reasonCode=cancellationReasonOf(externalSignal!);cut(new JuliusDispatchCancelled(reasonCode));controller.abort(reasonCode);};
  externalSignal?.addEventListener('abort',forward,{once:true});
  let timer:ReturnType<typeof setTimeout>|undefined;
- const running=run(controller.signal);
+ const running=run(controller.signal,deadlineAtMs);
  try{
-  timer=setTimeout(()=>{cut(new JuliusWorkerDeadlineExceeded(declaredTimeoutMs));controller.abort('worker_deadline_exceeded');},declaredTimeoutMs);
+  timer=setTimeout(()=>{cut(new JuliusWorkerDeadlineExceeded(declaredTimeoutMs));controller.abort('worker_deadline_exceeded');},Math.max(0,deadlineAtMs-Date.now()));
   return await Promise.race([running,race]);
  }finally{
   if(timer!==undefined)clearTimeout(timer);
@@ -612,7 +615,7 @@ export class JuliusExecutionCoordinator {
        * one edit that could actually break this, which is moving a line above
        * the await. `julius-worker-deadline.test.ts` pins the ordering instead.
        */
-      const result=await dispatchWithinDeadline(worker.timeoutMs,request.signal,(signal)=>this.router.dispatch(worker,{taskId:request.claim.taskId,contextId:request.claim.contextId,taskType:request.taskType,signal,...(request.allocation===undefined?{}:{allocation:request.allocation}),...(request.contract===undefined?{}:{contract:request.contract}),...(request.workspace===undefined?{}:{workspace:request.workspace}),/* WHICH ATTEMPT. The claim already fences it; the adapter needs it to keep one round's body from overwriting the round before it. */attempt:{leaseGeneration:request.claim.leaseGeneration},...(request.reads===undefined?{}:{reads:request.reads})}));
+      const result=await dispatchWithinDeadline(worker.timeoutMs,request.signal,(signal,deadlineAtMs)=>this.router.dispatch(worker,{taskId:request.claim.taskId,contextId:request.claim.contextId,taskType:request.taskType,signal,deadlineAtMs,...(request.allocation===undefined?{}:{allocation:request.allocation}),...(request.contract===undefined?{}:{contract:request.contract}),...(request.workspace===undefined?{}:{workspace:request.workspace}),/* WHICH ATTEMPT. The claim already fences it; the adapter needs it to keep one round's body from overwriting the round before it. */attempt:{leaseGeneration:request.claim.leaseGeneration},...(request.reads===undefined?{}:{reads:request.reads})}));
       answered=result;
       /**
        * NOTHING FROM A CANCELLED DISPATCH BECOMES MISSION STATE. An abort that

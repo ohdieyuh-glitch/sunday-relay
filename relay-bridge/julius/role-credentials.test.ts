@@ -7,7 +7,8 @@
  */
 
 import { createRequire } from 'node:module';
-import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   JULIUS_CONTEXT_COMPILER_VERSION, JuliusDispatchError, safeReviewDiagnostics, type JuliusContextSnapshot,
@@ -26,7 +27,7 @@ import { JULIUS_RESEARCH_ASK_LIMITS, sanitizeJuliusResearchAsks, withJuliusResea
 import { LIVE_REACH_READ_CAPABILITIES, LIVE_REACH_SOURCES } from '../../src/relay/mission/live-reach';
 import { HOSTED_API_KEY_ENV, HOSTED_MODEL_ENV } from '../hosted-coding-agent/hosted-readiness';
 import type { ShellEffectPort } from './executor-effects';
-import { createInMemoryArtifactExchange } from './live-workers';
+import { architectCorrectionMaxTokens, createInMemoryArtifactExchange } from './live-workers';
 import { resolveLiveWorkers } from './live-composition';
 import {
   J1_ROLE_CREDENTIALS, architectIndependenceProblems, j1RoleCredential, resolveArchitectCredential,
@@ -282,8 +283,6 @@ describe('the answer schema Anthropic receives is the supported subset of every 
       const sent = await sentSchema(schema);
       for (const keyword of keywordsOf(sent)) expect(ANTHROPIC_SCHEMA_KEYWORDS.has(keyword), `${name}: ${keyword}`).toBe(true);
       expect(keywordsOf(sent).has('maxItems'), name).toBe(false);
-      // Nothing else moved: the transform only removes bounds.
-      expect(JSON.stringify(sent).length, name).toBeLessThan(JSON.stringify(schema).length);
     }
   });
 
@@ -346,8 +345,137 @@ describe('the answer schema Anthropic receives is the supported subset of every 
       properties: {
         a: { type: 'array', minItems: 1, items: { type: 'string' } },
         b: { type: 'array', items: { type: 'integer' } },
-        c: { type: ['string', 'null'], format: 'uri', description: 'kept' },
+        c: { description: 'kept', anyOf: [{ type: 'string', format: 'uri' }, { type: 'null' }] },
       },
     });
+  });
+});
+
+describe('type arrays reach Anthropic as anyOf, never as an array-valued type', () => {
+  const WIRE = [
+    ['plan', withJuliusResearchAsks(ARCHITECT_PLAN_SCHEMA)],
+    ['guidance', withJuliusResearchAsks(ARCHITECT_GUIDANCE_SCHEMA)],
+    ['rebuttal', withJuliusResearchAsks(ARCHITECT_REBUTTAL_SCHEMA)],
+    ['consultation', withJuliusResearchAsks(ARCHITECT_CONSULTATION_SCHEMA)],
+  ] as const;
+  /** Every schema node, recursively, through properties, items, anyOf and allOf. */
+  const nodesOf = (node: unknown, out: Record<string, unknown>[] = []): Record<string, unknown>[] => {
+    if (node === null || typeof node !== 'object' || Array.isArray(node)) return out;
+    const record = node as Record<string, unknown>;
+    out.push(record);
+    if (record.properties) for (const sub of Object.values(record.properties as object)) nodesOf(sub, out);
+    if (record.items) nodesOf(record.items, out);
+    for (const key of ['anyOf', 'allOf'] as const) if (Array.isArray(record[key])) for (const sub of record[key] as unknown[]) nodesOf(sub, out);
+    return out;
+  };
+  const onWire = async (schema: Record<string, unknown>): Promise<unknown> => {
+    const bodies: string[] = [];
+    const fetchImpl = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+      bodies.push(String(init?.body));
+      return new Response(JSON.stringify({ error: { type: 'api_error', message: 'x' } }), { status: 500 });
+    }) as typeof fetch;
+    await runAnthropicArchitect({ apiKey: ARCHITECT_KEY, config: resolveArchitectCredential(J1_ENV).config, instructions: 'C', input: 'P', schema: { name: 'n', schema } }, { fetch: fetchImpl });
+    return (JSON.parse(bodies[0]!) as { output_config: { format: { schema: unknown } } }).output_config.format.schema;
+  };
+
+  it('MUTATION-CHECKED: no array-valued type on the wire for any of the four real schemas, and unions stay within the documented 16', async () => {
+    const sourceUnions = WIRE.map(([, schema]) => nodesOf(schema).filter((node) => Array.isArray(node.type)).length);
+    expect(sourceUnions.reduce((a, b) => a + b, 0), 'the real schemas do carry type arrays').toBeGreaterThan(0);
+    for (const [name, schema] of WIRE) {
+      const nodes = nodesOf(await onWire(schema));
+      expect(nodes.filter((node) => Array.isArray(node.type)).map((node) => JSON.stringify(node.type)), name).toEqual([]);
+      expect(nodes.filter((node) => Array.isArray(node.anyOf)).length, `${name}: union-typed parameters`).toBeLessThanOrEqual(16);
+    }
+  });
+
+  it('distributes each keyword to its own branch: an object-or-null keeps the object shape on the object branch; enum is split per branch', () => {
+    const out = anthropicStructuredOutputSchema({
+      type: 'object', additionalProperties: false, required: ['a', 'b', 'c'],
+      properties: {
+        a: { type: ['object', 'null'], description: 'kept outside', properties: { x: { type: 'string' } }, required: ['x'], additionalProperties: false },
+        b: { type: ['string', 'null'], enum: ['one', 'two', null] },
+        c: { type: ['string', 'integer'], enum: ['one'], maxLength: 3, minimum: 0 },
+      },
+    });
+    expect(out.properties).toEqual({
+      a: { description: 'kept outside', anyOf: [{ type: 'object', properties: { x: { type: 'string' } }, required: ['x'], additionalProperties: false }, { type: 'null' }] },
+      b: { anyOf: [{ type: 'string', enum: ['one', 'two'] }, { type: 'null', enum: [null] }] },
+      // The integer branch keeps no enum value, so it could match nothing and is dropped; the bounds are stripped.
+      c: { anyOf: [{ type: 'string', enum: ['one'] }] },
+    });
+    // An object branch without additionalProperties:false is still refused, after the rewrite.
+    expect(() => anthropicStructuredOutputSchema({ type: ['object', 'null'], properties: {} })).toThrow('architect_schema_unsupported:additionalProperties');
+  });
+});
+
+describe('a correction re-ask is started only if it can finish inside the coordinator\'s deadline', () => {
+  const NOW = 1_800_000_000_000;
+  const ceiling = resolveArchitectCredential(J1_ENV).config.maxOutputTokens;
+
+  /** A dispatch whose first answer is not JSON, so the adapter wants a correction; `deadlineAtMs` is the coordinator's. */
+  async function dispatchWithDeadline(remainingAfterFirstMs: number) {
+    const bodies: Record<string, unknown>[] = [];
+    let clock = NOW;
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => clock);
+    try {
+      const fetchImpl = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+        bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        // The first answer arrives 200 s in; the correction (if any) answers at once.
+        if (bodies.length === 1) clock = NOW + 200_000;
+        return new Response(JSON.stringify({
+          id: 'msg_01FAKEANSWER', model: 'claude-opus-5-5', stop_reason: 'end_turn',
+          content: [{ type: 'text', text: 'this is not json' }], usage: { input_tokens: 10, output_tokens: 10 },
+        }), { status: 200 });
+      }) as typeof fetch;
+      const resolution = resolve(J1_ENV, { shell: SHELL, verifiedOrganizations: ORGS, runners: { architect: createJ1ArchitectRunner({ fetch: fetchImpl }) } });
+      const architect = resolution.entries.find((entry) => entry.worker.role === 'PROMPT_ARCHITECT')!;
+      const deadlineAtMs = NOW + 200_000 + remainingAfterFirstMs;
+      const error = await architect.adapter.dispatch({ ...DISPATCH, deadlineAtMs }).then(() => null, (thrown: unknown) => thrown) as JuliusDispatchError;
+      return { error, bodies };
+    } finally {
+      nowSpy.mockRestore();
+    }
+  }
+  /** The remaining window that buys exactly `tokens` at 40 tok/s after the 30 s margin. */
+  const windowFor = (tokens: number): number => 30_000 + (tokens / 40) * 1000;
+
+  it('the budget is computed from the deadline: min(ceiling, floor((remaining - 30 s) x 40 tok/s)), or skip below 6000', () => {
+    expect(architectCorrectionMaxTokens(undefined, NOW, ceiling)).toBeNull();
+    expect(architectCorrectionMaxTokens(NOW + windowFor(12_000), NOW, ceiling)).toBe(12_000);
+    expect(architectCorrectionMaxTokens(NOW + 3_600_000, NOW, ceiling)).toBe(ceiling);
+    expect(architectCorrectionMaxTokens(NOW + windowFor(6_000), NOW, ceiling)).toBe(6_000);
+    expect(architectCorrectionMaxTokens(NOW + windowFor(6_000) - 25, NOW, ceiling)).toBe('skip');
+    // A ceiling below the floor is its own floor: the 4,000-token connector default is not refused every correction.
+    expect(architectCorrectionMaxTokens(NOW + windowFor(4_000), NOW, 4_000)).toBe(4_000);
+    expect(architectCorrectionMaxTokens(NOW + windowFor(4_000) - 25, NOW, 4_000)).toBe('skip');
+  });
+
+  it('MUTATION-CHECKED: a slow first answer skips the correction: no extra fetch, the known validation failure, NOT a TIMEOUT', async () => {
+    const { error, bodies } = await dispatchWithDeadline(windowFor(5_999));
+    expect(bodies).toHaveLength(1);
+    expect(error).toMatchObject({ code: 'WORKER_EXECUTION_FAILURE', retryable: false, failureClass: 'unparseable_plan_json' });
+  });
+
+  it('a fast first answer gets a correction whose max_tokens is the computed budget, on the wire', async () => {
+    const { error, bodies } = await dispatchWithDeadline(windowFor(12_000));
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0]!.max_tokens).toBe(ceiling);
+    expect(bodies[1]!.max_tokens).toBe(12_000);
+    expect(error).toMatchObject({ failureClass: 'unparseable_plan_json', retryable: false });
+  });
+
+  it('exactly at the 6000 floor the correction is made; one token short it is not', async () => {
+    const at = await dispatchWithDeadline(windowFor(6_000));
+    expect(at.bodies.map((body) => body.max_tokens)).toEqual([ceiling, 6_000]);
+    const below = await dispatchWithDeadline(windowFor(6_000) - 25);
+    expect(below.bodies).toHaveLength(1);
+  });
+
+  it('the coordinator hands the adapter the very deadline it enforces', () => {
+    const source = readFileSync('src/relay/mission/julius/julius-execution-coordinator.ts', 'utf8');
+    expect(source).toContain('const deadlineAtMs=Date.now()+declaredTimeoutMs;');
+    expect(source).toContain('const running=run(controller.signal,deadlineAtMs);');
+    expect(source).toContain('Math.max(0,deadlineAtMs-Date.now())');
+    expect(source).toContain('(signal,deadlineAtMs)=>this.router.dispatch(worker,{taskId:request.claim.taskId,contextId:request.claim.contextId,taskType:request.taskType,signal,deadlineAtMs,');
   });
 });

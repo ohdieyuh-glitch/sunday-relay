@@ -475,6 +475,34 @@ const correctionAffordable = (allocation: JuliusDispatchAllocation | undefined):
   allocation === undefined || allocation.usdMicros > 0;
 
 /**
+ * A CORRECTION RE-ASK IS STARTED ONLY IF IT CAN FINISH INSIDE THE DISPATCH.
+ *
+ * The plan call and its correction share ONE window: the coordinator cuts the
+ * whole dispatch at the worker's declared deadline (`dispatchWithinDeadline`,
+ * which hands that instant to the adapter as `deadlineAtMs`). A correction
+ * started too late would be cut mid-flight, which is a TIMEOUT after the
+ * handoff: OUTCOME UNKNOWN and never retried. So its output budget is what the
+ * remaining window can generate at a conservative 40 tokens a second, after a
+ * 30 s margin, capped at the configured ceiling. Below 6,000 tokens no useful
+ * correction fits, and none is started: the dispatch ends with the known,
+ * billed, non-retryable validation failure instead.
+ *
+ * `null` means no deadline was handed over (a caller outside the coordinator):
+ * the ceiling applies, exactly as before.
+ */
+export const ARCHITECT_CORRECTION_TOKENS_PER_SECOND = 40;
+export const ARCHITECT_CORRECTION_MARGIN_MS = 30_000;
+export const ARCHITECT_CORRECTION_MIN_TOKENS = 6_000;
+export function architectCorrectionMaxTokens(deadlineAtMs: number | undefined, nowMs: number, ceiling: number): number | null | 'skip' {
+  if (deadlineAtMs === undefined || !Number.isFinite(deadlineAtMs)) return null;
+  const affordable = Math.floor(((deadlineAtMs - nowMs - ARCHITECT_CORRECTION_MARGIN_MS) / 1000) * ARCHITECT_CORRECTION_TOKENS_PER_SECOND);
+  // The floor is the smaller of 6,000 and the ceiling itself: a deployment whose whole ceiling is below 6,000 (the
+  // connector default is 4,000) is not refused every correction by a floor its own first call never reached.
+  const floor = Math.min(ARCHITECT_CORRECTION_MIN_TOKENS, ceiling);
+  return affordable < floor ? 'skip' : Math.min(ceiling, affordable);
+}
+
+/**
  * HOW TO ASK AGAIN FOR A REVIEW THAT ARRIVED IN THE WRONG SHAPE.
  *
  * Keyed on the CLOSED failure shape the Hermes reader assigned, so nothing the
@@ -1104,12 +1132,21 @@ export function createLiveArchitectAdapter(input: {
       const baseCharter = `${roleCharter}\n\n${RESEARCH_FIELD_GUIDANCE}\n\n${researchAuthorityFor(input.researchPolicyFor, snapshot.packet.missionId, input.worker.role)}`;
       let attempts = 0;
       let correction: string | null = null;
+      /* The correction's output budget, from the coordinator's own deadline (`architectCorrectionMaxTokens`). */
+      let correctionMaxTokens: number | null = null;
+      const correctionAllowed = (): boolean => {
+        if (!(attempts < PLAN_ATTEMPT_LIMIT && correctionAffordable(dispatch.allocation))) return false;
+        const budget = architectCorrectionMaxTokens(dispatch.deadlineAtMs, Date.now(), input.config.maxOutputTokens);
+        if (budget === 'skip') return false;
+        correctionMaxTokens = budget;
+        return true;
+      };
       for (;;) {
       attempts += 1;
       const startedAtMs = Date.now();
       const outcome: ArchitectRunOutcome = await run({
         apiKey: input.apiKey,
-        config: input.config,
+        config: correctionMaxTokens === null ? input.config : { ...input.config, maxOutputTokens: correctionMaxTokens },
         // The correction goes in the INSTRUCTIONS, beside the charter it did
         // not follow — not into the mission packet, which is Julius's own
         // compiled context and is not the place to record a model's mistake.
@@ -1267,7 +1304,7 @@ export function createLiveArchitectAdapter(input: {
       let parseFailed = false;
       try { parsed = JSON.parse(outcome.outputText); } catch { parseFailed = true; }
       if (parseFailed) {
-        if (attempts < PLAN_ATTEMPT_LIMIT && correctionAffordable(dispatch.allocation)) {
+        if (correctionAllowed()) {
           correction = 'CORRECTION — your previous answer was REFUSED: it was not parseable JSON. Answer with exactly one JSON object conforming to the output schema, and nothing else — no prose before or after it, and no code fence.';
           continue;
         }
@@ -1311,7 +1348,7 @@ export function createLiveArchitectAdapter(input: {
         }).ok;
         const consistencyOk = sanitizeJuliusConsistency({ value: source.consistency, revision: 1 }).ok;
         if (!architectureOk || !consistencyOk) {
-          if (attempts < PLAN_ATTEMPT_LIMIT && correctionAffordable(dispatch.allocation)) {
+          if (correctionAllowed()) {
             correction = 'CORRECTION — your previous answer was REFUSED: it did not form a usable architecture consultation. Answer with exactly one JSON object conforming to the output schema. "architecture" must state the whole design — at least one component, boundary, dependency, decision, assumption, question or risk — and "consistency" must carry an assessment of exactly ALIGNED, DRIFT_NON_BLOCKING, DRIFT_REQUIRES_REPAIR or REPLAN_REQUIRED. ALIGNED must name no drift; anything else must name drift AND cite at least one evidence reference; DRIFT_REQUIRES_REPAIR and REPLAN_REQUIRED must name drift whose kind is a boundary that moved, not a rename or a reformat, and DRIFT_REQUIRES_REPAIR must name the drifting task ids. No field may name a Mission Contract term, and no field may declare work verified, accepted or complete.';
             continue;
           }
@@ -1370,7 +1407,7 @@ export function createLiveArchitectAdapter(input: {
          * it must resolve the disagreement against.
          */
         if (!sanitizeJuliusRebuttal(parsed).ok) {
-          if (attempts < PLAN_ATTEMPT_LIMIT && correctionAffordable(dispatch.allocation)) {
+          if (correctionAllowed()) {
             correction = 'CORRECTION — your previous answer was REFUSED: it did not form a usable rebuttal. Answer with exactly one JSON object conforming to the output schema. "position" must be exactly CONCEDES or MAINTAINS; a MAINTAINS position must carry at least one evidence entry with a locator and your own claim about it; no field may name a Mission Contract term, and no field may declare work verified, accepted or complete.';
             continue;
           }
@@ -1423,7 +1460,7 @@ export function createLiveArchitectAdapter(input: {
       }
       if (guiding) {
         if (sanitizeJuliusGuidanceProposal(parsed) === null) {
-          if (attempts < PLAN_ATTEMPT_LIMIT && correctionAffordable(dispatch.allocation)) {
+          if (correctionAllowed()) {
             correction = 'CORRECTION — your previous answer was REFUSED: it did not form a usable guidance packet. Answer with exactly one JSON object conforming to the output schema. Every listed field must be present, every string must be substantive, and no field naming a Mission Contract term may appear.';
             continue;
           }
@@ -1493,7 +1530,7 @@ export function createLiveArchitectAdapter(input: {
       }
       const validation = validateArchitectPlan(parsed);
       if (!validation.ok) {
-        const remedy = attempts < PLAN_ATTEMPT_LIMIT && correctionAffordable(dispatch.allocation)
+        const remedy = correctionAllowed()
           ? planCorrection(validation.reasonCode, validation.reasonField ?? null)
           : null;
         if (remedy !== null) { correction = remedy; continue; }

@@ -534,6 +534,12 @@ jobs:
       # architect's dispatch refuses any other SERVED model.
       JULIUS_ARCHITECT_PROVIDER: anthropic
       RELAY_ANTHROPIC_ARCHITECT_MODEL: claude-opus-5-5
+      # THE ARCHITECT'S DEADLINE, 540 s (REVIEW ruling A', 2026-10-26). It is BOTH the per-call timeout and the worker's
+      # declared deadline, which the coordinator enforces on the whole dispatch (plan call plus any correction). A
+      # 20,000-token non-streaming answer needs >= 37 tok/s to finish inside it; a correction is started only if the
+      # remaining window can finish it at 40 tok/s (live-workers.ts architectCorrectionMaxTokens). Stage bound
+      # 540 + 120 = 660 s; coder-envelope.test.ts holds the job budget to it. Streaming (#85) is the real fix.
+      RELAY_PROMPT_ARCHITECT_TIMEOUT_MS: '540000'
       # THE CODING AGENT IS CLAUDE OPUS 5.5 (founder decision, 2026-09-30). The pin
       # is unchanged. Hosted CI authenticates that model with ANTHROPIC_API_KEY
       # under JULIUS_CLAUDE_AUTH=ANTHROPIC_API. CLAUDE_CODE_OAUTH_TOKEN is not a

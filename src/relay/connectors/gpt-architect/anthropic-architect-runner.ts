@@ -91,6 +91,74 @@ export class AnthropicSchemaUnsupported extends Error {
   }
 }
 
+/**
+ * `{type: [A, B], ...rest}` AS `{anyOf: [{type: A, ...}, {type: B, ...}]}`.
+ *
+ * The documentation lists `anyOf` as supported and mentions type arrays only as
+ * something counted against the union limit ("Total parameters that use `anyOf`
+ * or type arrays (for example, `"type": ["string", "null"]`) across all strict
+ * schemas", limit 16). It never lists them as supported, so they are not sent.
+ * Each keyword goes to the branch it constrains:
+ *   - `properties`, `required`, `additionalProperties` to the object branch;
+ *   - `items`, `minItems` and the array bounds to the array branch;
+ *   - `format` and the string bounds to the string branch;
+ *   - the numeric bounds to the integer/number branch;
+ *   - `enum` and `const`, filtered per branch by the JSON type of each value (a
+ *     branch whose enum keeps no value is dropped: it could match nothing);
+ *   - `description`, `title`, `default` stay on the outer node.
+ * Any other keyword is left on the outer node, where the walker refuses it.
+ */
+const OBJECT_KEYS = new Set(['properties', 'required', 'additionalProperties']);
+const ARRAY_KEYS = new Set(['items', 'minItems', 'maxItems', 'uniqueItems']);
+const STRING_KEYS = new Set(['format', 'minLength', 'maxLength', 'pattern']);
+const NUMBER_KEYS = new Set(['minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'multipleOf']);
+const jsonTypeOf = (value: unknown): string => (value === null ? 'null'
+  : typeof value === 'number' ? (Number.isInteger(value) ? 'integer' : 'number')
+    : typeof value === 'string' ? 'string' : typeof value === 'boolean' ? 'boolean' : 'other');
+const valueFitsType = (value: unknown, type: string): boolean => {
+  const actual = jsonTypeOf(value);
+  return actual === type || (type === 'number' && actual === 'integer');
+};
+
+export function anthropicTypeArrayAsAnyOf(node: Record<string, unknown>, at: string): Record<string, unknown> {
+  const types = node.type as unknown[];
+  if (types.length === 0 || types.some((entry) => typeof entry !== 'string' || !BASIC_TYPES.has(entry)) || new Set(types).size !== types.length) {
+    throw new AnthropicSchemaUnsupported('type', `${at}/type`);
+  }
+  if ('anyOf' in node) throw new AnthropicSchemaUnsupported('anyOf', `${at}/anyOf`);
+  const outer: Record<string, unknown> = {};
+  const branches = (types as string[]).map((type) => ({ type } as Record<string, unknown>));
+  const branchFor = (type: string): Record<string, unknown> | undefined => branches.find((branch) => branch.type === type);
+  for (const [key, value] of Object.entries(node)) {
+    if (key === 'type') continue;
+    const owner = OBJECT_KEYS.has(key) ? branchFor('object')
+      : ARRAY_KEYS.has(key) ? branchFor('array')
+        : STRING_KEYS.has(key) ? branchFor('string')
+          : NUMBER_KEYS.has(key) ? (branchFor('number') ?? branchFor('integer'))
+            : undefined;
+    if (OBJECT_KEYS.has(key) || ARRAY_KEYS.has(key) || STRING_KEYS.has(key) || NUMBER_KEYS.has(key)) {
+      // A keyword for a type the union does not include constrains nothing that can occur.
+      if (owner !== undefined) owner[key] = value;
+      continue;
+    }
+    if (key === 'enum' || key === 'const') {
+      for (const branch of branches) {
+        const kept = key === 'enum'
+          ? (Array.isArray(value) ? value.filter((entry) => valueFitsType(entry, branch.type as string)) : value)
+          : (valueFitsType(value, branch.type as string) ? value : undefined);
+        if (key === 'enum') branch.enum = kept;
+        else if (kept !== undefined) branch.const = kept;
+        else branch.__drop = true;
+      }
+      continue;
+    }
+    outer[key] = value;
+  }
+  const kept = branches.filter((branch) => branch.__drop !== true && !(Array.isArray(branch.enum) && branch.enum.length === 0));
+  if (kept.length === 0) throw new AnthropicSchemaUnsupported('enum', `${at}/enum`);
+  return { ...outer, anyOf: kept };
+}
+
 export function anthropicStructuredOutputSchema(schema: Record<string, unknown>): Record<string, unknown> {
   const root = schema;
   const defsOf = (name: '$defs' | 'definitions'): Record<string, unknown> =>
@@ -120,6 +188,8 @@ export function anthropicStructuredOutputSchema(schema: Record<string, unknown>)
   };
   const walk = (node: unknown, at: string): Record<string, unknown> => {
     if (node === null || typeof node !== 'object' || Array.isArray(node)) throw new AnthropicSchemaUnsupported('schema', at);
+    // A TYPE ARRAY IS REWRITTEN AS anyOf before anything else is read (see `anthropicTypeArrayAsAnyOf`).
+    if (Array.isArray((node as Record<string, unknown>).type)) return walk(anthropicTypeArrayAsAnyOf(node as Record<string, unknown>, at), at);
     const source = node as Record<string, unknown>;
     const out: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(source)) {
@@ -127,9 +197,9 @@ export function anthropicStructuredOutputSchema(schema: Record<string, unknown>)
       if (STRIPPED_BOUNDS.has(key)) continue;
       switch (key) {
         case 'type': {
-          const types = Array.isArray(value) ? value : [value];
-          if (types.length === 0 || types.some((entry) => typeof entry !== 'string' || !BASIC_TYPES.has(entry))) throw new AnthropicSchemaUnsupported('type', here);
-          out.type = Array.isArray(value) ? [...value] : value;
+          // A type array never reaches here (it was rewritten above), so the wire only ever carries one type per node.
+          if (typeof value !== 'string' || !BASIC_TYPES.has(value)) throw new AnthropicSchemaUnsupported('type', here);
+          out.type = value;
           break;
         }
         case 'properties': {
