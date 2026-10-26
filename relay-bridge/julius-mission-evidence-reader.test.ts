@@ -745,6 +745,7 @@ describe('X′ §4: the result record, bound to the spend record, the pinned che
   const GRADE_JOB = 'J1: grade the final message with the pinned hidden checker';
   const GRADE_STEP = 'J1: stage the pinned checker from git objects and grade';
   const PASS_STEP = "J1: the pinned checker's verdict is PASS";
+  const FAIL_STEP = "J1: the pinned checker's verdict is FAIL";
 
   type Fields = Record<string, string>;
   const resultBody = (over: Fields = {}): string => {
@@ -771,14 +772,17 @@ describe('X′ §4: the result record, bound to the spend record, the pinned che
   }
   const step = (name: string, conclusion: string | null) => ({ name, status: conclusion === null ? 'in_progress' : 'completed', conclusion });
   const job = (name: string, conclusion: string | null, steps: readonly ReturnType<typeof step>[]) => ({ name, status: conclusion === null ? 'in_progress' : 'completed', conclusion, steps });
-  const passingJobs = (over: { live?: string | null; liveStep?: string | null; grade?: string | null; gradeStep?: string | null; pass?: string | null } = {}) => [
+  const passingJobs = (over: { live?: string | null; liveStep?: string | null; grade?: string | null; gradeStep?: string | null; pass?: string | null; fail?: string | null } = {}) => [
     job('spend-tag', 'success', []),
     job(LIVE_JOB, over.live === undefined ? 'success' : over.live, [step(LIVE_STEP, over.liveStep === undefined ? 'success' : over.liveStep)]),
     job(GRADE_JOB, over.grade === undefined ? 'success' : over.grade, [
       step(GRADE_STEP, over.gradeStep === undefined ? 'success' : over.gradeStep),
       ...(over.pass === null ? [] : [step(PASS_STEP, over.pass === undefined ? 'success' : over.pass)]),
+      ...(over.fail === null ? [] : [step(FAIL_STEP, over.fail === undefined ? 'skipped' : over.fail)]),
     ]),
   ];
+  /** A run whose own checker said FAIL: the grade job and step succeed (a FAIL exits 0), FAIL ran, PASS skipped. */
+  const failingJobs = () => passingJobs({ pass: 'skipped', fail: 'success' });
   const botStatus = (body: string, over: Record<string, unknown> = {}) => ({
     context: 'julius-run-result', state: 'success', description: `v1 sha256:${digest(body)}`, creator: 'github-actions[bot]',
     targetUrl: `https://github.com/ohdieyuh-glitch/sunday-relay/actions/runs/${RUN}`, ...over,
@@ -881,13 +885,36 @@ describe('X′ §4: the result record, bound to the spend record, the pinned che
     expect(calls).not.toContain('jobs 9999 1');
   });
 
-  it('a FAIL from the tag only when the run\'s own grade step FAILED; otherwise unverified (NOT_RUN)', async () => {
+  it('D-b SYMMETRIC: a real FAIL shows FAIL (the FAIL step ran, the PASS step was skipped); otherwise unverified', async () => {
     const fail = resultBody({ verdict: 'FAIL' });
     const failStatus = (body: string) => [botStatus(body, { state: 'failure' })];
-    expect(await verdictOf({ result: fail, statuses: failStatus(fail), jobs: passingJobs({ gradeStep: 'failure', grade: 'failure', pass: 'skipped' }) })).toBe('FAIL');
-    expect(await verdictOf({ result: fail, statuses: failStatus(fail), jobs: passingJobs({ pass: 'skipped' }) })).toBe('NOT_RUN');
+    const reading = await world({ result: fail, statuses: failStatus(fail), jobs: failingJobs() }).reader.read(WLJ) as JuliusMissionCompletionEvidence;
+    expect(reading.juliusFinalState).toBe('COMPLETED');
+    expect(reading.checkerVerdict).toBe('FAIL');
+    expect(acceptJuliusMissionEvidence(WLJ, reading).completion?.checkerVerdict).toBe('FAIL');
+    // The FAIL step missing, skipped, or failed; the PASS step not skipped; the grade step failed: each unverified.
+    for (const jobs of [
+      passingJobs({ pass: 'skipped', fail: null }), passingJobs({ pass: 'skipped', fail: 'skipped' }), passingJobs({ pass: 'skipped', fail: 'failure' }),
+      passingJobs({ pass: null, fail: 'success' }), passingJobs({ gradeStep: 'failure', grade: 'failure', pass: 'skipped', fail: 'skipped' }),
+    ]) expect(await verdictOf({ result: fail, statuses: failStatus(fail), jobs }), JSON.stringify(jobs.at(-1))).toBe('NOT_RUN');
     const notRun = resultBody({ verdict: 'NOT_RUN' });
     expect(await verdictOf({ result: notRun, statuses: failStatus(notRun) })).toBe('NOT_RUN');
+  });
+
+  it('MUTATION D-b: a forged PASS tag over a real FAIL is unverified', async () => {
+    expect(await verdictOf({ jobs: failingJobs() })).toBe('NOT_RUN');
+  });
+
+  it('MUTATION D-b: a forged FAIL tag over a real PASS is unverified', async () => {
+    const fail = resultBody({ verdict: 'FAIL' });
+    expect(await verdictOf({ result: fail, statuses: [botStatus(fail, { state: 'failure' })], jobs: passingJobs() })).toBe('NOT_RUN');
+  });
+
+  it('MUTATION D-b: BOTH verdict steps succeeded is unverified, whichever the tag says', async () => {
+    const both = passingJobs({ pass: 'success', fail: 'success' });
+    expect(await verdictOf({ jobs: both })).toBe('NOT_RUN');
+    const fail = resultBody({ verdict: 'FAIL' });
+    expect(await verdictOf({ result: fail, statuses: [botStatus(fail, { state: 'failure' })], jobs: both })).toBe('NOT_RUN');
   });
 
   it('(i) the run itself: path, attempt 1, head, workflow_dispatch, main, completed; each violation is unverified', async () => {

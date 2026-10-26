@@ -2215,9 +2215,9 @@ jobs:
       # grade job cannot download an artifact, and since Branch S it runs on this
       # same host as this same user. So the raw trimmed final message and its
       # manifest, and the evidence bundle exactly as the scan above left it, are
-      # copied into $HOME/julius-handoff/<run id>-<attempt>/, created 0700 (the
-      # runner user's own 0700 home; no sudo: the Branch S sudoers kit grants no
-      # path outside /tmp/julius-*). The directory is never mounted into the
+      # copied into /var/lib/julius-handoff/<run id>-<attempt>/, created 0700 by this
+      # job (no sudo) under the base directory the host kit created 0700 for the
+      # runner user (REVIEW ruling D-c). The directory is never mounted into the
       # coder's `--network none` sandbox. Every file's sha256 is written as a job
       # output, hashes and closed file names only, so the grade job can refuse
       # anything that changed in between. The raw text never leaves the host.
@@ -2229,14 +2229,14 @@ jobs:
         run: |
           set -euo pipefail
           refuse() { echo "handoff_refused: $1" >&2; exit 1; }
-          case "${HOME:-}" in /?*) ;; *) refuse home_unusable ;; esac
+          # THE BASE DIRECTORY IS THE HOST KIT'S (Branch S step 10, M-D): 0700 and the job user's. The job never
+          # creates or widens it, and refuses if it is missing, a link, or not exactly that.
+          base_private() { [ -d "$1" ] && [ ! -L "$1" ] && [ "$(stat -c '%a %u' "$1")" = "700 $(id -u)" ]; }
           printf '%s' "${GITHUB_RUN_ID:-}-${GITHUB_RUN_ATTEMPT:-}" | grep -Eqx '[0-9]{1,20}-[0-9]{1,10}' || refuse run_unusable
           umask 077
-          root="$HOME/julius-handoff"
+          root=/var/lib/julius-handoff
+          base_private "$root" || refuse base_not_private
           dir="$root/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          mkdir -p "$root"
-          [ -d "$root" ] && [ ! -L "$root" ] || refuse root_unusable
-          chmod 0700 "$root"
           [ ! -e "$dir" ] && [ ! -L "$dir" ] || refuse handoff_exists
           mkdir -m 0700 "$dir" "$dir/final-message" "$dir/evidence"
           if [ -n "$FINAL_MESSAGE_DIR" ] && [ -d "$FINAL_MESSAGE_DIR" ] && [ ! -L "$FINAL_MESSAGE_DIR" ]; then
@@ -2325,7 +2325,7 @@ jobs:
 
       # A PRIVATE HOST COPY OF THE SCANNED EVIDENCE (X′ §5 (e)), the job's last step. Under the billing
       # lock the evidence artifact may not exist, so the same scanned set is kept on the runner host:
-      # $HOME/julius-evidence/<run id>-<attempt>/, 0700 (the runner user's own home; no sudo), with
+      # /var/lib/julius-evidence/<run id>-<attempt>/, 0700, created by this job under the kit's base (D-c), with
       # the bundle as the scan left it, the attempted and completed marker.txt, and a SHA256SUMS. No
       # secret and no final message: the raw text stays only in the handoff directory and is deleted.
       # The grade job adds its verdict file. For REVIEW's verification and a later backfill (not part
@@ -2338,14 +2338,14 @@ jobs:
         run: |
           set -euo pipefail
           refuse() { echo "evidence_copy_refused: $1" >&2; exit 1; }
-          case "${HOME:-}" in /?*) ;; *) refuse home_unusable ;; esac
+          # THE BASE DIRECTORY IS THE HOST KIT'S (Branch S step 10, M-D): 0700 and the job user's. The job never
+          # creates or widens it, and refuses if it is missing, a link, or not exactly that.
+          base_private() { [ -d "$1" ] && [ ! -L "$1" ] && [ "$(stat -c '%a %u' "$1")" = "700 $(id -u)" ]; }
           printf '%s' "${GITHUB_RUN_ID:-}-${GITHUB_RUN_ATTEMPT:-}" | grep -Eqx '[0-9]{1,20}-[0-9]{1,10}' || refuse run_unusable
           umask 077
-          root="$HOME/julius-evidence"
+          root=/var/lib/julius-evidence
+          base_private "$root" || refuse base_not_private
           dir="$root/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          mkdir -p "$root"
-          [ -d "$root" ] && [ ! -L "$root" ] || refuse root_unusable
-          chmod 0700 "$root"
           [ ! -e "$dir" ] && [ ! -L "$dir" ] || refuse copy_exists
           mkdir -m 0700 "$dir"
           if [ -d julius-live-evidence ] && [ ! -L julius-live-evidence ]; then
@@ -2403,6 +2403,11 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+      # THE GRADER'S NODE IS THE LIVE JOB'S (REVIEW ruling D-d): the same pinned action and version, never a
+      # node the self-hosted host happens to have. No cache: nothing from the repository is read to set it up.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
       # THE HAND-OFF, RE-HASHED. The list must hash to the live job's digest, every
       # line must be a closed `sha256  ./final-message|evidence/<name>` line, the
       # directory must be 0700 and this user's, and the copy taken here must hash
@@ -2415,9 +2420,13 @@ jobs:
         run: |
           set -euo pipefail
           refuse() { echo "handoff_refused: $1" >&2; exit 1; }
-          case "${HOME:-}" in /?*) ;; *) refuse home_unusable ;; esac
+          # THE BASE DIRECTORY IS THE HOST KIT'S (Branch S step 10, M-D): 0700 and the job user's. The job never
+          # creates or widens it, and refuses if it is missing, a link, or not exactly that.
+          base_private() { [ -d "$1" ] && [ ! -L "$1" ] && [ "$(stat -c '%a %u' "$1")" = "700 $(id -u)" ]; }
           printf '%s' "${GITHUB_RUN_ID:-}-${GITHUB_RUN_ATTEMPT:-}" | grep -Eqx '[0-9]{1,20}-[0-9]{1,10}' || refuse run_unusable
-          dir="$HOME/julius-handoff/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          root=/var/lib/julius-handoff
+          base_private "$root" || refuse base_not_private
+          dir="$root/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           [ -d "$dir" ] && [ ! -L "$dir" ] || refuse handoff_missing
           [ "$(stat -c '%a %u' "$dir")" = "700 $(id -u)" ] || refuse handoff_not_private
           printf '%s' "${HANDOFF_SUMS_SHA256:-}" | grep -Eqx '[0-9a-f]{64}' || refuse sums_digest_missing
@@ -2509,9 +2518,13 @@ jobs:
         continue-on-error: true
         run: |
           set -euo pipefail
-          case "${HOME:-}" in /?*) ;; *) echo 'evidence_copy_refused: home_unusable' >&2; exit 1 ;; esac
+          # THE BASE DIRECTORY IS THE HOST KIT'S (Branch S step 10, M-D): 0700 and the job user's. The job never
+          # creates or widens it, and refuses if it is missing, a link, or not exactly that.
+          base_private() { [ -d "$1" ] && [ ! -L "$1" ] && [ "$(stat -c '%a %u' "$1")" = "700 $(id -u)" ]; }
           printf '%s' "${GITHUB_RUN_ID:-}-${GITHUB_RUN_ATTEMPT:-}" | grep -Eqx '[0-9]{1,20}-[0-9]{1,10}' || exit 1
-          dir="$HOME/julius-evidence/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          root=/var/lib/julius-evidence
+          base_private "$root" || { echo 'evidence_copy_refused: base_not_private' >&2; exit 1; }
+          dir="$root/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           [ -d "$dir" ] && [ ! -L "$dir" ] || { echo 'evidence_copy_missing' >&2; exit 1; }
           file=julius-inworld-verdict/checker-verdict.txt
           [ -f "$file" ] && [ ! -L "$file" ] || { echo 'no verdict file to add'; exit 0; }
@@ -2523,13 +2536,17 @@ jobs:
           printf '%s\n' "$sums" > "$dir/SHA256SUMS"
           chmod 0600 "$dir/SHA256SUMS"
           echo "evidence_copy_verdict_added dir=$dir"
-      # THE RUN-BOUND PASS (X′ §4, run binding). A genuine FAIL also exits 0, so the grade step's
-      # success cannot tell PASS from FAIL. This step runs ONLY when the pinned checker's own
-      # verdict file in THIS run said PASS, and the result reader requires it to have succeeded:
-      # a result tag forged by another workflow cannot change this run's jobs.
+      # THE RUN-BOUND VERDICT (X′ §4, run binding; REVIEW ruling D-b). A genuine FAIL also exits 0, so the
+      # grade step's success cannot tell PASS from FAIL. Exactly one of these two steps runs, and only when
+      # the pinned checker's own verdict file in THIS run said so. The result reader shows PASS only when
+      # the PASS step succeeded and the FAIL step was skipped, FAIL only the other way round, and anything
+      # else is unverified: a result tag forged by another workflow cannot change this run's jobs.
       - name: 'J1: the pinned checker''s verdict is PASS'
         if: success() && steps.verdict.outputs.verdict == 'PASS'
         run: echo 'checker_verdict=PASS'
+      - name: 'J1: the pinned checker''s verdict is FAIL'
+        if: success() && steps.verdict.outputs.verdict == 'FAIL'
+        run: echo 'checker_verdict=FAIL'
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         continue-on-error: true
@@ -2663,9 +2680,13 @@ jobs:
       - name: 'J1: delete the graded final message'
         run: |
           set -euo pipefail
-          case "${HOME:-}" in /?*) ;; *) echo 'handoff_delete_refused: home_unusable' >&2; exit 1 ;; esac
+          # THE BASE DIRECTORY IS THE HOST KIT'S (Branch S step 10, M-D): 0700 and the job user's. The job never
+          # creates or widens it, and refuses if it is missing, a link, or not exactly that.
+          base_private() { [ -d "$1" ] && [ ! -L "$1" ] && [ "$(stat -c '%a %u' "$1")" = "700 $(id -u)" ]; }
           printf '%s' "${GITHUB_RUN_ID:-}-${GITHUB_RUN_ATTEMPT:-}" | grep -Eqx '[0-9]{1,20}-[0-9]{1,10}' || { echo 'handoff_delete_refused: run_unusable' >&2; exit 1; }
-          dir="$HOME/julius-handoff/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}/final-message"
+          root=/var/lib/julius-handoff
+          base_private "$root" || { echo 'handoff_delete_refused: base_not_private' >&2; exit 1; }
+          dir="$root/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}/final-message"
           rm -rf "$dir"
           [ ! -e "$dir" ] || { echo 'handoff_final_message_not_deleted' >&2; exit 1; }
           echo 'j1_final_message_deleted handoff=final-message'

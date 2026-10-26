@@ -829,9 +829,10 @@ function completionFromArtifacts(
  * names, through that run's own jobs (which no other run can write):
  *   (i)   the run at the spend tag's workflow_run_id: the paid workflow's path, attempt 1, the
  *         spend tag's head, event workflow_dispatch, branch main, completed;
- *   (ii)  PASS only when the grade job, its GRADE_STEP and its PASS step concluded success AND
- *         the LIVE job concluded success;
- *   (iii) FAIL only when GRADE_STEP concluded failure;
+ *   (ii)  PASS only when the grade job and its GRADE_STEP concluded success, its PASS step
+ *         concluded success AND its FAIL step was skipped, and the LIVE job and step succeeded;
+ *   (iii) FAIL only when the grade job and GRADE_STEP concluded success, its FAIL step concluded
+ *         success AND its PASS step was skipped (REVIEW ruling D-b: symmetric);
  *   (iv)  anything else is NOT_RUN (unverified), whatever the tag says;
  *   (v)   the tag and status hash checks hold as well.
  * Completion itself needs the LIVE job AND its LIVE step to have concluded success.
@@ -845,6 +846,8 @@ const LIVE_STEP = 'LIVE: run the first real Julius mission';
 const GRADE_JOB = 'J1: grade the final message with the pinned hidden checker';
 /** Runs only when the pinned checker's own verdict file says PASS (julius-first-live-mission.yml). */
 const PASS_STEP = "J1: the pinned checker's verdict is PASS";
+/** Runs only when the pinned checker's own verdict file says FAIL. */
+const FAIL_STEP = "J1: the pinned checker's verdict is FAIL";
 const STATUS_BOT = 'github-actions[bot]';
 const RESULT_KEYS = [
   'run', 'namespace', 'workflow_run_id', 'workflow_run_attempt', 'head_sha', 'final_state', 'completed_at', 'verdict',
@@ -1008,15 +1011,18 @@ async function readBoundResultRecord(
   const gradeJob = onlyOne(jobs, (job) => job.name === GRADE_JOB);
   const gradeStep = gradeJob === null ? null : onlyOne(gradeJob.steps, (step) => step.name === GRADE_STEP);
   const passStep = gradeJob === null ? null : onlyOne(gradeJob.steps, (step) => step.name === PASS_STEP);
-  const done = (item: { readonly status: string; readonly conclusion: string | null } | null, conclusion: string): boolean => item !== null && item.status === 'completed' && item.conclusion === conclusion;
+  const failStep = gradeJob === null ? null : onlyOne(gradeJob.steps, (step) => step.name === FAIL_STEP);
+  const done =(item: { readonly status: string; readonly conclusion: string | null } | null, conclusion: string): boolean => item !== null && item.status === 'completed' && item.conclusion === conclusion;
   const completed = done(liveJob, 'success') && done(liveStep, 'success');
   const liveFailed = done(liveJob, 'failure') && done(liveStep, 'failure');
   // The verdict names the pinned checker, and the bytes it judged are the bytes the run published.
   const judged = record.judgedTrimmedSha256 !== null && record.checkerSha256 === J1_PINNED_CHECKER_FILE_SHA256
     && record.publishedTrimmedSha256 === record.judgedTrimmedSha256;
+  // SYMMETRIC (D-b): exactly one verdict step ran in THIS run, and it is the one the tag names.
+  const graded = judged && completed && done(gradeJob, 'success') && done(gradeStep, 'success');
   let verdict: JuliusCheckerVerdict = 'NOT_RUN';
-  if (record.verdict === 'PASS' && judged && completed && done(gradeJob, 'success') && done(gradeStep, 'success') && done(passStep, 'success')) verdict = 'PASS';
-  if (record.verdict === 'FAIL' && judged && done(gradeStep, 'failure')) verdict = 'FAIL';
+  if (record.verdict === 'PASS' && graded && done(passStep, 'success') && done(failStep, 'skipped')) verdict = 'PASS';
+  if (record.verdict === 'FAIL' && graded && done(failStep, 'success') && done(passStep, 'skipped')) verdict = 'FAIL';
   return { record, verdict, completed, liveFailed };
 }
 

@@ -366,3 +366,26 @@ describe('what the reviewer process did, when the review did not arrive', () => 
     expect(DEFAULT_KILL_GRACE_MS).toBeLessThanOrEqual(10_000);
   });
 });
+
+describe('X′ D-a: the reviewer child never receives the job token', () => {
+  it('runHermesReview spawns Hermes with PATH and HOME only: no GITHUB_TOKEN, GH_TOKEN or any other parent variable', async () => {
+    const CANARY = 'canary_job_token_ZZ9_x7Q2m4k8w1';
+    const names = ['GITHUB_TOKEN', 'GH_TOKEN', 'ANTHROPIC_API_KEY', 'XAI_API_KEY', 'DATABASE_URL'];
+    const saved = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+    for (const name of names) process.env[name] = CANARY;
+    const seen: Record<string, string>[] = [];
+    const fake = processFake({ writes: [[1, APPROVED]], exitsAfterMs: 5 });
+    const spawnImpl = ((exe: string, args: string[], opts: { cwd: string; env: Record<string, string> }) => {
+      seen.push(opts.env);
+      return (fake.spawnImpl as unknown as (e: string, a: string[], o: unknown) => unknown)(exe, args, opts);
+    }) as never;
+    try {
+      await runHermesReview({ packet: PACKET, config: CONFIG(), spawnImpl });
+    } finally {
+      for (const name of names) { if (saved[name] === undefined) delete process.env[name]; else process.env[name] = saved[name]; }
+    }
+    expect(seen).toHaveLength(1);
+    expect(Object.keys(seen[0] ?? {}).sort()).toEqual(['HOME', 'PATH']);
+    expect(JSON.stringify(seen[0])).not.toContain(CANARY);
+  });
+});

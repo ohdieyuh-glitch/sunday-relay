@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
 
@@ -1139,8 +1139,19 @@ describe('X′ §2: the attempted marker is a job-token tag, and LIVE waits for 
   });
 });
 
-/** Run one step script in `cwd`, with a fake `stat` (the 0700 check is the script's; NTFS cannot answer it). */
-function runStep(text: string, cwd: string, env: Record<string, string>): { status: number; stderr: string; stdout: string } {
+/**
+ * Run one step script in `cwd`, with a fake `stat` (the 0700 check is the script's; NTFS cannot answer it).
+ * `HOME` stands in for `/var/lib` (D-c): the host kit's base directories `<HOME>/julius-handoff` and
+ * `<HOME>/julius-evidence` are created as the kit would, unless `NO_HOST_BASE=1` models a host without them.
+ */
+function runStep(source: string, cwd: string, env: Record<string, string>): { status: number; stderr: string; stdout: string } {
+  let text = source;
+  if (env.HOME !== undefined) {
+    expect(source.includes('$HOME'), 'the host paths are /var/lib, never the runner user\'s home').toBe(false);
+    // Forward slashes: the script assigns the path unquoted, where a Windows backslash would be an escape.
+    text = source.replaceAll('/var/lib/julius-', `${env.HOME.replaceAll('\\', '/')}/julius-`);
+    if (env.NO_HOST_BASE !== '1') for (const base of ['julius-handoff', 'julius-evidence']) mkdirSync(join(env.HOME, base), { recursive: true, mode: 0o700 });
+  }
   const bin = mkdtempSync(join(tmpdir(), 'julius-x-prime-bin-'));
   writeFileSync(join(bin, 'stat'), '#!/usr/bin/env bash\nprintf \'%s %s\\n\' "${FAKE_STAT_MODE:-700}" "${FAKE_STAT_UID:-$(id -u)}"\n');
   chmodSync(join(bin, 'stat'), 0o755);
@@ -1233,7 +1244,10 @@ describe('X′ §3: grading without an artifact handoff', () => {
     expect(paid).toContain('handoff_sha256sums: ${{ steps.handoff.outputs.sums }}');
     expect(paid).toContain('handoff_sums_sha256: ${{ steps.handoff.outputs.sums_sha256 }}');
     expect(paid, 'the old one-day artifact hand-off is gone').not.toMatch(/name: j1-final-message\n/u);
-    expect(script(step(paid, HANDOFF_LIVE)), 'no privilege: the runner user\'s own home').not.toMatch(/\bsudo\b|\/var\/lib/u);
+    const handoffScript = script(step(paid, HANDOFF_LIVE));
+    expect(handoffScript, 'no privilege: the job creates only its own run directory').not.toMatch(/\bsudo\b|mkdir -p|chmod/u);
+    expect(handoffScript).toContain('root=/var/lib/julius-handoff\n');
+    expect(handoffScript).toContain('base_private "$root" || refuse base_not_private');
     const { dir, outputs, cleanup } = handOff();
     try {
       expect(outputs.sums?.split('\n')).toEqual([
@@ -1288,9 +1302,10 @@ describe('X′ §3: grading without an artifact handoff', () => {
       const malformed = `${outputs.sums ?? ''}\nnot a sums line`;
       const sha = execFileSync('bash', ['-c', 'printf \'%s\\n\' "$S" | sha256sum | cut -d" " -f1'], { env: { ...process.env, S: malformed }, encoding: 'utf8' }).trim();
       expect(receive(home, { sums: malformed, sums_sha256: sha }).stderr).toContain('handoff_refused: sums_malformed');
-      expect(receive(home, outputs, { FAKE_STAT_MODE: '755' }).stderr).toContain('handoff_refused: handoff_not_private');
-      expect(receive(home, outputs, { FAKE_STAT_UID: '4242424' }).stderr).toContain('handoff_refused: handoff_not_private');
+      expect(receive(home, outputs, { FAKE_STAT_MODE: '755' }).stderr).toContain('handoff_refused: base_not_private');
+      expect(receive(home, outputs, { FAKE_STAT_UID: '4242424' }).stderr).toContain('handoff_refused: base_not_private');
       expect(receive(join(home, 'nowhere'), outputs).stderr).toContain('handoff_refused: handoff_missing');
+      expect(receive(join(home, 'no-kit'), outputs, { NO_HOST_BASE: '1' }).stderr).toContain('handoff_refused: base_not_private');
     } finally { cleanup(); }
   });
 
@@ -1516,7 +1531,8 @@ describe('X′ §5 (e): a private host copy of the scanned evidence, with SHA256
     const steps = paid.slice(paid.indexOf('\n    steps:\n'));
     expect(steps.slice(steps.lastIndexOf('\n      - name: ') + '\n      - name: '.length).startsWith(COPY)).toBe(true);
     expect(step(paid, COPY)).toContain('continue-on-error: true');
-    expect(script(step(paid, COPY))).not.toMatch(/\bsudo\b|\/var\/lib/u);
+    expect(script(step(paid, COPY))).not.toMatch(/\bsudo\b|mkdir -p|chmod 0700 "\$root"/u);
+    expect(script(step(paid, COPY))).toContain('root=/var/lib/julius-evidence\n');
     const home = mkdtempSync(join(tmpdir(), 'julius-x-prime-home-'));
     const work = mkdtempSync(join(tmpdir(), 'julius-x-prime-live-'));
     try {
@@ -1611,5 +1627,59 @@ describe('Branch S X: bare self-hosted labels, fork guards on every pull_request
     const executor = readFileSync(join(ROOT, '.github/julius-live-executor.sh'), 'utf8');
     expect(executor).toContain('pg_port=${JULIUS_LIVE_PG_PORT:-5432}');
     expect(executor).toContain('-p "127.0.0.1:${pg_port}:5432"');
+  });
+});
+
+describe('REVIEW rulings D-a, D-b, D-d on the paid workflow', () => {
+  const paid = job('first-live-mission');
+  const grade = job('grade-inworld');
+  /** Every step of a job: its display name (or `uses`) and its text. */
+  const stepsOf = (text: string): { name: string; text: string }[] => text.slice(text.indexOf('\n    steps:\n')).split('\n      - ').slice(1)
+    .map((block) => ({ name: /^(?:name: |uses: )([^\n]+)/u.exec(block)?.[1] ?? block.slice(0, 60), text: block }));
+
+  it('D-a: the job token reaches exactly the steps that call GitHub, each named here with its reason; no job-level env carries it', () => {
+    const jobEnv = paid.slice(paid.indexOf('\n    env:\n'), paid.indexOf('\n    steps:\n'));
+    expect(jobEnv).not.toMatch(/GITHUB_TOKEN|GH_TOKEN|github\.token/u);
+    const holders = stepsOf(paid).filter((entry) => /\n {10}(GITHUB_TOKEN|GH_TOKEN): \$\{\{ github\.token \}\}/u.test(entry.text)).map((entry) => entry.name);
+    expect(holders).toEqual([
+      "'Gate: the code this job will run is reviewed, current and not rolled back'", // gh api: main's tip, provenance, monotonicity
+      "'Gate: no paid mission has been attempted or completed for THIS contract'", // gh api: the completion-marker listing
+      "'Gate: attempted markers and the combined cap, before the attempted marker'", // the spent-tag ledger and attempted markers
+      "'Learning pair arm WITH: restore arm WITHOUT''s store before anything migrates or bootstraps'", // the WITHOUT run's artifacts
+      ATTEMPT_TAG, // X′ §2: the one contents: write use, the attempted record tag
+      "'Live progress: start the phase publisher (best-effort)'", // the julius-live-progress status (statuses: write)
+      LIVE_STEP, // the entrypoint's in-run cap check on the spent-tag ledger
+    ]);
+    // No other way to the token: no `github.token` and no `secrets.GITHUB_TOKEN` outside those steps.
+    for (const entry of stepsOf(paid).filter((candidate) => !holders.includes(candidate.name))) {
+      expect(entry.text, entry.name).not.toMatch(/github\.token|secrets\.GITHUB_TOKEN|GH_TOKEN|GITHUB_TOKEN:/u);
+    }
+  });
+
+  it('D-a: the coder\'s and the reviewer\'s child environments are allowlists without the token', () => {
+    const envelope = readFileSync(join(ROOT, 'relay-bridge/hosted-coding-agent/hosted-envelope.ts'), 'utf8');
+    const built = envelope.slice(envelope.indexOf('export function hostedChildEnv('));
+    expect(built.slice(0, built.indexOf('\n}\n'))).not.toMatch(/process\.env|GITHUB_TOKEN|GH_TOKEN|\.\.\.input/u);
+    const reviewer = readFileSync(join(ROOT, 'relay-bridge/hermes-reviewer.ts'), 'utf8');
+    expect(reviewer.split("env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '' },").length - 1).toBe(2);
+  });
+
+  it('D-b: the FAIL step mirrors the PASS step, only when this run\'s own verdict file says FAIL', () => {
+    const passStep = step(grade, "'J1: the pinned checker''s verdict is PASS'");
+    const failStep = step(grade, "'J1: the pinned checker''s verdict is FAIL'");
+    expect(ifOf(failStep)).toBe("success() && steps.verdict.outputs.verdict == 'FAIL'");
+    expect(ifOf(passStep)).toBe("success() && steps.verdict.outputs.verdict == 'PASS'");
+    expect(grade.indexOf("- name: 'J1: read the verdict for the result record (closed fields)'")).toBeLessThan(grade.indexOf("- name: 'J1: the pinned checker''s verdict is FAIL'"));
+    expect(failStep).toContain("run: echo 'checker_verdict=FAIL'");
+  });
+
+  it('D-d: grade-inworld sets up the LIVE job\'s own pinned node, without a cache, before anything runs node', () => {
+    const pins = [...paid.matchAll(/- uses: (actions\/setup-node@[0-9a-f]{40}) # v4\n {8}with:\n {10}node-version: '([0-9]+)'/gu)].map((match) => `${match[1] ?? ''} ${match[2] ?? ''}`);
+    expect(new Set(pins).size).toBe(1);
+    const setup = /- uses: (actions\/setup-node@[0-9a-f]{40}) # v4\n {8}with:\n {10}node-version: '([0-9]+)'\n/u.exec(grade);
+    expect(setup === null ? null : `${setup[1] ?? ''} ${setup[2] ?? ''}`).toBe(pins[0]);
+    const block = grade.slice(grade.indexOf('- uses: actions/setup-node'));
+    expect(block.slice(0, block.indexOf('\n      - ', 1))).not.toContain('cache:');
+    expect(grade.indexOf('- uses: actions/setup-node')).toBeLessThan(grade.indexOf("- name: 'J1: receive the handoff from the runner host and verify every hash'"));
   });
 });
