@@ -839,6 +839,24 @@ describe('reader answers that are not a count are UNKNOWN, a 409, never a 503', 
         }
       }
     }
+    // An answer that throws when it is looked at is still read inside the try: UNKNOWN, a 409, never a 503.
+    const hostile = { get readable(): boolean { throw new Error('hostile getter'); }, counted: 1 };
+    for (const which of ['read', 'readCompleted'] as const) {
+      const answer = () => Promise.resolve(hostile as unknown as PriorAttemptRead);
+      const prior: PriorAttemptReader = {
+        read: which === 'read' ? answer : () => Promise.resolve(ZERO),
+        readCompleted: which === 'readCompleted' ? answer : () => Promise.resolve(ZERO),
+      };
+      const fx = await admitted(RUN_A, prior);
+      try {
+        const refused = await fx.start({ acknowledgeRerun: PHRASE });
+        expect(refused?.status, which).toBe(409);
+        expect(kindOf(refused?.body)).toBe('julius_prior_attempts_unknown');
+        expect(fx.journal()).toEqual([]);
+      } finally {
+        fx.cleanup();
+      }
+    }
     expect(priorCount({ readable: 1, counted: 1 } as unknown as PriorAttemptRead)).toBe('UNKNOWN');
     expect(priorCount(null)).toBe('UNKNOWN');
   });
