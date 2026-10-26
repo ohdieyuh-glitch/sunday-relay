@@ -1865,7 +1865,7 @@ describe('the second review, finding by finding', () => {
     for (const launcher of gateModule.LIVE_LAUNCHERS) {
       expect(readFileSync(join(REPO, launcher), 'utf8'), `${launcher} sets the reviewer's provider`).toMatch(/RELAY_HERMES_PROVIDER\s*[:=]\s*xai\s*$/mu);
     }
-    expect([...live.transports].sort(), 'the runtime\'s own transport enum (julius-router.ts)').toEqual(['hosted', 'local', 'openai', 'remote']);
+    expect([...live.transports].sort(), 'the runtime\'s own transport enum (julius-router.ts)').toEqual(['anthropic', 'hosted', 'local', 'openai', 'remote']);
   });
 
   /* ------------------------------------------------ P1-C · each row, its own drill */

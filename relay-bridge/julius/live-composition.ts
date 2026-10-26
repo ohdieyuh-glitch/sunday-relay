@@ -354,15 +354,28 @@ export function architectIndependenceProblems(input: {
  * the deadline, and a constant deadline is how a declaration stops describing
  * the call it declares.
  */
+/**
+ * THE TWO ARCHITECT IDENTITIES. The OpenAI one keeps the exact declaration
+ * `scripts/wonderland-beta-gate.mjs` reads (`workerId, role, adapterId,
+ * providerId` in that order); the J1 Anthropic one is written role-first, so the
+ * gate's reader does not see a second PROMPT_ARCHITECT declaration. Teaching
+ * the founder-governed gate the J1 identity is a separate, governed change.
+ */
+const OPENAI_ARCHITECT_IDENTITY = {
+  workerId: 'prompt-architect-openai', role: 'PROMPT_ARCHITECT',
+  adapterId: 'openai-architect-live', providerId: 'openai',
+} as const;
+const ANTHROPIC_ARCHITECT_IDENTITY = {
+  role: 'PROMPT_ARCHITECT', workerId: 'prompt-architect-anthropic',
+  adapterId: 'anthropic-architect-live', providerId: 'anthropic',
+} as const;
+
 export const architectWorker = (
   env: Record<string, string | undefined>,
   /** Which architect this deployment runs (`resolveArchitectCredential`). The identity follows it; nothing else does. */
   provider: JuliusArchitectProvider = 'openai',
 ): JuliusWorker => ({
-  ...(provider === 'anthropic'
-    ? { workerId: 'prompt-architect-anthropic', adapterId: 'anthropic-architect-live', providerId: 'anthropic' }
-    : { workerId: 'prompt-architect-openai', adapterId: 'openai-architect-live', providerId: 'openai' }),
-  role: 'PROMPT_ARCHITECT',
+  ...(provider === 'anthropic' ? ANTHROPIC_ARCHITECT_IDENTITY : OPENAI_ARCHITECT_IDENTITY),
   // `repair:plan` is a PLAN REVISION: a repair inherits its subject's role and
   // stage, so a rejected plan comes back here with the reviewer's findings in
   // its context, not to the Coding Agent. Paid run 34037313976 minted the

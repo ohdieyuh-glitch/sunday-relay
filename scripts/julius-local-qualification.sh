@@ -82,7 +82,8 @@ export HERMES_WRAPPER_DIR=/tmp/julius-hermes-bin
 export MISSION_DIR=.github/julius-missions/julius-live-mission-6
 export CONTRACT=.github/julius-missions/julius-live-mission-6/contract.json
 export RELAY_PROMPT_ARCHITECT_MODE=live
-export OPENAI_PROMPT_ARCHITECT_MODEL=gpt-5.6-sol
+export JULIUS_ARCHITECT_PROVIDER=openai
+export RELAY_ANTHROPIC_ARCHITECT_MODEL=claude-opus-5-5
 export RELAY_HOSTED_CODING_MODEL=claude-opus-5-5
 export RELAY_HERMES_PROVIDER=xai
 export RELAY_HERMES_MODEL=grok-build-0.1
@@ -98,6 +99,9 @@ export HERMES_REQUEST_TIMEOUT_SECONDS=480
 # THE TWO LOCAL ADDITIONS. Neither exists in the workflow, which is what keeps CI unchanged.
 export JULIUS_CLAUDE_AUTH=CLAUDE_SUBSCRIPTION
 export JULIUS_LIVE_PG_PORT=55432
+# THE LOCAL ARCHITECT. The hosted J1 workflow runs the Anthropic Agentic Architect; this founder-machine
+# launcher keeps the OpenAI architect (JULIUS_ARCHITECT_PROVIDER=openai above), so it pins that model here.
+export OPENAI_PROMPT_ARCHITECT_MODEL=gpt-5.6-sol
 # The workflow job's own ceiling, `timeout-minutes: 300` (the founder workflow draft r5), which JOB_BUDGET_MS in
 # relay-bridge/reviewer-deadline.ts is shared out from. Applied to the live step here.
 readonly LIVE_TIMEOUT_MINUTES=300

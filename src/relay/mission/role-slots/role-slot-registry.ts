@@ -413,7 +413,8 @@ export function occupantsForRole(role: RoleSlot): readonly RoleOccupant[] {
  * by the role-slot tests.
  */
 export const JULIUS_LIVE_REQUESTED_MODELS = Object.freeze({
-  prompt_architect: 'gpt-5.6-sol',
+  // The J1 Agentic Architect (founder, 2026-10-26): Anthropic, RELAY_ANTHROPIC_ARCHITECT_MODEL.
+  prompt_architect: 'claude-opus-5-5',
   coding_agent: 'claude-opus-5-5',
   reviewer: 'grok-build-0.1',
 });

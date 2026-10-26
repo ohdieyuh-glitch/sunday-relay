@@ -1772,7 +1772,7 @@ jobs:
           trap 'rm -f "$needles"; rm -rf "$render"; [ "$clean" = 1 ] || { rm -rf julius-learning-store; echo "learning_store=REFUSED_BY_SCAN" > julius-live-evidence/learning-store.txt; }' EXIT
           refuse() { echo "$1: refusing to upload the learning store" >&2; exit 1; }
           [ -f julius-learning-store/julius.pgdump ] && [ -f "$render/julius.sql" ] || refuse learning_store_incomplete
-          for value in "$EXECUTOR_ROOT" "$DB_PASSWORD" "$OPENAI_API_KEY" "$ANTHROPIC_ARCHITECT_API_KEY" "$ANTHROPIC_API_KEY" "$CLAUDE_CODE_OAUTH_TOKEN" "$XAI_API_KEY"; do
+          for value in "$EXECUTOR_ROOT" "$DB_PASSWORD" "$OPENAI_API_KEY" "${ANTHROPIC_ARCHITECT_API_KEY:-}" "$ANTHROPIC_API_KEY" "$CLAUDE_CODE_OAUTH_TOKEN" "$XAI_API_KEY"; do
             if [ -n "$value" ]; then printf '%s\n' "$value" >> "$needles"; fi
           done
           printf '%s' "$SCOPED" | tr ',' '\n' | sed -n 's/.*:"\([A-Za-z0-9_-]\{20,\}\)".*/\1/p' | awk '{ print }' >> "$needles" || true
@@ -1970,7 +1970,7 @@ jobs:
 
           # LAYER TWO's needles — the exact values this job actually holds. A shape rule cannot know what a
           # 43-character base64url scoped credential looks like, so the values themselves are matched literally.
-          for value in "$EXECUTOR_ROOT" "$DB_PASSWORD" "$OPENAI_API_KEY" "$ANTHROPIC_ARCHITECT_API_KEY" "$ANTHROPIC_API_KEY" "$CLAUDE_CODE_OAUTH_TOKEN" "$XAI_API_KEY"; do
+          for value in "$EXECUTOR_ROOT" "$DB_PASSWORD" "$OPENAI_API_KEY" "${ANTHROPIC_ARCHITECT_API_KEY:-}" "$ANTHROPIC_API_KEY" "$CLAUDE_CODE_OAUTH_TOKEN" "$XAI_API_KEY"; do
             if [ -n "$value" ]; then printf '%s\n' "$value" >> "$needles"; fi
           done
           # Every derived scoped credential, pulled out of the JSON map. awk re-terminates every record: without it

@@ -90,6 +90,10 @@ function launcherJobEnv(): Map<string, string> {
  * here is how a new difference is argued in; nothing else can make one pass.
  */
 const LOCAL_DIFFERENCES: Record<string, { readonly local: string; readonly why: string }> = {
+  JULIUS_ARCHITECT_PROVIDER: {
+    local: 'openai',
+    why: 'the founder-machine launcher keeps the OpenAI architect; the hosted J1 workflow runs the Anthropic Agentic Architect',
+  },
   PGDATABASE: {
     local: 'julius_qualification',
     why: 'a name of its own, so nothing that reaches the wrong port can find a database called "julius" there',
@@ -119,7 +123,7 @@ describe('the local launch mirrors the workflow job, and names every difference'
     const outside = (launcher.slice(0, begin) + launcher.slice(end)).split('\n')
       .map((line) => /^export ([A-Z][A-Z0-9_]*)=(.*)$/u.exec(line))
       .filter((match): match is RegExpExecArray => match !== null);
-    expect(outside.map((match) => match[1])).toEqual(['JULIUS_CLAUDE_AUTH', 'JULIUS_LIVE_PG_PORT']);
+    expect(outside.map((match) => match[1])).toEqual(['JULIUS_CLAUDE_AUTH', 'JULIUS_LIVE_PG_PORT', 'OPENAI_PROMPT_ARCHITECT_MODEL']);
     const auth = outside[0]![2]!;
     expect((CLAUDE_AUTH_MODES as readonly string[]).includes(auth), 'a mode the composition knows').toBe(true);
     expect(auth).toBe('CLAUDE_SUBSCRIPTION');

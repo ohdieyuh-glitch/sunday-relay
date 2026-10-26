@@ -113,7 +113,8 @@ describe('every occupant declares how far it has been qualified', () => {
   it('asks the hosted workflow for the three requested models', () => {
     const workflow = readFileSync(join(REPO, '.github/workflows/julius-first-live-mission.yml'), 'utf8');
     const pin = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
-    expect(workflow).toMatch(new RegExp(`OPENAI_PROMPT_ARCHITECT_MODEL:\\s*${pin(JULIUS_LIVE_REQUESTED_MODELS.prompt_architect)}\\s`, 'u'));
+    expect(workflow).toMatch(new RegExp(`RELAY_ANTHROPIC_ARCHITECT_MODEL:\\s*${pin(JULIUS_LIVE_REQUESTED_MODELS.prompt_architect)}\\s`, 'u'));
+    expect(workflow, 'the J1 architect is not pinned to OpenAI').not.toMatch(/^\s+OPENAI_PROMPT_ARCHITECT_MODEL:/mu);
     expect(workflow).toMatch(new RegExp(`RELAY_HOSTED_CODING_MODEL:\\s*${pin(JULIUS_LIVE_REQUESTED_MODELS.coding_agent)}\\s`, 'u'));
     expect(workflow).toMatch(new RegExp(`RELAY_HERMES_MODEL:\\s*${pin(JULIUS_LIVE_REQUESTED_MODELS.reviewer)}\\s`, 'u'));
     expect(workflow).not.toMatch(/claude-fable-5/u);
