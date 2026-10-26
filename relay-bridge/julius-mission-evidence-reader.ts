@@ -30,6 +30,8 @@ export const JULIUS_SPEND_TAG_SCHEMA = 'julius-run-spent.v1' as const;
 const EVIDENCE_ARTIFACT = 'julius-live-evidence';
 /** The grade job's own artifact. A verdict anywhere else is not read. */
 const VERDICT_ARTIFACT = 'julius-inworld-verdict';
+/** The grade job's one step that exits with the checker's status (julius-first-live-mission.yml). */
+const GRADE_STEP = 'J1: stage the pinned checker from git objects and grade';
 /** J1_PINNED_CHECKER_FILE_SHA256 (relay-bridge/julius-inworld-checker.ts), inlined so this reader does not reach the J1 dispatch modules. A test holds the two equal. */
 const J1_PINNED_CHECKER_FILE_SHA256 = '1a98f1a4d739ebe2da254715d81f56cd5fa08d534a1fbf10ef6214e8b262207e';
 
@@ -661,10 +663,15 @@ export function createJuliusMissionEvidenceReader(github: JuliusMissionGitHub): 
         || observed.workflowRunId !== spendTag.workflowRunId
         || observed.workflowRunAttempt !== spendTag.workflowRunAttempt
         || observed.headSha !== spendTag.headSha
-        || observed.status !== 'completed'
-        || observed.conclusion !== 'success') {
+        || observed.status !== 'completed') {
         return null;
       }
+      // A graded FAIL fails the grade job, and so the run. That run is read only when the
+      // grade step is the one thing that failed, and is returned only if its verdict is FAIL.
+      const gradedFailure = observed.conclusion === 'failure'
+        && observed.failedSteps.length > 0
+        && observed.failedSteps.every((step) => step === GRADE_STEP);
+      if (observed.conclusion !== 'success' && !gradedFailure) return null;
       const evidence = observed.artifacts.find((artifact) => artifact.name === EVIDENCE_ARTIFACT);
       const marker = observed.artifacts.find((artifact) => artifact.name === `${spendTag.namespace}-completed`);
       if (!markerAgrees(marker, spendTag)) return null;
@@ -698,6 +705,8 @@ export function createJuliusMissionEvidenceReader(github: JuliusMissionGitHub): 
           (taskId, contextId) => publishedFinalMessageSha256(fileText(evidence, `${taskId.replace(/:/gu, '_')}.${contextId.replace(/:/gu, '_')}.redacted.json`), taskId, contextId, derived.runId),
         ),
       };
+      // Anything but a FAIL verdict on a run the grade failed is not this run's outcome.
+      if (gradedFailure && completion.checkerVerdict !== 'FAIL') return null;
       return completion;
     },
 

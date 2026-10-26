@@ -609,6 +609,36 @@ describe('the hidden checker verdict is read from the grade job only', () => {
     const notRun = await createJuliusMissionEvidenceReader(github(tagMessage(WLJ), smuggled)).read(WLJ) as { checkerVerdict: string } | null;
     expect(notRun?.checkerVerdict).toBe('NOT_RUN');
   });
+
+  it('#51: a run the grade job failed is read, and is the outcome only when its verdict is FAIL', async () => {
+    const runs = `run_id\tmission_id\tstate\tcard_revision\n${WLJ}\tmission:julius-continuous-1\tCOMPLETED\t7\n(1 row)\n`;
+    const files = [
+      { path: 'live-mission.evidence.txt', text: RESULT }, { path: 'runs.tsv', text: runs },
+      { path: 'final-message/task_build-1.context_9.redacted.json', text: redactedRecord() },
+    ];
+    const GRADE = 'J1: stage the pinned checker from git objects and grade';
+    const run = (verdict: string | null, overrides: Partial<JuliusMissionWorkflowRun>) => {
+      const base = withProof(files, overrides);
+      return verdict === null ? base : { ...base, artifacts: [...base.artifacts, { name: 'julius-inworld-verdict', files: [{ path: 'checker-verdict.txt', text: verdictFile(verdict) }] }] };
+    };
+    const read = async (value: JuliusMissionWorkflowRun) => await createJuliusMissionEvidenceReader(github(tagMessage(WLJ), value)).read(WLJ) as { checkerVerdict: string } | null;
+    const graded = { conclusion: 'failure' as const, failedSteps: [GRADE] };
+    // FAIL: the run concluded failure because the grade did. It is reported.
+    expect((await read(run('FAIL', graded)))?.checkerVerdict).toBe('FAIL');
+    // PASS: unchanged, a successful run.
+    expect((await read(run('PASS', {})))?.checkerVerdict).toBe('PASS');
+    // A failed grade whose verdict is not FAIL (NOT_RUN, a PASS that failed anyway, or none) is not an outcome.
+    expect(await read(run('NOT_RUN', graded))).toBeNull();
+    expect(await read(run('PASS', graded))).toBeNull();
+    expect(await read(run(null, graded))).toBeNull();
+    // Any other failed step, alone or beside the grade, is not a graded failure.
+    expect(await read(run('FAIL', { conclusion: 'failure', failedSteps: ['LIVE: run the first real Julius mission'] }))).toBeNull();
+    expect(await read(run('FAIL', { conclusion: 'failure', failedSteps: [GRADE, 'J1: delete the graded final message'] }))).toBeNull();
+    expect(await read(run('FAIL', { conclusion: 'failure', failedSteps: [] }))).toBeNull();
+    // Cancelled, or not finished yet: no verdict yet.
+    expect(await read(run('FAIL', { conclusion: 'cancelled', failedSteps: [GRADE] }))).toBeNull();
+    expect(await read(run('FAIL', { status: 'in_progress', conclusion: null, failedSteps: [GRADE] }))).toBeNull();
+  });
 });
 
 describe('the reader\'s inlined checker pin', () => {
