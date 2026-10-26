@@ -959,9 +959,11 @@ void UWonderlandJuliusMissionSubsystem::PollLiveEvents()
 	if (bLiveInFlight) { return; }
 	const FLiveFeed& Feed = Host->LiveFeed;
 	// The bound workflow run finished, GitHub was readable, and the last page brought nothing new: the stream is done.
-	// ...unless the contract still awaits the verdict (REVIEW N1): the uncertainty clock runs on /events, so a stopped poll
-	// would read as a lost connection. Polling on keeps that clock honest; a real drop still trips it.
-	if (Feed.Run() == ELiveRunStatus::Completed && !Feed.IsStale() && bLiveDrained && !bAwaitingVerdict) { return; }
+	// ...unless this run's contract has not ENDED yet (REVIEW N1/N2): the uncertainty clock runs on /events, so a stopped poll
+	// would read as a lost connection -- including after an outage where /result recovers first and the phase leaves the
+	// grading wait while the presentation is still suspended. Polling on keeps that clock honest; a real drop still trips it.
+	const bool bContractOpen = ContractCursor.IsValid() && ContractRunId == LiveRunId && !ContractCursor->Ended();
+	if (Feed.Run() == ELiveRunStatus::Completed && !Feed.IsStale() && bLiveDrained && !bAwaitingVerdict && !bContractOpen) { return; }
 	// The wrapper's run is over and the bridge says nothing was ever dispatched: no stream will ever exist.
 	if (Host->Session.CanStartNewAttempt() && Feed.Source() == ELiveSource::None && Feed.Reason() == "not_dispatched") { return; }
 	const uint64 NowMs = Host->Clock.NowUtcMs();
