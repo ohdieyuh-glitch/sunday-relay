@@ -2323,6 +2323,53 @@ jobs:
           rm -rf "$RUNNER_TEMP"/julius-final-message.* 2>/dev/null || true
           echo 'cleanup complete'
 
+      # A PRIVATE HOST COPY OF THE SCANNED EVIDENCE (X′ §5 (e)), the job's last step. Under the billing
+      # lock the evidence artifact may not exist, so the same scanned set is kept on the runner host:
+      # $HOME/julius-evidence/<run id>-<attempt>/, 0700 (the runner user's own home; no sudo), with
+      # the bundle as the scan left it, the attempted and completed marker.txt, and a SHA256SUMS. No
+      # secret and no final message: the raw text stays only in the handoff directory and is deleted.
+      # The grade job adds its verdict file. For REVIEW's verification and a later backfill (not part
+      # of X′). Best-effort: it can never change the job's outcome.
+      - name: 'Keep the scanned evidence on the runner host (0700, SHA256SUMS)'
+        if: always() && inputs.confirm_live == 'RUN LIVE MISSION'
+        continue-on-error: true
+        env:
+          MARKER_NAMESPACE: ${{ steps.inputs_gate.outputs.marker_namespace }}
+        run: |
+          set -euo pipefail
+          refuse() { echo "evidence_copy_refused: $1" >&2; exit 1; }
+          case "${HOME:-}" in /?*) ;; *) refuse home_unusable ;; esac
+          printf '%s' "${GITHUB_RUN_ID:-}-${GITHUB_RUN_ATTEMPT:-}" | grep -Eqx '[0-9]{1,20}-[0-9]{1,10}' || refuse run_unusable
+          umask 077
+          root="$HOME/julius-evidence"
+          dir="$root/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          mkdir -p "$root"
+          [ -d "$root" ] && [ ! -L "$root" ] || refuse root_unusable
+          chmod 0700 "$root"
+          [ ! -e "$dir" ] && [ ! -L "$dir" ] || refuse copy_exists
+          mkdir -m 0700 "$dir"
+          if [ -d julius-live-evidence ] && [ ! -L julius-live-evidence ]; then
+            cp -R julius-live-evidence "$dir/julius-live-evidence"
+          fi
+          case "${MARKER_NAMESPACE:-}" in *[!a-z0-9-]*|'') ;; *)
+            for kind in attempted completed; do
+              marker="${MARKER_NAMESPACE}-${kind}/marker.txt"
+              if [ -f "$marker" ] && [ ! -L "$marker" ]; then
+                mkdir -m 0700 "$dir/${MARKER_NAMESPACE}-${kind}"
+                cp "$marker" "$dir/${MARKER_NAMESPACE}-${kind}/marker.txt"
+              fi
+            done ;;
+          esac
+          # The raw final message is never evidence: if one is here, the copy is removed.
+          if [ -n "$(find "$dir" -name '*.raw.txt' -print -quit)" ]; then rm -rf "$dir"; refuse final_message_raw_in_evidence; fi
+          odd=$(find "$dir" ! -type f ! -type d -print -quit)
+          if [ -n "$odd" ]; then rm -rf "$dir"; refuse evidence_copy_not_regular; fi
+          # Listed BEFORE the file exists: a redirect inside the listing would list its own output.
+          sums=$(cd "$dir" && find . -type f ! -path ./SHA256SUMS -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum)
+          printf '%s\n' "$sums" > "$dir/SHA256SUMS"
+          chmod 0600 "$dir/SHA256SUMS"
+          echo "evidence_copy dir=$dir files=$(grep -c . "$dir/SHA256SUMS" || true)"
+
   # THE HIDDEN CHECKER, IN A JOB OF ITS OWN. No provider credential, no
   # environment and read-only contents. It stages the pinned checker, oracle,
   # contract and seed from git objects at this run's own commit, never from a
@@ -2456,6 +2503,26 @@ jobs:
             echo "final_message_sha256=$final"
           } >> "${GITHUB_OUTPUT:?}"
           echo "verdict_fields verdict=$verdict checker_sha256=$checker judged_trimmed_sha256=$judged published_trimmed_sha256=$published"
+      # X′ §5 (e): the verdict joins the private host copy of the evidence, and SHA256SUMS is rewritten.
+      - name: 'Add the verdict to the runner host evidence copy (0700, SHA256SUMS)'
+        if: always()
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          case "${HOME:-}" in /?*) ;; *) echo 'evidence_copy_refused: home_unusable' >&2; exit 1 ;; esac
+          printf '%s' "${GITHUB_RUN_ID:-}-${GITHUB_RUN_ATTEMPT:-}" | grep -Eqx '[0-9]{1,20}-[0-9]{1,10}' || exit 1
+          dir="$HOME/julius-evidence/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          [ -d "$dir" ] && [ ! -L "$dir" ] || { echo 'evidence_copy_missing' >&2; exit 1; }
+          file=julius-inworld-verdict/checker-verdict.txt
+          [ -f "$file" ] && [ ! -L "$file" ] || { echo 'no verdict file to add'; exit 0; }
+          umask 077
+          mkdir -p "$dir/julius-inworld-verdict"
+          cp "$file" "$dir/julius-inworld-verdict/checker-verdict.txt"
+          # Listed BEFORE the file exists: a redirect inside the listing would list its own output.
+          sums=$(cd "$dir" && find . -type f ! -path ./SHA256SUMS -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum)
+          printf '%s\n' "$sums" > "$dir/SHA256SUMS"
+          chmod 0600 "$dir/SHA256SUMS"
+          echo "evidence_copy_verdict_added dir=$dir"
       # THE RUN-BOUND PASS (X′ §4, run binding). A genuine FAIL also exits 0, so the grade step's
       # success cannot tell PASS from FAIL. This step runs ONLY when the pinned checker's own
       # verdict file in THIS run said PASS, and the result reader requires it to have succeeded:

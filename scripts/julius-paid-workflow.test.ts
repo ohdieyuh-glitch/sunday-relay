@@ -1500,3 +1500,63 @@ describe('X′ §4: the result record is written by a minimal job of its own; gr
     }
   });
 });
+
+describe('X′ §5 (e): a private host copy of the scanned evidence, with SHA256SUMS', () => {
+  const paid = job('first-live-mission');
+  const grade = job('grade-inworld');
+  const COPY = "'Keep the scanned evidence on the runner host (0700, SHA256SUMS)'";
+  const ADD = "'Add the verdict to the runner host evidence copy (0700, SHA256SUMS)'";
+
+  const sumsOf = (dir: string): Record<string, string> => Object.fromEntries(readFileSync(join(dir, 'SHA256SUMS'), 'utf8').trim().split('\n').map((line) => {
+    const [sha, name] = line.split(/ {2}/u);
+    return [name ?? '', sha ?? ''];
+  }));
+
+  it('is the paid job\'s last step, best-effort, and keeps the scanned bundle and both markers, never a final message', () => {
+    const steps = paid.slice(paid.indexOf('\n    steps:\n'));
+    expect(steps.slice(steps.lastIndexOf('\n      - name: ') + '\n      - name: '.length).startsWith(COPY)).toBe(true);
+    expect(step(paid, COPY)).toContain('continue-on-error: true');
+    expect(script(step(paid, COPY))).not.toMatch(/\bsudo\b|\/var\/lib/u);
+    const home = mkdtempSync(join(tmpdir(), 'julius-x-prime-home-'));
+    const work = mkdtempSync(join(tmpdir(), 'julius-x-prime-live-'));
+    try {
+      execFileSync('bash', ['-c', `mkdir -p "${work}/julius-live-evidence/final-message" "${work}/julius-inworld-data-1-attempted" "${work}/julius-inworld-data-1-completed"`]);
+      writeFileSync(join(work, 'julius-live-evidence', 'tasks.tsv'), 'run_id\n(0 rows)\n');
+      writeFileSync(join(work, 'julius-live-evidence', 'final-message', `${STEM}.redacted.json`), '{"published":true}\n');
+      writeFileSync(join(work, 'julius-inworld-data-1-attempted', 'marker.txt'), 'attempted_at=x\n');
+      writeFileSync(join(work, 'julius-inworld-data-1-completed', 'marker.txt'), 'completed_at=x\n');
+      const env = { HOME: home, MARKER_NAMESPACE: 'julius-inworld-data-1' };
+      const copied = runStep(script(step(paid, COPY)), work, env);
+      expect(copied.status, copied.stderr).toBe(0);
+      const dir = join(home, 'julius-evidence', '40400000001-1');
+      const sums = sumsOf(dir);
+      expect(Object.keys(sums).sort()).toEqual([
+        './julius-inworld-data-1-attempted/marker.txt', './julius-inworld-data-1-completed/marker.txt',
+        `./julius-live-evidence/final-message/${STEM}.redacted.json`, './julius-live-evidence/tasks.tsv',
+      ]);
+      expect(sums['./julius-live-evidence/tasks.tsv']).toBe(createHash('sha256').update('run_id\n(0 rows)\n').digest('hex'));
+      if (process.platform !== 'win32') expect(statSync(dir).mode & 0o777).toBe(0o700);
+      // The grade job adds its verdict, and SHA256SUMS covers it.
+      const gradeWork = mkdtempSync(join(tmpdir(), 'julius-x-prime-grade-'));
+      try {
+        execFileSync('bash', ['-c', `mkdir -p "${gradeWork}/julius-inworld-verdict"`]);
+        writeFileSync(join(gradeWork, 'julius-inworld-verdict', 'checker-verdict.txt'), 'schema=julius-inworld-verdict.v1\nverdict=PASS\n');
+        const added = runStep(script(step(grade, ADD)), gradeWork, { HOME: home });
+        expect(added.status, added.stderr).toBe(0);
+        expect(sumsOf(dir)['./julius-inworld-verdict/checker-verdict.txt']).toBe(createHash('sha256').update('schema=julius-inworld-verdict.v1\nverdict=PASS\n').digest('hex'));
+        expect(Object.keys(sumsOf(dir))).toHaveLength(5);
+      } finally { rmSync(gradeWork, { recursive: true, force: true }); }
+      // A second copy for the same run attempt is refused, never merged.
+      expect(runStep(script(step(paid, COPY)), work, env).stderr).toContain('evidence_copy_refused: copy_exists');
+      // A raw final message in the bundle: the copy is removed and the step says so.
+      rmSync(join(home, 'julius-evidence'), { recursive: true, force: true });
+      writeFileSync(join(work, 'julius-live-evidence', `${STEM}.raw.txt`), 'the coder said this');
+      const refused = runStep(script(step(paid, COPY)), work, env);
+      expect(refused.stderr).toContain('evidence_copy_refused: final_message_raw_in_evidence');
+      expect(() => readdirSync(dir)).toThrow();
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(work, { recursive: true, force: true });
+    }
+  });
+});
