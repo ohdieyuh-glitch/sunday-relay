@@ -1,3 +1,4 @@
+import { JULIUS_OUTCOME_UNKNOWN_CAUSES, type JuliusOutcomeUnknownCause } from './julius-mission-evidence-reader';
 import { juliusMissionTraceId } from '../scripts/julius-mission-trace.mjs';
 
 /**
@@ -187,6 +188,42 @@ export interface JuliusCheckerEvidence {
  */
 export interface JuliusMissionEvidenceReader {
   read(wljRunId: string): Promise<unknown>;
+  /**
+   * Optional. The ambiguous provider outcome Julius itself recorded for this
+   * run, when it recorded one. The value is accepted only by
+   * {@link acceptJuliusOutcomeUnknown}. Null or a throw means none was READ;
+   * that is not proof there was none.
+   */
+  readOutcomeUnknown?(wljRunId: string): Promise<unknown>;
+}
+
+
+export { JULIUS_OUTCOME_UNKNOWN_CAUSES, type JuliusOutcomeUnknownCause };
+
+export interface JuliusOutcomeUnknown {
+  readonly cause: JuliusOutcomeUnknownCause;
+  readonly role: 'PROMPT_ARCHITECT' | 'CODING_AGENT' | 'INDEPENDENT_REVIEWER' | null;
+  readonly taskId: string | null;
+}
+
+const OUTCOME_ROLES = new Set(['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER']);
+const OUTCOME_TASK = /^[A-Za-z0-9:_-]{1,128}$/u;
+const OUTCOME_RUN = /^[1-9][0-9]{0,19}$/u;
+
+/**
+ * A reader's outcome-unknown value, bound to the workflow run the dispatch
+ * record names. When the record names no run, or the value is for another run
+ * or is not this shape, it is null.
+ */
+export function acceptJuliusOutcomeUnknown(value: unknown, dispatchedWorkflowRunId: string | null): JuliusOutcomeUnknown | null {
+  const body = record(value);
+  if (body === null || dispatchedWorkflowRunId === null || !OUTCOME_RUN.test(dispatchedWorkflowRunId)) return null;
+  if (body.workflowRunId !== dispatchedWorkflowRunId) return null;
+  if (typeof body.cause !== 'string' || !(JULIUS_OUTCOME_UNKNOWN_CAUSES as readonly string[]).includes(body.cause)) return null;
+  const role = body.role === null || (typeof body.role === 'string' && OUTCOME_ROLES.has(body.role)) ? body.role : undefined;
+  const taskId = body.taskId === null || (typeof body.taskId === 'string' && OUTCOME_TASK.test(body.taskId)) ? body.taskId : undefined;
+  if (role === undefined || taskId === undefined) return null;
+  return { cause: body.cause as JuliusOutcomeUnknownCause, role: role as JuliusOutcomeUnknown['role'], taskId: taskId as string | null };
 }
 
 export interface JuliusMissionEvidenceReading {

@@ -17,16 +17,25 @@
  * failed read does not gain a fabricated phase list. A dispatch record is
  * not completion. YUJI owns the reader; this route does not match workflow
  * runs.
+ *
+ * OUTCOME UNKNOWN (/result only). `outcomeUnknown: {cause, role, taskId}` is
+ * Julius's own record that a provider request may have been processed, so the
+ * task was failed and never retried (a cause in JULIUS_OUTCOME_UNKNOWN_CAUSES). It is read
+ * only for a dispatched admission without a completion, from the finished run
+ * the spend tag names, and only when that is the run the dispatch recorded.
+ * `null` means none was read, not that there was none. It is never a success.
  */
 
 import { juliusMissionTraceId } from '../scripts/julius-mission-trace.mjs';
 import { parseJuliusAdmissionRunId } from '../src/relay/integration/wonderland-admission/admission-run-id';
 import {
   acceptJuliusMissionEvidence,
+  acceptJuliusOutcomeUnknown,
   bindJuliusEvidenceToDispatch,
   type JuliusMissionCompletionEvidence,
   type JuliusMissionEvidenceReader,
   type JuliusMissionPhaseEvidence,
+  type JuliusOutcomeUnknown,
 } from './julius-mission-evidence';
 import {
   guardPassed,
@@ -180,6 +189,9 @@ export function handleWonderlandMissionReadRoute(
       };
     }
     const cause = textOrNull(admission.cause);
+    const outcomeUnknown = admission.state === 'dispatched' && evidence.completion === null
+      ? await readOutcomeUnknown(evidenceReader, parsed.runId, textOrNull(admission.workflowRunId))
+      : null;
     return {
       status: 200,
       body: {
@@ -189,6 +201,7 @@ export function handleWonderlandMissionReadRoute(
         // Top level, for the client: only PASS is a verified completion.
         checkerVerdict: evidence.completion === null ? 'NOT_RUN' : evidence.completion.checkerVerdict,
         completion: evidence.completion,
+        outcomeUnknown,
       },
     };
   });
@@ -211,6 +224,20 @@ async function readEvidence(
     return acceptJuliusMissionEvidence(wljRunId, await reader.read(wljRunId));
   } catch {
     return { completion: null, phases: null };
+  }
+}
+
+/** No reader, no method, a throw or a value the check refuses: none read. */
+async function readOutcomeUnknown(
+  reader: JuliusMissionEvidenceReader | undefined,
+  wljRunId: string,
+  workflowRunId: string | null,
+): Promise<JuliusOutcomeUnknown | null> {
+  if (reader?.readOutcomeUnknown === undefined) return null;
+  try {
+    return acceptJuliusOutcomeUnknown(await reader.readOutcomeUnknown(wljRunId), workflowRunId);
+  } catch {
+    return null;
   }
 }
 

@@ -14,6 +14,8 @@ import {
 import {
   EVENTS_REFRESH_MS,
   EVENTS_STALE_MS,
+  LIVE_MISSION_JOB,
+  LIVE_MISSION_STEP,
   LIVE_PROGRESS_CONTEXT,
   createWonderlandMissionEventsBridge,
   isWonderlandMissionEventsRoute,
@@ -436,5 +438,134 @@ describe('rehearsal binds only a preflight run, and only before a real dispatch'
       await createWonderlandMissionEventsBridge(ports, reader).handle(request());
       expect(reader.calls[0]).toBe(`run ${WORKFLOW_RUN}`);
     }, { JULIUS_WONDERLAND_EVENTS_REHEARSAL_RUN_ID: PREFLIGHT_RUN });
+  });
+});
+
+describe('execution is read from the LIVE step and task samples, never from the run status alone', () => {
+  const step = (number: number, name: string, status: string, conclusion: string | null, startedAt: string | null = '2026-10-23T17:19:00Z') => ({
+    number, name, status, conclusion, startedAt, completedAt: status === 'completed' ? '2026-10-23T17:19:30Z' : null,
+  });
+  const job = (name: string, status: string, conclusion: string | null, steps: ReturnType<typeof step>[], id = '901'): JuliusRunJob => ({
+    id, name, status, conclusion, startedAt: '2026-10-23T17:18:30Z', completedAt: status === 'completed' ? '2026-10-23T17:25:00Z' : null, steps,
+  });
+  const read = async (ctx: Awaited<ReturnType<typeof admitted>>, state: Parameters<typeof fakeReader>[0]) => (
+    (await createWonderlandMissionEventsBridge(ctx.ports, fakeReader(state)).handle(request()))?.body as Body
+  );
+
+  it('a live run still in its gates is starting, not executing', async () => {
+    await withAdmission(async (ctx) => {
+      claim(ctx.storePath);
+      const body = await read(ctx, {
+        run: summary(ctx.keyHash),
+        jobs: [job('spend-tag', 'completed', 'success', []), job('paid-slot', 'in_progress', null, [step(4, 'Gate: admission runs only reviewed, current, not rolled-back code', 'in_progress', null)], '902')],
+      });
+      expect(body).toMatchObject({ live: true, execution: 'starting', executionStartedAt: null, stoppedAt: null });
+    });
+  });
+
+  it('the LIVE step in progress is executing, with when it started', async () => {
+    await withAdmission(async (ctx) => {
+      claim(ctx.storePath);
+      const body = await read(ctx, { run: summary(ctx.keyHash) });
+      expect(body).toMatchObject({ live: true, execution: 'executing', executionStartedAt: '2026-10-23T17:20:00Z', stoppedAt: null });
+    });
+  });
+
+  it('a task sample before the LIVE step is seen is executing; an idle marker alone is not', async () => {
+    await withAdmission(async (ctx) => {
+      claim(ctx.storePath);
+      const gates = [job(LIVE_MISSION_JOB, 'in_progress', null, [step(1, 'Gate: a paid run is attempt 1 only', 'completed', 'success')])];
+      const idle = await read(ctx, { run: summary(ctx.keyHash), jobs: gates, statuses: [status(`v1 r${WORKFLOW_RUN}.a1.${WLJ8} s1 idle`)] });
+      expect(idle.execution).toBe('starting');
+    });
+    await withAdmission(async (ctx) => {
+      claim(ctx.storePath);
+      const gates = [job(LIVE_MISSION_JOB, 'in_progress', null, [step(1, 'Gate: a paid run is attempt 1 only', 'completed', 'success')])];
+      const task = await read(ctx, { run: summary(ctx.keyHash), jobs: gates, statuses: [status(`v1 r${WORKFLOW_RUN}.a1.${WLJ8} s2 architect:plan:active o1 c0`)] });
+      expect(task).toMatchObject({ execution: 'executing', executionStartedAt: '2026-10-23T17:20:10Z' });
+    });
+  });
+
+  it('a run that finished before the LIVE step is did_not_start, naming the gate that refused (40258482240)', async () => {
+    await withAdmission(async (ctx) => {
+      claim(ctx.storePath);
+      const body = await read(ctx, {
+        run: summary(ctx.keyHash, { status: 'completed', conclusion: 'failure' }),
+        jobs: [
+          job('spend-tag', 'completed', 'success', [step(3, 'Gate: one spent tag for this admission run id, before any provider call', 'completed', 'success')], '900'),
+          job('paid-slot', 'completed', 'failure', [step(4, 'Gate: admission runs only reviewed, current, not rolled-back code', 'completed', 'failure')], '902'),
+          job(LIVE_MISSION_JOB, 'completed', 'skipped', [], '903'),
+        ],
+      });
+      expect(body).toMatchObject({
+        live: false, runConclusion: 'failure', execution: 'did_not_start', executionStartedAt: null,
+        stoppedAt: { job: 'paid-slot', step: 'Gate: admission runs only reviewed, current, not rolled-back code' },
+      });
+    });
+  });
+
+  it('a skipped LIVE step never counts as started', async () => {
+    await withAdmission(async (ctx) => {
+      claim(ctx.storePath);
+      const body = await read(ctx, {
+        run: summary(ctx.keyHash, { status: 'completed', conclusion: 'cancelled' }),
+        jobs: [job(LIVE_MISSION_JOB, 'completed', 'cancelled', [step(32, LIVE_MISSION_STEP, 'completed', 'skipped', null), step(3, 'Run actions/checkout', 'completed', 'cancelled')])],
+      });
+      expect(body).toMatchObject({ execution: 'did_not_start', stoppedAt: { job: LIVE_MISSION_JOB, step: 'Run actions/checkout' } });
+    });
+  });
+
+  it('a finished LIVE step is finished, which is not an outcome', async () => {
+    await withAdmission(async (ctx) => {
+      claim(ctx.storePath);
+      const jobs = [job(LIVE_MISSION_JOB, 'in_progress', null, [step(32, LIVE_MISSION_STEP, 'completed', 'success')])];
+      const running = await read(ctx, { run: summary(ctx.keyHash), jobs });
+      expect(running).toMatchObject({ live: true, execution: 'finished' });
+      expect(JSON.stringify(running)).not.toMatch(/checkerVerdict|completion|PASS/u);
+    });
+  });
+
+  it('a LIVE step that fails or is cancelled is interrupted at once, even while the run still runs', async () => {
+    for (const conclusion of ['failure', 'cancelled', 'timed_out']) {
+      await withAdmission(async (ctx) => {
+        claim(ctx.storePath);
+        const jobs = [job(LIVE_MISSION_JOB, 'in_progress', null, [step(32, LIVE_MISSION_STEP, 'completed', conclusion)])];
+        const body = await read(ctx, { run: summary(ctx.keyHash), jobs });
+        expect(body, conclusion).toMatchObject({ live: true, execution: 'interrupted', stoppedAt: { job: LIVE_MISSION_JOB, step: LIVE_MISSION_STEP } });
+      });
+    }
+  });
+
+  it('a run that ends while Julius runs, with no LIVE success, is interrupted, naming what stopped', async () => {
+    await withAdmission(async (ctx) => {
+      claim(ctx.storePath);
+      const bridge = createWonderlandMissionEventsBridge(ctx.ports, fakeReader({
+        run: summary(ctx.keyHash, { status: 'completed', conclusion: 'cancelled' }),
+        jobs: [job(LIVE_MISSION_JOB, 'completed', 'cancelled', [step(32, LIVE_MISSION_STEP, 'in_progress', null)])],
+      }));
+      const body = (await bridge.handle(request()))?.body as Body;
+      expect(body).toMatchObject({ live: false, execution: 'interrupted', stoppedAt: { job: LIVE_MISSION_JOB, step: null } });
+    });
+  });
+
+  it('the in-progress sighting is kept after the step completes, so executionStartedAt survives', async () => {
+    await withAdmission(async (ctx) => {
+      claim(ctx.storePath);
+      const state: Parameters<typeof fakeReader>[0] = { run: summary(ctx.keyHash) };
+      const bridge = createWonderlandMissionEventsBridge(ctx.ports, fakeReader(state));
+      const first = (await bridge.handle(request()))?.body as Body;
+      expect(first.execution).toBe('executing');
+      state.run = summary(ctx.keyHash, { status: 'completed', conclusion: 'success' });
+      state.jobs = [job(LIVE_MISSION_JOB, 'completed', 'success', [step(32, LIVE_MISSION_STEP, 'completed', 'success')])];
+      const later = (await bridge.handle(request({ nowMs: T0 + EVENTS_REFRESH_MS + 1 })))?.body as Body;
+      expect(later).toMatchObject({ execution: 'finished', executionStartedAt: '2026-10-23T17:20:00Z' });
+    });
+  });
+
+  it('with no bound run, execution is unknown (null), never "not started"', async () => {
+    await withAdmission(async (ctx) => {
+      const body = await read(ctx, { run: null });
+      expect(body).toMatchObject({ source: 'none', execution: null, executionStartedAt: null, stoppedAt: null });
+    });
   });
 });
