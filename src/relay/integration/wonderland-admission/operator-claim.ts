@@ -53,6 +53,8 @@
 
 import {
   applyWonderlandStatusTransition,
+  isWonderlandStatusState,
+  isWonderlandStatusTerminal,
   MISSION_SLUG,
   PAID_SLOT_DISPATCH_KEY,
   PAID_WORKFLOW_FILE,
@@ -366,6 +368,8 @@ export type ClaimResult =
     readonly priorAttempted?: number | 'UNKNOWN';
     /** On a rerun refusal: completed markers plus the recorded constant, or UNKNOWN. */
     readonly priorCompleted?: number | 'UNKNOWN';
+    /** On `julius_paid_run_in_flight`: the other admission of the same mission whose paid run is not settled. */
+    readonly inFlightWljRunId?: string;
   };
 
 export type StatusResult =
@@ -819,6 +823,13 @@ async function claimPhased(
   if (checked.kind === 'done') return checked.result;
   const onMain = mainRefusal(spawn, input, checked.admission);
   if (!onMain.ok) return onMain.result;
+  // THE IN-FLIGHT GUARD: another admission of this mission whose paid run may
+  // not have uploaded its attempted marker yet would make the count read 0
+  // too early. Refused before anything is read, written or dispatched.
+  const peers = await file.exclusive((io) => Promise.resolve(inFlightPeers(io.read(), checked.admission)));
+  const unsettled = peers.length === 0 ? null : unsettledPeer(spawn, input.repo, peers);
+  if (unsettled !== null) return inFlightRefusal(checked.admission, unsettled);
+  const settledPeers: ReadonlySet<string> = new Set(peers.map(peerKey));
   // THE RERUN GATE, before any claim is written or anything dispatched: the
   // two counts the paid workflow gates on for this contract's namespace, the
   // step-9 completed markers plus main's recorded constant, and the
@@ -874,7 +885,7 @@ async function claimPhased(
       toView(checked.admission, null),
     );
   }
-  const reserved = await file.exclusive((io) => Promise.resolve(reserveClaim(io, file.path, input, clock, tag, githubDate, consent)));
+  const reserved = await file.exclusive((io) => Promise.resolve(reserveClaim(io, file.path, input, clock, tag, githubDate, consent, settledPeers)));
   if (reserved.kind === 'done') return reserved.result;
   const ran = spawn.run(reserved.liveArgs);
   return file.exclusive((io) => Promise.resolve(recordDispatchOutcome(io, input, reserved, ran)));
@@ -970,6 +981,56 @@ function rerunFields(acknowledged: boolean, priorAttempted: number | undefined, 
   return acknowledged && typeof priorAttempted === 'number' && typeof priorCompleted === 'number'
     ? { acknowledgedRerun: true, priorAttempted, priorCompleted }
     : {};
+}
+
+/** Latest claim states after which that admission's paid run may still be running, or about to tag or mark. */
+const IN_FLIGHT_CLAIM_STATES: ReadonlySet<string> = new Set(['dispatching', 'dispatched']);
+
+const peerKey = (peer: StoredAdmission): string => `${peer.runId}\0${peer.serverRunId}`;
+
+/**
+ * The OTHER admissions of the same mission whose latest claim is
+ * `dispatching` or `dispatched` and whose journal holds no terminal progress
+ * note (`isWonderlandStatusTerminal`). `dispatch_failed` and `already_spent`
+ * are terminal claim states and never in flight. Journal only.
+ */
+export function inFlightPeers(document: OperatorDocument, admission: StoredAdmission): StoredAdmission[] {
+  return document.admissions.filter((row) => {
+    if (row.runId === admission.runId && row.serverRunId === admission.serverRunId) return false;
+    if (row.missionId === null || row.missionId !== admission.missionId) return false;
+    const latest = latestClaim(document, row.runId, row.serverRunId);
+    if (latest === null || !IN_FLIGHT_CLAIM_STATES.has(latest.state)) return false;
+    const note = [...(document.progress ?? [])].reverse().find((entry) => entry.serverRunId === row.serverRunId) ?? null;
+    return !(note !== null && isWonderlandStatusState(note.state) && isWonderlandStatusTerminal(note.state));
+  });
+}
+
+/**
+ * The first peer whose paid run GitHub does not show as finished, or null when
+ * every peer is settled. Settled means: the paid runs on main named
+ * `key=<the peer's dispatch key>` (`gh run list`, read-only, the reconcile
+ * read) are at least one, and every one of them is `completed`, so whatever
+ * attempted or completed marker it would upload is already listed. A list
+ * that cannot be read, or shows no run for the key, is not settled.
+ */
+export function unsettledPeer(spawn: GhSpawner, repo: string, peers: readonly StoredAdmission[]): StoredAdmission | null {
+  const listing = spawn.run(paidRunListArgs(repo));
+  for (const peer of peers) {
+    const runs = runsForDispatchKey(listing, peer.keyHash);
+    if (runs === null || runs.length === 0 || runs.some((run) => run.status !== 'completed')) return peer;
+  }
+  return null;
+}
+
+function inFlightRefusal(admission: StoredAdmission, peer: StoredAdmission): ClaimResult {
+  return {
+    ...fail(
+      'julius_paid_run_in_flight',
+      `Another paid run of ${admission.missionId ?? 'this mission'} (${peer.runId}) has not finished on GitHub, so its prior-attempt markers may not be listed yet. Nothing was claimed or dispatched; this admission is still held. Start again once that run has finished.`,
+      toView(admission, null),
+    ),
+    inFlightWljRunId: peer.runId,
+  } as ClaimResult;
 }
 
 function rerunRefusal(decision: Extract<RerunDecision, { ok: false }>, record: OperatorView): ClaimResult {
@@ -1099,11 +1160,16 @@ function reserveClaim(
   tag: 'present' | 'absent',
   githubDate: string | null,
   consent: RerunConsent,
+  settledPeers: ReadonlySet<string>,
 ): Reserved {
   // The record may have moved while the spent tag was read: check again.
   const checked = checkClaim(io, storePath, input, clock);
   if (checked.kind === 'done') return checked;
   const { admission, nowIso, command } = checked;
+  // An admission of this mission that started its paid run since the
+  // in-flight check (another process) was not proven settled: refuse.
+  const lateStarter = inFlightPeers(io.read(), admission).find((peer) => !settledPeers.has(peerKey(peer)));
+  if (lateStarter !== undefined) return { kind: 'done', result: inFlightRefusal(admission, lateStarter) };
   // The consent is this admission's, and the decision still holds.
   const again = decideRerun(consent.prior, input.rerunConfirmation);
   if (consent.wonderlandRunId !== admission.runId || consent.serverRunId !== admission.serverRunId

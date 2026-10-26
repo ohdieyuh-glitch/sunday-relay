@@ -233,9 +233,11 @@ export function startHttp(wljRunId: string, result: ClaimResult): { status: numb
   if (result.record !== null && STARTED_STATES.has(result.record.state)) {
     return { status: 200, body: startBody(wljRunId, result.record, true) };
   }
-  const body: Record<string, unknown> = { error: { kind: result.kind, message: result.message }, retry: false };
+  // A paid run of the same mission still in flight is the one refusal the founder can retry, once it has finished.
+  const body: Record<string, unknown> = { error: { kind: result.kind, message: result.message }, retry: result.kind === 'julius_paid_run_in_flight' };
   if (result.record !== null) Object.assign(body, startBody(wljRunId, result.record, false));
   if (result.priorAttempted !== undefined) body.priorAttempted = result.priorAttempted;
   if (result.priorCompleted !== undefined) body.priorCompleted = result.priorCompleted;
+  if (result.inFlightWljRunId !== undefined) body.inFlightWljRunId = result.inFlightWljRunId;
   return { status: 409, body };
 }

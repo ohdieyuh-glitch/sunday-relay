@@ -5,6 +5,7 @@
  * can reach GitHub or spend.
  */
 
+import { createHash } from 'node:crypto';
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -17,6 +18,7 @@ import {
   RERUN_PAID_MISSION_CONFIRMATION,
   createOperatorClaimTool,
   decideRerun,
+  inFlightPeers,
   legalTransition,
   missionContractPath,
   parseRecordedPaidAttempts,
@@ -87,7 +89,7 @@ ${recordedCase}`;
 const ABSENT: GhResult = { code: 1, stdout: 'HTTP/2.0 404 Not Found\nDate: Fri, 23 Oct 2026 17:18:05 GMT\n\n{"message":"Not Found"}\n', stderr: '' };
 const CONTENTS = `repos/${REPO}/contents/`;
 
-function fakeGh(options: { rerunInput?: boolean; contract?: string; recordedCase?: string } = {}): { spawn: GhSpawner; calls: string[][] } {
+function fakeGh(options: { rerunInput?: boolean; contract?: string; recordedCase?: string; runList?: () => GhResult } = {}): { spawn: GhSpawner; calls: string[][] } {
   const calls: string[][] = [];
   return {
     calls,
@@ -103,6 +105,7 @@ function fakeGh(options: { rerunInput?: boolean; contract?: string; recordedCase
           return text === null ? { code: 1, stdout: '', stderr: 'HTTP 404' } : { code: 0, stdout: text, stderr: '' };
         }
         if (args[0] === 'api') return ABSENT;
+        if (args[0] === 'run') return options.runList?.() ?? { code: 1, stdout: '', stderr: 'HTTP 502' };
         if (args[0] === 'workflow') return { code: 0, stdout: `https://github.com/${REPO}/actions/runs/${WORKFLOW_RUN}\n`, stderr: '' };
         return { code: 99, stdout: '', stderr: '' };
       },
@@ -836,5 +839,133 @@ describe('reader answers that are not a count are UNKNOWN, a 409, never a 503', 
     }
     expect(priorCount({ readable: 1, counted: 1 } as unknown as PriorAttemptRead)).toBe('UNKNOWN');
     expect(priorCount(null)).toBe('UNKNOWN');
+  });
+});
+
+describe('the in-flight guard: one paid run of a mission at a time', () => {
+  const KEY_A = ADMIT_KEY;
+  const KEY_B = '22222222-3333-4444-8555-666666666666';
+  const dispatchKey = (key: string) => createHash('sha256').update(key).digest('hex');
+  const listing = (key: string, status: string): GhResult => ({
+    code: 0,
+    stdout: JSON.stringify([{
+      databaseId: 40250000001, displayTitle: `julius mission=${MISSION} lane=lab mode=paid key=${dispatchKey(key)}`,
+      status, conclusion: status === 'completed' ? 'failure' : '', event: 'workflow_dispatch', headBranch: 'main', attempt: 1,
+    }]),
+    stderr: '',
+  });
+
+  /** Two admissions of the same mission in ONE store, and one claim core over it. */
+  async function pair(prior: PriorAttemptReader, runList: () => GhResult) {
+    const dir = mkdtempSync(join(tmpdir(), 'wlj-inflight-'));
+    const storePath = join(dir, 'admission.json');
+    const ports = service(storePath);
+    for (const [run, key, trigger] of [[RUN_A, KEY_A, 'trigger_01'], [RUN_B, KEY_B, 'trigger_02']] as const) {
+      const created = await handleWonderlandAdmissionRoute(base(run, {
+        path: WONDERLAND_ADMISSION_PATH,
+        url: `${WONDERLAND_ADMISSION_PATH}?projectId=${PROJECT}`,
+        idempotencyKey: key,
+        rawBody: JSON.stringify({ runId: run, clientTriggerId: trigger, clientLogSha256: 'ab'.repeat(32), clientUiActionUtc: WHEN }),
+      }), ports);
+      expect(created?.status).toBe(202);
+    }
+    const gh = fakeGh({ runList });
+    const tool = createOperatorClaimTool(openAdmissionFile(storePath), gh.spawn, { nowIso: () => WHEN }, prior);
+    const start = (run: string, extra: Record<string, unknown> = {}) =>
+      handleWonderlandMissionStartRoute(startRequest(run, extra), ports, { claimTool: () => tool });
+    const claimsOf = (run: string) => readAdmissionDocument(storePath).claims.filter((event) => event.wonderlandRunId === run);
+    const journalPath = () => join(dir, readdirSync(dir).find((entry) => entry.endsWith('.operator.json')) ?? '');
+    return { dir, storePath, gh, start, claimsOf, journalPath, cleanup() { ports.close(); rmSync(dir, { recursive: true, force: true }); } };
+  }
+
+  it('A dispatched and its run still going: B is 409 julius_paid_run_in_flight, nothing written, retry true; once that run completed, B goes on', async () => {
+    let runStatus = 'in_progress';
+    const fx = await pair(reader(ZERO), () => listing(KEY_A, runStatus));
+    try {
+      expect((await fx.start(RUN_A))?.status).toBe(202);
+      for (const extra of [{}, { acknowledgeRerun: PHRASE }]) {
+        const refused = await fx.start(RUN_B, extra);
+        expect(refused?.status).toBe(409);
+        expect(refused?.body).toEqual({
+          error: { kind: 'julius_paid_run_in_flight', message: expect.any(String) },
+          retry: true, wljRunId: RUN_B, state: 'admitted', workflowRunId: null, dispatchedAt: null, replayed: false, inFlightWljRunId: RUN_A,
+        });
+        expect(fx.claimsOf(RUN_B)).toEqual([]);
+      }
+      expect(workflowRuns(fx.gh.calls)).toHaveLength(1);
+      runStatus = 'completed';
+      expect((await fx.start(RUN_B))?.status).toBe(202);
+      expect(workflowRuns(fx.gh.calls)).toHaveLength(2);
+    } finally {
+      fx.cleanup();
+    }
+  });
+
+  it('a run list that cannot be read, or shows no run for the key of A, keeps B refused', async () => {
+    const lists: (() => GhResult)[] = [
+      () => ({ code: 1, stdout: '', stderr: 'HTTP 502' }),
+      () => ({ code: 0, stdout: '[]', stderr: '' }),
+      () => listing(KEY_B, 'completed'),
+    ];
+    for (const runList of lists) {
+      const fx = await pair(reader(ZERO), runList);
+      try {
+        expect((await fx.start(RUN_A))?.status).toBe(202);
+        const refused = await fx.start(RUN_B);
+        expect(kindOf(refused?.body)).toBe('julius_paid_run_in_flight');
+        expect(fx.claimsOf(RUN_B)).toEqual([]);
+      } finally {
+        fx.cleanup();
+      }
+    }
+  });
+
+  it('a terminal progress note, or a terminal claim state, settles A without any GitHub read', async () => {
+    const noList = (): GhResult => { throw new Error('no run list expected'); };
+    const fx = await pair(reader(ZERO), noList);
+    try {
+      expect((await fx.start(RUN_A))?.status).toBe(202);
+      const journal = JSON.parse(readFileSync(fx.journalPath(), 'utf8')) as { progress: unknown[] };
+      journal.progress = [...journal.progress, { serverRunId: RUN_A, state: 'failed', cause: null, updatedAt: WHEN }];
+      writeFileSync(fx.journalPath(), `${JSON.stringify(journal)}\n`);
+      expect((await fx.start(RUN_B))?.status).toBe(202);
+    } finally {
+      fx.cleanup();
+    }
+    const failed = await pair(reader(ZERO), noList);
+    try {
+      const real = failed.gh.spawn.run.bind(failed.gh.spawn);
+      let first = true;
+      failed.gh.spawn.run = (args) => {
+        if (args[0] === 'workflow' && first) {
+          first = false;
+          return { code: 1, stdout: '', stderr: 'boom' };
+        }
+        return real(args);
+      };
+      expect(kindOf((await failed.start(RUN_A))?.body)).toBe('dispatch_failed');
+      expect((await failed.start(RUN_B))?.status).toBe(202);
+    } finally {
+      failed.cleanup();
+    }
+  });
+
+  it('inFlightPeers: the same mission only, other admissions only, dispatching or dispatched only', async () => {
+    const fx = await pair(reader(ZERO), () => listing(KEY_A, 'in_progress'));
+    try {
+      const document = () => readAdmissionDocument(fx.storePath);
+      const rowOf = (run: string) => {
+        const row = document().admissions.find((entry) => entry.runId === run);
+        if (row === undefined) throw new Error('missing row');
+        return row;
+      };
+      expect(inFlightPeers(document(), rowOf(RUN_B))).toEqual([]);
+      expect((await fx.start(RUN_A))?.status).toBe(202);
+      expect(inFlightPeers(document(), rowOf(RUN_B)).map((row) => row.runId)).toEqual([RUN_A]);
+      expect(inFlightPeers(document(), rowOf(RUN_A))).toEqual([]);
+      expect(inFlightPeers(document(), { ...rowOf(RUN_B), missionId: 'julius-other-1' })).toEqual([]);
+    } finally {
+      fx.cleanup();
+    }
   });
 });
