@@ -952,6 +952,28 @@ describe('the in-flight guard: one paid run of a mission at a time', () => {
     }
   });
 
+  it('D3 (c): in flight under start key K, the other admission then terminal, the SAME key K proceeds per the count', async () => {
+    let runStatus = 'in_progress';
+    for (const [prior, expected] of [[reader(ZERO), 202], [reader(ONE), 409]] as const) {
+      runStatus = 'in_progress';
+      const fx = await pair(prior, () => listing(KEY_A, runStatus));
+      try {
+        expect((await fx.start(RUN_A, { acknowledgeRerun: PHRASE }))?.status).toBe(202);
+        const refused = await fx.start(RUN_B);
+        expect(kindOf(refused?.body)).toBe('julius_paid_run_in_flight');
+        const journal = JSON.parse(readFileSync(fx.journalPath(), 'utf8')) as { progress: unknown[] };
+        journal.progress = [...journal.progress, { serverRunId: RUN_A, state: 'failed', cause: null, updatedAt: WHEN }];
+        writeFileSync(fx.journalPath(), `${JSON.stringify(journal)}\n`);
+        const retried = await fx.start(RUN_B);
+        expect(retried?.status, JSON.stringify(retried?.body)).toBe(expected);
+        if (expected === 409) expect(kindOf(retried?.body)).toBe('julius_rerun_consent_required');
+        expect(workflowRuns(fx.gh.calls)).toHaveLength(expected === 202 ? 2 : 1);
+      } finally {
+        fx.cleanup();
+      }
+    }
+  });
+
   it('inFlightPeers: the same mission only, other admissions only, dispatching or dispatched only', async () => {
     const fx = await pair(reader(ZERO), () => listing(KEY_A, 'in_progress'));
     try {
@@ -1056,6 +1078,45 @@ describe('REVIEW findings on fd7d438d', () => {
         if (value === undefined) delete process.env[name];
         else process.env[name] = value;
       }
+    }
+  });
+});
+
+describe('REVIEW D3: a refusal is never remembered under the start key', () => {
+  it('(a) 409 consent required, then the SAME x-relay-idempotency-key with the phrase: exactly one gh workflow run, with the flag, one reservation', async () => {
+    const fx = await admitted(RUN_A, reader(ONE));
+    try {
+      const refused = await fx.start({}, { idempotencyKey: START_KEY });
+      expect(kindOf(refused?.body)).toBe('julius_rerun_consent_required');
+      const accepted = await fx.start({ acknowledgeRerun: PHRASE }, { idempotencyKey: START_KEY });
+      expect(accepted?.status).toBe(202);
+      const runs = workflowRuns(fx.gh.calls);
+      expect(runs).toHaveLength(1);
+      expect(ackFlags(runs[0] ?? [])).toEqual([['-f', 'acknowledge_rerun=RERUN PAID MISSION']]);
+      expect(fx.journal().filter((event) => event.state === 'dispatching')).toHaveLength(1);
+    } finally {
+      fx.cleanup();
+    }
+  });
+
+  it('(b) 409 UNKNOWN, the reader recovers to 1, then the SAME key with the phrase: exactly one dispatch', async () => {
+    let attempted: PriorAttemptRead = UNKNOWN;
+    const recovering: PriorAttemptReader = {
+      read: () => Promise.resolve(attempted),
+      readCompleted: () => Promise.resolve(ZERO),
+    };
+    const fx = await admitted(RUN_A, recovering);
+    try {
+      const refused = await fx.start({ acknowledgeRerun: PHRASE }, { idempotencyKey: START_KEY });
+      expect(kindOf(refused?.body)).toBe('julius_prior_attempts_unknown');
+      expect(fx.journal()).toEqual([]);
+      attempted = ONE;
+      const accepted = await fx.start({ acknowledgeRerun: PHRASE }, { idempotencyKey: START_KEY });
+      expect(accepted?.status).toBe(202);
+      expect(workflowRuns(fx.gh.calls)).toHaveLength(1);
+      expect(fx.journal().filter((event) => event.state === 'dispatching')).toHaveLength(1);
+    } finally {
+      fx.cleanup();
     }
   });
 });
