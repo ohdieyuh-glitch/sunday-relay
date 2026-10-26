@@ -26,6 +26,8 @@ import {
   priorCount,
   recordedPaidAttempts,
   rerunConsentBinds,
+  runsForDispatchKey,
+  unsettledPeer,
   workflowDispatchArgs,
   type GhResult,
   type GhSpawner,
@@ -1133,6 +1135,111 @@ describe('REVIEW D3: a refusal is never remembered under the start key', () => {
       expect(accepted?.status).toBe(202);
       expect(workflowRuns(fx.gh.calls)).toHaveLength(1);
       expect(fx.journal().filter((event) => event.state === 'dispatching')).toHaveLength(1);
+    } finally {
+      fx.cleanup();
+    }
+  });
+});
+
+describe('TODAY\'S REAL PEERS are settled: the founder\'s next J1 Start is not refused as in flight', () => {
+  /**
+   * The live bridge's admission store and journal, copied read-only on
+   * 2026-10-26 (four J1 admissions, each `dispatched`, the last
+   * wlj_0c96b0f9 to workflow run 40299692757), and the real `gh run list`
+   * answer for them, all four runs `completed`. Ids and hashes only.
+   */
+  const REAL = JSON.parse(readFileSync(join(__dirname, 'fixtures/realrun-j1-store-20261026.json'), 'utf8')) as {
+    readonly store: { readonly rows: readonly { readonly runId: string; readonly keyHash: string; readonly missionId: string }[] };
+    readonly journal: { readonly claims: readonly { readonly wonderlandRunId: string; readonly state: string; readonly workflowRunId: string | null }[] };
+    readonly runList: readonly unknown[];
+  };
+  const REAL_PEERS = [
+    'wlj_23f50bac-67d8-497c-b31f-1db02311ae93',
+    'wlj_1ed344d1-16f4-48fa-baa2-9f7cc8602e36',
+    'wlj_309e375d-c2c6-4a63-8590-b417c07dd433',
+    'wlj_0c96b0f9-2879-4426-b464-fb132ae658fa',
+  ];
+  const NEXT = 'wlj_5d6e7f80-91a2-4b3c-8d4e-5f60718293a4';
+
+  async function realStore(prior: PriorAttemptReader, runList: () => GhResult) {
+    const dir = mkdtempSync(join(tmpdir(), 'wlj-realpeer-'));
+    const storePath = join(dir, 'admission.json');
+    writeFileSync(storePath, `${JSON.stringify(REAL.store)}\n`);
+    writeFileSync(`${storePath}.operator.json`, `${JSON.stringify((REAL as unknown as { journal: unknown }).journal)}\n`);
+    const ports = service(storePath, { JULIUS_J1_MAX_RUNS_PER_MISSION: '10', JULIUS_J1_DAILY_CAP: '10' });
+    const created = await handleWonderlandAdmissionRoute(base(NEXT, {
+      path: WONDERLAND_ADMISSION_PATH,
+      url: `${WONDERLAND_ADMISSION_PATH}?projectId=${PROJECT}`,
+      idempotencyKey: '33333333-4444-4555-8666-777777777777',
+      rawBody: JSON.stringify({ runId: NEXT, clientTriggerId: 'trigger_09', clientLogSha256: 'ab'.repeat(32), clientUiActionUtc: WHEN }),
+    }), ports);
+    expect(created?.status, JSON.stringify(created?.body)).toBe(202);
+    const gh = fakeGh({ runList });
+    const tool = createOperatorClaimTool(openAdmissionFile(storePath), gh.spawn, { nowIso: () => WHEN }, prior);
+    const start = (extra: Record<string, unknown> = {}) => handleWonderlandMissionStartRoute(startRequest(NEXT, extra), ports, { claimTool: () => tool });
+    return { storePath, gh, start, cleanup() { ports.close(); rmSync(dir, { recursive: true, force: true }); } };
+  }
+  const realList = (): GhResult => ({ code: 0, stdout: JSON.stringify(REAL.runList), stderr: '' });
+
+  it('the fixture is the real record: four J1 admissions, each dispatched to a run the real list shows completed', () => {
+    expect(REAL.store.rows.map((row) => row.runId)).toEqual(REAL_PEERS);
+    expect(new Set(REAL.store.rows.map((row) => row.missionId))).toEqual(new Set([MISSION]));
+    const dispatched = REAL.journal.claims.filter((claim) => claim.state === 'dispatched');
+    expect(dispatched.map((claim) => [claim.wonderlandRunId, claim.workflowRunId])).toEqual([
+      [REAL_PEERS[0], '40242149156'], [REAL_PEERS[1], '40258482240'], [REAL_PEERS[2], '40278849833'], [REAL_PEERS[3], '40299692757'],
+    ]);
+    for (const row of REAL.store.rows) {
+      const runs = runsForDispatchKey(realList(), row.keyHash);
+      expect(runs?.length, row.runId).toBe(1);
+      expect(runs?.[0]?.status, row.runId).toBe('completed');
+    }
+  });
+
+  it('the journal names all four as dispatched peers, and the real run list settles every one', async () => {
+    const fx = await realStore(reader(ONE), realList);
+    try {
+      const document = readAdmissionDocument(fx.storePath);
+      const next = document.admissions.find((row) => row.runId === NEXT);
+      if (next === undefined) throw new Error('missing the new admission');
+      const peers = inFlightPeers(document, next);
+      expect(peers.map((row) => row.runId)).toEqual(REAL_PEERS);
+      const listing = fakeGh({ runList: realList }).spawn;
+      expect(unsettledPeer(listing, REPO, peers)).toBeNull();
+      for (const peer of peers) expect(unsettledPeer(listing, REPO, [peer]), peer.runId).toBeNull();
+    } finally {
+      fx.cleanup();
+    }
+  });
+
+  it('so the next J1 Start reaches the consent decision: 409 consent required without the phrase, one dispatch with the flag with it', async () => {
+    const fx = await realStore(reader(ONE), realList);
+    try {
+      const refused = await fx.start();
+      expect(refused?.status).toBe(409);
+      expect(kindOf(refused?.body)).toBe('julius_rerun_consent_required');
+      expect(refused?.body).toMatchObject({ priorAttempted: 1, priorCompleted: 0 });
+      const accepted = await fx.start({ acknowledgeRerun: PHRASE });
+      expect(accepted?.status, JSON.stringify(accepted?.body)).toBe(202);
+      const runs = workflowRuns(fx.gh.calls);
+      expect(runs).toHaveLength(1);
+      expect(ackFlags(runs[0] ?? [])).toEqual([['-f', 'acknowledge_rerun=RERUN PAID MISSION']]);
+    } finally {
+      fx.cleanup();
+    }
+  });
+
+  it('the same store with 40299692757 still running is refused as in flight, naming wlj_0c96b0f9', async () => {
+    const running = (): GhResult => ({
+      code: 0,
+      stdout: JSON.stringify(REAL.runList.map((row) => ((row as { databaseId: number }).databaseId === 40299692757 ? { ...(row as object), status: 'in_progress', conclusion: '' } : row))),
+      stderr: '',
+    });
+    const fx = await realStore(reader(ONE), running);
+    try {
+      const refused = await fx.start({ acknowledgeRerun: PHRASE });
+      expect(kindOf(refused?.body)).toBe('julius_paid_run_in_flight');
+      expect(refused?.body).toMatchObject({ inFlightWljRunId: REAL_PEERS[3], retry: true });
+      expect(workflowRuns(fx.gh.calls)).toEqual([]);
     } finally {
       fx.cleanup();
     }
