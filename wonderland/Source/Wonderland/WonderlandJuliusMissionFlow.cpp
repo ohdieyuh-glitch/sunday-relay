@@ -1903,6 +1903,16 @@ namespace WonderlandJuliusMissionFlow
 		return Out;
 	}
 
+	bool TaskRowMayPerform(bool bBoundToJuliusRun, bool bJuliusConfirmedThisSession)
+	{
+		return !bBoundToJuliusRun || bJuliusConfirmedThisSession; // FLOW_TASK_RESTORED_ROW_IS_INERT
+	}
+
+	bool AdoptingRunResetsToQueued(bool bRowHadRun, std::string_view RowRunId, std::string_view NewRunId)
+	{
+		return !bRowHadRun || RowRunId != NewRunId; // FLOW_TASK_NEW_RUN_STARTS_QUEUED
+	}
+
 	bool ConnectionUncertain(bool bStale, bool bHasSession, bool bEverRead, std::uint64_t MsSinceLastGoodRead)
 	{
 		return bStale || !bHasSession || (bEverRead && MsSinceLastGoodRead > LiveNoReadAfterMs); // FLOW_CONTRACT_UNCERTAIN_SUSPENDS

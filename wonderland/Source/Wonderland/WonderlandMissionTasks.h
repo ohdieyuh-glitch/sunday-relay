@@ -266,6 +266,13 @@ struct WONDERLAND_API FWonderlandMissionTask
 	 */
 	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Tasks")
 	bool bInWorkspace = true;
+
+	/**
+	 * JULIUS CONFIRMED THIS ROW'S STATE IN THIS SESSION (REVIEW 2026-10-26). Deliberately NOT a UPROPERTY, so it is never
+	 * saved: a row restored from disk starts unconfirmed and cannot drive the Dog until a scheduler writes its state. Source
+	 * cannot say this -- following a run sets Source to Julius before any state has been confirmed.
+	 */
+	bool bStateConfirmedThisSession = false;
 };
 
 /**
@@ -543,26 +550,14 @@ public:
 	 * he last clicked -- and a draft or a queued row must never take the performance away from a contract
 	 * mid-verification. Returns Draft when there is nothing to perform, which maps to no act at all.
 	 */
-	EWonderlandTaskState GetPerformingState() const
-	{
-		for (const FWonderlandMissionTask& Row : Tasks)
-		{
-			switch (Row.State)
-			{
-			case EWonderlandTaskState::Preparation:
-			case EWonderlandTaskState::Research:
-			case EWonderlandTaskState::Implementation:
-			case EWonderlandTaskState::Verification:
-			case EWonderlandTaskState::Review:
-			case EWonderlandTaskState::Repair:
-				return Row.State;
-			default:
-				break;
-			}
-		}
-		const FWonderlandMissionTask* Chosen = Find(Selected);
-		return Chosen != nullptr ? Chosen->State : EWonderlandTaskState::Draft;
-	}
+	EWonderlandTaskState GetPerformingState() const;
+
+	/**
+	 * May this row drive the Dog's performance? A row bound to a Julius run performs only once Julius confirmed its state THIS
+	 * session (bStateConfirmedThisSession; REVIEW 2026-10-26): a contract restored from the save is remembered, never
+	 * performed, until a scheduler speaks.
+	 */
+	static bool RowMayPerform(const FWonderlandMissionTask& Row);
 
 
 	/* ------------------------------------------------------- backend truth */

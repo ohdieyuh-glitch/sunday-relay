@@ -888,6 +888,15 @@ const ABSENT_PHASE = {
 			Expect(Research.Advance(R).at(0).Type == "review.started", "REVIEW F1: a review with a null (unreported) cycle is INDEPENDENT REVIEWER, never VERIFYING");
 		}
 		{
+			// REVIEW 2026-10-26 LINE 1: no presentation before confirmed execution, for the Dog's task-state fallback.
+			Expect(!TaskRowMayPerform(true, false), "a restored/unconfirmed row bound to a Julius run never performs");
+			Expect(TaskRowMayPerform(true, true), "a row Julius confirmed this session performs");
+			Expect(TaskRowMayPerform(false, false), "a local row that follows no run is unaffected");
+			Expect(AdoptingRunResetsToQueued(true, "wlj_a", "wlj_b"), "adopting a DIFFERENT run resets the row to queued");
+			Expect(!AdoptingRunResetsToQueued(true, "wlj_a", "wlj_a"), "the same run (restore) keeps its state");
+			Expect(AdoptingRunResetsToQueued(false, "", "wlj_a"), "a row with no run yet starts queued");
+		}
+		{
 			// REVIEW 2026-10-26: a reconnect taken MID-repair-round never replays past beats and never shows a late REPAIR
 			// REQUIRED: the fresh cursor shows the activation and the round's current beat only.
 			FContractCursor Joined;

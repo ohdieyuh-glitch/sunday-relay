@@ -1846,6 +1846,7 @@ namespace
 	{
 		for (const FWonderlandMissionTask& Row : Tasks.GetTasks())
 		{
+			if (!UWonderlandMissionTaskSubsystem::RowMayPerform(Row)) { continue; } // GetPerformingState's gate, kept identical
 			switch (Row.State)
 			{
 			case EWonderlandTaskState::Preparation:
@@ -1860,7 +1861,8 @@ namespace
 			}
 		}
 		const FWonderlandMissionTask* Chosen = Tasks.GetSelectedTask();
-		return Chosen != nullptr && WonderlandDogActForTaskState(Chosen->State) != EWonderlandDogAct::None ? Chosen : nullptr;
+		return Chosen != nullptr && UWonderlandMissionTaskSubsystem::RowMayPerform(*Chosen)
+			&& WonderlandDogActForTaskState(Chosen->State) != EWonderlandDogAct::None ? Chosen : nullptr;
 	}
 }
 

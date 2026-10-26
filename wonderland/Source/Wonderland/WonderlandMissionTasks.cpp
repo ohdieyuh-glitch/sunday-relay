@@ -11,6 +11,7 @@
 #include "WonderlandBeta.h"
 #include "WonderlandCard.h"
 #include "WonderlandMissionHandoff.h"
+#include "WonderlandJuliusMissionFlow.h"
 
 namespace
 {
@@ -476,6 +477,8 @@ void UWonderlandMissionTaskSubsystem::Touch(FWonderlandMissionTask& Task, EWonde
 {
 	Task.State = To;
 	Task.Source = From;
+	// Only a state Julius itself wrote counts as confirmed; a local touch never makes a run-bound row performable.
+	Task.bStateConfirmedThisSession = From == EWonderlandTaskSource::Julius;
 	// THE LIFECYCLE IS APPENDED, NEVER REWRITTEN. A task that went to REPAIR and back is a different thing from one
 	// that never left IMPLEMENTATION, and only the record can tell them apart afterwards.
 	Task.Lifecycle.Add(FString::Printf(TEXT("%s %s"),
@@ -955,6 +958,34 @@ int32 UWonderlandMissionTaskSubsystem::GetRunningCount() const
 	return Running;
 }
 
+bool UWonderlandMissionTaskSubsystem::RowMayPerform(const FWonderlandMissionTask& Row)
+{
+	const bool bBoundToRun = Row.RunId.bKnown && !Row.RunId.Value.IsEmpty();
+	return WonderlandJuliusMissionFlow::TaskRowMayPerform(bBoundToRun, Row.bStateConfirmedThisSession);
+}
+
+EWonderlandTaskState UWonderlandMissionTaskSubsystem::GetPerformingState() const
+{
+	for (const FWonderlandMissionTask& Row : Tasks)
+	{
+		if (!RowMayPerform(Row)) { continue; } // a restored, unconfirmed Julius row never performs
+		switch (Row.State)
+		{
+		case EWonderlandTaskState::Preparation:
+		case EWonderlandTaskState::Research:
+		case EWonderlandTaskState::Implementation:
+		case EWonderlandTaskState::Verification:
+		case EWonderlandTaskState::Review:
+		case EWonderlandTaskState::Repair:
+			return Row.State;
+		default:
+			break;
+		}
+	}
+	const FWonderlandMissionTask* Chosen = Find(Selected);
+	return Chosen != nullptr && RowMayPerform(*Chosen) ? Chosen->State : EWonderlandTaskState::Draft;
+}
+
 FGuid UWonderlandMissionTaskSubsystem::FollowJuliusRun(const FString& MissionId, const FWonderlandText& RunId)
 {
 	if (MissionId.IsEmpty())
@@ -995,6 +1026,13 @@ FGuid UWonderlandMissionTaskSubsystem::FollowJuliusRun(const FString& MissionId,
 		Task->JuliusState = FWonderlandText();
 		Task->EvidenceCount = FWonderlandTally();
 		Task->TokensUsed = FWonderlandTally();
+	}
+	// A NEW RUN STARTS QUEUED (REVIEW 2026-10-26): adopting a different run than the row held must not carry the old run's
+	// working state into the broadcast below (the Dog would perform it for a frame). The same run keeps its state.
+	if (RunId.bKnown && WonderlandJuliusMissionFlow::AdoptingRunResetsToQueued(
+		Task->RunId.bKnown, TCHAR_TO_UTF8(*Task->RunId.Value), TCHAR_TO_UTF8(*RunId.Value)))
+	{
+		Touch(*Task, EWonderlandTaskState::Queued, EWonderlandTaskSource::Julius);
 	}
 	if (RunId.bKnown)
 	{

@@ -594,6 +594,16 @@ MUTATIONS = [
         'View.TaskType == "repair_audit" || View.RepairCycle != 0)) // FLOW_CONTRACT_VERIFYING_NEEDS_A_REPORTED_CYCLE',
     ),
     (
+        "task_restored_row_performs",
+        "return !bBoundToJuliusRun || bJuliusConfirmedThisSession; // FLOW_TASK_RESTORED_ROW_IS_INERT",
+        "return true; // FLOW_TASK_RESTORED_ROW_IS_INERT",
+    ),
+    (
+        "task_new_run_keeps_old_state",
+        "return !bRowHadRun || RowRunId != NewRunId; // FLOW_TASK_NEW_RUN_STARTS_QUEUED",
+        "return !bRowHadRun; // FLOW_TASK_NEW_RUN_STARTS_QUEUED",
+    ),
+    (
         "contract_research_shown_as_architect",
         'else if (View.TaskType == "research") { Out.push_back(FContractBeat{"research.requested", View.Role, Round}); } // FLOW_CONTRACT_RESEARCH_ONLY_WHEN_REPORTED',
         'else if (View.TaskType == "research") { Out.push_back(FContractBeat{"architect.started", View.Role, Round}); } // FLOW_CONTRACT_RESEARCH_ONLY_WHEN_REPORTED',

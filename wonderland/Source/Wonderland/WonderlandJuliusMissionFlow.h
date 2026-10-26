@@ -683,6 +683,16 @@ namespace WonderlandJuliusMissionFlow
 	 */
 	bool ConnectionUncertain(bool bStale, bool bHasSession, bool bEverRead, std::uint64_t MsSinceLastGoodRead);
 
+	/**
+	 * NO PRESENTATION BEFORE CONFIRMED EXECUTION, for the Dog's task-state fallback (REVIEW 2026-10-26, LINE 1): a task row
+	 * bound to a Julius run performs only once Julius confirmed it THIS session. A row restored from the save (or otherwise
+	 * unconfirmed) stays inert; a local row that follows no run is not affected.
+	 */
+	bool TaskRowMayPerform(bool bBoundToJuliusRun, bool bJuliusConfirmedThisSession);
+
+	/** Following a run: adopting a DIFFERENT run than the row held starts the row at queued (a new run starts queued). */
+	bool AdoptingRunResetsToQueued(bool bRowHadRun, std::string_view RowRunId, std::string_view NewRunId);
+
 	/** The contract task state word for a view ("queued", "preparation", "implementation", "review", "repair",
 	 *  "verification", "completed", "failed", "cancelled") or empty for none. */
 	const char* ContractTaskStateFor(const FExecutionView& View);
