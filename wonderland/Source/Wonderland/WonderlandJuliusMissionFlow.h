@@ -671,6 +671,8 @@ namespace WonderlandJuliusMissionFlow
 		bool bReleased = false;
 		/** A repair round is open: the first repair task after other work showed REPAIR REQUIRED; non-repair work closes it. */
 		bool bInRepairRound = false;
+		/** This cursor has seen a task sample (so a round opening is a transition it actually observed). */
+		bool bSawTask = false;
 		std::string LastBeatKey;
 	};
 

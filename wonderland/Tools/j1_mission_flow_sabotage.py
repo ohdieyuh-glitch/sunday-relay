@@ -584,6 +584,11 @@ MUTATIONS = [
         'Out.push_back(FContractBeat{"repair.started", View.Role, Round}); // FLOW_CONTRACT_REPAIR_REQUIRED_ON_ROUND_START',
     ),
     (
+        "contract_reconnect_shows_late_repair_required",
+        "const bool bRoundOpensHere = bRepair && !bInRepairRound && bSawTask;",
+        "const bool bRoundOpensHere = bRepair && !bInRepairRound;",
+    ),
+    (
         "contract_research_shown_as_architect",
         'else if (View.TaskType == "research") { Out.push_back(FContractBeat{"research.requested", View.Role, Round}); } // FLOW_CONTRACT_RESEARCH_ONLY_WHEN_REPORTED',
         'else if (View.TaskType == "research") { Out.push_back(FContractBeat{"architect.started", View.Role, Round}); } // FLOW_CONTRACT_RESEARCH_ONLY_WHEN_REPORTED',

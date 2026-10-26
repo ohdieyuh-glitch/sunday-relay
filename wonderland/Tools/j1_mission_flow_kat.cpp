@@ -883,6 +883,18 @@ const ABSENT_PHASE = {
 			R.Role = "reviewer"; R.TaskType = "review"; R.RepairCycle = 0;
 			Expect(Research.Advance(R).at(0).Type == "review.started", "a first review (no repairs) is INDEPENDENT REVIEWER, not VERIFYING");
 		}
+		{
+			// REVIEW 2026-10-26: a reconnect taken MID-repair-round never replays past beats and never shows a late REPAIR
+			// REQUIRED: the fresh cursor shows the activation and the round's current beat only.
+			FContractCursor Joined;
+			FExecutionView J; J.Phase = EExecutionPhase::Executing; J.Role = "coder"; J.TaskType = "repair_build"; J.RepairCycle = 3;
+			const std::vector<FContractBeat> First = Joined.Advance(J);
+			Expect(First.size() == 2 && First[0].Type == "run.started" && First[1].Type == "repair.started", "mid-round reconnect: activation + REPAIRING, no burst, no REPAIR REQUIRED");
+			J.Role = "reviewer"; J.TaskType = "repair_audit"; J.RepairCycle = -1;
+			Expect(Joined.Advance(J).at(0).Type == "repair.completed", "then the audit: VERIFYING");
+			J.Role = "coder"; J.TaskType = "repair_build"; J.RepairCycle = -1;
+			Expect(Joined.Advance(J).at(0).Type == "repair.started", "still the same round: REPAIRING, not a new REPAIR REQUIRED");
+		}
 		FExecutionView Stale = Seq; Stale.bStale = true; Stale.Phase = EExecutionPhase::Completed;
 		Expect(Cursor.Advance(Stale).empty() && !Cursor.Ended(), "stale moves nothing");
 		Seq.Phase = EExecutionPhase::Completed;

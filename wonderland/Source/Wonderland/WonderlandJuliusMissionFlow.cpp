@@ -1869,11 +1869,15 @@ namespace WonderlandJuliusMissionFlow
 				// publisher samples the one ACTIVE task (JUDEV, julius-live-progress.mjs); each beat below is keyed to a task
 				// type Julius actually publishes, never to timing. WAITING / CHECKPOINT has no live signal in J1 (autonomous,
 				// no approvals), so it is never emitted here.
-				if (bRepair && !bInRepairRound)
+				// A cursor that joins mid-round (a reconnect) never SAW the round open: it shows the round's current beat, not a
+				// late REPAIR REQUIRED, and replays nothing that came before.
+				const bool bRoundOpensHere = bRepair && !bInRepairRound && bSawTask;
+				if (bRepair) { bInRepairRound = true; }
+				bSawTask = true;
+				if (bRoundOpensHere)
 				{
 					// The reviewer's decision is not published live; the first repair task after other work IS the proof the
 					// work was sent back. REPAIR REQUIRED is shown on that sample, once per round.
-					bInRepairRound = true;
 					Out.push_back(FContractBeat{"review.repair_required", View.Role, Round}); // FLOW_CONTRACT_REPAIR_REQUIRED_ON_ROUND_START
 				}
 				else if (View.TaskType == "research") { Out.push_back(FContractBeat{"research.requested", View.Role, Round}); } // FLOW_CONTRACT_RESEARCH_ONLY_WHEN_REPORTED
