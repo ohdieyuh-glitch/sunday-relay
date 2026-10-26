@@ -315,7 +315,7 @@ describe('the requested model, and only it, passes through', () => {
     expect(run.result.failure).toBeNull();
   });
 
-  it('an ORDINARY coder failure keeps the ordinary ending: TASK_FAILED, and /result reads the code', async () => {
+  it('an ORDINARY coder failure keeps the ordinary ending: TASK_FAILED, and /result reads its unknown outcome', async () => {
     const run = await runMission({ sessions: [MAX_TURNS] });
     expect(run.coderSessions).toBe(1);
     const failed = run.events.filter((event) => event.type === 'task.failed' && event.taskId === 'build-1');
@@ -323,10 +323,13 @@ describe('the requested model, and only it, passes through', () => {
     const ordinaryClass = failed[0]!.facts.failureClass;
     expect(typeof ordinaryClass).toBe('string');
     expect(ordinaryClass).not.toMatch(/^coder_served_model_/u);
-    expect('reasonCode' in failed[0]!.facts, 'only a run-ending class becomes the row\'s reason').toBe(false);
+    // Not a run-ending class, so not its reason. The session ran after the
+    // handoff and ended on a class that proves no pre-processing rejection, so
+    // the row's reason is the unknown outcome (D2), and the run ends the ordinary way.
+    expect(failed[0]!.facts.reasonCode, 'only the unknown-outcome mark, never a run-ending class').toBe('HANDED_FAILURE_OUTCOME_UNKNOWN');
     expect(run.run.state).toBe('FAILED');
     expect(run.runFailed[0]!.facts.reasonCode).toBe('TASK_FAILED');
-    expect(run.result.failure).toEqual({ reasonCode: failed[0]!.facts.code, failureClass: ordinaryClass });
+    expect(run.result.failure).toEqual({ reasonCode: 'HANDED_FAILURE_OUTCOME_UNKNOWN', failureClass: ordinaryClass });
   });
 });
 

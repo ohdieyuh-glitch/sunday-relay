@@ -1,12 +1,12 @@
 import { juliusMissionSpanId, juliusMissionTraceId, juliusMissionTraceparent } from '../../../../scripts/julius-mission-trace.mjs';
 import type { JuliusCardPolicy } from './julius-policy';
-import { flattenDiagnostics, JuliusDispatchError, JuliusProviderRouter, safeReviewDiagnostics, type JuliusDispatchAllocation, type JuliusDispatchReads, type JuliusDispatchWorkspace, type JuliusProviderResult } from './julius-router';
+import { flattenDiagnostics, JuliusDispatchError, JuliusProviderRouter, type JuliusErrorCode, safeReviewDiagnostics, type JuliusDispatchAllocation, type JuliusDispatchReads, type JuliusDispatchWorkspace, type JuliusProviderResult } from './julius-router';
 import type { JuliusEvidence, JuliusTask, JuliusWorker, JuliusWorkerRole } from './julius-runtime';
 import type { JuliusContractReviewCharge } from './julius-task-contract';
 import { isJuliusContentDigest, juliusDurableArtifactRef } from './julius-artifact-reference';
 import { juliusEvidenceAuthority, juliusMintedEvidenceId } from './julius-worker-authority';
 import { juliusStoreErrorClass, juliusStoreErrorIsTransient, type JuliusStoreErrorClass } from './julius-store-failure';
-import { juliusRunHaltingFailureClass } from './julius-coding-agent';
+import { juliusFailureIsContentRefusal, juliusRunHaltingFailureClass } from './julius-coding-agent';
 
 /** The cost a provider reported on its own result, or null when it reported none. */
 const reportedUsdMicros=(result:JuliusProviderResult|null):number|null=>{
@@ -353,9 +353,10 @@ export type JuliusExecutionOutcome={readonly status:'COMPLETED';readonly workerI
   */
  readonly implementation?:unknown;
  /**
-  * WHY A RETRYABLE ERROR ENDED THE TASK INSTEAD. Present only on a FAILED
-  * outcome the coordinator refused to retry because the provider may already
-  * have processed, answered and charged it (see {@link juliusHandedOutcomeUnknown}).
+  * WHY THE TASK ENDED ON AN UNKNOWN OUTCOME. Present only on a FAILED outcome
+  * after the handoff whose provider may already have processed, answered and
+  * charged it: a retryable error the coordinator refused to retry, or a
+  * non-retryable one whose outcome is not known (see {@link juliusHandedOutcomeUnknown}).
   * The pipeline reads it so it does not reroute the same work to another
   * worker either: a reroute is a second paid dispatch as surely as a retry.
   */
@@ -396,17 +397,52 @@ export type JuliusExecutionOutcome={readonly status:'COMPLETED';readonly workerI
  *    attests): HANDED_FAILURE_OUTCOME_UNKNOWN. A dropped connection or a server
  *    error alone cannot establish that nothing ran.
  *
- * Non-retryable failures are untouched: they were never retried. Everything
- * before the handoff is untouched: nothing was sent, so a timeout there is
- * retried as before.
+ * A NON-RETRYABLE FAILURE AFTER THE HANDOFF IS MARKED TOO (D2). It was never
+ * retried and still is not, but its ending used to carry no cause, so `/result`
+ * showed a generic failure for a request the provider may well have processed
+ * and charged (an UNCLASSIFIED free-text 429 out of a started session, a
+ * PROCESS_EXIT, a result malformed after send, a cancellation mid-flight). It
+ * now ends HANDED_FAILURE_OUTCOME_UNKNOWN unless its outcome is KNOWN:
+ *  - its code is on {@link JULIUS_HANDED_KNOWN_OUTCOME_CODES}: the provider
+ *    attested a rejection before processing (AUTH_CONFIGURATION, a 401/403;
+ *    INVALID_REQUEST, a 400 with an error body), or Julius refused it
+ *    (POLICY_DENIED, BUDGET_DENIED);
+ *  - its class is a content refusal (`juliusFailureIsContentRefusal`): the
+ *    provider ANSWERED, with a refusal, which is a known outcome;
+ *  - its class ends the run (`juliusRunHaltingFailureClass`): a peer answered
+ *    by a model it did not ask for is a known outcome, and the row already
+ *    carries that class as its reason;
+ *  - its boundary attests `runtimeStarted: false`: the adapter knows it sent
+ *    nothing (a cancel or a sub-cent allocation before launch, its own store
+ *    failing before the session). The hold release trusts the same fact.
+ * Anything else is OUTCOME UNKNOWN. Only the reason is added: retryability,
+ * the hold and everything before the handoff are unchanged.
+ *
+ * Everything before the handoff is untouched: nothing was sent, so a timeout
+ * there is retried as before.
  */
 export const JULIUS_HANDED_TIMEOUT_OUTCOME_UNKNOWN='HANDED_TIMEOUT_OUTCOME_UNKNOWN';
 export const JULIUS_HANDED_FAILURE_OUTCOME_UNKNOWN='HANDED_FAILURE_OUTCOME_UNKNOWN';
 export type JuliusHandedOutcomeUnknownCause=typeof JULIUS_HANDED_TIMEOUT_OUTCOME_UNKNOWN|typeof JULIUS_HANDED_FAILURE_OUTCOME_UNKNOWN;
 /** Positive evidence that the provider processed nothing: its own 429, attested unprocessed. */
 const provenUnprocessed=(failure:JuliusDispatchError):boolean=>failure.code==='RATE_LIMIT'&&failure.diagnostics?.runtimeStarted===false;
+/**
+ * CLOSED: the codes whose non-retryable ending after the handoff is a KNOWN
+ * outcome. Each is a rejection before processing, attested by the provider
+ * (AUTH_CONFIGURATION, INVALID_REQUEST) or decided by Julius (POLICY_DENIED,
+ * BUDGET_DENIED). Every other code is OUTCOME UNKNOWN.
+ */
+export const JULIUS_HANDED_KNOWN_OUTCOME_CODES:readonly JuliusErrorCode[]=Object.freeze(['AUTH_CONFIGURATION','INVALID_REQUEST','POLICY_DENIED','BUDGET_DENIED']);
+/** A non-retryable failure whose outcome is known: see the list above. */
+const knownOutcome=(failure:JuliusDispatchError):boolean=>
+ JULIUS_HANDED_KNOWN_OUTCOME_CODES.includes(failure.code)
+ ||juliusFailureIsContentRefusal(failure.failureClass)
+ ||juliusRunHaltingFailureClass(failure.failureClass)!==null
+ ||failure.diagnostics?.runtimeStarted===false;
 export const juliusHandedOutcomeUnknown=(failure:JuliusDispatchError,handed:boolean):JuliusHandedOutcomeUnknownCause|null=>{
- if(!handed||!failure.retryable||provenUnprocessed(failure))return null;
+ if(!handed)return null;
+ if(!failure.retryable)return knownOutcome(failure)?null:JULIUS_HANDED_FAILURE_OUTCOME_UNKNOWN;
+ if(provenUnprocessed(failure))return null;
  return failure.code==='TIMEOUT'?JULIUS_HANDED_TIMEOUT_OUTCOME_UNKNOWN:JULIUS_HANDED_FAILURE_OUTCOME_UNKNOWN;
 };
 

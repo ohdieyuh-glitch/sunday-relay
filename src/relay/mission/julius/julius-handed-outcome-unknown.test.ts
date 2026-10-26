@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
-  JuliusExecutionCoordinator, JuliusProviderHealthRegistry, JuliusProviderRouter, JuliusWorkerRegistry,
+  JULIUS_HANDED_KNOWN_OUTCOME_CODES, JuliusExecutionCoordinator, JuliusProviderHealthRegistry, JuliusProviderRouter, JuliusWorkerRegistry,
   type JuliusCardPolicy, type JuliusExecutionPorts, type JuliusProviderAdapter,
 } from '.';
 import { JuliusDispatchError } from './julius-router';
@@ -145,10 +145,104 @@ describe('S3 · a typed error an adapter raises (Coding Agent taxonomy, reviewer
     expect(await h.coordinator.execute(request)).toMatchObject({ status: 'RETRY', code: 'RATE_LIMIT' });
   });
 
-  it('a non-retryable failure after the handoff keeps today\'s ending, with no OUTCOME UNKNOWN cause', async () => {
-    const result = await unit(new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'safe', 'coder_refused')).coordinator.execute(request);
+  it('a non-retryable failure after the handoff is still never retried, and now names its unknown outcome (D2)', async () => {
+    const h = unit(new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'safe', 'coder_refused'));
+    expect(await h.coordinator.execute(request)).toMatchObject({ status: 'FAILED', code: 'WORKER_EXECUTION_FAILURE', reasonCode: 'HANDED_FAILURE_OUTCOME_UNKNOWN' });
+    expect(h.calls()).toBe(1);
+    expect(h.rows.map((row) => row.type)).not.toContain('retry.scheduled');
+  });
+});
+
+/* ============ D2 · a NON-retryable failure after the handoff ============= */
+
+const failedRows = (rows: readonly Record<string, unknown>[]) => rows.filter((row) => row.type === 'task.failed');
+
+describe('D2 · a non-retryable failure after the handoff whose class proves nothing is OUTCOME UNKNOWN', () => {
+  it.each([
+    // A free-text 429 out of the Claude Code CLI (#481) is UNCLASSIFIED: nothing says the provider refused it unprocessed.
+    ['UNCLASSIFIED (a free-text 429 in a started session)', new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'safe', 'coding_agent_unclassified', { runtimeStarted: true })],
+    ['UNCLASSIFIED that attests nothing', new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'safe', 'coding_agent_unclassified')],
+    ['PROCESS_EXIT reported non-retryable', new JuliusDispatchError('PROVIDER_UNAVAILABLE', false, 'safe', 'coding_agent_process_exit')],
+    ['MALFORMED_OUTPUT after send', new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'safe', 'coding_agent_malformed_output', { runtimeStarted: true })],
+    ['PARTIAL_RESPONSE', new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'safe', 'coding_agent_partial_response')],
+    ['CREDIT_UNAVAILABLE that attests nothing', new JuliusDispatchError('PROVIDER_UNAVAILABLE', false, 'safe', 'coding_agent_credit_unavailable')],
+    ['a cancellation mid-flight', new JuliusDispatchError('CANCELLED', false, 'safe', 'operator_cancelled', { runtimeStarted: true })],
+    ['Julius\'s own store failing during the dispatch', new JuliusDispatchError('PERSISTENCE_FAILURE', false, 'safe', 'persist_during_dispatch', { runtimeStarted: true })],
+  ] as const)('%s: exactly 1 provider call, task.failed HANDED_FAILURE_OUTCOME_UNKNOWN, retryability unchanged', async (_name, error) => {
+    const h = unit(error);
+    expect(await h.coordinator.execute(request)).toMatchObject({ status: 'FAILED', code: error.code, reasonCode: 'HANDED_FAILURE_OUTCOME_UNKNOWN' });
+    expect(h.calls()).toBe(1);
+    expect(h.rows.map((row) => row.type)).not.toContain('retry.scheduled');
+    expect(failedRows(h.rows)).toEqual([expect.objectContaining({ code: error.code, errorRetryable: false, reasonCode: 'HANDED_FAILURE_OUTCOME_UNKNOWN' })]);
+    expect(h.released, 'the hold already closed unknown: the mark changes no money').toEqual(UNKNOWN_SPEND);
+  });
+
+  it('a worker that ANSWERS with a failed result after send is OUTCOME UNKNOWN too: 1 call', async () => {
+    let calls = 0;
+    const adapter: JuliusProviderAdapter = {
+      adapterId: 'adapter',
+      async dispatch() { calls += 1; return { workerId: 'worker', providerId: 'provider', status: 'FAILED', safeSummary: 'x', evidence: [], usage: null }; },
+    };
+    const registry = new JuliusWorkerRegistry();
+    registry.register({
+      workerId: 'worker', role: 'CODING_AGENT', adapterId: 'adapter', providerId: 'provider', capabilities: ['code'],
+      taskTypes: ['implementation'], concurrencyLimit: 1, timeoutMs: 5_000, maxRetries: 2, status: 'AVAILABLE',
+    });
+    const rows: Record<string, unknown>[] = [];
+    const ports: JuliusExecutionPorts = {
+      async reserve() { return { reservationId: 'reservation', state: 'RESERVED', denialReason: null }; },
+      async commit() {}, async release() {}, async persistEvidence() {}, async acceptResult() { return { duplicate: false }; },
+      async recordEvent(input) { rows.push({ type: input.type, ...input.payload }); },
+    };
+    const coordinator = new JuliusExecutionCoordinator(new JuliusProviderRouter(registry, new Map([['adapter', adapter]]), new JuliusProviderHealthRegistry()), ports);
+    expect(await coordinator.execute(request)).toMatchObject({ status: 'FAILED', failureClass: 'worker_reported_failure', reasonCode: 'HANDED_FAILURE_OUTCOME_UNKNOWN' });
+    expect(calls).toBe(1);
+    expect(failedRows(rows)).toEqual([expect.objectContaining({ reasonCode: 'HANDED_FAILURE_OUTCOME_UNKNOWN' })]);
+  });
+});
+
+describe('D2 · a KNOWN outcome after the handoff keeps its ending, with no OUTCOME UNKNOWN cause', () => {
+  it.each([
+    ['AUTH_CONFIGURATION (a 401/403)', new JuliusDispatchError('AUTH_CONFIGURATION', false, 'safe', 'coding_agent_authentication', { runtimeStarted: true })],
+    ['INVALID_REQUEST (a 400 with an error body)', new JuliusDispatchError('INVALID_REQUEST', false, 'safe', 'provider_invalid_request')],
+    ['INVALID_REQUEST: CONTEXT_OVERFLOW', new JuliusDispatchError('INVALID_REQUEST', false, 'safe', 'coding_agent_context_overflow', { runtimeStarted: true })],
+    ['CONTENT_REFUSED (Coding Agent)', new JuliusDispatchError('INVALID_REQUEST', false, 'safe', 'coding_agent_content_refused', { runtimeStarted: true })],
+    // A content refusal is a known outcome whatever code a peer files it under.
+    ['review_content_refused, filed under another code', new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'safe', 'review_content_refused')],
+    ['the Prompt Architect\'s `refused`, filed under another code', new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'safe', 'refused')],
+    ['POLICY_DENIED', new JuliusDispatchError('POLICY_DENIED', false, 'safe', 'policy_denied')],
+    ['BUDGET_DENIED', new JuliusDispatchError('BUDGET_DENIED', false, 'safe', 'budget_denied')],
+    // The adapter knows it sent nothing; the hold release trusts the same fact.
+    ['cancelled before launch (runtimeStarted: false)', new JuliusDispatchError('CANCELLED', false, 'safe', 'coder_cancelled_before_launch', { runtimeStarted: false })],
+    ['allocation below one cent (runtimeStarted: false)', new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'safe', 'coder_allocation_below_one_cent', { runtimeStarted: false })],
+  ] as const)('%s: 1 call, FAILED, no reasonCode', async (_name, error) => {
+    const h = unit(error);
+    const result = await h.coordinator.execute(request);
+    expect(result).toMatchObject({ code: error.code });
+    expect((result as { reasonCode?: string }).reasonCode).toBeUndefined();
+    expect(h.calls()).toBe(1);
+    expect(failedRows(h.rows)).toHaveLength(1);
+    expect(failedRows(h.rows)[0]!.reasonCode).toBeUndefined();
+  });
+
+  it('a run-halting class keeps its OWN reason, never overwritten by the unknown-outcome mark', async () => {
+    const h = unit(new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'safe', 'coder_served_model_mismatch', { runtimeStarted: true }));
+    const result = await h.coordinator.execute(request);
+    expect((result as { reasonCode?: string }).reasonCode).toBeUndefined();
+    expect(failedRows(h.rows)).toEqual([expect.objectContaining({ reasonCode: 'coder_served_model_mismatch' })]);
+  });
+
+  it('PRE-HANDOFF is unchanged: a non-retryable failure before `worker.dispatched` carries no mark and calls nothing', async () => {
+    const h = unit(raw('TIMEOUT'), { ports: { async recordHandoff() { throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'The handoff write failed.', 'coding_agent_unclassified'); } } });
+    const result = await h.coordinator.execute(request);
     expect(result).toMatchObject({ status: 'FAILED', code: 'WORKER_EXECUTION_FAILURE' });
     expect((result as { reasonCode?: string }).reasonCode).toBeUndefined();
+    expect(failedRows(h.rows)[0]!.reasonCode).toBeUndefined();
+    expect(h.calls()).toBe(0);
+  });
+
+  it('the known-outcome code list is closed and explicit', () => {
+    expect([...JULIUS_HANDED_KNOWN_OUTCOME_CODES].sort()).toEqual(['AUTH_CONFIGURATION', 'BUDGET_DENIED', 'INVALID_REQUEST', 'POLICY_DENIED']);
   });
 });
 
@@ -243,6 +337,27 @@ describe('the dispatch counter, through the run loop', () => {
     expect(m.retries).toBe(1);
     expect(m.task).toBe('SUCCEEDED');
     expect(m.run).toBe('COMPLETED');
+  });
+
+  it('D2: an ambiguous NON-retryable failure is not rerouted either: 1 dispatch, the other worker never asked', async () => {
+    const m = await mission([{ kind: 'fail', code: 'WORKER_EXECUTION_FAILURE', failureClass: 'coding_agent_unclassified', runtimeStarted: true }], { reroute: true });
+    expect(m.dispatches).toBe(1);
+    expect(m.secondWorker, 'the other worker is never asked').toBe(0);
+    expect(m.task).toBe('FAILED');
+    expect(m.failed).toEqual([expect.objectContaining({ code: 'WORKER_EXECUTION_FAILURE', reasonCode: 'HANDED_FAILURE_OUTCOME_UNKNOWN' })]);
+  });
+
+  it('D2 CONTROL: a failure attested unprocessed is still rerouted, and the mission completes', async () => {
+    const m = await mission([{ kind: 'fail', code: 'PROVIDER_UNAVAILABLE', runtimeStarted: false }], { reroute: true });
+    expect(m.secondWorker).toBe(1);
+    expect(m.task).toBe('SUCCEEDED');
+  });
+
+  it('D2 CONTROL: a known outcome (CONTENT_REFUSED) carries no mark through the run loop', async () => {
+    const m = await mission([{ kind: 'fail', code: 'INVALID_REQUEST', failureClass: 'coding_agent_content_refused', runtimeStarted: true }]);
+    expect(m.dispatches).toBe(1);
+    expect(m.failed).toHaveLength(1);
+    expect(m.failed[0]!.reasonCode).toBeUndefined();
   });
 
   it('CONTROL: a non-retryable failure keeps today\'s behaviour: 1 dispatch, FAILED, no OUTCOME UNKNOWN cause', async () => {
