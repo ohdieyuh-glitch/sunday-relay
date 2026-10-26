@@ -440,10 +440,14 @@ jobs:
       group: ${{ inputs.confirm_live == 'RUN LIVE MISSION' && 'julius-paid-provider-slot' || format('julius-preflight-{0}', github.run_id) }}
       cancel-in-progress: false
     runs-on: julius-paid
-    # THE J1 HAND-OFF. The grade job takes the coder's final message from this
-    # upload's id and deletes the artifact once it has graded it.
+    # THE J1 HAND-OFF (X′ §3). The grade job takes the coder's final message and
+    # the scanned evidence from a 0700 run-scoped directory on the runner host,
+    # never from an artifact, and re-hashes every file against these outputs:
+    # the `sha256sum` list (hashes and closed file names only, no content) and
+    # the sha256 of that list.
     outputs:
-      final_message_artifact_id: ${{ steps.final_message_upload.outputs.artifact-id }}
+      handoff_sha256sums: ${{ steps.handoff.outputs.sums }}
+      handoff_sums_sha256: ${{ steps.handoff.outputs.sums_sha256 }}
     # THE JOB BUDGET IS SHARED OUT, not a taste. It is `JOB_BUDGET_MS` in
     # relay-bridge/reviewer-deadline.ts and a structural test fails if the two
     # disagree. 60 -> 90 when the reviewer deadline was derived (50 minutes: six
@@ -1717,11 +1721,10 @@ jobs:
           echo "julius_exit=$status"
           exit "$status"
 
-      # THE J1 HAND-OFF TO THE GRADE JOB. Only the raw trimmed final message and
-      # its manifest (task, run, raw and trimmed sha256) leave this job, in an
-      # artifact of their own that lives one day and that the grade job deletes.
-      # They never enter julius-live-evidence/. A paid J1 run that wrote no final
-      # message uploads nothing, and the grade job reports it as missing.
+      # THE J1 HAND-OFF TO THE GRADE JOB is below, after the evidence scan (X′ §3):
+      # the raw trimmed final message and its manifest go to a 0700 run-scoped
+      # directory on the runner host beside the scanned evidence, never to an
+      # artifact. They never enter julius-live-evidence/.
 
       - name: 'Live progress: stop the phase publisher'
         if: always() && inputs.confirm_live == 'RUN LIVE MISSION'
@@ -1734,25 +1737,6 @@ jobs:
           fi
           grep -E '^live_progress (posted s[0-9]+|skipped reason=[a-z_]+|started)$' "${RUNNER_TEMP}/julius-live-progress.log" 2>/dev/null | tail -n 5 || true
 
-      - name: 'J1: hand the final message to the grade job'
-        if: always() && inputs.mission == 'julius-inworld-data-1' && inputs.confirm_live == 'RUN LIVE MISSION'
-        env:
-          FINAL_MESSAGE_DIR: ${{ steps.final_message_dir.outputs.dir }}
-        run: |
-          set -uo pipefail
-          mkdir -p j1-final-message
-          if [ -n "$FINAL_MESSAGE_DIR" ] && [ -d "$FINAL_MESSAGE_DIR" ] && [ ! -L "$FINAL_MESSAGE_DIR" ]; then
-            find "$FINAL_MESSAGE_DIR" -maxdepth 1 -type f \( -name '*.raw.txt' -o -name '*.manifest.json' \) -exec cp {} j1-final-message/ \;
-          fi
-          ls -1 j1-final-message | sed 's/^/j1_final_message_file=/'
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        id: final_message_upload
-        if: always() && inputs.mission == 'julius-inworld-data-1' && inputs.confirm_live == 'RUN LIVE MISSION'
-        with:
-          name: j1-final-message
-          path: j1-final-message
-          if-no-files-found: ignore
-          retention-days: 1
 
       # ------------------------------------------------------------- EVIDENCE
 
@@ -1776,8 +1760,10 @@ jobs:
             echo "workflow_ref=${GITHUB_WORKFLOW_REF:-unknown}"
           } > "$MARKER_DIR/marker.txt"
 
+      # BEST-EFFORT SINCE X′ §3: no artifact upload after LIVE may fail the job.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: success() && inputs.confirm_live == 'RUN LIVE MISSION' && steps.live_mission.outcome == 'success'
+        continue-on-error: true
         with:
           name: ${{ steps.inputs_gate.outputs.marker_namespace }}-completed
           path: ${{ steps.inputs_gate.outputs.marker_namespace }}-completed
@@ -1881,6 +1867,7 @@ jobs:
       # its WITH arm. A WITH arm dispatched after it expires is refused by its restore step, and the pair starts again.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: success() && steps.learning_store_scan.outcome == 'success'
+        continue-on-error: true
         with:
           name: julius-learning-store
           path: julius-learning-store
@@ -2135,15 +2122,69 @@ jobs:
           if [ "$code" -ne 0 ]; then echo "::error title=Evidence bundle does not resolve::resolve-artifacts --strict exited $code (see the job summary)"; fi
           exit "$code"
 
+      # THE J1 HAND-OFF, ON THE RUNNER HOST (X′ §3). Under the billing lock the
+      # grade job cannot download an artifact, and since Branch S it runs on this
+      # same host as this same user. So the raw trimmed final message and its
+      # manifest, and the evidence bundle exactly as the scan above left it, are
+      # copied into $HOME/julius-handoff/<run id>-<attempt>/, created 0700 (the
+      # runner user's own 0700 home; no sudo: the Branch S sudoers kit grants no
+      # path outside /tmp/julius-*). The directory is never mounted into the
+      # coder's `--network none` sandbox. Every file's sha256 is written as a job
+      # output, hashes and closed file names only, so the grade job can refuse
+      # anything that changed in between. The raw text never leaves the host.
+      - name: 'J1: hand the final message and the scanned evidence to the grade job (runner host, 0700)'
+        id: handoff
+        if: always() && inputs.mission == 'julius-inworld-data-1' && inputs.confirm_live == 'RUN LIVE MISSION'
+        env:
+          FINAL_MESSAGE_DIR: ${{ steps.final_message_dir.outputs.dir }}
+        run: |
+          set -euo pipefail
+          refuse() { echo "handoff_refused: $1" >&2; exit 1; }
+          case "${HOME:-}" in /?*) ;; *) refuse home_unusable ;; esac
+          printf '%s' "${GITHUB_RUN_ID:-}-${GITHUB_RUN_ATTEMPT:-}" | grep -Eqx '[0-9]{1,20}-[0-9]{1,10}' || refuse run_unusable
+          umask 077
+          root="$HOME/julius-handoff"
+          dir="$root/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          mkdir -p "$root"
+          [ -d "$root" ] && [ ! -L "$root" ] || refuse root_unusable
+          chmod 0700 "$root"
+          [ ! -e "$dir" ] && [ ! -L "$dir" ] || refuse handoff_exists
+          mkdir -m 0700 "$dir" "$dir/final-message" "$dir/evidence"
+          if [ -n "$FINAL_MESSAGE_DIR" ] && [ -d "$FINAL_MESSAGE_DIR" ] && [ ! -L "$FINAL_MESSAGE_DIR" ]; then
+            find "$FINAL_MESSAGE_DIR" -maxdepth 1 -type f \( -name '*.raw.txt' -o -name '*.manifest.json' \) -exec cp {} "$dir/final-message/" \;
+          fi
+          if [ -d julius-live-evidence ] && [ ! -L julius-live-evidence ]; then
+            cp -R julius-live-evidence/. "$dir/evidence/"
+          fi
+          # Regular files and directories only: a link or a device is not handed over.
+          odd=$(find "$dir" ! -type f ! -type d -print -quit)
+          [ -z "$odd" ] || refuse handoff_not_regular
+          sums=$(cd "$dir" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum)
+          if [ -n "$sums" ]; then
+            printf '%s\n' "$sums" | while IFS= read -r line; do
+              printf '%s\n' "$line" | grep -Eqx '[0-9a-f]{64}  \./(final-message|evidence)/[A-Za-z0-9._/-]+' || exit 1
+            done || refuse sums_malformed
+          fi
+          sums_sha256=$(printf '%s\n' "$sums" | sha256sum | cut -d' ' -f1)
+          {
+            echo 'sums<<JULIUS_HANDOFF_SUMS_END'
+            printf '%s\n' "$sums"
+            echo 'JULIUS_HANDOFF_SUMS_END'
+            echo "sums_sha256=$sums_sha256"
+          } >> "${GITHUB_OUTPUT:?}"
+          echo "j1_handoff files=$(printf '%s\n' "$sums" | grep -c . || true) sums_sha256=$sums_sha256"
+
       # THE PAID-RUN ARCHIVE'S EXPORT. This job's PostgreSQL is disposable and
       # dies with the runner whatever step runs next, so this artifact is the
       # only copy of the run's state. It is the export the local importer
       # (`scripts/julius-paid-run-archive.mjs import --run <id>`) reads into the
       # durable `julius-postgres` archive; 90 days, not 14, so an import is not
-      # a race.
+      # a race. BEST-EFFORT SINCE X′ §3: the step after this one says whether it
+      # was preserved, and the host copy (X′ §5) is kept either way.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         id: evidence_upload
         if: always()
+        continue-on-error: true
         with:
           name: julius-live-evidence
           path: julius-live-evidence
@@ -2193,13 +2234,18 @@ jobs:
           rm -rf "$RUNNER_TEMP"/julius-final-message.* 2>/dev/null || true
           echo 'cleanup complete'
 
-  # THE HIDDEN CHECKER, IN A JOB OF ITS OWN. A fresh runner with no provider
-  # credential, no environment and read-only contents. It stages the pinned
-  # checker, oracle, contract and seed from git objects at this run's own
-  # commit, never from a working tree the coder could have touched, grades the
-  # final message the live job handed over, and publishes a closed
-  # PASS / FAIL / NOT_RUN verdict. Only this job's artifact carries the verdict
-  # the evidence reader accepts.
+  # THE HIDDEN CHECKER, IN A JOB OF ITS OWN. No provider credential, no
+  # environment and read-only contents. It stages the pinned checker, oracle,
+  # contract and seed from git objects at this run's own commit, never from a
+  # working tree the coder could have touched, grades the final message the live
+  # job handed over, and publishes a closed PASS / FAIL / NOT_RUN verdict.
+  #
+  # X′ §3, HONESTLY: on the self-hosted runner this job runs on the SAME host as
+  # the live job, as the same user, not on a fresh VM, and takes its inputs from
+  # the live job's 0700 host directory rather than from artifacts. Every file is
+  # re-hashed against the live job's outputs and any mismatch refuses grading.
+  # A compromised host or user could still alter the inputs between the jobs
+  # (Branch S §6.3); in exchange the final message never leaves the machine.
   grade-inworld:
     name: 'J1: grade the final message with the pinned hidden checker'
     needs: [first-live-mission]
@@ -2212,16 +2258,49 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        continue-on-error: true
-        with:
-          name: j1-final-message
-          path: j1-final-message
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        continue-on-error: true
-        with:
-          name: julius-live-evidence
-          path: j1-evidence
+      # THE HAND-OFF, RE-HASHED. The list must hash to the live job's digest, every
+      # line must be a closed `sha256  ./final-message|evidence/<name>` line, the
+      # directory must be 0700 and this user's, and the copy taken here must hash
+      # to exactly that list: a changed, added or missing file refuses grading.
+      - name: 'J1: receive the handoff from the runner host and verify every hash'
+        id: handoff
+        env:
+          HANDOFF_SUMS: ${{ needs.first-live-mission.outputs.handoff_sha256sums }}
+          HANDOFF_SUMS_SHA256: ${{ needs.first-live-mission.outputs.handoff_sums_sha256 }}
+        run: |
+          set -euo pipefail
+          refuse() { echo "handoff_refused: $1" >&2; exit 1; }
+          case "${HOME:-}" in /?*) ;; *) refuse home_unusable ;; esac
+          printf '%s' "${GITHUB_RUN_ID:-}-${GITHUB_RUN_ATTEMPT:-}" | grep -Eqx '[0-9]{1,20}-[0-9]{1,10}' || refuse run_unusable
+          dir="$HOME/julius-handoff/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          [ -d "$dir" ] && [ ! -L "$dir" ] || refuse handoff_missing
+          [ "$(stat -c '%a %u' "$dir")" = "700 $(id -u)" ] || refuse handoff_not_private
+          printf '%s' "${HANDOFF_SUMS_SHA256:-}" | grep -Eqx '[0-9a-f]{64}' || refuse sums_digest_missing
+          [ "$(printf '%s\n' "${HANDOFF_SUMS:-}" | sha256sum | cut -d' ' -f1)" = "$HANDOFF_SUMS_SHA256" ] || refuse sums_digest_mismatch
+          if [ -n "${HANDOFF_SUMS:-}" ]; then
+            printf '%s\n' "$HANDOFF_SUMS" | while IFS= read -r line; do
+              printf '%s\n' "$line" | grep -Eqx '[0-9a-f]{64}  \./(final-message|evidence)/[A-Za-z0-9._/-]+' || exit 1
+            done || refuse sums_malformed
+          fi
+          odd=$(find "$dir" ! -type f ! -type d -print -quit)
+          [ -z "$odd" ] || refuse handoff_not_regular
+          umask 077
+          rm -rf j1-handoff j1-final-message j1-evidence
+          mkdir j1-handoff
+          cp -R "$dir/." j1-handoff/
+          actual=$(cd j1-handoff && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum)
+          if [ "$actual" != "${HANDOFF_SUMS:-}" ]; then
+            rm -rf j1-handoff
+            refuse hash_mismatch
+          fi
+          mkdir -p j1-handoff/final-message j1-handoff/evidence
+          mv j1-handoff/final-message j1-final-message
+          mv j1-handoff/evidence j1-evidence
+          rm -rf j1-handoff
+          # The manifests only (task, context, run, trimmed sha256, bytes; no text), for the result record.
+          mkdir -p "$RUNNER_TEMP/j1-manifests"
+          find j1-final-message -maxdepth 1 -type f -name '*.manifest.json' -exec cp {} "$RUNNER_TEMP/j1-manifests/" \;
+          echo "j1_handoff_verified files=$(printf '%s\n' "${HANDOFF_SUMS:-}" | grep -c . || true)"
       - name: 'J1: stage the pinned checker from git objects and grade'
         id: grade
         env:
@@ -2234,8 +2313,9 @@ jobs:
             git show "$GITHUB_SHA:$MISSION_SRC/$f" > "$stage/$f" || { echo "stage_failed: $f" >&2; exit 2; }
           done
           mkdir -p j1-final-message j1-evidence julius-inworld-verdict
-          # This job's own fresh checkout at GITHUB_SHA: the coder never ran on this
-          # runner. The checker child runs with the staging dir as its cwd and HOME.
+          # This job's own checkout at GITHUB_SHA: the coder never ran in it (on the
+          # self-hosted runner it ran on this host, inside its `--network none`
+          # sandbox). The checker child runs with the staging dir as its cwd and HOME.
           set +e
           env -i PATH="$PATH" HOME="$stage" node scripts/julius-inworld-grade.mjs \
             --staging "$stage" --final-message j1-final-message \
@@ -2247,6 +2327,7 @@ jobs:
           exit "$status"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
+        continue-on-error: true
         with:
           name: julius-inworld-verdict
           path: julius-inworld-verdict
@@ -2255,20 +2336,36 @@ jobs:
 
   # THE GRADED FINAL MESSAGE IS DELETED BY A JOB THAT DOES NOTHING ELSE. `actions: write` is
   # granted here and only here; it checks out nothing and runs nothing from the repository.
+  # X′ §3: the final message lives in the runner host's handoff directory, so that is what
+  # is removed. The artifact deletion is kept, best-effort and scoped to THIS run's own
+  # `j1-final-message`: nothing here can reach another run's artifacts or any tag.
   delete-final-message:
     name: 'J1: delete the graded final message'
     needs: [first-live-mission, grade-inworld]
-    if: ${{ always() && needs.first-live-mission.outputs.final_message_artifact_id != '' }}
+    if: ${{ always() && inputs.mission == 'julius-inworld-data-1' && inputs.confirm_live == 'RUN LIVE MISSION' && needs.first-live-mission.result != 'skipped' }}
     runs-on: julius-paid
     timeout-minutes: 5
     permissions:
       actions: write
     steps:
       - name: 'J1: delete the graded final message'
+        run: |
+          set -euo pipefail
+          case "${HOME:-}" in /?*) ;; *) echo 'handoff_delete_refused: home_unusable' >&2; exit 1 ;; esac
+          printf '%s' "${GITHUB_RUN_ID:-}-${GITHUB_RUN_ATTEMPT:-}" | grep -Eqx '[0-9]{1,20}-[0-9]{1,10}' || { echo 'handoff_delete_refused: run_unusable' >&2; exit 1; }
+          dir="$HOME/julius-handoff/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}/final-message"
+          rm -rf "$dir"
+          [ ! -e "$dir" ] || { echo 'handoff_final_message_not_deleted' >&2; exit 1; }
+          echo 'j1_final_message_deleted handoff=final-message'
+      - name: 'J1: delete this run''s j1-final-message artifact, if one exists (best-effort)'
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
-          ARTIFACT_ID: ${{ needs.first-live-mission.outputs.final_message_artifact_id }}
         run: |
           set -uo pipefail
-          case "$ARTIFACT_ID" in *[!0-9]*|'') echo 'artifact_id_not_numeric' >&2; exit 1;; esac
-          gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID" && echo "j1_final_message_deleted artifact_id=$ARTIFACT_ID"
+          printf '%s' "${GITHUB_RUN_ID:-}" | grep -Eqx '[0-9]{1,20}' || exit 1
+          ids=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?name=j1-final-message&per_page=100" --jq '.artifacts[].id') || exit 1
+          for id in $ids; do
+            case "$id" in *[!0-9]*|'') echo 'artifact_id_not_numeric' >&2; exit 1;; esac
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id" && echo "j1_final_message_deleted artifact_id=$id"
+          done

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
 
@@ -1133,6 +1133,204 @@ describe('X′ §2: the attempted marker is a job-token tag, and LIVE waits for 
       const refused = runWithFakeCurl(tagScript, { ...env, ...bad });
       expect(refused.status, JSON.stringify(bad)).not.toBe(0);
       expect(refused.curlLog, JSON.stringify(bad)).toBe('');
+    }
+  });
+});
+
+/** Run one step script in `cwd`, with a fake `stat` (the 0700 check is the script's; NTFS cannot answer it). */
+function runStep(text: string, cwd: string, env: Record<string, string>): { status: number; stderr: string; stdout: string } {
+  const bin = mkdtempSync(join(tmpdir(), 'julius-x-prime-bin-'));
+  writeFileSync(join(bin, 'stat'), '#!/usr/bin/env bash\nprintf \'%s %s\\n\' "${FAKE_STAT_MODE:-700}" "${FAKE_STAT_UID:-$(id -u)}"\n');
+  chmodSync(join(bin, 'stat'), 0o755);
+  // GNU's own text-mode line (`<sha>  <name>`) on every platform: Git Bash on Windows defaults to binary (`<sha> *<name>`).
+  writeFileSync(join(bin, 'sha256sum'), '#!/usr/bin/env bash\nexec /usr/bin/sha256sum --text "$@"\n');
+  chmodSync(join(bin, 'sha256sum'), 0o755);
+  try {
+    const stdout = execFileSync('bash', [...GITHUB_BASH, text], {
+      cwd,
+      env: { ...process.env, PATH: `${bin}${delimiter}${process.env.PATH ?? ''}`, GITHUB_RUN_ID: '40400000001', GITHUB_RUN_ATTEMPT: '1', ...env },
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return { status: 0, stderr: '', stdout };
+  } catch (error) {
+    const failed = error as { status?: number; stderr?: string; stdout?: string };
+    return { status: failed.status ?? 1, stderr: failed.stderr ?? '', stdout: failed.stdout ?? '' };
+  } finally {
+    rmSync(bin, { recursive: true, force: true });
+  }
+}
+
+/** GITHUB_OUTPUT as GitHub reads it: `k=v` lines and `k<<DELIM` blocks. */
+function readOutputs(file: string): Record<string, string> {
+  const lines = readFileSync(file, 'utf8').split('\n');
+  const out: Record<string, string> = {};
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i] ?? '';
+    const heredoc = /^([a-z_]+)<<(.+)$/u.exec(line);
+    if (heredoc !== null) {
+      const body: string[] = [];
+      for (i += 1; i < lines.length && lines[i] !== heredoc[2]; i += 1) body.push(lines[i] ?? '');
+      out[heredoc[1] ?? ''] = body.join('\n');
+      continue;
+    }
+    const at = line.indexOf('=');
+    if (at > 0) out[line.slice(0, at)] = line.slice(at + 1);
+  }
+  return out;
+}
+
+const HANDOFF_LIVE = "'J1: hand the final message and the scanned evidence to the grade job (runner host, 0700)'";
+const HANDOFF_GRADE = "'J1: receive the handoff from the runner host and verify every hash'";
+const GRADE_STEP_NAME = "'J1: stage the pinned checker from git objects and grade'";
+const STEM = 'build_task.ctx_1';
+
+describe('X′ §3: grading without an artifact handoff', () => {
+  const paid = job('first-live-mission');
+  const grade = job('grade-inworld');
+  const remove = job('delete-final-message');
+
+  /** A live job's workspace after the scan, a home, and the handoff it leaves. */
+  const handOff = (): { home: string; work: string; outputs: Record<string, string>; dir: string; cleanup: () => void } => {
+    const home = mkdtempSync(join(tmpdir(), 'julius-x-prime-home-'));
+    const work = mkdtempSync(join(tmpdir(), 'julius-x-prime-live-'));
+    const finalDir = join(work, 'final');
+    execFileSync('bash', ['-c', `mkdir -p "${finalDir}" "${work}/julius-live-evidence/final-message"`]);
+    writeFileSync(join(finalDir, `${STEM}.raw.txt`), 'the coder said this');
+    writeFileSync(join(finalDir, `${STEM}.manifest.json`), '{"schema":"julius-final-message.v2"}\n');
+    writeFileSync(join(finalDir, `${STEM}.redacted.json`), '{"never":"handed"}\n');
+    writeFileSync(join(work, 'julius-live-evidence', 'tasks.tsv'), 'run_id\n(0 rows)\n');
+    writeFileSync(join(work, 'julius-live-evidence', 'final-message', `${STEM}.redacted.json`), '{"published":true}\n');
+    const output = join(work, 'github-output.txt');
+    writeFileSync(output, '');
+    const run = runStep(script(step(paid, HANDOFF_LIVE)), work, { HOME: home, FINAL_MESSAGE_DIR: finalDir, GITHUB_OUTPUT: output });
+    expect(run.status, run.stderr).toBe(0);
+    return {
+      home, work, outputs: readOutputs(output), dir: join(home, 'julius-handoff', '40400000001-1'),
+      cleanup: () => { rmSync(home, { recursive: true, force: true }); rmSync(work, { recursive: true, force: true }); },
+    };
+  };
+
+  const receive = (home: string, outputs: Record<string, string>, env: Record<string, string> = {}) => {
+    const work = mkdtempSync(join(tmpdir(), 'julius-x-prime-grade-'));
+    const runnerTemp = mkdtempSync(join(tmpdir(), 'julius-x-prime-rt-'));
+    const result = runStep(script(step(grade, HANDOFF_GRADE)), work, {
+      HOME: home, RUNNER_TEMP: runnerTemp, HANDOFF_SUMS: outputs.sums ?? '', HANDOFF_SUMS_SHA256: outputs.sums_sha256 ?? '', ...env,
+    });
+    const listing = (sub: string): string[] => { try { return readdirSync(join(work, sub)).sort(); } catch { return []; } };
+    const seen = { finalMessage: listing('j1-final-message'), evidence: listing('j1-evidence'), manifests: (() => { try { return readdirSync(join(runnerTemp, 'j1-manifests')).sort(); } catch { return []; } })() };
+    rmSync(work, { recursive: true, force: true });
+    rmSync(runnerTemp, { recursive: true, force: true });
+    return { ...result, seen };
+  };
+
+  it('the live job copies the raw message, its manifest and the SCANNED evidence to a 0700 run-scoped host directory, hashes as outputs', () => {
+    const at = (name: string): number => paid.indexOf(`- name: ${name}`);
+    expect(at("'Refuse to publish evidence that contains credential material'")).toBeLessThan(at(HANDOFF_LIVE));
+    expect(at(HANDOFF_LIVE)).toBeLessThan(paid.indexOf('id: evidence_upload'));
+    expect(paid).toContain('handoff_sha256sums: ${{ steps.handoff.outputs.sums }}');
+    expect(paid).toContain('handoff_sums_sha256: ${{ steps.handoff.outputs.sums_sha256 }}');
+    expect(paid, 'the old one-day artifact hand-off is gone').not.toMatch(/name: j1-final-message\n/u);
+    expect(script(step(paid, HANDOFF_LIVE)), 'no privilege: the runner user\'s own home').not.toMatch(/\bsudo\b|\/var\/lib/u);
+    const { dir, outputs, cleanup } = handOff();
+    try {
+      expect(outputs.sums?.split('\n')).toEqual([
+        expect.stringMatching(/^[0-9a-f]{64} {2}\.\/evidence\/final-message\/build_task\.ctx_1\.redacted\.json$/u),
+        expect.stringMatching(/^[0-9a-f]{64} {2}\.\/evidence\/tasks\.tsv$/u),
+        expect.stringMatching(/^[0-9a-f]{64} {2}\.\/final-message\/build_task\.ctx_1\.manifest\.json$/u),
+        expect.stringMatching(/^[0-9a-f]{64} {2}\.\/final-message\/build_task\.ctx_1\.raw\.txt$/u),
+      ]);
+      expect(outputs.sums_sha256).toMatch(/^[0-9a-f]{64}$/u);
+      expect(outputs.sums, 'hashes and names only, never content').not.toContain('the coder said this');
+      expect(readdirSync(join(dir, 'final-message')).sort()).toEqual([`${STEM}.manifest.json`, `${STEM}.raw.txt`]);
+      if (process.platform !== 'win32') {
+        expect(statSync(dir).mode & 0o777).toBe(0o700);
+        expect(statSync(join(dir, '..')).mode & 0o777).toBe(0o700);
+      }
+    } finally { cleanup(); }
+  });
+
+  it('grade-inworld reads the host directory, re-hashes, and grades only what the live job hashed', () => {
+    expect(grade).not.toContain('actions/download-artifact');
+    expect(grade.indexOf(`- name: ${HANDOFF_GRADE}`)).toBeLessThan(grade.indexOf(`- name: ${GRADE_STEP_NAME}`));
+    expect(step(grade, HANDOFF_GRADE)).not.toContain('continue-on-error');
+    const { home, outputs, cleanup } = handOff();
+    try {
+      const ok = receive(home, outputs);
+      expect(ok.status, ok.stderr).toBe(0);
+      expect(ok.seen.finalMessage).toEqual([`${STEM}.manifest.json`, `${STEM}.raw.txt`]);
+      expect(ok.seen.evidence).toEqual(['final-message', 'tasks.tsv']);
+      expect(ok.seen.manifests).toEqual([`${STEM}.manifest.json`]);
+    } finally { cleanup(); }
+  });
+
+  it('a HASH MISMATCH REFUSES GRADING: a changed, added or removed file, a forged list, a malformed line, a shared directory', () => {
+    const cases: readonly [string, (dir: string, outputs: Record<string, string>) => Record<string, string>, string][] = [
+      ['changed', (dir, o) => { writeFileSync(join(dir, 'final-message', `${STEM}.raw.txt`), 'something else'); return o; }, 'hash_mismatch'],
+      ['added', (dir, o) => { writeFileSync(join(dir, 'evidence', 'planted.tsv'), 'x'); return o; }, 'hash_mismatch'],
+      ['removed', (dir, o) => { rmSync(join(dir, 'evidence', 'tasks.tsv')); return o; }, 'hash_mismatch'],
+      ['forged list', (_dir, o) => ({ ...o, sums: (o.sums ?? '').replace(/^[0-9a-f]{64}/u, '0'.repeat(64)) }), 'sums_digest_mismatch'],
+      ['no digest', (_dir, o) => ({ ...o, sums_sha256: '' }), 'sums_digest_missing'],
+    ];
+    for (const [label, mutate, reason] of cases) {
+      const { home, dir, outputs, cleanup } = handOff();
+      try {
+        const refused = receive(home, mutate(dir, outputs));
+        expect(refused.status, label).not.toBe(0);
+        expect(refused.stderr, label).toContain(`handoff_refused: ${reason}`);
+        expect(refused.seen.finalMessage, `${label}: nothing is left for the grader`).toEqual([]);
+      } finally { cleanup(); }
+    }
+    const { home, outputs, cleanup } = handOff();
+    try {
+      const malformed = `${outputs.sums ?? ''}\nnot a sums line`;
+      const sha = execFileSync('bash', ['-c', 'printf \'%s\\n\' "$S" | sha256sum | cut -d" " -f1'], { env: { ...process.env, S: malformed }, encoding: 'utf8' }).trim();
+      expect(receive(home, { sums: malformed, sums_sha256: sha }).stderr).toContain('handoff_refused: sums_malformed');
+      expect(receive(home, outputs, { FAKE_STAT_MODE: '755' }).stderr).toContain('handoff_refused: handoff_not_private');
+      expect(receive(home, outputs, { FAKE_STAT_UID: '4242424' }).stderr).toContain('handoff_refused: handoff_not_private');
+      expect(receive(join(home, 'nowhere'), outputs).stderr).toContain('handoff_refused: handoff_missing');
+    } finally { cleanup(); }
+  });
+
+  it('GRADING HOLDS NO SECRET AND NO ENVIRONMENT, and reads contents only', () => {
+    expect(grade).toMatch(/\n    permissions:\n      contents: read\n    steps:\n/u);
+    expect(grade).not.toMatch(/secrets\.|environment:|vars\.|github\.token|GH_TOKEN|GITHUB_TOKEN/u);
+    expect(grade).not.toMatch(/: write\n/u);
+    expect(script(step(grade, GRADE_STEP_NAME))).toContain('env -i PATH="$PATH" HOME="$stage" node scripts/julius-inworld-grade.mjs');
+  });
+
+  it('delete-final-message removes the handoff final message, and its artifact deletion is this run\'s own, best-effort', () => {
+    expect(remove).toContain("if: ${{ always() && inputs.mission == 'julius-inworld-data-1' && inputs.confirm_live == 'RUN LIVE MISSION' && needs.first-live-mission.result != 'skipped' }}");
+    const { home, dir, cleanup } = handOff();
+    try {
+      const deleted = runStep(script(step(remove, "'J1: delete the graded final message'")), home, { HOME: home });
+      expect(deleted.status, deleted.stderr).toBe(0);
+      expect(() => readdirSync(join(dir, 'final-message'))).toThrow();
+      expect(readdirSync(join(dir, 'evidence')).sort()).toEqual(['final-message', 'tasks.tsv']);
+    } finally { cleanup(); }
+    const best = step(remove, "'J1: delete this run''s j1-final-message artifact, if one exists (best-effort)'");
+    expect(best).toContain('continue-on-error: true');
+    expect(best).toContain('repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?name=j1-final-message&per_page=100');
+  });
+
+  it('EVERY ARTIFACT UPLOAD AFTER LIVE IS BEST-EFFORT (continue-on-error), so none can fail the job that LIVE ran in', () => {
+    const live = workflow.indexOf(`- name: ${LIVE_STEP}`);
+    const after = workflow.slice(live).split('- uses: actions/upload-artifact').slice(1);
+    expect(after.length).toBeGreaterThanOrEqual(4);
+    for (const block of after) {
+      const head = block.slice(0, block.indexOf('\n        with:'));
+      expect(head, block.slice(0, 200)).toContain('\n        continue-on-error: true');
+    }
+  });
+
+  it('NOTHING DELETES HISTORICAL ARTIFACTS OR TAGS: the only deletion is delete-final-message\'s own run-scoped one', () => {
+    const deletions = workflow.split('\n').filter((line) => /-X DELETE|--method DELETE|"DELETE"|git push [^\n]*(--delete|:refs)|git tag -d|\/git\/refs\/[^\n]*DELETE/u.test(line));
+    expect(deletions.map((line) => line.trim())).toEqual(['gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id" && echo "j1_final_message_deleted artifact_id=$id"']);
+    expect(remove).toContain(deletions[0]?.trim() ?? 'missing');
+    expect(workflow, 'no artifact is listed repository-wide for deletion').not.toMatch(/actions\/artifacts\?[^\n]*\n[^\n]*DELETE/u);
+    for (const file of readdirSync(join(ROOT, '.github/workflows'))) {
+      if (file === 'julius-first-live-mission.yml') continue;
+      expect(readFileSync(join(ROOT, '.github/workflows', file), 'utf8'), file).not.toMatch(/actions\/artifacts\/[^\n]*-X DELETE|-X DELETE[^\n]*actions\/artifacts|git\/refs\/tags[^\n]*DELETE/u);
     }
   });
 });
