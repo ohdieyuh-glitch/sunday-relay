@@ -4701,3 +4701,176 @@ describe('a Prompt Architect answer Julius cannot store is its own failure, paid
     expect(calls.count).toBe(1);
   });
 });
+
+/* ------------------------------------------- the Agentic Architect on the Claude Agent SDK (JULIUS_ARCHITECT_RUNTIME) */
+
+/**
+ * THE SDK ARCHITECT IN THE SAME SLOT, THROUGH THE REAL RUN LOOP. The SDK is faked at its `query` boundary, as the
+ * Coding Agent's SDK tests fake it; the slot (charter, schema, `validateArchitectPlan`, contract proposal), the
+ * coordinator, the ledger, the coder and the reviewer are the ones above. Nothing is spawned and nothing is called.
+ */
+describe('JULIUS_ARCHITECT_RUNTIME=agent_sdk answers the architect slot with the Claude Agent SDK', () => {
+  const SDK_MODEL = 'claude-opus-5-5';
+  const ARCHITECT_KEY = 'FAKETESTNOTREAL-architect';
+  const SDK_ENV: Record<string, string> = {
+    ...LIVE_ENV, JULIUS_ARCHITECT_RUNTIME: 'agent_sdk', ANTHROPIC_ARCHITECT_API_KEY: ARCHITECT_KEY,
+    OPENAI_PROMPT_ARCHITECT_MODEL: SDK_MODEL,
+  };
+  type Script = (options: Record<string, unknown>) => unknown[];
+  const answering = (plan: unknown, opts: { cost?: number | null; served?: string } = {}): Script => (options) => {
+    const served = opts.served ?? SDK_MODEL;
+    return [
+      { type: 'system', subtype: 'init', session_id: 'sess-arch', model: SDK_MODEL, cwd: options.cwd, tools: ['Read', 'Grep', 'Glob', 'StructuredOutput'] },
+      { type: 'assistant', parent_tool_use_id: null, request_id: 'req_arch_1', message: { id: 'msg_arch_1', model: served, usage: { input_tokens: 2_000, output_tokens: 700 }, content: [{ type: 'tool_use', name: 'StructuredOutput', input: plan }] } },
+      {
+        type: 'result', subtype: 'success', is_error: false, terminal_reason: 'completed', result: '', num_turns: 2, duration_ms: 5, permission_denials: [],
+        ...(opts.cost === null ? {} : { total_cost_usd: opts.cost ?? 0.234567, usage: { input_tokens: 2_000, output_tokens: 700 } }),
+        modelUsage: { [served]: { inputTokens: 2_000, outputTokens: 700 } }, structured_output: plan,
+      },
+    ];
+  };
+  const rateLimitedFirst: Script = (options) => [
+    { type: 'system', subtype: 'init', session_id: 'sess-arch', model: SDK_MODEL, cwd: options.cwd, tools: ['Read', 'Grep', 'Glob'] },
+    { type: 'assistant', parent_tool_use_id: null, error: 'rate_limit', message: { content: [] } },
+    { type: 'result', subtype: 'error_during_execution', is_error: true, result: 'API Error: 429' },
+  ];
+
+  function sdkResolution(scripts: readonly Script[], env: Record<string, string | undefined> = SDK_ENV) {
+    const log: FakeLog = { order: [] };
+    const prompts: string[] = [];
+    const packets: ReviewPacket[] = [];
+    const invocations: ShellEffectInput[] = [];
+    const calls: { prompt: string; options: Record<string, unknown> }[] = [];
+    const query: HostedQueryFn = ({ prompt, options }) => {
+      calls.push({ prompt, options });
+      log.order.push('architect');
+      const script = scripts[Math.min(calls.length - 1, scripts.length - 1)]!;
+      return (async function* () { for (const message of script(options)) yield message; })();
+    };
+    const memory = createJuliusMemoryStore();
+    const handoffs = createContextAndClaimHandoffs(memory as unknown as JuliusRuntimeStore & JuliusRecoveryDriver);
+    const resolution = resolveLiveWorkers({
+      env, projectId: 'prj-live', workspacePath: '/workspace/mission', testCommand: 'npm run mission-test',
+      contexts: handoffs.contexts, artifacts: createInMemoryArtifactExchange(), shell: fakeShell(log, invocations),
+      runners: {
+        // A Messages-runner call here would be a routing defect: it must never be reached under agent_sdk.
+        architect: (async () => { throw new Error('the Messages runner was called under agent_sdk'); }) as never,
+        coder: fakeCoder(log, prompts) as never,
+        reviewer: fakeReviewer(log, packets, ['approved', 'approved', 'approved', 'approved']) as never,
+        queryLoader: async () => query,
+      },
+    });
+    return { memory, handoffs, resolution, calls, log };
+  }
+
+  async function driveSdkMission(scripts: readonly Script[]) {
+    const fakes = sdkResolution(scripts);
+    expect(fakes.resolution.ok, JSON.stringify(fakes.resolution.problems)).toBe(true);
+    seedMissionRun(fakes.memory);
+    const runtime = assembleLiveJuliusRuntime({
+      store: fakes.handoffs.store, entries: fakes.resolution.entries,
+      cardRevision: 'card-test-1', spendCeilingUsdMicros: 5_000_000, maxRepairRounds: 1,
+    });
+    const outcome = await driveJuliusRunToTerminal({
+      loop: runtime.loop, store: fakes.handoffs.store, runId: 'run-live', projectId: 'prj-live', maxTicks: 24,
+    });
+    return { ...fakes, outcome };
+  }
+
+  const architectSettled = (memory: ReturnType<typeof createJuliusMemoryStore>) =>
+    memory.events().filter((event) => event.type === 'budget.settled' && event.facts.role === 'PROMPT_ARCHITECT');
+
+  it('the default (unset) stays the Messages runner; agent_sdk routes the slot to the SDK worker', () => {
+    const byDefault = liveResolution({}).resolution.entries.find((entry) => entry.worker.role === 'PROMPT_ARCHITECT');
+    expect(byDefault?.worker.workerId).toBe('prompt-architect-openai');
+    expect(byDefault?.worker.adapterId).toBe('openai-architect-live');
+    const sdk = sdkResolution([answering(VALID_PLAN)]).resolution;
+    expect(sdk.ok).toBe(true);
+    const entry = sdk.entries.find((candidate) => candidate.worker.role === 'PROMPT_ARCHITECT');
+    expect(entry?.worker).toMatchObject({ workerId: 'agentic-architect-sdk', adapterId: 'agentic-architect-agent-sdk', providerId: 'anthropic' });
+    expect(entry?.adapter.adapterId).toBe(entry?.worker.adapterId);
+    expect(Object.keys(entry!.adapter)).toEqual(['adapterId', 'dispatch']);
+    // The slot is the same slot: same task types, same deadline, same single retry.
+    const messages = architectWorker(SDK_ENV);
+    expect(entry?.worker.taskTypes).toEqual(messages.taskTypes);
+    expect(entry?.worker.timeoutMs).toBe(messages.timeoutMs);
+    expect(entry?.worker.maxRetries).toBe(messages.maxRetries);
+  });
+
+  it.each(['agent-sdk', 'AGENT_SDK', 'claude'])('an unknown runtime %s is refused before any architect exists', (value) => {
+    const { resolution } = sdkResolution([answering(VALID_PLAN)], { ...SDK_ENV, JULIUS_ARCHITECT_RUNTIME: value });
+    expect(resolution.ok).toBe(false);
+    expect(resolution.problems).toContainEqual(expect.objectContaining({ role: 'PROMPT_ARCHITECT', reason: 'architect_runtime_unknown' }));
+    expect(resolution.entries.some((entry) => entry.worker.role === 'PROMPT_ARCHITECT')).toBe(false);
+  });
+
+  it('agent_sdk without the architect key, or with the Coding Agent key, is refused by name', () => {
+    const noKey = sdkResolution([answering(VALID_PLAN)], { ...SDK_ENV, ANTHROPIC_ARCHITECT_API_KEY: '' }).resolution;
+    expect(noKey.ok).toBe(false);
+    expect(noKey.problems.find((p) => p.role === 'PROMPT_ARCHITECT')?.missing).toContain('ANTHROPIC_ARCHITECT_API_KEY');
+    const coderKey = sdkResolution([answering(VALID_PLAN)], { ...SDK_ENV, ANTHROPIC_ARCHITECT_API_KEY: SDK_ENV.ANTHROPIC_API_KEY }).resolution;
+    expect(coderKey.ok).toBe(false);
+    expect(coderKey.problems.find((p) => p.role === 'PROMPT_ARCHITECT')?.missing.join(' ')).toContain('must not be the Coding Agent');
+    // The Messages runner's key is not this runtime's requirement.
+    const { OPENAI_API_KEY: _unused, ...withoutOpenAi } = SDK_ENV;
+    expect(sdkResolution([answering(VALID_PLAN)], withoutOpenAi).resolution.ok).toBe(true);
+  });
+
+  it('plan, coder, reviewer, COMPLETED: the plan validated by the slot validator and its cost settled', async () => {
+    const { memory, outcome, calls, log } = await driveSdkMission([answering(VALID_PLAN)]);
+    expect(outcome.state).toBe('COMPLETED');
+    expect(calls, 'one SDK session for the plan').toHaveLength(1);
+    expect(log.order[0]).toBe('architect');
+    expect(log.order.indexOf('coder')).toBeGreaterThan(0);
+    // The slot's own charter and packet reached the SDK, and the plan schema bounded the answer.
+    expect(String(calls[0]!.options.systemPrompt)).toContain('produce the structured plan the output schema requires');
+    expect((calls[0]!.options.outputFormat as { type: string }).type).toBe('json_schema');
+    expect(calls[0]!.options.env).toMatchObject({ ANTHROPIC_API_KEY: ARCHITECT_KEY, CLAUDE_CODE_MAX_RETRIES: '0' });
+    expect(Object.values(calls[0]!.options.env as Record<string, string>)).not.toContain(LIVE_ENV.ANTHROPIC_API_KEY);
+    // The validated plan is the artifact the coder worked from.
+    const plan = memory.events().find((event) => event.type === 'worker.completed' && event.taskId === 'plan-1');
+    expect(plan?.facts.diag_validationPassed).toBe(true);
+    expect(plan?.facts.diag_transport).toBe('hosted');
+    // The SDK's reported figure settled, as PROVIDER_REPORTED, inside the run's ledger.
+    const settled = architectSettled(memory).filter((row) => row.taskId === 'plan-1');
+    expect(settled).toHaveLength(1);
+    expect(settled[0]!.facts).toMatchObject({ usdMicros: 234_567, costBasis: 'PROVIDER_REPORTED', billingPath: 'API_BILLED', released: false });
+    // And the most it could have spent was bounded by the allocation Julius reserved for it.
+    expect(memory.events().some((event) => event.type === 'budget.reserved' && event.taskId === 'plan-1')).toBe(true);
+    expect(calls[0]!.options.maxBudgetUsd as number).toBeGreaterThan(0);
+  });
+
+  it('an unknown SDK cost settles UNKNOWN with no amount, never $0', async () => {
+    const { memory, outcome } = await driveSdkMission([answering(VALID_PLAN, { cost: null })]);
+    expect(outcome.state).toBe('COMPLETED');
+    const settled = architectSettled(memory).filter((row) => row.taskId === 'plan-1');
+    expect(settled[0]!.facts.costBasis).toBe('UNKNOWN');
+    expect(settled[0]!.facts.usdMicros).toBeNull();
+    expect(settled[0]!.facts.released).toBe(false);
+  });
+
+  it('a plan the validator refuses is refused here too (same validator), and corrected once', async () => {
+    const unbounded = { ...VALID_PLAN, handoff: { ...VALID_PLAN.handoff, allowedFileScope: [] } };
+    const { outcome, calls, memory } = await driveSdkMission([answering(unbounded), answering(VALID_PLAN)]);
+    expect(calls, 'the refusal bought exactly one correction').toHaveLength(2);
+    expect(String(calls[1]!.options.systemPrompt)).toContain('CORRECTION');
+    expect(outcome.state).toBe('COMPLETED');
+    // Both sessions are on the one settlement.
+    expect(architectSettled(memory).find((row) => row.taskId === 'plan-1')?.facts.usdMicros).toBe(469_134);
+  });
+
+  it('a structured rate limit on the first request is retried ONCE by the coordinator, and the mission completes', async () => {
+    const { outcome, calls, memory } = await driveSdkMission([rateLimitedFirst, answering(VALID_PLAN)]);
+    expect(calls).toHaveLength(2);
+    expect(memory.events().filter((event) => event.type === 'retry.scheduled' && event.taskId === 'plan-1')).toHaveLength(1);
+    expect(outcome.state).toBe('COMPLETED');
+  });
+
+  it('a served-model mismatch HALTS the run on its own class', async () => {
+    const { outcome, calls, memory, log } = await driveSdkMission([answering(VALID_PLAN, { served: 'claude-opus-5' })]);
+    expect(calls).toHaveLength(1);
+    expect(outcome.state).toBe('FAILED');
+    expect(memory.events().find((event) => event.type === 'run.failed')?.facts.reasonCode).toBe('architect_served_model_mismatch');
+    expect(log.order).not.toContain('coder');
+  });
+});

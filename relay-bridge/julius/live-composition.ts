@@ -114,6 +114,7 @@ import {
 } from '../../src/relay/connectors/gpt-architect';
 import { HOSTED_API_KEY_ENV, HOSTED_MODEL_ENV } from '../hosted-coding-agent/hosted-readiness';
 import { ANTHROPIC_CREDENTIAL_ENV_NAMES, JULIUS_CLAUDE_AUTH_ENV, resolveClaudeAuthMode } from '../hosted-coding-agent/hosted-auth';
+import { AGENTIC_ARCHITECT_API_KEY_ENV, JULIUS_ARCHITECT_RUNTIME_ENV, JULIUS_ARCHITECT_RUNTIMES, createAgentSdkArchitectAdapter, resolveJuliusArchitectRuntime } from '../hosted-coding-agent/hosted-architect';
 import { loadHermesConfig } from '../hermes-reviewer';
 import type { runGptArchitect } from '../../src/relay/connectors/gpt-architect';
 import type { runHostedCodingAgent, HostedQueryFn } from '../hosted-coding-agent/hosted-runner';
@@ -419,7 +420,14 @@ export function resolveLiveWorkers(options: {
     reviewerModel: hermes.model ?? null,
   };
 
-  if (!architectReadiness.ready) {
+  // THE ARCHITECT RUNTIME SWITCH (default `messages`, the runner below). `agent_sdk` answers the SAME slot with the
+  // Claude Agent SDK (hosted-architect.ts); an unknown value is refused before any adapter exists.
+  const architectRuntime = resolveJuliusArchitectRuntime(options.env);
+  if (!architectRuntime.ok) {
+    problems.push({ role: 'PROMPT_ARCHITECT', reason: architectRuntime.refusal, missing: [`${JULIUS_ARCHITECT_RUNTIME_ENV} (one of: ${JULIUS_ARCHITECT_RUNTIMES.join(', ')})`] });
+  } else if (architectRuntime.runtime === 'agent_sdk') {
+    resolveAgenticArchitect(options, architectConfig, problems, entries);
+  } else if (!architectReadiness.ready) {
     problems.push({ role: 'PROMPT_ARCHITECT', reason: 'live_config_missing', missing: architectReadiness.missing });
   } else {
     // ONE worker object for the registration and the adapter, exactly as the
@@ -1471,4 +1479,57 @@ async function learningRecordOf(
     if (last === undefined || last.sequence <= since) throw new Error('learning_timeline_not_advancing');
     since = last.sequence;
   }
+}
+
+/* ------------------------------------------------- the Agentic Architect on the Claude Agent SDK (default OFF) */
+
+/**
+ * THE SAME ARCHITECT SLOT, NAMED FOR WHAT ANSWERS IT. Every bound is the slot's own (`architectWorker`): the task
+ * types, the operative deadline, one retry. Only the identity says the Claude Agent SDK on Anthropic answered.
+ */
+export const agenticArchitectWorker = (env: Record<string, string | undefined>): JuliusWorker => ({
+  ...architectWorker(env),
+  workerId: 'agentic-architect-sdk', adapterId: 'agentic-architect-agent-sdk', providerId: 'anthropic',
+});
+
+/**
+ * `JULIUS_ARCHITECT_RUNTIME=agent_sdk`. The slot adapter is built exactly as the default path builds it — same charter,
+ * schema, validator, correction and contract proposal — with the SDK session as its `run`, keyed by the ARCHITECT's own
+ * credential. Refused, naming what is missing, when the slot is not live, the key is absent, the key is the coder's,
+ * or there is no workspace for the read tools.
+ */
+function resolveAgenticArchitect(
+  options: Parameters<typeof resolveLiveWorkers>[0],
+  architectConfig: ReturnType<typeof readGptArchitectConfig>,
+  problems: LiveRoleProblem[],
+  entries: LiveWorkerEntry[],
+): void {
+  // The slot's own readiness, minus the Messages runner's key: this runtime is keyed separately.
+  const missing = [...evaluateReadiness({ ...architectConfig, apiKeyPresent: true }).missing];
+  const key = options.env[AGENTIC_ARCHITECT_API_KEY_ENV] ?? '';
+  if (key.trim() === '') missing.push(AGENTIC_ARCHITECT_API_KEY_ENV);
+  // Compared, never printed: the architect child must never hold the Coding Agent's key.
+  else if (key === options.env[HOSTED_API_KEY_ENV]) missing.push(`${AGENTIC_ARCHITECT_API_KEY_ENV} (must not be the Coding Agent's ${HOSTED_API_KEY_ENV})`);
+  if (!options.workspacePath) missing.push('mission workspacePath (contract field)');
+  if (missing.length > 0 || architectConfig.model === null) {
+    problems.push({ role: 'PROMPT_ARCHITECT', reason: 'live_config_missing', missing });
+    return;
+  }
+  const worker = agenticArchitectWorker(options.env);
+  entries.push({
+    worker,
+    adapter: createAgentSdkArchitectAdapter({
+      adapterId: worker.adapterId, requestedModel: architectConfig.model, apiKey: key,
+      workspacePath: options.workspacePath, maxRuntimeMs: architectConfig.timeoutMs,
+      // PATH and HOME only, as the Coding Agent's child gets them; nothing else on the host is read.
+      host: { path: process.env.PATH, home: process.env.HOME },
+      ...(options.runners?.queryLoader === undefined ? {} : { queryLoader: options.runners.queryLoader }),
+      slot: (run) => createLiveArchitectAdapter({
+        worker, contexts: options.contexts, artifacts: options.artifacts,
+        config: architectConfig, apiKey: key,
+        ...(options.researchPolicyFor === undefined ? {} : { researchPolicyFor: options.researchPolicyFor }),
+        run,
+      }),
+    }),
+  });
 }
