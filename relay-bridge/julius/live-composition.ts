@@ -18,7 +18,7 @@
  */
 
 import { coderAttemptDeadlineMs } from '../hosted-coding-agent/coder-envelope';
-import { architectOperativeTimeoutMs, type ArchitectReasoningEffort } from '../../src/relay/connectors/gpt-architect/config';
+import { architectOperativeTimeoutMs, readGptArchitectConfig, type ArchitectReasoningEffort, type GptArchitectConfig } from '../../src/relay/connectors/gpt-architect/config';
 import type { HostedEffort, HostedSdkHelpers } from '../hosted-coding-agent/hosted-runner';
 import { JOB_BUDGET_MS, reviewerOperativeTimeoutMs } from '../reviewer-deadline';
 import { randomUUID } from 'node:crypto';
@@ -108,14 +108,10 @@ import {
 import type { JuliusFileCreationGrant, JuliusTimelineReader } from '../../src/relay/mission/julius';
 import { createLiveReachService } from '../live-reach-service';
 import type { BackendProbe } from '../../src/relay/mission/live-reach';
-import {
-  evaluateReadiness,
-  readGptArchitectConfig,
-} from '../../src/relay/connectors/gpt-architect';
+import { createJ1ArchitectRunner, type ArchitectRunner } from '../../src/relay/connectors/gpt-architect/anthropic-architect-runner';
 import { HOSTED_API_KEY_ENV, HOSTED_MODEL_ENV } from '../hosted-coding-agent/hosted-readiness';
 import { ANTHROPIC_CREDENTIAL_ENV_NAMES, JULIUS_CLAUDE_AUTH_ENV, resolveClaudeAuthMode } from '../hosted-coding-agent/hosted-auth';
 import { loadHermesConfig } from '../hermes-reviewer';
-import type { runGptArchitect } from '../../src/relay/connectors/gpt-architect';
 import type { runHostedCodingAgent, HostedQueryFn } from '../hosted-coding-agent/hosted-runner';
 import type { runHermesReview } from '../hermes-reviewer';
 
@@ -177,6 +173,179 @@ import {
 } from './live-workers';
 import type { ShellEffectPort, TaskClaimSource } from './executor-effects';
 
+/* ------------------------------------------------ role-to-credential table */
+
+/**
+ * WHICH ACCOUNT PAYS FOR WHICH ROLE, written down once.
+ *
+ * The founder's J1 mapping (2026-10-26): the Agentic Architect and the Coding
+ * Agent are both Anthropic, on two DIFFERENT Anthropic accounts, and the
+ * Independent Reviewer is xAI. Each role reads exactly its own key variable and
+ * is attributed to exactly its own expected organization. There is no fallback
+ * in either direction: the architect never reads `ANTHROPIC_API_KEY`, and the
+ * coder never reads `ANTHROPIC_ARCHITECT_API_KEY`.
+ *
+ * Names only. No value is held, logged or returned by anything in this section
+ * except `resolveArchitectCredential`, which hands the architect's own key to
+ * the architect adapter and to nothing else.
+ */
+
+
+export interface JuliusRoleCredential {
+  /** The internal role enum. Wire and ledger values are unchanged. */
+  readonly role: 'PROMPT_ARCHITECT' | 'CODING_AGENT' | 'INDEPENDENT_REVIEWER';
+  /** The name people read. */
+  readonly displayName: 'Agentic Architect' | 'Coding Agent' | 'Independent Reviewer';
+  readonly provider: 'anthropic' | 'xai';
+  /** The only environment variable this role's key is read from. */
+  readonly keyEnv: string;
+  /** The variable naming the organization that key must bill, or null when the provider has no spend-free attribution. */
+  readonly expectedOrgEnv: string | null;
+  /** The variable that pins this role's model. */
+  readonly modelEnv: string;
+  /** The `role=` token on this role's `org_attribution` line, when it has one. */
+  readonly attributionRole: 'architect' | 'coder' | null;
+}
+
+/** THE J1 ROLE-TO-CREDENTIAL TABLE. One row per role; the paid composition and the preflight both read it. */
+export const J1_ROLE_CREDENTIALS = Object.freeze([
+  Object.freeze({
+    role: 'PROMPT_ARCHITECT', displayName: 'Agentic Architect', provider: 'anthropic',
+    keyEnv: 'ANTHROPIC_ARCHITECT_API_KEY', expectedOrgEnv: 'JULIUS_EXPECTED_ANTHROPIC_ARCHITECT_ORG_ID',
+    modelEnv: 'RELAY_ANTHROPIC_ARCHITECT_MODEL', attributionRole: 'architect',
+  }),
+  Object.freeze({
+    role: 'CODING_AGENT', displayName: 'Coding Agent', provider: 'anthropic',
+    keyEnv: 'ANTHROPIC_API_KEY', expectedOrgEnv: 'JULIUS_EXPECTED_ANTHROPIC_ORG_ID',
+    modelEnv: 'RELAY_HOSTED_CODING_MODEL', attributionRole: 'coder',
+  }),
+  Object.freeze({
+    role: 'INDEPENDENT_REVIEWER', displayName: 'Independent Reviewer', provider: 'xai',
+    keyEnv: 'XAI_API_KEY', expectedOrgEnv: null,
+    modelEnv: 'RELAY_HERMES_MODEL', attributionRole: null,
+  }),
+] as const satisfies readonly JuliusRoleCredential[]);
+
+export const j1RoleCredential = (role: JuliusRoleCredential['role']): JuliusRoleCredential => {
+  const row = J1_ROLE_CREDENTIALS.find((entry) => entry.role === role);
+  if (row === undefined) throw new Error(`j1_role_credential_missing:${role}`);
+  return row;
+};
+
+/**
+ * WHICH ARCHITECT THIS DEPLOYMENT RUNS, said by the deployment.
+ *
+ * `anthropic` is the J1 Agentic Architect on the table's architect row. Unset
+ * (or `openai`) is the OpenAI architect every other path already runs, which
+ * this change does not alter. Any other value is refused by name; it never
+ * falls back to either.
+ */
+export const JULIUS_ARCHITECT_PROVIDER_ENV = 'JULIUS_ARCHITECT_PROVIDER';
+export type JuliusArchitectProvider = 'openai' | 'anthropic';
+
+export type ArchitectCredentialResolution =
+  | {
+    readonly ok: true;
+    readonly provider: JuliusArchitectProvider;
+    /** The variable the key was read from. */
+    readonly keyEnv: string;
+    readonly config: GptArchitectConfig;
+    readonly apiKey: string;
+  }
+  | {
+    readonly ok: false;
+    readonly provider: JuliusArchitectProvider | null;
+    /** The shared bounds even when the provider is refused, so a caller can still report them. */
+    readonly config: GptArchitectConfig;
+    readonly reason: 'architect_provider_unknown' | 'live_config_missing';
+    /** Variable NAMES (or preconditions), never values. */
+    readonly missing: readonly string[];
+  };
+
+/**
+ * The architect's credential and configuration, from its own variables only.
+ *
+ * The bounds (`maxOutputTokens`, `timeoutMs`, `liveMode`) come from the same
+ * reader for both providers, so the envelope cannot differ by vendor. For
+ * `anthropic` the key and the model are replaced by the table's architect row:
+ * an OpenAI key or model present in the same environment changes nothing.
+ */
+export function resolveArchitectCredential(env: Readonly<Record<string, string | undefined>>): ArchitectCredentialResolution {
+  const declared = env[JULIUS_ARCHITECT_PROVIDER_ENV]?.trim() ?? '';
+  const provider: JuliusArchitectProvider | null = declared === '' || declared === 'openai'
+    ? 'openai' : declared === 'anthropic' ? 'anthropic' : null;
+  if (provider === null) {
+    return {
+      ok: false, provider: null, config: readGptArchitectConfig(env as Record<string, string | undefined>), reason: 'architect_provider_unknown',
+      missing: [`${JULIUS_ARCHITECT_PROVIDER_ENV} (must be anthropic or openai)`],
+    };
+  }
+  const shared = readGptArchitectConfig(env as Record<string, string | undefined>);
+  const row = j1RoleCredential('PROMPT_ARCHITECT');
+  const keyEnv = provider === 'anthropic' ? row.keyEnv : 'OPENAI_API_KEY';
+  const modelEnv = provider === 'anthropic' ? row.modelEnv : 'OPENAI_PROMPT_ARCHITECT_MODEL';
+  // The OpenAI path is passed exactly as it always was; the Anthropic key is trimmed.
+  const apiKey = provider === 'openai' ? env[keyEnv] ?? '' : env[keyEnv]?.trim() ?? '';
+  const config: GptArchitectConfig = provider === 'openai' ? shared : {
+    ...shared,
+    apiKeyPresent: apiKey !== '',
+    model: env[modelEnv]?.trim() || null,
+  };
+  const missing: string[] = [];
+  if (!config.apiKeyPresent) missing.push(keyEnv);
+  if (config.model === null) missing.push(modelEnv);
+  if (!config.liveMode) missing.push('RELAY_PROMPT_ARCHITECT_MODE=live');
+  missing.push(...config.unusable);
+  if (missing.length > 0) return { ok: false, provider, config, reason: 'live_config_missing', missing };
+  return { ok: true, provider, keyEnv, config, apiKey };
+}
+
+/** The verified organization ids the preflight read, one per Anthropic role. */
+export interface VerifiedRoleOrganizations {
+  readonly architect: string;
+  readonly coder: string;
+}
+
+/**
+ * THE ARCHITECT IS INDEPENDENT OF THE CODER, OR THE RUN DOES NOT START.
+ *
+ * Both are Anthropic, so a provider comparison cannot separate them. What does:
+ *   (a) two different key variables, holding two different keys;
+ *   (b) two different VERIFIED organizations, as the preflight read them (passed
+ *       in, never re-derived here);
+ *   (c) a reviewer provider that is neither the architect's nor the coder's.
+ * Returns the failed conditions by name; empty means independent.
+ *
+ * `organizations` is null only for a composition that cannot dispatch (the
+ * preflight's, with no executor shell). That composition is checked on (a) and
+ * (c), and the confirmed composition is checked on all three.
+ */
+export function architectIndependenceProblems(input: {
+  readonly env: Readonly<Record<string, string | undefined>>;
+  readonly architectProvider: string;
+  readonly coderProvider: string;
+  readonly reviewerProvider: string | null;
+  readonly organizations: VerifiedRoleOrganizations | null;
+  readonly requireOrganizations: boolean;
+}): readonly string[] {
+  const problems: string[] = [];
+  const architect = j1RoleCredential('PROMPT_ARCHITECT');
+  const coder = j1RoleCredential('CODING_AGENT');
+  const architectKey = input.env[architect.keyEnv]?.trim() ?? '';
+  const coderKey = input.env[coder.keyEnv]?.trim() ?? '';
+  if (architect.keyEnv === coder.keyEnv) problems.push('architect_and_coder_share_a_key_variable');
+  else if (architectKey !== '' && architectKey === coderKey) problems.push('architect_and_coder_share_a_key');
+  if (input.requireOrganizations || input.organizations !== null) {
+    if (input.organizations === null) problems.push('organizations_not_verified');
+    else if (input.organizations.architect === input.organizations.coder) problems.push('architect_and_coder_share_an_organization');
+  }
+  if (input.reviewerProvider !== null
+    && (input.reviewerProvider === input.architectProvider || input.reviewerProvider === input.coderProvider)) {
+    problems.push('reviewer_shares_a_provider_with_architect_or_coder');
+  }
+  return problems;
+}
+
 /* ------------------------------------------------------- role resolution */
 
 /**
@@ -185,9 +354,15 @@ import type { ShellEffectPort, TaskClaimSource } from './executor-effects';
  * the deadline, and a constant deadline is how a declaration stops describing
  * the call it declares.
  */
-export const architectWorker = (env: Record<string, string | undefined>): JuliusWorker => ({
-  workerId: 'prompt-architect-openai', role: 'PROMPT_ARCHITECT',
-  adapterId: 'openai-architect-live', providerId: 'openai',
+export const architectWorker = (
+  env: Record<string, string | undefined>,
+  /** Which architect this deployment runs (`resolveArchitectCredential`). The identity follows it; nothing else does. */
+  provider: JuliusArchitectProvider = 'openai',
+): JuliusWorker => ({
+  ...(provider === 'anthropic'
+    ? { workerId: 'prompt-architect-anthropic', adapterId: 'anthropic-architect-live', providerId: 'anthropic' }
+    : { workerId: 'prompt-architect-openai', adapterId: 'openai-architect-live', providerId: 'openai' }),
+  role: 'PROMPT_ARCHITECT',
   // `repair:plan` is a PLAN REVISION: a repair inherits its subject's role and
   // stage, so a rejected plan comes back here with the reviewer's findings in
   // its context, not to the Coding Agent. Paid run 34037313976 minted the
@@ -373,9 +548,18 @@ export function resolveLiveWorkers(options: {
    * mediator, which is what DECIDES; absent, each prompt says it was not told.
    */
   readonly researchPolicyFor?: ResearchPolicySource;
+  /**
+   * THE ORGANIZATIONS THE PREFLIGHT VERIFIED for the two Anthropic keys, passed
+   * in from its result and never re-read here. Required for an Anthropic
+   * architect in a composition that can dispatch (a non-null shell); the
+   * preflight's own composition, which cannot dispatch, has none yet.
+   */
+  readonly verifiedOrganizations?: VerifiedRoleOrganizations | null;
+  /** Where the architect's one refusal line goes (the entrypoint's redacted stdout). Absent prints nothing. */
+  readonly report?: (line: string) => void;
   /** Test seams: inject fakes here; production callers omit them. */
   readonly runners?: {
-    readonly architect?: typeof runGptArchitect;
+    readonly architect?: ArchitectRunner;
     readonly coder?: typeof runHostedCodingAgent;
     readonly reviewer?: typeof runHermesReview;
     readonly queryLoader?: () => Promise<HostedQueryFn>;
@@ -396,7 +580,10 @@ export function resolveLiveWorkers(options: {
    * environment's answer untouched, so a mission that says nothing behaves
    * exactly as every mission did before.
    */
-  const envArchitectConfig = readGptArchitectConfig(options.env);
+  /* WHICH ARCHITECT, AND WHOSE KEY: the role-to-credential table, never a fallback (`role-credentials.ts`). */
+  const architectCredential = resolveArchitectCredential(options.env);
+  const architectProvider: JuliusArchitectProvider = architectCredential.provider ?? 'openai';
+  const envArchitectConfig = architectCredential.config;
   const declaredCeiling = options.architectMaxOutputTokens;
   const ceilingConfig = typeof declaredCeiling === 'number'
       && Number.isInteger(declaredCeiling)
@@ -408,7 +595,6 @@ export function resolveLiveWorkers(options: {
   const architectConfig = options.architectEffort != null
     ? { ...ceilingConfig, reasoningEffort: options.architectEffort }
     : ceilingConfig;
-  const architectReadiness = evaluateReadiness(architectConfig);
   const hermes = loadHermesConfig(options.env);
   const requested = {
     architectModel: architectConfig.model,
@@ -419,20 +605,23 @@ export function resolveLiveWorkers(options: {
     reviewerModel: hermes.model ?? null,
   };
 
-  if (!architectReadiness.ready) {
-    problems.push({ role: 'PROMPT_ARCHITECT', reason: 'live_config_missing', missing: architectReadiness.missing });
+  if (!architectCredential.ok) {
+    problems.push({ role: 'PROMPT_ARCHITECT', reason: architectCredential.reason, missing: architectCredential.missing });
   } else {
     // ONE worker object for the registration and the adapter, exactly as the
     // reviewer does it below. Two calls would be two resolutions of the same
     // environment — equal today, and the shape that drifts.
-    const worker = architectWorker(options.env);
+    const worker = architectWorker(options.env, architectProvider);
     entries.push({
       worker,
       adapter: createLiveArchitectAdapter({
         worker, contexts: options.contexts, artifacts: options.artifacts,
-        config: architectConfig, apiKey: options.env.OPENAI_API_KEY ?? '',
+        // The key from the architect's own variable only (`resolveArchitectCredential`).
+        config: architectConfig, apiKey: architectCredential.apiKey,
         ...(options.researchPolicyFor === undefined ? {} : { researchPolicyFor: options.researchPolicyFor }),
-        run: options.runners?.architect,
+        ...(options.report === undefined ? {} : { report: options.report }),
+        // THE J1 RUNNER BOUNDARY: the Anthropic architect's runner comes from `createJ1ArchitectRunner` alone.
+        run: options.runners?.architect ?? (architectProvider === 'anthropic' ? createJ1ArchitectRunner() : undefined),
       }),
     });
   }
@@ -527,6 +716,26 @@ export function resolveLiveWorkers(options: {
         run: options.runners?.reviewer,
       }),
     });
+  }
+
+  /**
+   * DEFENCE IN DEPTH FOR THE J1 MAPPING. The architect and the coder share a
+   * provider by the founder's decision, so the only provider rule above
+   * (reviewer differs from coder) cannot tell them apart. They must be
+   * separated by key and by verified organization, and the reviewer must be
+   * neither of them (`architectIndependenceProblems`).
+   */
+  if (architectProvider === 'anthropic') {
+    const independence = architectIndependenceProblems({
+      env: options.env,
+      architectProvider, coderProvider: CODER_WORKER.providerId,
+      reviewerProvider: hermes.provider ?? null,
+      organizations: options.verifiedOrganizations ?? null,
+      requireOrganizations: options.shell !== null,
+    });
+    if (independence.length > 0) {
+      problems.push({ role: 'PROMPT_ARCHITECT', reason: 'architect_not_independent', missing: independence });
+    }
   }
 
   return { ok: problems.length === 0, problems, entries: problems.length === 0 ? entries : [], requested };

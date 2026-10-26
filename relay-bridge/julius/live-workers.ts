@@ -46,8 +46,8 @@ import {
 import {
   runGptArchitect,
   type GptArchitectConfig,
-  type GptRunOutcome,
 } from '../../src/relay/connectors/gpt-architect';
+import type { AnthropicRefusalEvidence, ArchitectRunOutcome, ArchitectRunner } from '../../src/relay/connectors/gpt-architect/anthropic-architect-runner';
 import { validateArchitectPlan, type ArchitectPlanReasonCode } from '../../src/relay/mission/prompt-architect/prompt-architect-plan';
 import { sanitizeJuliusGuidanceProposal } from '../../src/relay/mission/julius/julius-continuous-lifecycle';
 import { sanitizeJuliusRebuttal } from '../../src/relay/mission/julius/julius-disagreement';
@@ -653,7 +653,7 @@ const reviewerDiagnostics = (input: {
  * `architect-diagnostics.test.ts` fails when a site stops doing it.
  */
 const providerFacts = (
-  outcome: GptRunOutcome,
+  outcome: ArchitectRunOutcome,
   startedAtMs: number,
   maxOutputTokens: number,
   /**
@@ -769,7 +769,7 @@ export function juliusReviewerBillingPath(
   }
 }
 
-const planDiagnostics = (input: {
+const planDiagnosticsFor = (input: {
   readonly requestedModel: string | null;
   readonly servedModel?: string | null;
   readonly responseId?: string | null;
@@ -807,11 +807,13 @@ const planDiagnostics = (input: {
   /** The reasoning effort the connector put in the request / the provider echoed. Absent unless there is one. */
   readonly effortSent?: string | null;
   readonly effortEchoed?: string | null;
+  /** Which architect answered. Absent is the OpenAI architect, exactly as before. */
+  readonly provider?: 'openai' | 'anthropic';
 }): Record<string, unknown> => ({
   outcome: input.outcome ?? 'failed',
   stage: 'plan',
-  transport: 'openai',
-  provider: 'openai',
+  transport: input.provider ?? 'openai',
+  provider: input.provider ?? 'openai',
   requestedModel: input.requestedModel,
   // Evidence: the model the provider said answered, never the one requested.
   servedModel: input.servedModel ?? null,
@@ -972,6 +974,43 @@ function contractProposalFromPlan(plan: unknown): Record<string, unknown> | unde
   return Object.keys(proposal).length === 0 ? undefined : proposal;
 }
 
+/**
+ * THE ANTHROPIC ARCHITECT'S REFUSAL, IN COLUMNS THAT ALREADY EXIST.
+ *
+ * `provider_http_status`, `provider_request_id`, `provider_request_availability`
+ * and `provider_request_unavailable_reason` are the dump's own columns, read
+ * through the domain allowlist (`safeReviewDiagnostics`). `error.type` goes to
+ * `failure_shape` as `anthropic_error_<type>`, or `anthropic_error_unparseable`
+ * when a type was sent that is not a safe token. Nothing branches on
+ * `failure_shape` for an architect row: it is written for the reader. The OpenAI
+ * architect's outcome has none of these, so its rows are unchanged.
+ */
+export function architectRefusalFacts(outcome: ArchitectRunOutcome): Record<string, unknown> {
+  const facts: Record<string, unknown> = {};
+  if ('providerRequestId' in outcome || 'providerRequestUnavailableReason' in outcome) {
+    const id = outcome.providerRequestId ?? null;
+    facts.providerRequestId = id;
+    facts.providerRequestAvailability = id === null ? 'UNAVAILABLE' : 'CAPTURED';
+    facts.providerRequestUnavailableReason = id === null ? outcome.providerRequestUnavailableReason ?? null : null;
+  }
+  const refusal = 'refusal' in outcome ? outcome.refusal : undefined;
+  if (refusal !== undefined) {
+    facts.providerHttpStatus = refusal.httpStatus;
+    if (refusal.errorType !== null) facts.failureShape = `anthropic_error_${refusal.errorType}`;
+    else if (refusal.errorTypeUnparseable) facts.failureShape = 'anthropic_error_unparseable';
+  }
+  return facts;
+}
+
+/** THE ONE STDOUT LINE for a refused architect request. Every field is an integer or a safe token. */
+export function architectProviderRefusalLine(provider: 'openai' | 'anthropic', refusal: AnthropicRefusalEvidence): string {
+  const n = (value: number | null): string => (value === null ? 'unknown' : String(value));
+  return `provider_refusal role=PROMPT_ARCHITECT provider=${provider} http=${refusal.httpStatus} type=${refusal.errorType ?? 'unknown'}`
+    + ` limit_tokens=${n(refusal.rateLimit.tokensLimit)} remaining_tokens=${n(refusal.rateLimit.tokensRemaining)}`
+    + ` limit_requests=${n(refusal.rateLimit.requestsLimit)} remaining_requests=${n(refusal.rateLimit.requestsRemaining)}`
+    + ` request_id=${refusal.requestId ?? 'unavailable'}`;
+}
+
 export function createLiveArchitectAdapter(input: {
   readonly worker: JuliusWorker;
   readonly contexts: CompiledContextSource;
@@ -980,13 +1019,19 @@ export function createLiveArchitectAdapter(input: {
   readonly apiKey: string;
   /** The mission's sealed research policy, the same source the mediator decides with. */
   readonly researchPolicyFor?: ResearchPolicySource;
-  /** Injectable for offline tests; defaults to the real connector. */
-  readonly run?: typeof runGptArchitect;
+  /** Injectable for offline tests; defaults to the real OpenAI connector. The paid J1 composition passes `createJ1ArchitectRunner()`. */
+  readonly run?: ArchitectRunner;
+  /** Where the one `provider_refusal` line goes. Absent prints nothing. */
+  readonly report?: (line: string) => void;
 }): JuliusProviderAdapter {
   if (!input.config.liveMode || input.config.model === null || !input.apiKey) {
     throw new Error('architect_adapter_requires_live_config');
   }
-  const run = input.run ?? runGptArchitect;
+  const run: ArchitectRunner = input.run ?? runGptArchitect;
+  /* The worker's provider names the transport on every diagnostic row; the OpenAI architect's rows are unchanged. */
+  const architectProvider: 'openai' | 'anthropic' = input.worker.providerId === 'anthropic' ? 'anthropic' : 'openai';
+  const planDiagnostics = (facts: Parameters<typeof planDiagnosticsFor>[0]): Record<string, unknown> =>
+    planDiagnosticsFor({ ...facts, provider: architectProvider });
   return {
     adapterId: input.worker.adapterId,
     async dispatch(dispatch): Promise<JuliusProviderResult> {
@@ -1062,7 +1107,7 @@ export function createLiveArchitectAdapter(input: {
       for (;;) {
       attempts += 1;
       const startedAtMs = Date.now();
-      const outcome: GptRunOutcome = await run({
+      const outcome: ArchitectRunOutcome = await run({
         apiKey: input.apiKey,
         config: input.config,
         // The correction goes in the INSTRUCTIONS, beside the charter it did
@@ -1115,7 +1160,8 @@ export function createLiveArchitectAdapter(input: {
          * nobody took. `validationPassed` is null either way: this path returns
          * before Julius validates, so it never had a verdict to report. */
         const responded = typeof outcome.responseId === 'string' && outcome.responseId.length > 0;
-        const failed = planDiagnostics({
+        const failed = {
+          ...planDiagnostics({
           // Absent when the call never reached the provider; never zero for a
           // call that did. `undefined` becomes null in the row, which is the
           // honest reading of "no answer to report".
@@ -1124,7 +1170,12 @@ export function createLiveArchitectAdapter(input: {
           jsonParseable: responded ? false : null,
           validationPassed: null,
           attempts,
-        });
+          }),
+          // The Anthropic architect's refusal evidence, in the EXISTING columns only.
+          ...architectRefusalFacts(outcome),
+        };
+        const refusal = 'refusal' in outcome ? outcome.refusal : undefined;
+        if (refusal !== undefined) input.report?.(architectProviderRefusalLine(architectProvider, refusal));
         /*
          * NOT EVEN A 401, A 403 OR A 429 MAY SAY NOTHING RAN HERE, although each
          * is the provider refusing THIS request unprocessed. The refusal ends the
@@ -1149,6 +1200,19 @@ export function createLiveArchitectAdapter(input: {
             throw new JuliusDispatchError('TIMEOUT', true, 'Prompt Architect provider timed out.', outcome.failureClass, failed);
           case 'model_unavailable':
             throw new JuliusDispatchError('PROVIDER_UNAVAILABLE', false, 'Prompt Architect model is unavailable.', outcome.failureClass, failed);
+          case 'insufficient_credit':
+            /*
+             * THE ACCOUNT'S BALANCE REFUSED THE CALL. AUTH_CONFIGURATION, never
+             * retryable: funding an account is the operator's configuration, and
+             * the paid-slot report already reads AUTH_CONFIGURATION as
+             * PROVIDER_BLOCKED. It is the provider's explicit rejection before
+             * processing, so this request's outcome is KNOWN, but it does not
+             * attest `runtimeStarted: false`: a correction call may follow an
+             * answer this dispatch already paid for, exactly as the 401/403/429
+             * note above says. Non-retryable is what keeps it from ever buying a
+             * second call, whichever way the hold settles.
+             */
+            throw new JuliusDispatchError('AUTH_CONFIGURATION', false, 'Agentic Architect account has insufficient credit.', outcome.failureClass, failed);
           case 'refused':
             // The provider declined the REQUEST, not the caller: INVALID_REQUEST,
             // the code the Coding Agent's CONTENT_REFUSED carries, so one

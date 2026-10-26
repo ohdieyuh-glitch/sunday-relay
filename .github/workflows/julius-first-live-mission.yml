@@ -524,7 +524,16 @@ jobs:
       # The three roles, pinned. The preflight refuses if the entrypoint
       # resolves anything other than these.
       RELAY_PROMPT_ARCHITECT_MODE: live
-      OPENAI_PROMPT_ARCHITECT_MODEL: gpt-5.6-sol
+      # THE AGENTIC ARCHITECT IS ANTHROPIC (founder decision, 2026-10-26), on its OWN
+      # account: the key is the julius-live-validation secret ANTHROPIC_ARCHITECT_API_KEY
+      # and its organization is the repository variable
+      # JULIUS_EXPECTED_ANTHROPIC_ARCHITECT_ORG_ID (read like JULIUS_EXPECTED_ANTHROPIC_ORG_ID),
+      # passed only to the readiness, roles-preflight, LIVE and leak-scan steps. It
+      # never reads ANTHROPIC_API_KEY (the Coding Agent's account) and OpenAI is not
+      # used, required or contacted by J1. The model is the coder's pin; the
+      # architect's dispatch refuses any other SERVED model.
+      JULIUS_ARCHITECT_PROVIDER: anthropic
+      RELAY_ANTHROPIC_ARCHITECT_MODEL: claude-opus-5-5
       # THE CODING AGENT IS CLAUDE OPUS 5.5 (founder decision, 2026-09-30). The pin
       # is unchanged. Hosted CI authenticates that model with ANTHROPIC_API_KEY
       # under JULIUS_CLAUDE_AUTH=ANTHROPIC_API. CLAUDE_CODE_OAUTH_TOKEN is not a
@@ -1295,7 +1304,7 @@ jobs:
       # generates nothing and bills nothing, so it is asked here, before the
       # attempt marker can be written.
       #
-      # THE KEY NEVER TOUCHES ARGV OR THE LOG. OpenAI and xAI reach curl as a
+      # THE KEY NEVER TOUCHES ARGV OR THE LOG. Both Anthropic keys and xAI reach curl as a
       # `--config` file on stdin, written by `printf` — a bash builtin, so no
       # process is started with the key in its arguments — and only the HTTP
       # status is kept. No response body is read, stored or printed.
@@ -1320,23 +1329,25 @@ jobs:
       - name: 'Preflight: each provider accepts its credential and serves the pinned model, nothing generated'
         id: provider_readiness
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # Two Anthropic accounts: the Agentic Architect's and the Coding Agent's.
+          ANTHROPIC_ARCHITECT_API_KEY: ${{ secrets.ANTHROPIC_ARCHITECT_API_KEY }}
+          JULIUS_EXPECTED_ANTHROPIC_ARCHITECT_ORG_ID: ${{ vars.JULIUS_EXPECTED_ANTHROPIC_ARCHITECT_ORG_ID }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
           JULIUS_EXPECTED_ANTHROPIC_ORG_ID: ${{ vars.JULIUS_EXPECTED_ANTHROPIC_ORG_ID }}
         run: |
           set -uo pipefail
           : > provider-readiness.log
-          # $1 provider  $2 model  $3 url  — the curl config (headers) arrives on stdin.
+          # $1 provider  $2 model  $3 url  [$4 role] — the curl config (headers) arrives on stdin.
           #
           # THE VERDICT IS READ FROM THE RECORD, NOT FROM A SHELL VARIABLE. Each
           # probe runs at the end of a pipeline, which bash executes in a
           # subshell, so a `failed=1` set inside it would vanish — and a refused
           # credential would pass this gate. Every probe writes its result line;
-          # the step fails unless both API lines say AUTHENTICATED_MODEL_AVAILABLE
-          # and the organization line says VERIFIED.
+          # the step fails unless all three API lines say AUTHENTICATED_MODEL_AVAILABLE
+          # and both organization lines say VERIFIED, for two different organizations.
           probe() {
-            local provider=$1 model=$2 url=$3 config code=000 attempt result
+            local provider=$1 model=$2 url=$3 role=${4:-} config code=000 attempt result
             config=$(cat)
             for attempt in 1 2 3; do
               code=$(printf '%s\n' "$config" | curl -sS -o /dev/null -w '%{http_code}' --max-time 20 --config - "$url" 2>/dev/null) || code=000
@@ -1349,16 +1360,30 @@ jobs:
               000|429|5??) result=UNREACHABLE;;
               *) result=UNEXPECTED_STATUS;;
             esac
-            echo "provider_readiness provider=$provider model=$model http=$code result=$result" | tee -a provider-readiness.log
+            echo "provider_readiness provider=$provider${role:+ role=$role} model=$model http=$code result=$result" | tee -a provider-readiness.log
           }
-          [ -n "$OPENAI_API_KEY" ] && [ -n "$ANTHROPIC_API_KEY" ] && [ -n "$XAI_API_KEY" ] && [ -n "$JULIUS_EXPECTED_ANTHROPIC_ORG_ID" ] || {
-            echo 'provider_credentials_missing: a provider credential or the expected organization id is not set in the julius-live-validation environment' >&2; exit 1; }
-          printf 'header = "Authorization: Bearer %s"\n' "$OPENAI_API_KEY" \
-            | probe openai "$OPENAI_PROMPT_ARCHITECT_MODEL" "https://api.openai.com/v1/models/$OPENAI_PROMPT_ARCHITECT_MODEL"
-          # Spend-free models read. The script prints one closed line and never the key.
+          # EACH MISSING NAME IS NAMED, before anything is contacted. No value is printed.
+          missing=''
+          for name in ANTHROPIC_ARCHITECT_API_KEY JULIUS_EXPECTED_ANTHROPIC_ARCHITECT_ORG_ID ANTHROPIC_API_KEY JULIUS_EXPECTED_ANTHROPIC_ORG_ID XAI_API_KEY; do
+            [ -n "${!name:-}" ] || missing="$missing $name"
+          done
+          # THE ARCHITECT'S OWN KEY, named first: there is no fallback to any other key.
+          if [ -z "${ANTHROPIC_ARCHITECT_API_KEY:-}" ]; then
+            echo 'architect_credential_unset: ANTHROPIC_ARCHITECT_API_KEY is not set in the julius-live-validation environment; the Agentic Architect never uses another key' >&2
+          fi
+          [ -z "$missing" ] || {
+            echo "provider_credentials_missing:$missing (not set in the julius-live-validation environment; nothing was contacted)" >&2; exit 1; }
+          # THE TWO ANTHROPIC KEYS, SEPARATELY: a models read each, nothing generated.
+          printf 'header = "x-api-key: %s"\nheader = "anthropic-version: 2023-06-01"\n' "$ANTHROPIC_ARCHITECT_API_KEY" \
+            | probe anthropic "$RELAY_ANTHROPIC_ARCHITECT_MODEL" "https://api.anthropic.com/v1/models/$RELAY_ANTHROPIC_ARCHITECT_MODEL" architect
+          printf 'header = "x-api-key: %s"\nheader = "anthropic-version: 2023-06-01"\n' "$ANTHROPIC_API_KEY" \
+            | probe anthropic "$RELAY_HOSTED_CODING_MODEL" "https://api.anthropic.com/v1/models/$RELAY_HOSTED_CODING_MODEL" coder
+          # Spend-free models read, once per Anthropic role, each against ITS OWN expected
+          # organization. The script prints one closed line and never the key.
           # Errexit is off so a non-zero still reaches the reviewer probe and the count.
           set +e
-          node scripts/julius-org-attribution.mjs | tee -a provider-readiness.log
+          JULIUS_ORG_ATTRIBUTION_ROLE=architect node scripts/julius-org-attribution.mjs | tee -a provider-readiness.log
+          JULIUS_ORG_ATTRIBUTION_ROLE=coder node scripts/julius-org-attribution.mjs | tee -a provider-readiness.log
           set -e
           if [ "$RELAY_HERMES_PROVIDER" = 'xai' ]; then
             printf 'header = "Authorization: Bearer %s"\n' "$XAI_API_KEY" \
@@ -1368,12 +1393,22 @@ jobs:
           fi
           echo 'provider_balance=UNKNOWN (no provider exposes a spend-free balance query; exhaustion surfaces as PROVIDER_BLOCKED when a provider refuses)' | tee -a provider-readiness.log
           probed=$(grep -c '^provider_readiness ' provider-readiness.log || true)
-          api_ready=$(grep -cE '^provider_readiness provider=(openai|xai) .* result=AUTHENTICATED_MODEL_AVAILABLE$' provider-readiness.log || true)
-          org_verified=$(grep -cE '^org_attribution provider=anthropic model=[A-Za-z0-9._-]+ http=200 result=VERIFIED organization_id=[A-Za-z0-9_-]+$' provider-readiness.log || true)
-          if [ "$probed" -ne 2 ] || [ "$api_ready" -ne 2 ] || [ "$org_verified" -ne 1 ]; then
-            echo 'provider_not_ready: an API provider refused its credential, does not serve the pinned model, or could not be reached, or the Coding Agent organization attribution is ORG_ATTRIBUTION_UNVERIFIED; nothing was spent' >&2
+          api_ready=$(grep -cE '^provider_readiness provider=(anthropic role=(architect|coder)|xai) .* result=AUTHENTICATED_MODEL_AVAILABLE$' provider-readiness.log || true)
+          architect_org=$(sed -n 's/^org_attribution provider=anthropic role=architect model=[A-Za-z0-9._-]* http=200 result=VERIFIED organization_id=\([A-Za-z0-9_-]*\)$/\1/p' provider-readiness.log)
+          coder_org=$(sed -n 's/^org_attribution provider=anthropic role=coder model=[A-Za-z0-9._-]* http=200 result=VERIFIED organization_id=\([A-Za-z0-9_-]*\)$/\1/p' provider-readiness.log)
+          if [ "$probed" -ne 3 ] || [ "$api_ready" -ne 3 ] || [ -z "$architect_org" ] || [ -z "$coder_org" ]; then
+            echo 'provider_not_ready: an API provider refused its credential, does not serve the pinned model, or could not be reached, or an Anthropic organization attribution (Agentic Architect or Coding Agent) is ORG_ATTRIBUTION_UNVERIFIED; nothing was spent' >&2
             exit 1
           fi
+          # TWO ACCOUNTS, OR NO PAID RUN. Organization ids only.
+          if [ "$architect_org" = "$coder_org" ]; then
+            echo "org_attribution_distinct result=REFUSED reason=architect_and_coder_share_an_organization organization_id=$coder_org" | tee -a provider-readiness.log
+            echo 'provider_not_ready: the Agentic Architect and the Coding Agent keys bill the same Anthropic organization; two distinct accounts are required; nothing was spent' >&2
+            exit 1
+          fi
+          echo "org_attribution_distinct result=DISTINCT architect_organization_id=$architect_org coder_organization_id=$coder_org" | tee -a provider-readiness.log
+          # THE GATE'S VERIFIED IDS, handed to LIVE so the composition checks these, not a second reading.
+          { echo "architect_org=$architect_org"; echo "coder_org=$coder_org"; } >> "${GITHUB_OUTPUT:-/dev/null}"
 
       - name: 'Preflight: all three roles resolve to the expected models, nothing dispatched'
         env:
@@ -1383,7 +1418,9 @@ jobs:
           # values the LIVE step passes.
           JULIUS_RUN_ID: ${{ needs.spend-tag.outputs.run_id }}
           JULIUS_SERVER_RUN_ID: ${{ needs.spend-tag.outputs.run_id }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # The Agentic Architect's own key: its presence is checked by name here,
+          # before the attempted marker. Nothing is contacted in this step.
+          ANTHROPIC_ARCHITECT_API_KEY: ${{ secrets.ANTHROPIC_ARCHITECT_API_KEY }}
           # The Coding Agent uses ANTHROPIC_API_KEY alone. The consumer login
           # token is not passed into this step, and the preflight requires it
           # MISSING.
@@ -1410,7 +1447,9 @@ jobs:
           # constructed. These greps pin WHICH models were configured. The model a
           # provider actually serves is a different fact, observed during the run
           # and recorded as `actualModel` / `servedModel`; nothing here can know it.
-          grep -q 'architect=gpt-5.6-sol' preflight-roles.log || { echo 'architect_model_unexpected' >&2; exit 1; }
+          grep -q 'architect=claude-opus-5-5 ' preflight-roles.log || { echo 'architect_model_unexpected' >&2; exit 1; }
+          grep -qx '  role credential: Agentic Architect (PROMPT_ARCHITECT) provider=anthropic key=ANTHROPIC_ARCHITECT_API_KEY expected_org=JULIUS_EXPECTED_ANTHROPIC_ARCHITECT_ORG_ID model=RELAY_ANTHROPIC_ARCHITECT_MODEL' preflight-roles.log \
+            || { echo 'architect_credential_unexpected: the Agentic Architect did not resolve to its own Anthropic key' >&2; exit 1; }
           grep -q 'coder=claude-opus-5-5' preflight-roles.log || { echo 'coding_model_unexpected' >&2; exit 1; }
           grep -q 'reviewer=xai/grok-build-0.1' preflight-roles.log || { echo 'reviewer_model_unexpected' >&2; exit 1; }
           # THE LIVE LEDGER IS BOUND, OR THE PAID RUN DOES NOT START. Without it every
@@ -1418,7 +1457,7 @@ jobs:
           # coder stopped after two turns). The entrypoint prints the answer from
           # the store it will actually use; nothing but BOUND is accepted.
           grep -qx '  live_ledger: BOUND' preflight-roles.log || { echo 'live_ledger_unbound: allocation would fall back to a flat estimate' >&2; exit 1; }
-          for name in OPENAI_API_KEY ANTHROPIC_API_KEY DATABASE_URL JULIUS_EXECUTOR_ENDPOINT JULIUS_SCOPED_CREDENTIALS EXECUTOR_KEY_ID JULIUS_PUBLIC_KEY_PATH JULIUS_CALLER_ID; do
+          for name in ANTHROPIC_ARCHITECT_API_KEY ANTHROPIC_API_KEY DATABASE_URL JULIUS_EXECUTOR_ENDPOINT JULIUS_SCOPED_CREDENTIALS EXECUTOR_KEY_ID JULIUS_PUBLIC_KEY_PATH JULIUS_CALLER_ID; do
             grep -q "^  $name: SET$" preflight-roles.log || { echo "preflight_variable_not_set:$name" >&2; exit 1; }
           done
           # HOW EACH ROLE IS PAID FOR, AS THE ENTRYPOINT RESOLVED IT, OR NO PAID RUN.
@@ -1537,7 +1576,15 @@ jobs:
         id: live_mission
         if: success() && inputs.confirm_live == 'RUN LIVE MISSION' && steps.coder_auth.outcome == 'success' && steps.provider_readiness.outcome == 'success'
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # The Agentic Architect's own Anthropic account. The entrypoint reads it
+          # against JULIUS_EXPECTED_ANTHROPIC_ARCHITECT_ORG_ID, requires the two
+          # organizations to differ, and halts before it submits a run otherwise.
+          ANTHROPIC_ARCHITECT_API_KEY: ${{ secrets.ANTHROPIC_ARCHITECT_API_KEY }}
+          JULIUS_EXPECTED_ANTHROPIC_ARCHITECT_ORG_ID: ${{ vars.JULIUS_EXPECTED_ANTHROPIC_ARCHITECT_ORG_ID }}
+          # The organizations the pre-marker readiness gate VERIFIED. The entrypoint's
+          # own reading must equal them, and the composition is checked against them.
+          JULIUS_VERIFIED_ARCHITECT_ORG_ID: ${{ steps.provider_readiness.outputs.architect_org }}
+          JULIUS_VERIFIED_CODER_ORG_ID: ${{ steps.provider_readiness.outputs.coder_org }}
           # API key only. The consumer login token is not mapped into this step.
           # The entrypoint compares anthropic-organization-id with
           # JULIUS_EXPECTED_ANTHROPIC_ORG_ID and halts ORG_ATTRIBUTION_UNVERIFIED
@@ -1712,6 +1759,7 @@ jobs:
           SCOPED: ${{ steps.identity.outputs.scoped }}
           DB_PASSWORD: ${{ steps.identity.outputs.database_password }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_ARCHITECT_API_KEY: ${{ secrets.ANTHROPIC_ARCHITECT_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
@@ -1724,7 +1772,7 @@ jobs:
           trap 'rm -f "$needles"; rm -rf "$render"; [ "$clean" = 1 ] || { rm -rf julius-learning-store; echo "learning_store=REFUSED_BY_SCAN" > julius-live-evidence/learning-store.txt; }' EXIT
           refuse() { echo "$1: refusing to upload the learning store" >&2; exit 1; }
           [ -f julius-learning-store/julius.pgdump ] && [ -f "$render/julius.sql" ] || refuse learning_store_incomplete
-          for value in "$EXECUTOR_ROOT" "$DB_PASSWORD" "$OPENAI_API_KEY" "$ANTHROPIC_API_KEY" "$CLAUDE_CODE_OAUTH_TOKEN" "$XAI_API_KEY"; do
+          for value in "$EXECUTOR_ROOT" "$DB_PASSWORD" "$OPENAI_API_KEY" "$ANTHROPIC_ARCHITECT_API_KEY" "$ANTHROPIC_API_KEY" "$CLAUDE_CODE_OAUTH_TOKEN" "$XAI_API_KEY"; do
             if [ -n "$value" ]; then printf '%s\n' "$value" >> "$needles"; fi
           done
           printf '%s' "$SCOPED" | tr ',' '\n' | sed -n 's/.*:"\([A-Za-z0-9_-]\{20,\}\)".*/\1/p' | awk '{ print }' >> "$needles" || true
@@ -1800,7 +1848,7 @@ jobs:
           # exact lines the readiness step prints — provider, model, status, result —
           # the organization-attribution line, and the balance disclaimer.
           # Never a header, never a body, never a key.
-          grep -E '^(provider_readiness provider=[a-z]+ model=[A-Za-z0-9._:/-]+ http=([0-9]{3}|none) result=(AUTHENTICATED_MODEL_AVAILABLE|UNAUTHENTICATED|MODEL_NOT_FOUND|UNREACHABLE|UNEXPECTED_STATUS|UNCHECKED)|org_attribution provider=anthropic model=[A-Za-z0-9._-]+ http=(none|[0-9]{3}) result=(VERIFIED organization_id=[A-Za-z0-9_-]+|ORG_ATTRIBUTION_UNVERIFIED reason=[a-z_]+( organization_id=[A-Za-z0-9_-]+ expected_organization_id=[A-Za-z0-9_-]+)?)|provider_balance=UNKNOWN .*)$' provider-readiness.log \
+          grep -E '^(provider_readiness provider=[a-z]+( role=(architect|coder))? model=[A-Za-z0-9._:/-]+ http=([0-9]{3}|none) result=(AUTHENTICATED_MODEL_AVAILABLE|UNAUTHENTICATED|MODEL_NOT_FOUND|UNREACHABLE|UNEXPECTED_STATUS|UNCHECKED)|org_attribution provider=anthropic( role=(architect|coder))? model=[A-Za-z0-9._-]+ http=(none|[0-9]{3}) result=(VERIFIED organization_id=[A-Za-z0-9_-]+|ORG_ATTRIBUTION_UNVERIFIED reason=[a-z_]+( organization_id=[A-Za-z0-9_-]+ expected_organization_id=[A-Za-z0-9_-]+)?)|org_attribution_distinct result=(DISTINCT architect_organization_id=[A-Za-z0-9_-]+ coder_organization_id=[A-Za-z0-9_-]+|REFUSED reason=architect_and_coder_share_an_organization organization_id=[A-Za-z0-9_-]+)|provider_balance=UNKNOWN .*)$' provider-readiness.log \
             > julius-live-evidence/provider-readiness.txt 2>/dev/null || true
 
           # Only safe columns, from one script the `first-live-topology` job also
@@ -1896,9 +1944,11 @@ jobs:
           EXECUTOR_ROOT: ${{ steps.identity.outputs.root }}
           SCOPED: ${{ steps.identity.outputs.scoped }}
           DB_PASSWORD: ${{ steps.identity.outputs.database_password }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           # Kept although no step passes it any more: scanning for a secret this
           # job might still hold costs nothing, and dropping it would be a gap.
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # The Agentic Architect's key is scanned for exactly like the coder's.
+          ANTHROPIC_ARCHITECT_API_KEY: ${{ secrets.ANTHROPIC_ARCHITECT_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           # The Coding Agent's subscription token is a credential like any other.
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -1917,7 +1967,7 @@ jobs:
 
           # LAYER TWO's needles — the exact values this job actually holds. A shape rule cannot know what a
           # 43-character base64url scoped credential looks like, so the values themselves are matched literally.
-          for value in "$EXECUTOR_ROOT" "$DB_PASSWORD" "$OPENAI_API_KEY" "$ANTHROPIC_API_KEY" "$CLAUDE_CODE_OAUTH_TOKEN" "$XAI_API_KEY"; do
+          for value in "$EXECUTOR_ROOT" "$DB_PASSWORD" "$OPENAI_API_KEY" "$ANTHROPIC_ARCHITECT_API_KEY" "$ANTHROPIC_API_KEY" "$CLAUDE_CODE_OAUTH_TOKEN" "$XAI_API_KEY"; do
             if [ -n "$value" ]; then printf '%s\n' "$value" >> "$needles"; fi
           done
           # Every derived scoped credential, pulled out of the JSON map. awk re-terminates every record: without it

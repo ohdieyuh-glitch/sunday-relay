@@ -226,7 +226,7 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
  const providerRequestUnavailableReason=captured?null:statedRequestReason??(credentialShapedRequest?'provider_request_id_credential_shaped':statedRequestAvailability==='CAPTURED'?'provider_request_id_unusable':null);
  return Object.freeze({
   stage:safeEnum(v.stage,['plan','build','repair:plan','repair:build'] as const),
-  transport:safeEnum(v.transport,['local','remote','openai','hosted'] as const),
+  transport:safeEnum(v.transport,['local','remote','openai','anthropic','hosted'] as const),
   provider:safeToken(v.provider),
   servedModel:safeModel(v.servedModel),
   /* --- WHAT SERVED, AND HOW ANYONE KNOWS. Coding Agent only; null for the other roles.

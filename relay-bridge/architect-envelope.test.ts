@@ -94,7 +94,7 @@ describe('1–4 · the declared deadline and the operative one, under environmen
     expect(source).not.toMatch(/timeoutMs:\s*(?:DEFAULT_TIMEOUT_MS|ARCHITECT_OPERATIVE_TIMEOUT_MS)\b/u);
     // And one worker object serves both the registration and the adapter, so
     // two resolutions of one environment cannot drift.
-    expect(source).toContain('const worker = architectWorker(options.env);');
+    expect(source).toContain('const worker = architectWorker(options.env, architectProvider);');
   });
 });
 

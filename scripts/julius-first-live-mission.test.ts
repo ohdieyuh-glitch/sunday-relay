@@ -271,7 +271,10 @@ describe('the paid stage is gated, and the unpaid stage cannot pay', () => {
   });
 
   it('pins all three roles to the models the founder named', () => {
-    expect(workflow).toMatch(/OPENAI_PROMPT_ARCHITECT_MODEL:\s*gpt-5\.6-sol/u);
+    // The Agentic Architect is Anthropic on its own account (founder, 2026-10-26); no OpenAI architect is pinned.
+    expect(workflow).toMatch(/^\s+JULIUS_ARCHITECT_PROVIDER: anthropic$/mu);
+    expect(workflow).toMatch(/^\s+RELAY_ANTHROPIC_ARCHITECT_MODEL: claude-opus-5-5$/mu);
+    expect(workflow, 'no OpenAI architect pin').not.toMatch(/^\s+OPENAI_PROMPT_ARCHITECT_MODEL:/mu);
     expect(workflow).toMatch(/RELAY_HOSTED_CODING_MODEL:\s*claude-opus-5-5$/mu);
     // The founder named Claude Opus 5.5 for the smoke AND the paid run (2026-09-30):
     // no other model may be pinned, and none may sit anywhere as a fallback.
@@ -281,7 +284,7 @@ describe('the paid stage is gated, and the unpaid stage cannot pay', () => {
     expect(workflow).toMatch(/RELAY_HERMES_MODEL:\s*grok-build-0\.1/u);
     // Exit 5 (asserted above) is what proves the roles resolved; these pin
     // WHICH models were configured. The served model is observed during the run.
-    expect(workflow).toContain('architect=gpt-5.6-sol');
+    expect(workflow).toContain("grep -q 'architect=claude-opus-5-5 '");
     expect(workflow).toContain('coder=claude-opus-5-5');
     expect(workflow).toContain('reviewer=xai/grok-build-0.1');
   });
@@ -351,16 +354,30 @@ describe('no credential is committed, and none can leave the runner', () => {
     expect(roles).toContain("grep -qx '  claude auth source: anthropic_api_key' preflight-roles.log");
     expect(roles).toContain("grep -qx '  CLAUDE_CODE_OAUTH_TOKEN: MISSING' preflight-roles.log");
     expect(roles).toContain("grep -qx '  CLAUDE AUTH: API KEY provider=ANTHROPIC execution=CLAUDE_AGENT_SDK plan=n/a api_key_used=true api_cost_applicable=true' preflight-roles.log");
-    expect(roles).toMatch(/for name in OPENAI_API_KEY ANTHROPIC_API_KEY /u);
+    expect(roles).toMatch(/for name in ANTHROPIC_ARCHITECT_API_KEY ANTHROPIC_API_KEY /u);
+    // The Agentic Architect's key reaches exactly the steps that need it; OpenAI reaches none of them.
+    for (const name of ["'Preflight: all three roles resolve to the expected models, nothing dispatched'", "'LIVE: run the first real Julius mission'",
+      "'Preflight: each provider accepts its credential and serves the pinned model, nothing generated'"]) {
+      expect(stepNamed(name), name).toContain('ANTHROPIC_ARCHITECT_API_KEY: ${{ secrets.ANTHROPIC_ARCHITECT_API_KEY }}');
+      expect(stepNamed(name), name).not.toContain('secrets.OPENAI_API_KEY');
+    }
+    expect(live).toContain('JULIUS_EXPECTED_ANTHROPIC_ARCHITECT_ORG_ID: ${{ vars.JULIUS_EXPECTED_ANTHROPIC_ARCHITECT_ORG_ID }}');
+    expect(live).toContain('JULIUS_VERIFIED_ARCHITECT_ORG_ID: ${{ steps.provider_readiness.outputs.architect_org }}');
+    expect(live).toContain('JULIUS_VERIFIED_CODER_ORG_ID: ${{ steps.provider_readiness.outputs.coder_org }}');
     const readiness = stepNamed("'Preflight: each provider accepts its credential and serves the pinned model, nothing generated'");
     expect(readiness).toContain('\n        id: provider_readiness\n');
     expect(readiness).toContain('ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}');
     expect(readiness).toContain('JULIUS_EXPECTED_ANTHROPIC_ORG_ID: ${{ vars.JULIUS_EXPECTED_ANTHROPIC_ORG_ID }}');
-    expect(readiness).toContain('node scripts/julius-org-attribution.mjs');
+    expect(readiness).toContain('JULIUS_ORG_ATTRIBUTION_ROLE=architect node scripts/julius-org-attribution.mjs');
+    expect(readiness).toContain('JULIUS_ORG_ATTRIBUTION_ROLE=coder node scripts/julius-org-attribution.mjs');
+    expect(readiness).toContain('JULIUS_EXPECTED_ANTHROPIC_ARCHITECT_ORG_ID: ${{ vars.JULIUS_EXPECTED_ANTHROPIC_ARCHITECT_ORG_ID }}');
     expect(readiness, 'readiness does not generate').not.toMatch(/claude" -p /u);
     expect(readiness).not.toContain('julius-subscription-check.mjs');
     expect(readiness).not.toContain('CLAUDE_CODE_OAUTH_TOKEN');
-    expect(readiness).not.toContain('https://api.anthropic.com/v1/models/');
+    // Each Anthropic key gets a spend-free models read of its own, through --config on stdin.
+    expect(readiness).toContain('https://api.anthropic.com/v1/models/$RELAY_ANTHROPIC_ARCHITECT_MODEL" architect');
+    expect(readiness).toContain('https://api.anthropic.com/v1/models/$RELAY_HOSTED_CODING_MODEL" coder');
+    expect(readiness, 'no completion endpoint').not.toContain('/v1/messages');
   });
 
   it('the product path does not invoke a consumer Claude login, and the coder child still pins its model', () => {
@@ -2475,7 +2492,7 @@ describe('F5 — evidence is built by allowlist, and secrets cannot ride along',
       writeFileSync(join(bundle, 'workspace.diff'), 'diff --git a/x b/x\n+task-free text\n');
       mutate(bundle);
       writeFileSync(join(root, 'step.sh'), script);
-      const env = { PATH: process.env.PATH ?? '', EXECUTOR_ROOT: LIVE, DB_PASSWORD: 'db-password-0123456789', SCOPED: '', OPENAI_API_KEY: '', ANTHROPIC_API_KEY: '',
+      const env = { PATH: process.env.PATH ?? '', EXECUTOR_ROOT: LIVE, DB_PASSWORD: 'db-password-0123456789', SCOPED: '', OPENAI_API_KEY: '', ANTHROPIC_ARCHITECT_API_KEY: '', ANTHROPIC_API_KEY: '',
         CLAUDE_CODE_OAUTH_TOKEN: '', XAI_API_KEY: '', TMPDIR: root, SystemRoot: process.env.SystemRoot ?? '' };
       const result = spawnSync(bashBinary, ['-eo', 'pipefail', 'step.sh'], { cwd: root, env, encoding: 'utf8' });
       const kept = existsSync(bundle);
@@ -4233,7 +4250,7 @@ describe('a learning pair is two jobs on one store: arm WITHOUT exports it, arm 
       writeFileSync(join(job, 'julius-live-evidence', 'learning-store.txt'), 'dump_sha256=0\n');
       const status = run(stepScript(SCAN), job, {
         RUNNER_TEMP: temp, EXECUTOR_ROOT: 'executor-root-value-0001', DB_PASSWORD: 'db-password-value-0001',
-        SCOPED: '{"execute":"Xk7Qm2Rv9TzLbN4pAeWs6YcHgJdF1uOi3ZrKxVtB0nM"}', OPENAI_API_KEY: '', ANTHROPIC_API_KEY: '',
+        SCOPED: '{"execute":"Xk7Qm2Rv9TzLbN4pAeWs6YcHgJdF1uOi3ZrKxVtB0nM"}', OPENAI_API_KEY: '', ANTHROPIC_ARCHITECT_API_KEY: '', ANTHROPIC_API_KEY: '',
         CLAUDE_CODE_OAUTH_TOKEN: '', XAI_API_KEY: '',
       });
       expect(existsSync(join(temp, 'julius-learning-store-render')), 'the rendering never outlives the step').toBe(false);

@@ -187,48 +187,82 @@ describe('no second spending path', () => {
 describe('provider readiness fails before spending, and never exposes a key', () => {
   const paidJob = job('first-live-mission');
   const readiness = step(paidJob, READINESS);
-  const VERIFIED = 'org_attribution provider=anthropic model=claude-opus-5-5 http=200 result=VERIFIED organization_id=org_recorded';
+  /* Test fixtures only. The real ids come from the repository variables, never from source. */
+  const ARCHITECT_ORG = 'aff8a85a-82c3-4ca7-afa7-8d3f63856dc4';
+  const CODER_ORG = 'be82739b-746c-4288-a91b-6a332816e790';
+  const verified = (role: 'architect' | 'coder', org: string): string =>
+    `org_attribution provider=anthropic role=${role} model=claude-opus-5-5 http=200 result=VERIFIED organization_id=${org}`;
+  const MARKER = "- name: 'Record that a paid mission was attempted (before any provider can be reached)'";
 
-  it('runs on every dispatch, before the roles check and long before LIVE', () => {
+  /** The ORDER rule, as one predicate: after the build, before the marker, the roles check and LIVE. */
+  const gateRunsBeforeMarker = (text: string): boolean => {
+    const at = text.indexOf(`- name: ${READINESS}`);
+    const build = text.indexOf('- name: Build the executor, the preflight probe and the live entrypoint');
+    const marker = text.indexOf(MARKER);
+    return at > -1 && build > -1 && marker > -1 && at > build && at < marker
+      && at < text.indexOf("- name: 'Preflight: all three roles resolve")
+      && at < text.indexOf("- name: 'LIVE: run the first real Julius mission'");
+  };
+
+  it('runs on every dispatch, after the build and before the attempted marker, the roles check and LIVE', () => {
     expect(readiness, 'a condition would let a paid run skip it').not.toMatch(/\n\s+if:/u);
-    const at = paidJob.indexOf(`- name: ${READINESS}`);
-    expect(at).toBeLessThan(paidJob.indexOf("- name: 'Preflight: all three roles resolve"));
-    expect(at).toBeLessThan(paidJob.indexOf("- name: 'LIVE: run the first real Julius mission'"));
+    expect(gateRunsBeforeMarker(paidJob)).toBe(true);
+  });
+
+  it('MUTATION: the same gate moved after the attempted marker is refused by the order rule', () => {
+    const block = `${readiness.trimEnd()}\n`;
+    const without = paidJob.replace(block, '');
+    expect(without, 'the mutation removed the step').not.toContain(`- name: ${READINESS}`);
+    const markerAt = without.indexOf(MARKER);
+    const nextStep = without.indexOf('\n      - name:', markerAt);
+    const moved = `${without.slice(0, nextStep + 1)}      ${block}${without.slice(nextStep + 1)}`;
+    expect(moved).toContain(`- name: ${READINESS}`);
+    expect(gateRunsBeforeMarker(moved)).toBe(false);
   });
 
   it('the key reaches curl only through --config on stdin, and is never echoed', () => {
     const body = script(readiness);
+    const expandsKey = /\$\{?[A-Z_]*API_KEY\b/u;
     for (const line of body.split('\n')) {
-      if (/API_KEY/u.test(line) && !/^\s*\[ -n "\$OPENAI_API_KEY" \]/u.test(line)) {
+      if (expandsKey.test(line) && !/^\s*if \[ -z "\$\{ANTHROPIC_ARCHITECT_API_KEY:-\}" \]; then$/u.test(line)) {
         expect(line, 'a key may only be interpolated into the printf that feeds --config').toMatch(/^\s*printf 'header = /u);
       }
       if (/\bcurl\b/u.test(line)) expect(line, 'curl never receives a key as an argument').not.toMatch(/API_KEY/u);
-      if (/\becho\b/u.test(line)) expect(line, 'nothing echoes a key').not.toMatch(/API_KEY/u);
+      if (/\becho\b/u.test(line)) expect(line, 'nothing echoes a key').not.toMatch(expandsKey);
     }
     expect(body).toContain('--config -');
-    expect(body).toContain('node scripts/julius-org-attribution.mjs');
+    expect(body).toContain('JULIUS_ORG_ATTRIBUTION_ROLE=architect node scripts/julius-org-attribution.mjs');
+    expect(body).toContain('JULIUS_ORG_ATTRIBUTION_ROLE=coder node scripts/julius-org-attribution.mjs');
     expect(body, 'the consumer login token is not a readiness credential').not.toContain('CLAUDE_CODE_OAUTH_TOKEN');
     expect(body).toContain('provider_balance=UNKNOWN');
-    expect(body, 'the Anthropic key is an environment entry for the attribution script, never a curl argument').not.toContain('api.anthropic.com');
+    expect(body, 'OpenAI is not a J1 requirement').not.toMatch(/OPENAI|api\.openai\.com/u);
+    expect(readiness, 'OpenAI is not passed to the readiness step').not.toContain('secrets.OPENAI_API_KEY');
   });
 
   /**
-   * Run the step for real. A fake curl answers OpenAI and xAI. A fake node,
-   * earlier on PATH, answers the organization script with a closed line.
-   * Neither is a live provider, and neither is presented as one.
+   * Run the step for real. A fake curl answers Anthropic (per key) and xAI. A fake
+   * node, earlier on PATH, answers the organization script with one closed line per
+   * role. Neither is a live provider, and neither is presented as one.
    */
-  const runReadiness = (statuses: { openai: string; xai: string }, env: Record<string, string> = {}, probe?: { line: string; exitCode: number }) => {
+  const runReadiness = (
+    statuses: { architect?: string; coder?: string; xai: string },
+    env: Record<string, string> = {},
+    orgs: { architect?: string; coder?: string } = {},
+  ) => {
     const dir = mkdtempSync(join(tmpdir(), 'julius-readiness-'));
     const record = dir.replace(/\\/gu, '/');
     const fakeNode = join(dir, 'node');
     writeFileSync(fakeNode, [
       '#!/usr/bin/env bash',
       'for arg in "$@"; do case "$arg" in *FAKETESTNOTREAL*) echo LEAK >> "$FAKE_DIR/leak";; esac; done',
-      `printf '%s\\n' "$*" >> '${record}/node-argv'`,
+      `printf '%s %s\\n' "\${JULIUS_ORG_ATTRIBUTION_ROLE:-none}" "$*" >> '${record}/node-argv'`,
       'case "$*" in',
       '  *julius-org-attribution.mjs*)',
-      '    if [ -n "${JULIUS_ORG_PROBE_LINE:-}" ]; then printf \'%s\\n\' "$JULIUS_ORG_PROBE_LINE"; exit "${JULIUS_ORG_PROBE_EXIT:-1}"; fi',
-      `    printf '%s\\n' '${VERIFIED}'`,
+      '    case "${JULIUS_ORG_ATTRIBUTION_ROLE:-}" in',
+      `      architect) if [ -n "\${FAKE_ARCHITECT_LINE:-}" ]; then printf '%s\\n' "$FAKE_ARCHITECT_LINE"; exit 1; fi; printf '%s\\n' "org_attribution provider=anthropic role=architect model=claude-opus-5-5 http=200 result=VERIFIED organization_id=$FAKE_ARCHITECT_ORG";;`,
+      `      coder) if [ -n "\${FAKE_CODER_LINE:-}" ]; then printf '%s\\n' "$FAKE_CODER_LINE"; exit 1; fi; printf '%s\\n' "org_attribution provider=anthropic role=coder model=claude-opus-5-5 http=200 result=VERIFIED organization_id=$FAKE_CODER_ORG";;`,
+      '      *) echo "role missing" >> "$FAKE_DIR/leak"; exit 1;;',
+      '    esac',
       '    exit 0;;',
       'esac',
       'echo "unexpected node: $*" >> "$FAKE_DIR/leak"',
@@ -242,8 +276,13 @@ describe('provider readiness fails before spending, and never exposes a key', ()
       'for arg in "$@"; do case "$arg" in *FAKETESTNOTREAL*) echo LEAK >> "$FAKE_DIR/leak";; esac; done',
       'url="${@: -1}"',
       'case "$url" in',
-      `  *api.openai.com*) printf '%s' "${statuses.openai}";;`,
-      '  *api.anthropic.com*) echo ANTHROPIC_API_CALLED >> "$FAKE_DIR/leak"; printf 200;;',
+      '  *api.openai.com*) echo OPENAI_CALLED >> "$FAKE_DIR/leak"; printf 200;;',
+      '  *api.anthropic.com*)',
+      '    case "$config" in',
+      `      *FAKETESTNOTREAL-anthropic-architect*) printf '%s' "${statuses.architect ?? '200'}";;`,
+      `      *FAKETESTNOTREAL-anthropic*) printf '%s' "${statuses.coder ?? '200'}";;`,
+      '      *) printf 000;;',
+      '    esac;;',
       `  *api.x.ai*) printf '%s' "${statuses.xai}";;`,
       '  *) printf 000;;',
       'esac',
@@ -252,8 +291,11 @@ describe('provider readiness fails before spending, and never exposes a key', ()
     const fakeSleep = join(dir, 'sleep');
     writeFileSync(fakeSleep, '#!/usr/bin/env bash\nexit 0\n');
     chmodSync(fakeSleep, 0o755);
+    const outputFile = join(dir, 'github-output');
+    writeFileSync(outputFile, '');
     let code = 0;
     let output = '';
+    let stderr = '';
     try {
       output = execFileSync('bash', [...GITHUB_BASH, script(readiness)], {
         cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
@@ -262,69 +304,93 @@ describe('provider readiness fails before spending, and never exposes a key', ()
           PATH: `${dir}${delimiter}${process.env.PATH ?? ''}`,
           FAKE_DIR: dir,
           GITHUB_WORKSPACE: dir,
-          OPENAI_API_KEY: 'FAKETESTNOTREAL-openai',
+          GITHUB_OUTPUT: outputFile,
+          FAKE_ARCHITECT_ORG: orgs.architect ?? ARCHITECT_ORG,
+          FAKE_CODER_ORG: orgs.coder ?? CODER_ORG,
+          ANTHROPIC_ARCHITECT_API_KEY: 'FAKETESTNOTREAL-anthropic-architect',
+          JULIUS_EXPECTED_ANTHROPIC_ARCHITECT_ORG_ID: ARCHITECT_ORG,
           ANTHROPIC_API_KEY: 'FAKETESTNOTREAL-anthropic',
           XAI_API_KEY: 'FAKETESTNOTREAL-xai',
-          JULIUS_EXPECTED_ANTHROPIC_ORG_ID: 'org_recorded',
-          OPENAI_PROMPT_ARCHITECT_MODEL: 'gpt-5.6-sol',
+          JULIUS_EXPECTED_ANTHROPIC_ORG_ID: CODER_ORG,
+          RELAY_ANTHROPIC_ARCHITECT_MODEL: 'claude-opus-5-5',
           RELAY_HOSTED_CODING_MODEL: 'claude-opus-5-5',
           RELAY_HERMES_PROVIDER: 'xai',
           RELAY_HERMES_MODEL: 'grok-build-0.1',
-          ...(probe === undefined ? {} : { JULIUS_ORG_PROBE_LINE: probe.line, JULIUS_ORG_PROBE_EXIT: String(probe.exitCode) }),
           ...env,
         },
       });
     } catch (error) {
       code = (error as { status?: number }).status ?? 1;
       output = String((error as { stdout?: string }).stdout ?? '');
+      stderr = String((error as { stderr?: string }).stderr ?? '');
     }
     const recorded = (name: string): string => { try { return readFileSync(join(dir, name), 'utf8'); } catch { return ''; } };
-    return { code, output, leak: recorded('leak'), nodeArgv: recorded('node-argv').trim() };
+    return { code, output, stderr, leak: recorded('leak'), nodeArgv: recorded('node-argv').trim(), githubOutput: recorded('github-output') };
   };
 
-  it('both API providers authenticate and the organization line is VERIFIED, with no key in argv or output', () => {
-    const run = runReadiness({ openai: '200', xai: '200' });
-    expect(run.code).toBe(0);
-    expect(run.output.match(/result=AUTHENTICATED_MODEL_AVAILABLE/gu)?.length).toBe(2);
-    expect(run.output).toContain(VERIFIED);
+  it('both Anthropic keys and xAI authenticate, both organizations are VERIFIED and distinct, with no key in argv or output', () => {
+    const run = runReadiness({ xai: '200' });
+    expect(run.code, run.stderr).toBe(0);
+    expect(run.output).toContain('provider_readiness provider=anthropic role=architect model=claude-opus-5-5 http=200 result=AUTHENTICATED_MODEL_AVAILABLE');
+    expect(run.output).toContain('provider_readiness provider=anthropic role=coder model=claude-opus-5-5 http=200 result=AUTHENTICATED_MODEL_AVAILABLE');
+    expect(run.output.match(/result=AUTHENTICATED_MODEL_AVAILABLE/gu)?.length).toBe(3);
+    expect(run.output).toContain(verified('architect', ARCHITECT_ORG));
+    expect(run.output).toContain(verified('coder', CODER_ORG));
+    expect(run.output).toContain(`org_attribution_distinct result=DISTINCT architect_organization_id=${ARCHITECT_ORG} coder_organization_id=${CODER_ORG}`);
     expect(run.output).toContain('provider_balance=UNKNOWN');
-    expect(run.leak, 'no argv leak, and curl never calls Anthropic').toBe('');
+    expect(run.leak, 'no argv leak, and OpenAI is never contacted').toBe('');
     expect(run.output).not.toContain('FAKETESTNOTREAL');
-    expect(run.nodeArgv).toBe('scripts/julius-org-attribution.mjs');
+    expect(run.nodeArgv.split('\n')).toEqual(['architect scripts/julius-org-attribution.mjs', 'coder scripts/julius-org-attribution.mjs']);
+    // The verified ids are the gate's outputs, for LIVE.
+    expect(run.githubOutput).toBe(`architect_org=${ARCHITECT_ORG}\ncoder_org=${CODER_ORG}\n`);
   });
 
-  it('an unverified organization still probes the reviewer and fails closed', () => {
-    const line = 'org_attribution provider=anthropic model=claude-opus-5-5 http=200 result=ORG_ATTRIBUTION_UNVERIFIED reason=mismatch organization_id=org_other expected_organization_id=org_recorded';
-    const run = runReadiness({ openai: '200', xai: '200' }, {}, { line, exitCode: 1 });
+  it('the two keys billing the same organization is refused before the marker', () => {
+    const run = runReadiness({ xai: '200' }, {}, { architect: CODER_ORG, coder: CODER_ORG });
     expect(run.code).not.toBe(0);
-    expect(run.output).toContain(line);
-    expect(run.output).toContain('ORG_ATTRIBUTION_UNVERIFIED');
-    expect(run.output).toContain('provider_readiness provider=xai model=grok-build-0.1 http=200 result=AUTHENTICATED_MODEL_AVAILABLE');
-    expect(run.output).toContain('provider_balance=UNKNOWN');
-    expect(run.output).not.toContain('FAKETESTNOTREAL');
+    expect(run.output).toContain(`org_attribution_distinct result=REFUSED reason=architect_and_coder_share_an_organization organization_id=${CODER_ORG}`);
+    expect(run.stderr).toContain('two distinct accounts are required');
+    expect(run.githubOutput).toBe('');
   });
 
-  it('a refused credential or an unreachable API provider fails the job', () => {
-    expect(runReadiness({ openai: '401', xai: '200' }).code).not.toBe(0);
-    expect(runReadiness({ openai: '404', xai: '200' }).code).not.toBe(0);
-    expect(runReadiness({ openai: '200', xai: '503' }).code).not.toBe(0);
-  });
-
-  it('a missing key or expected organization id fails before any request is made', () => {
-    const blanks: Record<string, string>[] = [
-      { XAI_API_KEY: '' },
-      { ANTHROPIC_API_KEY: '' },
-      { OPENAI_API_KEY: '' },
-      { JULIUS_EXPECTED_ANTHROPIC_ORG_ID: '' },
-    ];
-    for (const blank of blanks) {
-      const run = runReadiness({ openai: '200', xai: '200' }, blank);
-      expect(run.code, JSON.stringify(blank)).not.toBe(0);
-      expect(run.output, JSON.stringify(blank)).not.toContain('provider_readiness');
-      expect(run.output, JSON.stringify(blank)).not.toContain('org_attribution');
-      expect(run.nodeArgv, JSON.stringify(blank)).toBe('');
+  it("either role's organization not matching its OWN expected id still probes the reviewer and fails closed", () => {
+    for (const [role, expected] of [['architect', ARCHITECT_ORG], ['coder', CODER_ORG]] as const) {
+      const line = `org_attribution provider=anthropic role=${role} model=claude-opus-5-5 http=200 result=ORG_ATTRIBUTION_UNVERIFIED reason=mismatch organization_id=org_other expected_organization_id=${expected}`;
+      const run = runReadiness({ xai: '200' }, role === 'architect' ? { FAKE_ARCHITECT_LINE: line } : { FAKE_CODER_LINE: line });
+      expect(run.code, role).not.toBe(0);
+      expect(run.output, role).toContain(line);
+      expect(run.output, role).toContain('provider_readiness provider=xai model=grok-build-0.1 http=200 result=AUTHENTICATED_MODEL_AVAILABLE');
+      expect(run.stderr, role).toContain('ORG_ATTRIBUTION_UNVERIFIED');
+      expect(run.githubOutput, role).toBe('');
       expect(run.output).not.toContain('FAKETESTNOTREAL');
     }
+  }, 60_000);
+
+  it('a refused credential or an unreachable API provider fails the job', () => {
+    expect(runReadiness({ architect: '401', xai: '200' }).code).not.toBe(0);
+    expect(runReadiness({ coder: '401', xai: '200' }).code).not.toBe(0);
+    expect(runReadiness({ architect: '404', xai: '200' }).code).not.toBe(0);
+    expect(runReadiness({ xai: '503' }).code).not.toBe(0);
+  }, 60_000);
+
+  it('a missing key or expected organization id fails before any request is made, by name', () => {
+    for (const name of ['ANTHROPIC_ARCHITECT_API_KEY', 'JULIUS_EXPECTED_ANTHROPIC_ARCHITECT_ORG_ID', 'XAI_API_KEY', 'ANTHROPIC_API_KEY', 'JULIUS_EXPECTED_ANTHROPIC_ORG_ID']) {
+      const run = runReadiness({ xai: '200' }, { [name]: '' });
+      expect(run.code, name).not.toBe(0);
+      expect(run.stderr, name).toContain(`provider_credentials_missing: ${name}`);
+      expect(run.output, name).not.toContain('provider_readiness');
+      expect(run.output, name).not.toContain('org_attribution');
+      expect(run.nodeArgv, name).toBe('');
+      expect(run.output).not.toContain('FAKETESTNOTREAL');
+    }
+    const unset = runReadiness({ xai: '200' }, { ANTHROPIC_ARCHITECT_API_KEY: '' });
+    expect(unset.stderr).toContain('architect_credential_unset');
+  }, 60_000);
+
+  it('OpenAI is neither required nor contacted: an absent OpenAI key changes nothing', () => {
+    const run = runReadiness({ xai: '200' }, { OPENAI_API_KEY: '' });
+    expect(run.code, run.stderr).toBe(0);
+    expect(run.leak).toBe('');
   });
 });
 
