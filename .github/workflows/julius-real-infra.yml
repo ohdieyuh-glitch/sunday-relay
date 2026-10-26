@@ -370,7 +370,11 @@ jobs:
             const files = report.testResults.map((file) => file.name.replace(`${process.cwd()}/`, ""));
             const idle = report.numTodoTests + report.numPendingTests;
             console.log(`real-PostgreSQL suites: ${files.length} files, ${report.numPassedTests} passed, ${report.numFailedTests} failed, ${idle} todo/skipped`);
-            for (const file of files) console.log(`  ${file}`);
+            // One line per suite, so a per-suite count is read off this step rather than reconstructed from the default reporter.
+            for (const [index, result] of report.testResults.entries()) {
+              const count = (status) => result.assertionResults.filter((test) => test.status === status).length;
+              console.log(`  ${files[index]}: ${count("passed")} passed, ${count("failed")} failed, ${count("todo")} todo, ${count("pending") + count("skipped")} skipped`);
+            }
             if (files.length === 0) { console.error("real_postgres_no_suites: no file matched"); process.exit(1); }
             if (idle > 0) { console.error(`real_postgres_not_run: ${idle} case(s) did not run`); process.exit(1); }
           '
