@@ -5959,29 +5959,38 @@ namespace WonderlandJuliusMissionQa
 		const TWeakObjectPtr<UWorld> WeakWorld(World);
 		const TSharedRef<int32> Remaining = MakeShared<int32>(24);
 		const TSharedRef<FTimerHandle> Settle = MakeShared<FTimerHandle>();
-		World->GetTimerManager().SetTimer(*Settle, FTimerDelegate::CreateLambda([WeakCapture, WeakWorld, Remaining, Settle, Name, Width, Height]()
+		World->GetTimerManager().SetTimer(*Settle, FTimerDelegate::CreateLambda([WeakCapture, WeakWorld, Remaining, Settle, Name]()
 		{
 			ASceneCapture2D* Done = WeakCapture.Get();
 			UTextureRenderTarget2D* Shot = Done != nullptr ? Done->GetCaptureComponent2D()->TextureTarget.Get() : nullptr;
-			if (Shot == nullptr)
+			if (Shot != nullptr)
 			{
-				if (UWorld* Here = WeakWorld.Get()) { Here->GetTimerManager().ClearTimer(*Settle); }
-				UE_LOG(LogWonderlandUi, Warning, TEXT("WLJ1WORLD shot_error=capture_gone"));
-				return;
+				Done->GetCaptureComponent2D()->CaptureScene();
+				if (--(*Remaining) > 0) { return; }
 			}
-			Done->GetCaptureComponent2D()->CaptureScene();
-			if (--(*Remaining) > 0) { return; }
-			if (UWorld* Here = WeakWorld.Get()) { Here->GetTimerManager().ClearTimer(*Settle); }
+			// CLEARING THE TIMER DESTROYS THIS LAMBDA, captures and all: everything still needed is copied out first.
+			const FString ShotName = Name;
+			const TSharedRef<FTimerHandle> Handle = Settle;
+			if (UWorld* Here = WeakWorld.Get()) { Here->GetTimerManager().ClearTimer(*Handle); }
+			if (Shot == nullptr) { UE_LOG(LogWonderlandUi, Warning, TEXT("WLJ1WORLD shot_error=capture_gone")); return; }
 			FlushRenderingCommands();
 			TArray<FColor> Pixels;
 			FTextureRenderTargetResource* Resource = Shot->GameThread_GetRenderTargetResource();
-			const bool bRead = Resource != nullptr && Resource->ReadPixels(Pixels) && Pixels.Num() == Width * Height;
+			const bool bReadOk = Resource != nullptr && Resource->ReadPixels(Pixels);
+			const int32 ShotWidth = Shot->SizeX;
+			const int32 ShotHeight = Shot->SizeY;
+			const bool bRead = bReadOk && ShotWidth > 0 && Pixels.Num() == ShotWidth * ShotHeight;
 			Done->Destroy();
-			if (!bRead) { UE_LOG(LogWonderlandUi, Warning, TEXT("WLJ1WORLD shot_error=read_back")); return; }
+			if (!bRead)
+			{
+				UE_LOG(LogWonderlandUi, Warning, TEXT("WLJ1WORLD shot_error=read_back resource=%d read=%d pixels=%d size=%dx%d"),
+					Resource != nullptr ? 1 : 0, bReadOk ? 1 : 0, Pixels.Num(), Shot->SizeX, Shot->SizeY);
+				return;
+			}
 			for (FColor& Pixel : Pixels) { Pixel.A = 255; }
-			const FString Path = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots") / TEXT("WLJ1") / (Name + TEXT(".png")));
+			const FString Path = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots") / TEXT("WLJ1") / (ShotName + TEXT(".png")));
 			IFileManager::Get().MakeDirectory(*FPaths::GetPath(Path), true);
-			const bool bSaved = FImageUtils::SaveImageByExtension(*Path, FImageView(Pixels.GetData(), Width, Height));
+			const bool bSaved = FImageUtils::SaveImageByExtension(*Path, FImageView(Pixels.GetData(), ShotWidth, ShotHeight));
 			UE_LOG(LogWonderlandUi, Display, TEXT("WLJ1WORLD shot_path=%s saved=%d"), *Path, bSaved ? 1 : 0);
 		}), 0.05f, true);
 	}
