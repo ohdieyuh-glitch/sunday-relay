@@ -6,6 +6,7 @@ import { delimiter, join, resolve } from 'node:path';
 
 import { LEGACY_RUN_ID_PATTERN, parseJuliusAdmissionRunId, WLJ_RUN_ID_PATTERN } from './julius-admission-run-id.mjs';
 import { preflightIdentityFor } from './julius-live-preflight-identity';
+import { parseJuliusAttemptRecordTag } from '../src/relay/mission/julius/julius-spend-ceiling';
 
 /**
  * ONE SPENDING PATH, ONE SLOT, NO WAY AROUND EITHER.
@@ -887,10 +888,10 @@ describe('the live-progress publisher is best-effort, paid-only, and the job wri
   const STOP = "'Live progress: stop the phase publisher'";
   const LIVE = "'LIVE: run the first real Julius mission'";
 
-  it('declares the full read set plus statuses: write, and never checks: write', () => {
+  it('declares the full read set plus statuses: write and (X′ §2, the attempted record tag) contents: write, and never checks: write', () => {
     const block = /\n    permissions:\n((?: {6}\S[^\n]*\n)+)/u.exec(paid)?.[1] ?? '';
     const scopes = Object.fromEntries(block.trim().split('\n').map((line) => line.trim().split(/:\s*/u)));
-    expect(scopes).toEqual({ contents: 'read', actions: 'read', 'pull-requests': 'read', issues: 'read', statuses: 'write' });
+    expect(scopes).toEqual({ contents: 'write', actions: 'read', 'pull-requests': 'read', issues: 'read', statuses: 'write' });
     // As a YAML key, not prose: the comment above the block names `checks: write` to say it is never granted.
     expect(workflow).not.toMatch(/^\s+checks:\s*write\s*$/mu);
   });
@@ -966,5 +967,172 @@ describe('the provider-readiness evidence allowlist admits closed lines only', (
       `org_attribution provider=anthropic role=architect model=claude-opus-5-5 http=200 result=VERIFIED organization_id=_${ORG}`,
     ];
     expect(admitted(bad)).toEqual([]);
+  });
+});
+
+/* ------------------------------------------------------------------------------------------------------------------
+ * X′ (X_PRIME_ARTIFACT_INDEPENDENT_PROPOSAL.md): J1 without blocking on GitHub artifacts. Every founder requirement
+ * the workflow carries is pinned here; the readers' halves are in julius-prior-spend.test.ts and
+ * julius-mission-evidence-reader.test.ts.
+ * ---------------------------------------------------------------------------------------------------------------- */
+
+/** A fake `curl` for a job-token tag write: every POST answers 201 with a fresh sha, the ref create answers `refCode`. */
+function runWithFakeCurl(
+  text: string,
+  env: Record<string, string>,
+  curl: { refCode?: string; refBody?: string; exitCode?: string; failPath?: string } = {},
+): { status: number; stderr: string; stdout: string; curlLog: string } {
+  const bin = mkdtempSync(join(tmpdir(), 'julius-x-prime-curl-'));
+  const curlLog = join(bin, 'curl.log');
+  writeFileSync(join(bin, 'curl'), [
+    '#!/usr/bin/env bash',
+    'out=""; method="GET"; data=""; url=""; prev=""',
+    'for arg in "$@"; do',
+    '  if [ "$prev" = "-o" ]; then out=$arg; fi',
+    '  if [ "$prev" = "-X" ]; then method=$arg; fi',
+    '  if [ "$prev" = "--data-binary" ]; then data=$arg; fi',
+    '  case "$arg" in https://*) url=$arg ;; esac',
+    '  prev=$arg',
+    'done',
+    'printf \'%s %s DATA %s\\n\' "$method" "$url" "$data" >> "$CURL_LOG"',
+    'if [ "${CURL_EXIT:-0}" != 0 ]; then exit "$CURL_EXIT"; fi',
+    'respond() { if [ -n "$out" ]; then printf \'%s\' "$2" > "$out"; fi; printf \'%s\' "$1"; exit 0; }',
+    'if [ -n "${CURL_FAIL_PATH:-}" ]; then case "$url" in *"$CURL_FAIL_PATH") respond 500 \'{"message":"boom"}\';; esac; fi',
+    'case "$url" in',
+    '  */git/refs)',
+    '    if [ "$CURL_REF_CODE" = 201 ]; then',
+    '      sha=$(printf \'%s\' "$data" | grep -oE \'"sha":"[0-9a-f]{40}"\' | grep -oE \'[0-9a-f]{40}\' | head -1)',
+    '      respond 201 "{\\"ref\\":\\"x\\",\\"object\\":{\\"sha\\":\\"$sha\\",\\"type\\":\\"tag\\"}}"',
+    '    fi',
+    '    respond "$CURL_REF_CODE" "$CURL_REF_BODY" ;;',
+    '  */statuses/*) respond 201 \'{"id":1,"state":"success"}\' ;;',
+    '  *)',
+    '    count=0; if [ -f "$CURL_LOG.count" ]; then count=$(cat "$CURL_LOG.count"); fi',
+    '    count=$((count + 1)); printf \'%s\' "$count" > "$CURL_LOG.count"',
+    '    respond 201 "{\\"sha\\":\\"$(printf \'%040x\' "$count")\\"}" ;;',
+    'esac',
+    '',
+  ].join('\n'));
+  chmodSync(join(bin, 'curl'), 0o755);
+  const read = (): string => { try { return readFileSync(curlLog, 'utf8'); } catch { return ''; } };
+  try {
+    const stdout = execFileSync('bash', [...GITHUB_BASH, text], {
+      cwd: ROOT,
+      env: {
+        ...process.env,
+        PATH: `${bin}${delimiter}${process.env.PATH ?? ''}`,
+        CURL_LOG: curlLog,
+        CURL_REF_CODE: curl.refCode ?? '201',
+        CURL_REF_BODY: curl.refBody ?? '',
+        CURL_EXIT: curl.exitCode ?? '0',
+        CURL_FAIL_PATH: curl.failPath ?? '',
+        GITHUB_RUN_ID: '40400000001',
+        GITHUB_RUN_ATTEMPT: '1',
+        GITHUB_SHA: 'a'.repeat(40),
+        GITHUB_REPOSITORY: 'ohdieyuh-glitch/sunday-relay',
+        GITHUB_SERVER_URL: 'https://github.com',
+        GH_TOKEN: 'github-token-placeholder',
+        ...env,
+      },
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return { status: 0, stderr: '', stdout, curlLog: read() };
+  } catch (error) {
+    const failed = error as { status?: number; stderr?: string; stdout?: string };
+    return { status: failed.status ?? 1, stderr: failed.stderr ?? '', stdout: failed.stdout ?? '', curlLog: read() };
+  } finally {
+    rmSync(bin, { recursive: true, force: true });
+  }
+}
+
+const X_WLJ = 'wlj_01234567-89ab-4cde-8fab-0123456789ab';
+const X_WLJ_HEX = '0123456789ab4cde8fab0123456789ab';
+const ATTEMPT_TAG = "'Record the attempt durably (git tag)'";
+const ATTEMPT_MARKER = "'Record that a paid mission was attempted (before any provider can be reached)'";
+const PRE_MARKER = "'Gate: attempted markers and the combined cap, before the attempted marker'";
+const LIVE_STEP = "'LIVE: run the first real Julius mission'";
+
+/** The JSON-escaped body one POST carried, decoded back to its text. */
+const postedBody = (log: string, path: string): string => {
+  const line = log.split('\n').find((entry) => entry.startsWith(`POST https://api.github.com/repos/ohdieyuh-glitch/sunday-relay${path} `)) ?? '';
+  const data = line.slice(line.indexOf(' DATA ') + ' DATA '.length);
+  const parsed = JSON.parse(data) as { content?: string; message?: string };
+  return parsed.content ?? parsed.message ?? '';
+};
+
+/** A step's `if:` expression, or null. */
+const ifOf = (block: string): string | null => /\n {8}if: ([^\n]+)\n/u.exec(block)?.[1] ?? null;
+
+describe('X′ §2: the attempted marker is a job-token tag, and LIVE waits for it', () => {
+  const paid = job('first-live-mission');
+  const tagBlock = step(paid, ATTEMPT_TAG);
+  const tagScript = script(tagBlock);
+  const env = { JULIUS_RUN_ID: X_WLJ, MARKER_NAMESPACE: 'julius-inworld-data-1', CONTRACT: '.github/julius-missions/julius-inworld-data-1/contract.json' };
+
+  it('the tag step follows the pre-marker gate and the marker, precedes the best-effort upload and LIVE, under the marker\'s own if', () => {
+    const at = (name: string): number => paid.indexOf(`- name: ${name}`);
+    expect(at(PRE_MARKER)).toBeGreaterThan(-1);
+    expect(at(PRE_MARKER)).toBeLessThan(at(ATTEMPT_MARKER));
+    expect(at(ATTEMPT_MARKER)).toBeLessThan(at(ATTEMPT_TAG));
+    expect(at(ATTEMPT_TAG)).toBeLessThan(at(LIVE_STEP));
+    const upload = paid.indexOf('- uses: actions/upload-artifact', at(ATTEMPT_MARKER));
+    expect(at(ATTEMPT_TAG)).toBeLessThan(upload);
+    expect(upload).toBeLessThan(at(LIVE_STEP));
+    expect(tagBlock).toContain('        id: attempt_tag\n');
+    expect(ifOf(tagBlock)).toBe(ifOf(step(paid, ATTEMPT_MARKER)));
+    expect(tagBlock).not.toContain('continue-on-error');
+    expect(tagBlock).not.toMatch(/secrets\./u);
+  });
+
+  it('LIVE runs only when the tag step succeeded (the upload no longer gates it)', () => {
+    expect(ifOf(step(paid, LIVE_STEP))).toBe(
+      "success() && inputs.confirm_live == 'RUN LIVE MISSION' && steps.coder_auth.outcome == 'success' && steps.provider_readiness.outcome == 'success' && steps.attempt_tag.outcome == 'success'",
+    );
+  });
+
+  it('the attempted-marker upload is best-effort: continue-on-error, still loud on an empty directory', () => {
+    const upload = paid.slice(paid.indexOf('- uses: actions/upload-artifact', paid.indexOf(`- name: ${ATTEMPT_MARKER}`)));
+    const block = upload.slice(0, upload.indexOf('\n      - ', 1));
+    expect(block).toContain('name: ${{ steps.inputs_gate.outputs.marker_namespace }}-attempted\n');
+    expect(block).toContain('        continue-on-error: true\n');
+    expect(block).toContain('if-no-files-found: error');
+  });
+
+  it('writes an annotated tag under julius-run-record-, never under julius-run-spent-, with the closed v1 body', () => {
+    const created = runWithFakeCurl(tagScript, env);
+    expect(created.status, created.stderr).toBe(0);
+    expect(created.curlLog).toContain(`"ref":"refs/tags/julius-run-record-${X_WLJ_HEX}-attempted"`);
+    expect(created.curlLog).not.toContain('julius-run-spent-');
+    const body = postedBody(created.curlLog, '/git/tags');
+    const lines = body.split('\n');
+    expect(lines.slice(0, 6)).toEqual([
+      'julius-run-attempted.v1', `run=${X_WLJ}`, 'namespace=julius-inworld-data-1',
+      'workflow_run_id=40400000001', 'workflow_run_attempt=1', `head_sha=${'a'.repeat(40)}`,
+    ]);
+    expect(lines[6]).toMatch(/^attempted_at=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/u);
+    expect(lines[7]).toMatch(/^contract_sha256=[0-9a-f]{64}$/u);
+    expect(postedBody(created.curlLog, '/git/blobs')).toBe(body);
+    // The reader's own pure parser reads exactly what the workflow writes.
+    expect(parseJuliusAttemptRecordTag(`refs/tags/julius-run-record-${X_WLJ_HEX}-attempted`, body, 'julius-inworld-data-1')).toEqual({
+      kind: 'bound', binding: { workflowRunId: '40400000001', workflowRunAttempt: '1', headSha: 'a'.repeat(40) },
+    });
+    expect(created.stdout).not.toContain('github-token-placeholder');
+  });
+
+  it('a ref that already exists is RUN_ID_ALREADY_ATTEMPTED; any other failure is ATTEMPT_TAG_UNVERIFIED (LIVE never runs)', () => {
+    const exists = runWithFakeCurl(tagScript, env, { refCode: '422', refBody: '{"message":"Reference already exists"}' });
+    expect(exists.status).not.toBe(0);
+    expect(exists.stderr).toContain('RUN_ID_ALREADY_ATTEMPTED');
+    for (const failure of [{ refCode: '500' }, { exitCode: '7' }, { failPath: '/git/tags' }, { refCode: '422', refBody: '{"message":"other"}' }]) {
+      const refused = runWithFakeCurl(tagScript, env, failure);
+      expect(refused.status, JSON.stringify(failure)).not.toBe(0);
+      expect(refused.stderr, JSON.stringify(failure)).toContain('ATTEMPT_TAG_UNVERIFIED');
+    }
+    for (const bad of [{ JULIUS_RUN_ID: 'not-an-id' }, { MARKER_NAMESPACE: 'Bad Namespace' }, { GITHUB_SHA: 'z'.repeat(40) }]) {
+      const refused = runWithFakeCurl(tagScript, { ...env, ...bad });
+      expect(refused.status, JSON.stringify(bad)).not.toBe(0);
+      expect(refused.curlLog, JSON.stringify(bad)).toBe('');
+    }
   });
 });

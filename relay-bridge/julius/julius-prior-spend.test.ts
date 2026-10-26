@@ -342,19 +342,25 @@ function spentTag(real: RealRun, overrides: { head?: string; attempt?: string; r
 
 interface GithubOptions {
   readonly tags?: readonly { ref: string; message: string }[];
+  /** X′ record tags (`refs/tags/julius-run-record-*`). A null message is a lightweight tag. */
+  readonly records?: readonly { ref: string; message: string | null }[];
   readonly fail?: (url: string) => boolean;
   readonly markers?: readonly RealRun[];
 }
 
 function githubFor(runs: readonly RealRun[], options: GithubOptions = {}): { fetchImpl: typeof fetch; seen: string[] } {
-  const tags = options.tags ?? runs.map((run) => spentTag(run));
+  // ONE REF STORE, LISTED THE WAY GITHUB LISTS IT: `matching-refs/tags/<p>` is every tag ref starting `refs/tags/<p>`.
+  const tags: readonly { ref: string; message: string | null }[] = [...(options.tags ?? runs.map((run) => spentTag(run))), ...(options.records ?? [])];
   const seen: string[] = [];
   const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
     seen.push(url);
     if (options.fail?.(url) === true) return new Response('nope', { status: 500 });
-    if (url === `${API}/git/matching-refs/tags/julius-run-spent-`) {
-      return Response.json(tags.map((tag, index) => ({ ref: tag.ref, object: { type: 'tag', sha: String(index).padStart(40, 'c') } })));
+    const matching = /\/git\/matching-refs\/tags\/([a-z0-9-]+)$/u.exec(url);
+    if (matching !== null) {
+      return Response.json(tags.flatMap((tag, index) => (tag.ref.startsWith(`refs/tags/${matching[1] ?? ''}`)
+        ? [{ ref: tag.ref, object: tag.message === null ? { type: 'commit', sha: 'e'.repeat(40) } : { type: 'tag', sha: String(index).padStart(40, 'c') } }]
+        : [])));
     }
     const tagObject = /\/git\/tags\/c*([0-9]+)$/u.exec(url);
     if (tagObject !== null) return Response.json({ message: tags[Number(tagObject[1])]?.message });
@@ -616,6 +622,91 @@ describe('the attempted-marker gate uses the same proofs', () => {
       fetchImpl: githubFor([real], { markers: [real], fail: (url) => url.includes('?name=') }).fetchImpl,
     });
     expect(markers).toEqual({ readable: false });
+  });
+});
+
+/** The body the paid job's "Record the attempt durably (git tag)" step writes. */
+function recordTag(real: RealRun, overrides: { namespace?: string; schema?: string; ref?: string; drop?: string } = {}): { ref: string; message: string } {
+  const suffix = real.wlj.slice(4).replaceAll('-', '');
+  const lines = [
+    overrides.schema ?? 'julius-run-attempted.v1', `run=${real.wlj}`, `namespace=${overrides.namespace ?? J1}`,
+    `workflow_run_id=${String(real.runId)}`, 'workflow_run_attempt=1', `head_sha=${real.head}`,
+    'attempted_at=2026-10-26T09:41:00Z', `contract_sha256=${'f'.repeat(64)}`,
+  ].filter((line) => overrides.drop === undefined || !line.startsWith(`${overrides.drop}=`));
+  return { ref: overrides.ref ?? `refs/tags/julius-run-record-${suffix}-attempted`, message: `${lines.join('\n')}\n` };
+}
+
+describe('X′ §2: the attempted record is a tag, the artifact best-effort, and the reader unions both', () => {
+  const read = (real: RealRun, options: GithubOptions) => readJuliusAttemptMarkers({
+    repository: REPO, token: TOKEN, namespace: J1, fetchImpl: githubFor([real], options).fetchImpl,
+  });
+
+  it('a tag-only run (its artifact upload failed under the lock) is read and classified like an artifact marker', async () => {
+    const real = run40278849833();
+    const markers = await read(real, { records: [recordTag(real)] });
+    expect(markers.readable && markers.proofs.map(juliusAttemptMarkerLine)).toEqual([
+      'attempt_marker workflow_run_id=40278849833 attempt=1 classification=NOT_EXECUTED basis=no_provider_execution_zero_rows_not_run counted=false',
+    ]);
+    // MUTATION GUARD: drop the tag source and an executed tag-only run would read counted=0. It must count.
+    const executed = run40278849833({ 'budget.tsv': 'run_id\nx\n(1 row)\n' });
+    const counted = await read(executed, { records: [recordTag(executed)] });
+    expect(counted.readable && counted.proofs.map((proof) => [proof.binding.workflowRunId, proof.classification])).toEqual([['40278849833', 'UNKNOWN']]);
+  });
+
+  it('the artifact and the tag of one run are ONE entry (workflowRunId + headSha)', async () => {
+    const real = run40278849833({ 'budget.tsv': 'run_id\nx\n(1 row)\n' });
+    const both = await read(real, { markers: [real], records: [recordTag(real)] });
+    expect(both.readable && both.proofs.length).toBe(1);
+  });
+
+  it('a lightweight record tag, a failed record listing, or a record whose namespace cannot be read is unreadable, never zero', async () => {
+    const real = run40278849833();
+    expect(await read(real, { records: [{ ref: recordTag(real).ref, message: null }] })).toEqual({ readable: false });
+    expect(await read(real, { records: [recordTag(real)], fail: (url) => url.includes('matching-refs/tags/julius-run-record-') })).toEqual({ readable: false });
+    expect(await read(real, { records: [recordTag(real, { drop: 'namespace' })] })).toEqual({ readable: false });
+    // The artifact listing failing is unreadable too, even when the tag source answers.
+    expect(await read(real, { markers: [real], records: [recordTag(real)], fail: (url) => url.includes('?name=') })).toEqual({ readable: false });
+  });
+
+  it('an unparseable body of THIS namespace counts, UNKNOWN; another namespace and the result record are not this gate', async () => {
+    const real = run40278849833();
+    const bad = await read(real, { records: [recordTag(real, { schema: 'julius-run-attempted.v0' })] });
+    expect(bad.readable && bad.proofs.map(juliusAttemptMarkerLine)).toEqual([
+      'attempt_marker workflow_run_id=UNKNOWN attempt=UNKNOWN classification=UNKNOWN basis=record_tag_unparseable counted=true',
+    ]);
+    const misfiled = await read(real, { records: [recordTag(real, { ref: `refs/tags/julius-run-record-${'0'.repeat(32)}-attempted` })] });
+    expect(misfiled.readable && misfiled.proofs.map((proof) => proof.basis)).toEqual(['record_tag_ref_mismatch']);
+    const other = await read(real, { records: [recordTag(real, { namespace: 'julius-first-live' })] });
+    expect(other).toEqual({ readable: true, proofs: [] });
+    const { fetchImpl, seen } = githubFor([real], { records: [{ ref: recordTag(real).ref.replace(/-attempted$/u, '-result'), message: 'julius-run-result.v1\n' }] });
+    expect(await readJuliusAttemptMarkers({ repository: REPO, token: TOKEN, namespace: J1, fetchImpl })).toEqual({ readable: true, proofs: [] });
+    expect(seen.some((url) => /\/git\/tags\//u.test(url)), 'the result record body is not fetched by the attempt gate').toBe(false);
+  });
+
+  it('THE SPEND LEDGER IS UNAFFECTED: record tags are outside `julius-run-spent-`, so its listing never returns them', async () => {
+    const real = run40278849833({ 'budget.tsv': 'run_id\nx\n(1 row)\n' });
+    const result = recordTag(real);
+    const records = [recordTag(real), { ref: result.ref.replace(/-attempted$/u, '-result'), message: 'julius-run-result.v1\n' }];
+    const without = await classify([real]);
+    const withRecords = await classify([real], { records });
+    expect(without.ledger.readable).toBe(true);
+    expect(withRecords).toEqual(without);
+    expect('refs/tags/julius-run-record-'.startsWith('refs/tags/julius-run-spent-')).toBe(false);
+    // MUTATION: the record tag filed under the spend namespace. The ledger becomes unreadable (every paid run refused).
+    const misfiled = await classify([real], { records: [{ ...result, ref: result.ref.replace('julius-run-record-', 'julius-run-spent-') }] });
+    expect(misfiled.ledger).toEqual({ readable: false });
+  });
+
+  it('the attempt-markers command the workflow runs counts a tag-only executed run', async () => {
+    const contract = readFileSync('.github/julius-missions/julius-inworld-data-1/contract.json', 'utf8');
+    const executed = run40278849833({ 'budget.tsv': 'run_id\nx\n(1 row)\n' });
+    const lines: string[] = [];
+    const code = await attemptMarkersCommand({
+      contractPath: 'contract.json', env: { GITHUB_REPOSITORY: REPO, GITHUB_TOKEN: TOKEN }, out: (line) => lines.push(line),
+      readFile: () => contract, fetchImpl: githubFor([executed], { records: [recordTag(executed)] }).fetchImpl,
+    });
+    expect(code).toBe(0);
+    expect(lines.at(-1)).toBe('attempt_markers_counted=1');
   });
 });
 

@@ -4300,14 +4300,14 @@ describe('count only real spend: the combined cap and the attempted markers are 
     expect(entry).toMatch(/authorizeSpendCommand[\s\S]*authorizeQualifyingPairSpend\(/u);
   });
 
-  it('the LIVE step carries the job token for its own ledger read, and the job permissions are not widened', () => {
+  it('the LIVE step carries the job token for its own ledger read, and the job permissions widen ONLY by contents: write (X′ §2, the attempted record tag)', () => {
     const live = stepIndex("'LIVE: run the first real Julius mission'");
     const block = workflow.slice(live, workflow.indexOf('\n        run: |', live));
     expect(block).toContain('GITHUB_TOKEN: ${{ github.token }}');
     const job = workflow.slice(workflow.indexOf('\n  first-live-mission:'), workflow.indexOf('\n  grade-inworld:'));
     const permissions = /\n    permissions:\n((?:      [a-z-]+: [a-z]+\n)+)/u.exec(job)?.[1] ?? '';
     expect(permissions.trim().split('\n').map((line) => line.trim())).toEqual([
-      'contents: read', 'actions: read', 'pull-requests: read', 'issues: read', 'statuses: write',
+      'contents: write', 'actions: read', 'pull-requests: read', 'issues: read', 'statuses: write',
     ]);
   });
 
