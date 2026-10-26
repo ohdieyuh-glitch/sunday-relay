@@ -414,6 +414,8 @@ void UWonderlandJuliusMissionSubsystem::SyncMissionContract()
 		bContractReleased = false;
 		bContractSuspended = false;
 		bGradingReleased = false;
+		RunCompletedSeenUtcMs = 0;
+		bAwaitingVerdict = false;
 	}
 	FResultRead Result;
 	if (ResultRead.Status != 0)
@@ -425,7 +427,24 @@ void UWonderlandJuliusMissionSubsystem::SyncMissionContract()
 	// A PASS that is not bound to what was graded is not a verdict; success needs the verified completion too.
 	const ECheckerVerdict Verdict = Result.bCheckerReported && !(Result.Checker == ECheckerVerdict::Pass && Result.bCheckerUnbound)
 		? Result.Checker : ECheckerVerdict::NotRun;
-	const FExecutionView View = ExecutionViewFor(Host->LiveFeed, true, ToStd(StartWorkflowRunId), Verdict, Result.bVerified && !Result.bCheckerUnbound);
+	FExecutionView View = ExecutionViewFor(Host->LiveFeed, true, ToStd(StartWorkflowRunId), Verdict, Result.bVerified && !Result.bCheckerUnbound);
+	// NO VERDICT YET IS NOT A FAILURE. /result can trail the run's completion, so NOT_RUN only counts once a /result read
+	// made after the completion was seen still says it, and then only after a grace; until then the run is a neutral
+	// wait (live) or shows nothing at all (a restored run: no activation replay, no invented outcome).
+	const uint64 VerdictNowMs = Host->Clock.NowUtcMs();
+	if (Host->LiveFeed.Run() == ELiveRunStatus::Completed && RunCompletedSeenUtcMs == 0) { RunCompletedSeenUtcMs = VerdictNowMs; }
+	bAwaitingVerdict = false;
+	if (View.Phase == EExecutionPhase::FailedUnverified)
+	{
+		const bool bReadAfterCompletion = ResultRead.Status == 200 && ResultRead.AtUtcMs >= RunCompletedSeenUtcMs + VerdictReadSlackMs;
+		const bool bGraceOver = VerdictNowMs >= RunCompletedSeenUtcMs + VerdictGraceMs;
+		if (!(bReadAfterCompletion && bGraceOver))
+		{
+			bAwaitingVerdict = true;
+			if (!ContractCursor->Started()) { return; }
+			View.Phase = EExecutionPhase::Grading; // VERDICT_GRACE_HOLDS
+		}
+	}
 	UGameInstance* Instance = GetGameInstance();
 	ULocalPlayer* Player = Instance != nullptr ? Instance->GetFirstGamePlayer() : nullptr;
 	UWonderlandMissionTaskSubsystem* Tasks = Player != nullptr ? Player->GetSubsystem<UWonderlandMissionTaskSubsystem>() : nullptr;
@@ -829,7 +848,8 @@ void UWonderlandJuliusMissionSubsystem::PollMissionReads()
 	// REVIEW LOW (#456): reads stop once the wrapper's run is terminal (one last read so the final answer shows),
 	// and back off on errors instead of hammering a bridge that is down.
 	const bool bTerminal = Host->Session.CanStartNewAttempt();
-	if (bTerminal && bFinalMissionReadSent) { return; }
+	// ...unless the contract still waits for the verdict: /result can trail the run's completion (founder demo 2026-10-26).
+	if (bTerminal && bFinalMissionReadSent && !bAwaitingVerdict) { return; }
 	const uint64 NowMs = Host->Clock.NowUtcMs();
 	if (NowMs < NextMissionReadAtUtcMs) { return; }
 	const uint64 Backoff = WonderlandJuliusMissionClient::MissionReadPeriodMs << FMath::Min(MissionReadFailures, 4);
@@ -907,6 +927,7 @@ void UWonderlandJuliusMissionSubsystem::CompleteMissionRead(
 	MissionReadFailures = Status == 200 ? 0 : MissionReadFailures + 1;
 	Slot.Status = Status;
 	Slot.Body = Body;
+	Slot.AtUtcMs = Host != nullptr ? Host->Clock.NowUtcMs() : 0;
 }
 
 void UWonderlandJuliusMissionSubsystem::PollLiveEvents()

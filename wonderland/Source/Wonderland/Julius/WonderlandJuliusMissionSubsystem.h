@@ -147,7 +147,16 @@ private:
 		int32 Status = 0;
 		FString Body;
 		bool bInFlight = false;
+		/** When the last answer arrived (UTC ms), so a verdict can be required to postdate the run's completion. */
+		uint64 AtUtcMs = 0;
 	};
+	/** When this client first saw the run completed (UTC ms); 0 = not yet. */
+	uint64 RunCompletedSeenUtcMs = 0;
+	/** The run completed and /result has no verdict yet: keep reading it past the wrapper's final read. */
+	bool bAwaitingVerdict = false;
+	/** A /result read must arrive this long after the completion was seen to count, and NOT_RUN is final only after the grace. */
+	static constexpr uint64 VerdictReadSlackMs = 2000;
+	static constexpr uint64 VerdictGraceMs = 120000;
 	FString MissionReadRunId;
 	FMissionReadSlot ResultRead;
 	FMissionReadSlot ProgressRead;
