@@ -1,3 +1,4 @@
+import { JULIUS_OUTCOME_UNKNOWN_CAUSES, type JuliusOutcomeUnknownCause } from './julius-mission-evidence-reader';
 import { juliusMissionTraceId } from '../scripts/julius-mission-trace.mjs';
 
 /**
@@ -196,13 +197,8 @@ export interface JuliusMissionEvidenceReader {
   readOutcomeUnknown?(wljRunId: string): Promise<unknown>;
 }
 
-/**
- * Julius's own record that a provider request may have been processed and
- * its outcome is unknown, so the task was failed and never retried. These
- * are the record's causes. Any other value is not this.
- */
-export const JULIUS_OUTCOME_UNKNOWN_CAUSES = ['HANDED_OUTCOME_UNKNOWN', 'HANDED_TIMEOUT_OUTCOME_UNKNOWN', 'HANDED_FAILURE_OUTCOME_UNKNOWN'] as const;
-export type JuliusOutcomeUnknownCause = (typeof JULIUS_OUTCOME_UNKNOWN_CAUSES)[number];
+
+export { JULIUS_OUTCOME_UNKNOWN_CAUSES, type JuliusOutcomeUnknownCause };
 
 export interface JuliusOutcomeUnknown {
   readonly cause: JuliusOutcomeUnknownCause;

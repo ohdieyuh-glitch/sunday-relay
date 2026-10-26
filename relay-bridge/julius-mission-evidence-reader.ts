@@ -24,7 +24,6 @@ import { createHash } from 'node:crypto';
 import { deriveJuliusSpentTag } from '../scripts/julius-admission-run-id.mjs';
 import { juliusMissionTraceId } from '../scripts/julius-mission-trace.mjs';
 import { projectJuliusSlotViews, type JuliusTimelineEntry } from '../src/relay/mission/julius/julius-runtime-api';
-import { JULIUS_OUTCOME_UNKNOWN_CAUSES } from './julius-mission-evidence';
 
 export const JULIUS_SPEND_TAG_SCHEMA = 'julius-run-spent.v1' as const;
 const EVIDENCE_ARTIFACT = 'julius-live-evidence';
@@ -180,6 +179,14 @@ export interface JuliusCheckerEvidence {
  * returns that run's completion evidence, or null when there is none.
  * Null is not completion. A thrown error is not completion.
  */
+/**
+ * Julius's own record that a provider request may have been processed and
+ * its outcome is unknown, so the task was failed and never retried. These
+ * are the record's causes. Any other value is not this.
+ */
+export const JULIUS_OUTCOME_UNKNOWN_CAUSES = ['HANDED_OUTCOME_UNKNOWN', 'HANDED_TIMEOUT_OUTCOME_UNKNOWN', 'HANDED_FAILURE_OUTCOME_UNKNOWN'] as const;
+export type JuliusOutcomeUnknownCause = (typeof JULIUS_OUTCOME_UNKNOWN_CAUSES)[number];
+
 export interface JuliusMissionEvidenceReader {
   read(wljRunId: string): Promise<unknown>;
   readOutcomeUnknown?(wljRunId: string): Promise<unknown>;
