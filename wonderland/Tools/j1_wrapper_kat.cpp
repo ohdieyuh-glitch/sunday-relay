@@ -583,6 +583,17 @@ int main()
 		Rig.Session.OnDispatchHttp(Http(200, AdmissionBody(Rig.Session.RunId(), "ADMISSION_HELD", "null", false, false), true));
 		Expect(Rig.Session.ServerRunId() == "run:later", "absent_resend_keeps_server_run_id");
 		Expect(!Rig.Session.IsFailClosed(), "absent_resend_is_not_an_error");
+		// REVIEW #74: an admitted run whose workflow completed without Julius finishing it ends locally, so a NEW mission
+		// can be offered -- only for exactly this admitted run, never sending anything, never minting by itself.
+		Expect(!Rig.Session.CanStartNewAttempt(), "admitted_unfinished_blocks_new_mission");
+		const int FillsBefore = Rig.Random.Fills;
+		Expect(!Rig.Session.ConcludeAfterWorkflowEnded("wlj_not_this_run", "DID_NOT_START"), "conclude_refuses_another_run");
+		Expect(!Rig.Session.CanStartNewAttempt(), "another_run_changes_nothing");
+		Expect(Rig.Session.ConcludeAfterWorkflowEnded(Rig.Session.RunId(), "DID_NOT_START"), "conclude_this_admitted_run");
+		Expect(Rig.Session.CanStartNewAttempt(), "concluded_run_permits_a_new_mission");
+		Expect(Rig.Random.Fills == FillsBefore, "conclude_never_mints_or_resends");
+		Expect(Contains(Rig.Session.SavedText(), "finished 1"), "conclude_is_persisted");
+		Expect(!Rig.Session.ConcludeAfterWorkflowEnded(Rig.Session.RunId(), "DID_NOT_START"), "conclude_is_once");
 	}
 
 	{

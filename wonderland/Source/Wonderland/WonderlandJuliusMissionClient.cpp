@@ -721,6 +721,18 @@ namespace WonderlandJuliusMissionClient
 		return NowMs - FirstSentUtcMs;
 	}
 
+	bool FJuliusMissionSession::ConcludeAfterWorkflowEnded(std::string_view RunId, std::string_view Outcome)
+	{
+		if (!bAdmitted || bFinished || bRefused || bFailClosed || RunId.empty() || RunId != CurrentRunId) { return false; } // CLIENT_CONCLUDE_ONLY_THIS_ADMITTED_RUN
+		SetUi(EJuliusUiState::Failed, "Julius ended this run without a result");
+		WriteTrace("result_received", std::string("\"finished\":\"WorkflowEnded\",\"outcome\":") + JsonString(Outcome));
+		bFinished = true;
+		bRunning = false;
+		NextPollAtUtcMs = 0;
+		Persist();
+		return true;
+	}
+
 	bool FJuliusMissionSession::BlocksMint() const
 	{
 		return bFailClosed || bStillWaiting || bPairOpen || bInFlight || (bAdmitted && !bFinished && !bRefused);

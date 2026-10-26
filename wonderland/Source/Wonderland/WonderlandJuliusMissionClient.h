@@ -286,6 +286,15 @@ namespace WonderlandJuliusMissionClient
 		/** False while a pair is open, in flight, still waiting, fail-closed, or admitted and unfinished. */
 		bool CanStartNewAttempt() const { return !BlocksMint(); }
 
+		/**
+		 * REVIEW #74: the bound GitHub run has COMPLETED and the contract has a terminal, non-success outcome with nothing left
+		 * to wait for, but Julius's own record never reached a final state (a gate stopped it before any task), so /status
+		 * never finishes this admission and no new mission could ever be offered. Ends THIS admission locally (finished,
+		 * persisted) so the player may explicitly start a NEW mission. Never resends, never re-dispatches, never reuses the
+		 * run id. Returns false (and changes nothing) unless an admitted, unfinished run with exactly this id is open.
+		 */
+		bool ConcludeAfterWorkflowEnded(std::string_view RunId, std::string_view Outcome);
+
 		/** One JSON object, no newline. Includes server_run_id. Never includes the token or the idempotency key. */
 		std::string StatusJson() const;
 		std::string TraceLocation() const;

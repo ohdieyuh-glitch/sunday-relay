@@ -452,6 +452,15 @@ void UWonderlandJuliusMissionSubsystem::SyncMissionContract()
 	{
 		bAwaitingVerdict = true;
 	}
+	// REVIEW #74: a run Julius never finished in its own record (a gate stopped it before any task) would hold the admission
+	// open forever and no NEW mission could ever be offered. Once the workflow run has completed, the outcome is terminal and
+	// nothing is awaited, end THIS admission locally. It never resends, never dispatches, never reuses the run id.
+	if (AdmissionEndsWithWorkflow(RunCompletedSeenUtcMs != 0, View.Phase, bAwaitingVerdict)
+		&& Host->Session.ConcludeAfterWorkflowEnded(ToStd(Run), ExecutionPhaseWord(View.Phase)))
+	{
+		UE_LOG(LogJuliusJ1, Display, TEXT("{\"event\":\"admission_concluded\",\"wlj_run_id\":\"%s\",\"phase\":\"%s\",\"reason\":\"workflow_run_completed\"}"),
+			*Run, UTF8_TO_TCHAR(ExecutionPhaseWord(View.Phase)));
+	}
 	// A RESTORED run that is waiting for its verdict shows nothing yet: no activation replay, no invented outcome.
 	if (!bStartAcceptedHere && !ContractCursor->Started() && View.Phase == EExecutionPhase::Grading) { return; }
 	UGameInstance* Instance = GetGameInstance();

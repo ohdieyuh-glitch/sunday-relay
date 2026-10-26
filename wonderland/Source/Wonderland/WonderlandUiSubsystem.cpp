@@ -5917,10 +5917,13 @@ namespace WonderlandJuliusMissionQa
 		ULocalPlayer* Player = Controller->GetLocalPlayer();
 		const UWonderlandMissionSubsystem* Mission = Player != nullptr ? Player->GetSubsystem<UWonderlandMissionSubsystem>() : nullptr;
 		const ARelayDogCharacter* Dog = Cast<ARelayDogCharacter>(Controller->GetPawn());
-		UE_LOG(LogWonderlandUi, Display, TEXT("WLJ1WORLD shot=%s headline=\"%s\" beat=\"%s\" provenance=\"%s\" julius_state=\"%s\" dog_act=\"%s\""), *Name,
+		UGameInstance* ShotInstance = Controller->GetGameInstance();
+		const UWonderlandJuliusMissionSubsystem* ShotJ1 = ShotInstance != nullptr ? ShotInstance->GetSubsystem<UWonderlandJuliusMissionSubsystem>() : nullptr;
+		UE_LOG(LogWonderlandUi, Display, TEXT("WLJ1WORLD shot=%s headline=\"%s\" beat=\"%s\" provenance=\"%s\" julius_state=\"%s\" dog_act=\"%s\" can_start_new=%d"), *Name,
 			Mission != nullptr ? *Mission->GetHeadlineLabel() : TEXT(""), Mission != nullptr ? *Mission->GetBeatLabel() : TEXT(""),
 			Mission != nullptr ? *Mission->GetProvenanceBanner() : TEXT(""), Mission != nullptr ? *Mission->GetFollowedJuliusState() : TEXT(""),
-			Dog != nullptr ? WonderlandDogActName(Dog->PerformingAct()) : TEXT("(no dog)"));
+			Dog != nullptr ? WonderlandDogActName(Dog->PerformingAct()) : TEXT("(no dog)"),
+			ShotJ1 != nullptr && ShotJ1->CanStartNewMission() ? 1 : 0);
 		FVector Location;
 		FRotator Rotation;
 		Controller->GetPlayerViewPoint(Location, Rotation);

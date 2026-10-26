@@ -1918,6 +1918,13 @@ namespace WonderlandJuliusMissionFlow
 		return bRowConfirmedThisSession; // FLOW_TASK_UNMAPPED_REPORT_NEVER_CONFIRMS
 	}
 
+	bool AdmissionEndsWithWorkflow(bool bRunCompletedSeen, EExecutionPhase Phase, bool bAwaitingVerdict)
+	{
+		const bool bTerminalNonSuccess = Phase == EExecutionPhase::Failed || Phase == EExecutionPhase::FailedUnverified
+			|| Phase == EExecutionPhase::DidNotStart || Phase == EExecutionPhase::Cancelled || Phase == EExecutionPhase::OutcomeUnknown;
+		return bRunCompletedSeen && bTerminalNonSuccess && !bAwaitingVerdict; // FLOW_ADMISSION_ENDS_WITH_WORKFLOW
+	}
+
 	bool KeepReadingResultAfterStop(bool bStoppedAfterExecution, bool bOutcomeUnknownSeen, bool bRunCompletedSeen,
 		std::uint64_t MsSinceRunCompleted, std::uint64_t GraceMs)
 	{

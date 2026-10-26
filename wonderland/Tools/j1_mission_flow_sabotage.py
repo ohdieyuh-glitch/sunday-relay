@@ -614,6 +614,16 @@ MUTATIONS = [
         "return bStoppedAfterExecution && !bOutcomeUnknownSeen; // FLOW_RESULT_READ_AFTER_STOP",
     ),
     (
+        "admission_ends_while_run_going",
+        "return bRunCompletedSeen && bTerminalNonSuccess && !bAwaitingVerdict; // FLOW_ADMISSION_ENDS_WITH_WORKFLOW",
+        "return bTerminalNonSuccess && !bAwaitingVerdict; // FLOW_ADMISSION_ENDS_WITH_WORKFLOW",
+    ),
+    (
+        "admission_ends_while_awaiting",
+        "return bRunCompletedSeen && bTerminalNonSuccess && !bAwaitingVerdict; // FLOW_ADMISSION_ENDS_WITH_WORKFLOW",
+        "return bRunCompletedSeen && bTerminalNonSuccess; // FLOW_ADMISSION_ENDS_WITH_WORKFLOW",
+    ),
+    (
         "task_new_run_keeps_old_state",
         "return !bRowHadRun || RowRunId != NewRunId; // FLOW_TASK_NEW_RUN_STARTS_QUEUED",
         "return !bRowHadRun; // FLOW_TASK_NEW_RUN_STARTS_QUEUED",
@@ -643,6 +653,11 @@ CLIENT_MUTATIONS = [
         "client_polls_without_a_session",
         "NowMs >= NextPollAtUtcMs && bSessionReady) // CLIENT_NO_POLL_WITHOUT_SESSION",
         "NowMs >= NextPollAtUtcMs) // CLIENT_NO_POLL_WITHOUT_SESSION",
+    ),
+    (
+        "client_concludes_any_run",
+        "if (!bAdmitted || bFinished || bRefused || bFailClosed || RunId.empty() || RunId != CurrentRunId) { return false; } // CLIENT_CONCLUDE_ONLY_THIS_ADMITTED_RUN",
+        "if (bFinished) { return false; } // CLIENT_CONCLUDE_ONLY_THIS_ADMITTED_RUN",
     ),
 ]
 

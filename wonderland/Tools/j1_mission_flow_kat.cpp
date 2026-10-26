@@ -903,6 +903,14 @@ const ABSENT_PHASE = {
 			Expect(!KeepReadingResultAfterStop(true, false, true, 180000, 180000), "the grace has passed: stop reading");
 			Expect(!KeepReadingResultAfterStop(true, true, false, 0, 180000), "outcomeUnknown seen: nothing more to wait for");
 			Expect(!KeepReadingResultAfterStop(false, false, false, 0, 180000), "not stopped after execution (e.g. did not start): no extra reads");
+			// #74: the admission ends locally only for a completed workflow run, a terminal non-success, nothing awaited.
+			Expect(AdmissionEndsWithWorkflow(true, EExecutionPhase::DidNotStart, false), "gate-stopped run completed: the admission ends (New mission possible)");
+			Expect(AdmissionEndsWithWorkflow(true, EExecutionPhase::Failed, false), "failed run completed, nothing awaited: ends");
+			Expect(AdmissionEndsWithWorkflow(true, EExecutionPhase::OutcomeUnknown, false), "outcome unknown, run completed: ends");
+			Expect(!AdmissionEndsWithWorkflow(false, EExecutionPhase::Failed, false), "the workflow run still going: never ends the admission");
+			Expect(!AdmissionEndsWithWorkflow(true, EExecutionPhase::Failed, true), "still awaiting /result (outcomeUnknown/verdict): not yet");
+			Expect(!AdmissionEndsWithWorkflow(true, EExecutionPhase::Completed, false), "success is never concluded locally (the claim record finishes it)");
+			Expect(!AdmissionEndsWithWorkflow(true, EExecutionPhase::Grading, false), "grading is not terminal");
 		}
 		{
 			// REVIEW 2026-10-26: a reconnect taken MID-repair-round never replays past beats and never shows a late REPAIR

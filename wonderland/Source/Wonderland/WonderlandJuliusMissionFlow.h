@@ -706,6 +706,13 @@ namespace WonderlandJuliusMissionFlow
 	 * presentation. After a stop that followed confirmed execution, keep reading until outcomeUnknown is seen or the run has
 	 * completed plus the grace -- read-only: nothing is started, nothing re-animates, the Dog stays normal.
 	 */
+	/**
+	 * REVIEW #74: may the client end the admission locally? Only when the bound workflow run has COMPLETED (a fresh /events
+	 * read), the contract is a terminal NON-success (failed, unverified, did not start, cancelled, outcome unknown) and no
+	 * verdict is still awaited. Success is never concluded here: the claim record finishes it.
+	 */
+	bool AdmissionEndsWithWorkflow(bool bRunCompletedSeen, EExecutionPhase Phase, bool bAwaitingVerdict);
+
 	bool KeepReadingResultAfterStop(bool bStoppedAfterExecution, bool bOutcomeUnknownSeen, bool bRunCompletedSeen,
 		std::uint64_t MsSinceRunCompleted, std::uint64_t GraceMs);
 
