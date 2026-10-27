@@ -8,6 +8,8 @@ import { juliusMissionTraceId } from '../scripts/julius-mission-trace.mjs';
 import {
   checkerVerdictFrom,
   createJuliusMissionEvidenceReader,
+  J1_GRADE_COMBINED_PIN_SHA256,
+  parseJuliusRunResultRecord,
   outcomeUnknownFrom,
   type JuliusMissionCompletionEvidence,
   type JuliusMissionGitHub,
@@ -752,9 +754,10 @@ describe('X′ §4: the result record, bound to the spend record, the pinned che
     const fields: Fields = {
       run: WLJ, namespace: 'julius-first-live', workflow_run_id: RUN, workflow_run_attempt: ATTEMPT, head_sha: SHA,
       final_state: 'COMPLETED', completed_at: '2026-10-24T13:00:00Z', verdict: 'PASS',
-      checker_sha256: J1_PINNED_CHECKER_FILE_SHA256, combined_pin_sha256: 'c'.repeat(64),
+      checker_sha256: J1_PINNED_CHECKER_FILE_SHA256, combined_pin_sha256: J1_GRADE_COMBINED_PIN_SHA256,
       judged_trimmed_sha256: JUDGED, published_trimmed_sha256: JUDGED, final_message_sha256: JUDGED,
       outcome_unknown: 'none', cost_basis: 'COMPLETE', usd_micros: '1234567',
+      grader_sha256: 'e'.repeat(64), node_sha256: 'd'.repeat(64), node_version: 'v22.23.2',
       ...over,
     };
     return `${['julius-run-result.v1', ...Object.entries(fields).map(([key, value]) => `${key}=${value}`)].join('\n')}\n`;
@@ -901,6 +904,51 @@ describe('X′ §4: the result record, bound to the spend record, the pinned che
     expect(await verdictOf({ result: notRun, statuses: failStatus(notRun) })).toBe('NOT_RUN');
   });
 
+  it('X-1: another run\'s julius-run-result at the same head does not break a genuine PASS', async () => {
+    const body = resultBody();
+    const otherBody = resultBody({ workflow_run_id: '9999' });
+    const other = botStatus(otherBody, { targetUrl: 'https://github.com/ohdieyuh-glitch/sunday-relay/actions/runs/9999' });
+    expect(await verdictOf({ statuses: [other, botStatus(body)] })).toBe('PASS');
+    expect(await verdictOf({ statuses: [botStatus(body), other, botStatus(otherBody, { state: 'failure', targetUrl: 'https://github.com/ohdieyuh-glitch/sunday-relay/actions/runs/9998' })] })).toBe('PASS');
+  });
+
+  it('X-1: two statuses that both name this run and this digest are unverified', async () => {
+    expect(await verdictOf({ statuses: [botStatus(resultBody()), botStatus(resultBody())] })).toBeNull();
+  });
+
+  it('X-1: a forged status with the right run id and the WRONG digest is not a candidate: alone it is unverified, beside the real one it is ignored', async () => {
+    const forged = botStatus(resultBody(), { description: `v1 sha256:${'0'.repeat(64)}` });
+    expect(await verdictOf({ statuses: [forged] })).toBeNull();
+    expect(await verdictOf({ statuses: [forged, botStatus(resultBody())] })).toBe('PASS');
+    // Nor is one from another creator, even with the right run and digest.
+    expect(await verdictOf({ statuses: [botStatus(resultBody(), { creator: 'ohdieyuh-glitch' })] })).toBeNull();
+  });
+
+  it('X-3: the record is BYTE-EXACT: a CR, a missing final LF or a trailing blank line is not the record (no normalization)', () => {
+    const body = resultBody();
+    expect(parseJuliusRunResultRecord(body)).not.toBeNull();
+    for (const bad of [body.replace(/\n/gu, '\r\n'), body.slice(0, -1), `${body}\n`, body.replace('\nrun=', '\r\nrun=')]) {
+      expect(parseJuliusRunResultRecord(bad), JSON.stringify(bad.slice(-12))).toBeNull();
+    }
+  });
+
+  it('X-3: the status digest is sha256 of the tag message bytes as read, not of any normalized form', async () => {
+    const body = resultBody();
+    expect(await verdictOf({ statuses: [botStatus(body, { description: `v1 sha256:${digest(`${body}\n`)}` })] })).toBeNull();
+    expect(await verdictOf({ statuses: [botStatus(body, { description: `v1 sha256:${digest(body.slice(0, -1))}` })] })).toBeNull();
+    expect(await verdictOf({})).toBe('PASS');
+  });
+
+  it('X-4: the combined pin of every staged grading input must be the pinned one; the grader and node fingerprints are recorded', async () => {
+    expect(await verdictOf({ result: resultBody({ combined_pin_sha256: 'c'.repeat(64) }) })).toBe('NOT_RUN');
+    expect(await verdictOf({ result: resultBody({ combined_pin_sha256: 'none' }) })).toBe('NOT_RUN');
+    expect(parseJuliusRunResultRecord(resultBody())).toMatchObject({ graderSha256: 'e'.repeat(64), nodeSha256: 'd'.repeat(64), nodeVersion: 'v22.23.2' });
+    expect(parseJuliusRunResultRecord(resultBody({ grader_sha256: 'none', node_sha256: 'none', node_version: 'none' }))).toMatchObject({ graderSha256: null, nodeSha256: null, nodeVersion: null });
+    for (const over of [{ grader_sha256: 'x' }, { node_sha256: 'D'.repeat(64) }, { node_version: '22.1.0' }, { node_version: 'v22.1.0 extra' }] as readonly Record<string, string>[]) {
+      expect(parseJuliusRunResultRecord(resultBody(over)), JSON.stringify(over)).toBeNull();
+    }
+  });
+
   it('MUTATION D-b: a forged PASS tag over a real FAIL is unverified', async () => {
     expect(await verdictOf({ jobs: failingJobs() })).toBe('NOT_RUN');
   });
@@ -985,5 +1033,12 @@ describe('X′ §4: the result record, bound to the spend record, the pinned che
     const green = world({ result: body, statuses });
     expect(await green.reader.readOutcomeUnknown?.(WLJ)).toBeNull();
     expect(await failed.reader.read(WLJ)).toBeNull();
+  });
+});
+
+describe('X-4: the reader\'s inlined combined pin is the grader\'s', () => {
+  it('J1_GRADE_COMBINED_PIN_SHA256 equals J1_GRADE_PINS.combinedSha256', async () => {
+    const { J1_GRADE_PINS } = await import('../scripts/julius-inworld-grade.mjs');
+    expect(J1_GRADE_COMBINED_PIN_SHA256).toBe(J1_GRADE_PINS.combinedSha256);
   });
 });

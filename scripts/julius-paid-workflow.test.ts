@@ -8,7 +8,7 @@ import { delimiter, join, resolve } from 'node:path';
 import { LEGACY_RUN_ID_PATTERN, parseJuliusAdmissionRunId, WLJ_RUN_ID_PATTERN } from './julius-admission-run-id.mjs';
 import { preflightIdentityFor } from './julius-live-preflight-identity';
 import { parseJuliusAttemptRecordTag } from '../src/relay/mission/julius/julius-spend-ceiling';
-import { juliusRunResultCanonicalBody, parseJuliusRunResultRecord } from '../relay-bridge/julius-mission-evidence-reader';
+import { juliusRunResultBodyIsExact, parseJuliusRunResultRecord } from '../relay-bridge/julius-mission-evidence-reader';
 
 /**
  * ONE SPENDING PATH, ONE SLOT, NO WAY AROUND EITHER.
@@ -1153,8 +1153,23 @@ function runStep(source: string, cwd: string, env: Record<string, string>): { st
     if (env.NO_HOST_BASE !== '1') for (const base of ['julius-handoff', 'julius-evidence']) mkdirSync(join(env.HOME, base), { recursive: true, mode: 0o700 });
   }
   const bin = mkdtempSync(join(tmpdir(), 'julius-x-prime-bin-'));
-  writeFileSync(join(bin, 'stat'), '#!/usr/bin/env bash\nprintf \'%s %s\\n\' "${FAKE_STAT_MODE:-700}" "${FAKE_STAT_UID:-$(id -u)}"\n');
+  // FAKE_STAT_MODE/UID answer for every path; FAKE_STAT_RUN_MODE/UID override them for a run directory (`…-<attempt>`).
+  writeFileSync(join(bin, 'stat'), [
+    '#!/usr/bin/env bash',
+    'path="${@: -1}"; mode=${FAKE_STAT_MODE:-700}; uid=${FAKE_STAT_UID:-$(id -u)}',
+    'case "$path" in *-[0-9]|*-[0-9][0-9]) mode=${FAKE_STAT_RUN_MODE:-$mode}; uid=${FAKE_STAT_RUN_UID:-$uid} ;; esac',
+    'printf \'%s %s\\n\' "$mode" "$uid"',
+    '',
+  ].join('\n'));
   chmodSync(join(bin, 'stat'), 0o755);
+  // FAKE_CP_PLANT: after the real copy into `j1-handoff/`, plant a FIFO in it (X-5: the copy must be re-checked).
+  writeFileSync(join(bin, 'cp'), [
+    '#!/usr/bin/env bash',
+    '/usr/bin/cp "$@" || exit $?',
+    'if [ -n "${FAKE_CP_PLANT:-}" ] && [ "${@: -1}" = j1-handoff/ ]; then mkfifo j1-handoff/planted.fifo; fi',
+    '',
+  ].join('\n'));
+  chmodSync(join(bin, 'cp'), 0o755);
   // GNU's own text-mode line (`<sha>  <name>`) on every platform: Git Bash on Windows defaults to binary (`<sha> *<name>`).
   writeFileSync(join(bin, 'sha256sum'), '#!/usr/bin/env bash\nexec /usr/bin/sha256sum --text "$@"\n');
   chmodSync(join(bin, 'sha256sum'), 0o755);
@@ -1309,6 +1324,45 @@ describe('X′ §3: grading without an artifact handoff', { timeout: 60_000 }, (
     } finally { cleanup(); }
   });
 
+  it('X-2 (W6, W11): the live handoff refuses a stale run directory and a base that is not 0700 and the job user\'s', () => {
+    const { home, work, cleanup } = handOff();
+    try {
+      const again = (env: Record<string, string> = {}) => {
+        const output = join(work, 'again.txt');
+        writeFileSync(output, '');
+        return runStep(script(step(paid, HANDOFF_LIVE)), work, { HOME: home, FINAL_MESSAGE_DIR: '', GITHUB_OUTPUT: output, ...env });
+      };
+      expect(again().stderr, 'W6: a stale directory for the run attempt is never reused').toContain('handoff_refused: handoff_exists');
+      for (const env of [{ FAKE_STAT_MODE: '755' }, { FAKE_STAT_MODE: '750' }, { FAKE_STAT_UID: '4242424' }] as readonly Record<string, string>[]) {
+        expect(again({ ...env, GITHUB_RUN_ATTEMPT: '2' }).stderr, `W11 ${JSON.stringify(env)}`).toContain('handoff_refused: base_not_private');
+      }
+      const fresh = mkdtempSync(join(tmpdir(), 'julius-x-prime-home-'));
+      try {
+        expect(runStep(script(step(paid, HANDOFF_LIVE)), work, { HOME: fresh, NO_HOST_BASE: '1', FINAL_MESSAGE_DIR: '', GITHUB_OUTPUT: join(work, 'x.txt') }).stderr)
+          .toContain('handoff_refused: base_not_private');
+      } finally { rmSync(fresh, { recursive: true, force: true }); }
+    } finally { cleanup(); }
+  });
+
+  it('X-2 (W14): grading refuses a run directory that is not 0700 and the job user\'s, under a private base', () => {
+    const { home, outputs, cleanup } = handOff();
+    try {
+      expect(receive(home, outputs, { FAKE_STAT_RUN_MODE: '755' }).stderr).toContain('handoff_refused: handoff_not_private');
+      expect(receive(home, outputs, { FAKE_STAT_RUN_UID: '4242424' }).stderr).toContain('handoff_refused: handoff_not_private');
+      expect(receive(home, outputs).status, 'control: a private run directory is received').toBe(0);
+    } finally { cleanup(); }
+  });
+
+  it('X-5: the COPY is re-checked after cp -R: anything but regular files and directories in it refuses grading', () => {
+    const { home, outputs, cleanup } = handOff();
+    try {
+      const planted = receive(home, outputs, { FAKE_CP_PLANT: '1' });
+      expect(planted.status).not.toBe(0);
+      expect(planted.stderr).toContain('handoff_refused: handoff_copy_not_regular');
+      expect(planted.seen.finalMessage).toEqual([]);
+    } finally { cleanup(); }
+  });
+
   it('GRADING HOLDS NO SECRET AND NO ENVIRONMENT, and reads contents only', () => {
     expect(grade).toMatch(/\n    permissions:\n      contents: read\n    steps:\n/u);
     expect(grade).not.toMatch(/secrets\.|environment:|vars\.|github\.token|GH_TOKEN|GITHUB_TOKEN/u);
@@ -1371,6 +1425,7 @@ describe('X′ §4: the result record is written by a minimal job of its own; gr
     RUN: X_WLJ, NAMESPACE: 'julius-inworld-data-1', FINAL_STATE: 'COMPLETED', COMPLETED_AT: '2026-10-26T10:00:00Z', OUTCOME_UNKNOWN: 'none',
     COST_BASIS: 'COMPLETE', USD_MICROS: '1234567', VERDICT: 'PASS', CHECKER_SHA256: '1a98f1a4d739ebe2da254715d81f56cd5fa08d534a1fbf10ef6214e8b262207e',
     COMBINED_PIN_SHA256: 'c'.repeat(64), JUDGED_TRIMMED_SHA256: 'b'.repeat(64), PUBLISHED_TRIMMED_SHA256: 'b'.repeat(64), FINAL_MESSAGE_SHA256: 'b'.repeat(64),
+    GRADER_SHA256: 'e'.repeat(64), NODE_SHA256: 'd'.repeat(64), NODE_VERSION: 'v22.23.2',
   };
 
   it('record-result: contents: write + statuses: write and nothing else, no checkout, no secret, one best-effort step', () => {
@@ -1408,12 +1463,21 @@ describe('X′ §4: the result record is written by a minimal job of its own; gr
     expect(run.curlLog).not.toContain('julius-run-spent-');
     const body = postedBody(run.curlLog, '/git/tags');
     const parsed = parseJuliusRunResultRecord(body);
-    expect(parsed).toMatchObject({ run: X_WLJ, workflowRunId: '40400000001', workflowRunAttempt: '1', headSha: 'a'.repeat(40), finalState: 'COMPLETED', verdict: 'PASS', usdMicros: 1234567 });
+    expect(parsed).toMatchObject({
+      run: X_WLJ, workflowRunId: '40400000001', workflowRunAttempt: '1', headSha: 'a'.repeat(40), finalState: 'COMPLETED', verdict: 'PASS', usdMicros: 1234567,
+      graderSha256: 'e'.repeat(64), nodeSha256: 'd'.repeat(64), nodeVersion: 'v22.23.2',
+    });
+    // BYTE-EXACT (X-3): each line ended by exactly one LF, no CR, no trailing blank line. Checked on the bytes
+    // themselves, not through the reader's own predicate.
+    expect(body.endsWith('\nnode_version=v22.23.2\n')).toBe(true);
+    expect(body).not.toMatch(/\r|\n\n/u);
+    expect(body.split('\n')).toHaveLength(21);
+    expect(juliusRunResultBodyIsExact(body)).toBe(true);
     const statusLine = run.curlLog.split('\n').find((line) => line.includes(`/statuses/${'a'.repeat(40)} `)) ?? '';
     const status = JSON.parse(statusLine.slice(statusLine.indexOf(' DATA ') + 6)) as Record<string, string>;
     expect(status).toEqual({
       state: 'success', context: 'julius-run-result',
-      description: `v1 sha256:${createHash('sha256').update(juliusRunResultCanonicalBody(body)).digest('hex')}`,
+      description: `v1 sha256:${createHash('sha256').update(body, 'utf8').digest('hex')}`,
       target_url: 'https://github.com/ohdieyuh-glitch/sunday-relay/actions/runs/40400000001',
     });
     expect(status.description?.length ?? 0).toBeLessThanOrEqual(140);
@@ -1457,6 +1521,8 @@ describe('X′ §4: the result record is written by a minimal job of its own; gr
       expect(readOutputs(output)).toEqual({
         verdict: 'PASS', checker_sha256: '1'.repeat(64), combined_pin_sha256: 'c'.repeat(64), judged_trimmed_sha256: 'b'.repeat(64),
         published_trimmed_sha256: 'b'.repeat(64), final_message_sha256: 'b'.repeat(64),
+        // X-4: the grader's own hash comes from the verdict file (absent here), the node binary is the one on PATH.
+        grader_sha256: 'none', node_sha256: expect.stringMatching(/^[0-9a-f]{64}$/u), node_version: process.version,
       });
       // No verdict file at all: NOT_RUN, every hash `none`.
       rmSync(join(work, 'julius-inworld-verdict'), { recursive: true, force: true });

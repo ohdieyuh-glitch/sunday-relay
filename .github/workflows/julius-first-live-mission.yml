@@ -2397,6 +2397,9 @@ jobs:
       judged_trimmed_sha256: ${{ steps.verdict.outputs.judged_trimmed_sha256 }}
       published_trimmed_sha256: ${{ steps.verdict.outputs.published_trimmed_sha256 }}
       final_message_sha256: ${{ steps.verdict.outputs.final_message_sha256 }}
+      grader_sha256: ${{ steps.verdict.outputs.grader_sha256 }}
+      node_sha256: ${{ steps.verdict.outputs.node_sha256 }}
+      node_version: ${{ steps.verdict.outputs.node_version }}
     permissions:
       contents: read
     steps:
@@ -2442,6 +2445,13 @@ jobs:
           rm -rf j1-handoff j1-final-message j1-evidence
           mkdir j1-handoff
           cp -R "$dir/." j1-handoff/
+          # AND THE COPY ITSELF (X-5): what was checked in the host directory is not what grading reads, so the copy
+          # is held to regular files and directories too, before a single byte of it is hashed or graded.
+          odd=$(find j1-handoff ! -type f ! -type d -print -quit)
+          if [ -n "$odd" ]; then
+            rm -rf j1-handoff
+            refuse handoff_copy_not_regular
+          fi
           actual=$(cd j1-handoff && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum)
           if [ "$actual" != "${HANDOFF_SUMS:-}" ]; then
             rm -rf j1-handoff
@@ -2495,6 +2505,13 @@ jobs:
           checker=$(shaped '[0-9a-f]{64}' "$(field checker_sha256)")
           pin=$(shaped '[0-9a-f]{64}' "$(field combined_pin)")
           judged=$(shaped '[0-9a-f]{64}' "$(field judged_trimmed_sha256)")
+          # X-4: the grader as it ran (its own sha256, which it writes into the verdict) and the node binary
+          # that ran it (sha256 of the file on PATH, and its version). Recorded, not pinned.
+          grader=$(shaped '[0-9a-f]{64}' "$(field grader_sha256)")
+          node_bin=$(command -v node 2>/dev/null || true)
+          node_sha=none
+          if [ -n "$node_bin" ] && [ -f "$node_bin" ]; then node_sha=$(shaped '[0-9a-f]{64}' "$(sha256sum < "$node_bin" | cut -d' ' -f1)"); fi
+          node_version=$(shaped 'v[0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}' "$(node --version 2>/dev/null || true)")
           run=$(field run_id); task=$(field task_id); ctx=$(field context_id)
           published=none; final=none
           if printf '%s' "$task" | grep -Eqx '[A-Za-z0-9:_-]{1,128}' && printf '%s' "$ctx" | grep -Eqx '[A-Za-z0-9:_-]{1,128}'; then
@@ -2510,6 +2527,9 @@ jobs:
             echo "judged_trimmed_sha256=$judged"
             echo "published_trimmed_sha256=$published"
             echo "final_message_sha256=$final"
+            echo "grader_sha256=$grader"
+            echo "node_sha256=$node_sha"
+            echo "node_version=$node_version"
           } >> "${GITHUB_OUTPUT:?}"
           echo "verdict_fields verdict=$verdict checker_sha256=$checker judged_trimmed_sha256=$judged published_trimmed_sha256=$published"
       # X′ §5 (e): the verdict joins the private host copy of the evidence, and SHA256SUMS is rewritten.
@@ -2591,6 +2611,9 @@ jobs:
           JUDGED_TRIMMED_SHA256: ${{ needs.grade-inworld.outputs.judged_trimmed_sha256 }}
           PUBLISHED_TRIMMED_SHA256: ${{ needs.grade-inworld.outputs.published_trimmed_sha256 }}
           FINAL_MESSAGE_SHA256: ${{ needs.grade-inworld.outputs.final_message_sha256 }}
+          GRADER_SHA256: ${{ needs.grade-inworld.outputs.grader_sha256 }}
+          NODE_SHA256: ${{ needs.grade-inworld.outputs.node_sha256 }}
+          NODE_VERSION: ${{ needs.grade-inworld.outputs.node_version }}
         run: |
           set -euo pipefail
           refuse() { echo "RESULT_RECORD_UNVERIFIED: $1" >&2; exit 1; }
@@ -2616,12 +2639,14 @@ jobs:
           # A grade job that produced no verdict is NOT_RUN, never a PASS.
           verdict=${VERDICT:-NOT_RUN}
           shape 'PASS|FAIL|NOT_RUN' "$verdict" verdict
-          for name in CHECKER_SHA256 COMBINED_PIN_SHA256 JUDGED_TRIMMED_SHA256 PUBLISHED_TRIMMED_SHA256 FINAL_MESSAGE_SHA256; do
+          for name in CHECKER_SHA256 COMBINED_PIN_SHA256 JUDGED_TRIMMED_SHA256 PUBLISHED_TRIMMED_SHA256 FINAL_MESSAGE_SHA256 GRADER_SHA256 NODE_SHA256; do
             value=${!name:-none}
             shape '[0-9a-f]{64}|none' "$value" "$name"
             printf -v "$name" '%s' "$value"
           done
-          body="julius-run-result.v1\nrun=${RUN}\nnamespace=${NAMESPACE}\nworkflow_run_id=${GITHUB_RUN_ID}\nworkflow_run_attempt=${GITHUB_RUN_ATTEMPT}\nhead_sha=${GITHUB_SHA}\nfinal_state=${FINAL_STATE}\ncompleted_at=${COMPLETED_AT}\nverdict=${verdict}\nchecker_sha256=${CHECKER_SHA256}\ncombined_pin_sha256=${COMBINED_PIN_SHA256}\njudged_trimmed_sha256=${JUDGED_TRIMMED_SHA256}\npublished_trimmed_sha256=${PUBLISHED_TRIMMED_SHA256}\nfinal_message_sha256=${FINAL_MESSAGE_SHA256}\noutcome_unknown=${OUTCOME_UNKNOWN}\ncost_basis=${COST_BASIS}\nusd_micros=${USD_MICROS}\n"
+          NODE_VERSION=${NODE_VERSION:-none}
+          shape 'v[0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}|none' "$NODE_VERSION" node_version
+          body="julius-run-result.v1\nrun=${RUN}\nnamespace=${NAMESPACE}\nworkflow_run_id=${GITHUB_RUN_ID}\nworkflow_run_attempt=${GITHUB_RUN_ATTEMPT}\nhead_sha=${GITHUB_SHA}\nfinal_state=${FINAL_STATE}\ncompleted_at=${COMPLETED_AT}\nverdict=${verdict}\nchecker_sha256=${CHECKER_SHA256}\ncombined_pin_sha256=${COMBINED_PIN_SHA256}\njudged_trimmed_sha256=${JUDGED_TRIMMED_SHA256}\npublished_trimmed_sha256=${PUBLISHED_TRIMMED_SHA256}\nfinal_message_sha256=${FINAL_MESSAGE_SHA256}\noutcome_unknown=${OUTCOME_UNKNOWN}\ncost_basis=${COST_BASIS}\nusd_micros=${USD_MICROS}\ngrader_sha256=${GRADER_SHA256}\nnode_sha256=${NODE_SHA256}\nnode_version=${NODE_VERSION}\n"
           digest=$(printf '%b' "$body" | sha256sum | cut -d' ' -f1)
           shape '[0-9a-f]{64}' "$digest" digest
           stamped=$(date -u +%Y-%m-%dT%H:%M:%SZ)

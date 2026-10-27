@@ -852,8 +852,14 @@ const STATUS_BOT = 'github-actions[bot]';
 const RESULT_KEYS = [
   'run', 'namespace', 'workflow_run_id', 'workflow_run_attempt', 'head_sha', 'final_state', 'completed_at', 'verdict',
   'checker_sha256', 'combined_pin_sha256', 'judged_trimmed_sha256', 'published_trimmed_sha256', 'final_message_sha256',
-  'outcome_unknown', 'cost_basis', 'usd_micros',
+  'outcome_unknown', 'cost_basis', 'usd_micros', 'grader_sha256', 'node_sha256', 'node_version',
 ] as const;
+/**
+ * J1_GRADE_PINS.combinedSha256 (scripts/julius-inworld-grade.mjs), inlined like the checker pin; a drift test
+ * holds the two equal. Every staged grading input (contract, checker, oracle, seed) is in this one digest.
+ */
+export const J1_GRADE_COMBINED_PIN_SHA256 = '0ca020dbfd2f971a8c112444961aa57ea0d113b0c1d86336f420fcae126eafd3';
+const NODE_VERSION = /^v[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/u;
 const SHA_OR_NONE = /^(?:[0-9a-f]{64}|none)$/u;
 const OUTCOME_ROLE = /^[A-Z_]{1,40}$/u;
 const OUTCOME_TASK = /^[A-Za-z0-9:_-]{1,128}$/u;
@@ -876,16 +882,26 @@ export interface JuliusRunResultRecord {
   readonly outcomeUnknown: { readonly cause: JuliusOutcomeUnknownCause; readonly role: string | null; readonly taskId: string | null } | null;
   readonly costBasis: 'COMPLETE' | 'PARTIAL' | 'UNKNOWN';
   readonly usdMicros: number | null;
+  /** The grader's own sha256 as it ran (scripts/julius-inworld-grade.mjs at the run's commit), recorded. */
+  readonly graderSha256: string | null;
+  /** The node binary the grade job ran, recorded (no pin): its sha256 and `node --version`. */
+  readonly nodeSha256: string | null;
+  readonly nodeVersion: string | null;
 }
 
-/** The tag body the status hash covers: the lines, each ended by one `\n`, as the record step wrote them. */
-export function juliusRunResultCanonicalBody(message: string): string {
-  return `${message.replace(/\r\n/gu, '\n').replace(/\n+$/u, '')}\n`;
+/**
+ * BYTE-EXACT (REVIEW finding X-3). The record step writes every line ended by exactly one `\n` and nothing
+ * else; the git tag object stores the message as given, so the message read back must be those bytes. Nothing
+ * is normalized: a carriage return, a missing final newline, or a trailing blank line is not this record.
+ */
+export function juliusRunResultBodyIsExact(message: string): boolean {
+  return message.endsWith('\n') && !message.endsWith('\n\n') && !message.includes('\r');
 }
 
 /** julius-run-result.v1, closed: every key once, in order, every value in its shape. Null is not a record. */
 export function parseJuliusRunResultRecord(message: string): JuliusRunResultRecord | null {
-  const lines = juliusRunResultCanonicalBody(message).split('\n');
+  if (!juliusRunResultBodyIsExact(message)) return null;
+  const lines = message.split('\n');
   lines.pop();
   if (lines.length !== RESULT_KEYS.length + 1 || lines[0] !== JULIUS_RUN_RESULT_SCHEMA) return null;
   const field = new Map<string, string>();
@@ -916,6 +932,10 @@ export function parseJuliusRunResultRecord(message: string): JuliusRunResultReco
   const read = hashes.map(sha);
   if (read.some((value) => value === undefined)) return null;
   const [checkerSha256, combinedPinSha256, judgedTrimmedSha256, publishedTrimmedSha256, finalMessageSha256] = read as (string | null)[];
+  const graderSha256 = sha('grader_sha256');
+  const nodeSha256 = sha('node_sha256');
+  const nodeVersion = get('node_version');
+  if (graderSha256 === undefined || nodeSha256 === undefined || (nodeVersion !== 'none' && !NODE_VERSION.test(nodeVersion))) return null;
   const unknownRaw = get('outcome_unknown');
   let outcomeUnknown: JuliusRunResultRecord['outcomeUnknown'] = null;
   if (unknownRaw !== 'none') {
@@ -943,6 +963,9 @@ export function parseJuliusRunResultRecord(message: string): JuliusRunResultReco
     outcomeUnknown,
     costBasis,
     usdMicros,
+    graderSha256,
+    nodeSha256,
+    nodeVersion: nodeVersion === 'none' ? null : nodeVersion,
   };
 }
 
@@ -1000,10 +1023,14 @@ async function readBoundResultRecord(
     return null;
   }
   // (v) Exactly one julius-run-result status on the head, from the job token, naming this run, over these bytes.
-  const status = onlyOne(statuses, (entry) => entry.context === JULIUS_RUN_RESULT_CONTEXT);
-  if (status === null || status.creator !== STATUS_BOT) return null;
-  if (TARGET_URL.exec(status.targetUrl ?? '')?.[1] !== spendTag.workflowRunId) return null;
-  if (status.description !== `v1 sha256:${sha256(juliusRunResultCanonicalBody(message))}`) return null;
+  // X-1: ANOTHER RUN at the same head may post its own julius-run-result. Only the statuses from the job
+  // token that name THIS run (the spend tag's) AND carry THIS body's digest are candidates, and exactly one
+  // must remain: two candidates, or none, is unverified.
+  const description = `v1 sha256:${sha256(message)}`;
+  const candidates = statuses.filter((entry) => entry.context === JULIUS_RUN_RESULT_CONTEXT && entry.creator === STATUS_BOT
+    && TARGET_URL.exec(entry.targetUrl ?? '')?.[1] === spendTag.workflowRunId && entry.description === description);
+  const status = candidates.length === 1 ? candidates[0] as JuliusMissionCommitStatus : null;
+  if (status === null) return null;
   if (status.state !== (record.verdict === 'PASS' ? 'success' : 'failure')) return null;
   // The run's own jobs.
   const liveJob = onlyOne(jobs, (job) => job.name === LIVE_JOB);
@@ -1016,7 +1043,9 @@ async function readBoundResultRecord(
   const completed = done(liveJob, 'success') && done(liveStep, 'success');
   const liveFailed = done(liveJob, 'failure') && done(liveStep, 'failure');
   // The verdict names the pinned checker, and the bytes it judged are the bytes the run published.
+  // X-4: every staged grading input is fingerprinted by the combined pin, which must be the pinned one.
   const judged = record.judgedTrimmedSha256 !== null && record.checkerSha256 === J1_PINNED_CHECKER_FILE_SHA256
+    && record.combinedPinSha256 === J1_GRADE_COMBINED_PIN_SHA256
     && record.publishedTrimmedSha256 === record.judgedTrimmedSha256;
   // SYMMETRIC (D-b): exactly one verdict step ran in THIS run, and it is the one the tag names.
   const graded = judged && completed && done(gradeJob, 'success') && done(gradeStep, 'success');
