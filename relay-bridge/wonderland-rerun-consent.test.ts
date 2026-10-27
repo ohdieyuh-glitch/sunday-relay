@@ -1365,7 +1365,7 @@ describe('R-2: a reservation whose gh child never reached GitHub is not a perman
    * reaching GitHub, so A stays `dispatching`. `world` is what GitHub answers
    * from then on: the run list and the spent-tag read (with its Date header).
    */
-  async function stuck(world: { runList: () => GhResult; spentTag: () => GhResult }) {
+  async function stuck(world: { runList: () => GhResult; spentTag: (args: readonly string[]) => GhResult }) {
     const dir = mkdtempSync(join(tmpdir(), 'wlj-stuck-'));
     const storePath = join(dir, 'admission.json');
     const ports = service(storePath);
@@ -1393,7 +1393,7 @@ describe('R-2: a reservation whose gh child never reached GitHub is not a perman
           if (args[0] === 'api') return absentAt(RESERVED_AT);
         }
         if (args[0] === 'run') return world.runList();
-        if (args[0] === 'api') return world.spentTag();
+        if (args[0] === 'api') return world.spentTag(args);
         if (args[0] === 'workflow') return { code: 0, stdout: `https://github.com/${REPO}/actions/runs/${WORKFLOW_RUN}\n`, stderr: '' };
         return { code: 99, stdout: '', stderr: '' };
       },
@@ -1443,7 +1443,12 @@ describe('R-2: a reservation whose gh child never reached GitHub is not a perman
   });
 
   it('each leg not met, or any read failing, writes nothing and B stays blocked', async () => {
-    const cases: [string, { runList: () => GhResult; spentTag: () => GhResult }, string][] = [
+    // A spent tag that verifies: the ref is an annotated tag whose message names A and a workflow run.
+    const verifiedTag = (args: readonly string[]): GhResult => (args.some((arg) => arg.includes('/git/tags/'))
+      ? { code: 0, stdout: JSON.stringify({ message: `julius-run-spent.v1\nrun=${RUN_A}\nworkflow_run_id=${WORKFLOW_RUN}\n` }), stderr: '' }
+      : { code: 0, stdout: `HTTP/2.0 200 OK\nDate: ${after(60 * 60 * 1000)}\n\n{"ref":"refs/tags/x","object":{"type":"tag","sha":"${'cd'.repeat(20)}"}}\n`, stderr: '' });
+    const cases: [string, { runList: () => GhResult; spentTag: (args: readonly string[]) => GhResult }, string][] = [
+      ['the spent tag is present and names A, though no run for the key is listed (e.g. outside the list window)', { runList: () => EMPTY_LIST, spentTag: verifiedTag }, 'reconcile_indeterminate'],
       ['grace not elapsed on GitHub\'s clock (14:59)', { runList: () => EMPTY_LIST, spentTag: () => absentAt(after(15 * 60 * 1000 - 1000)) }, 'reconcile_indeterminate'],
       ['GitHub\'s clock behind the reservation', { runList: () => EMPTY_LIST, spentTag: () => absentAt(after(-60 * 60 * 1000)) }, 'reconcile_indeterminate'],
       ['a run for the key exists', { runList: () => runFor(KEY_A, 'in_progress'), spentTag: () => absentAt(after(60 * 60 * 1000)) }, 'reconcile_indeterminate'],
