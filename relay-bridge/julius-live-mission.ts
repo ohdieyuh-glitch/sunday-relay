@@ -120,8 +120,8 @@ function tickOverrideOf(value: string | null): { readonly ok: true; readonly ove
   if (!/^[1-9][0-9]{0,5}$/u.test(value)) return { ok: false };
   return { ok: true, override: Number(value) };
 }
-import { authorizeJuliusLiveSpend, JULIUS_QUALIFYING_PAIR_NAMESPACES, juliusAttemptMarkerLine, juliusFileCreationGrantFor, juliusPriorRunLine, noJuliusResearch, type JuliusResearchPolicy, type JuliusSpendAuthorization } from '../src/relay/mission/julius';
-import { readJuliusAttemptMarkers, readJuliusClassifiedSpentTags, readJuliusPriorRunSpend } from './julius/julius-prior-spend';
+import { authorizeJuliusLiveSpend, JULIUS_QUALIFYING_PAIR_CAP_USD_MICROS, JULIUS_QUALIFYING_PAIR_NAMESPACES, juliusAttemptMarkerLine, juliusFileCreationGrantFor, juliusPriorRunLine, noJuliusResearch, type JuliusResearchPolicy, type JuliusSpendAuthorization } from '../src/relay/mission/julius';
+import { readJuliusAttemptMarkers, readJuliusClassifiedSpentTags, readJuliusPriorRunSpend, type JuliusReadTransport } from './julius/julius-prior-spend';
 import {
   LIVE_REACH_ACTION_CAPABILITIES,
   LIVE_REACH_READ_CAPABILITIES,
@@ -629,12 +629,15 @@ export function admitLiveJuliusRunId(env: {
  * run says why it counted or did not; an unreadable prior prints UNKNOWN,
  * never 0. The token is a header and is never printed.
  */
-export async function authorizeQualifyingPairSpend(input: {
+type QualifyingPairRead = Awaited<ReturnType<typeof readJuliusClassifiedSpentTags>>;
+
+async function readQualifyingPairLedger(input: {
   readonly contract: Pick<LiveMissionContractFile, 'markerNamespace' | 'limits'>;
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly out: (line: string) => void;
   readonly fetchImpl?: typeof fetch;
-}): Promise<JuliusSpendAuthorization> {
+  readonly transport?: JuliusReadTransport;
+}): Promise<QualifyingPairRead> {
   const { contract, env, out } = input;
   const classified = await readJuliusClassifiedSpentTags({
     repository: env.GITHUB_REPOSITORY ?? '',
@@ -642,6 +645,14 @@ export async function authorizeQualifyingPairSpend(input: {
     namespace: contract.markerNamespace,
     excludeRunId: env.JULIUS_SERVER_RUN_ID,
     ...(input.fetchImpl === undefined ? {} : { fetchImpl: input.fetchImpl }),
+    transport: {
+      ...(input.transport ?? {}),
+      onRetry: (attempt, cause) => {
+        input.transport?.onRetry?.(attempt, cause);
+        out(`ledger-retry: attempt ${String(attempt)} reason=${cause}`);
+      },
+    },
+    report: (reason) => { out(`prior_runs unreadable_reason=${reason}`); },
   });
   if (!classified.ledger.readable) {
     out('prior_runs ledger=UNREADABLE counted=UNKNOWN');
@@ -649,12 +660,113 @@ export async function authorizeQualifyingPairSpend(input: {
     for (const entry of classified.audit) out(juliusPriorRunLine(entry));
     out(`prior_runs ledger=READABLE counted=${String(classified.ledger.priorRuns.length)} of=${String(classified.audit.length)}`);
   }
+  return classified;
+}
+
+export async function authorizeQualifyingPairSpend(input: {
+  readonly contract: Pick<LiveMissionContractFile, 'markerNamespace' | 'limits'>;
+  readonly env: Readonly<Record<string, string | undefined>>;
+  readonly out: (line: string) => void;
+  readonly fetchImpl?: typeof fetch;
+  readonly transport?: JuliusReadTransport;
+}): Promise<JuliusSpendAuthorization> {
+  const classified = await readQualifyingPairLedger(input);
   return authorizeJuliusLiveSpend({
-    namespace: contract.markerNamespace,
-    spendUsd: contract.limits?.spendUsd ?? null,
-    repairCycles: contract.limits?.repairCycles ?? null,
+    namespace: input.contract.markerNamespace,
+    spendUsd: input.contract.limits?.spendUsd ?? null,
+    repairCycles: input.contract.limits?.repairCycles ?? null,
     ledger: classified.ledger,
   });
+}
+
+export type LedgerVerdict = 'FITS' | 'FULL' | 'UNREADABLE' | 'CONTRACT';
+
+/** Refusals that are about the contract, not about the ledger: never "FULL". */
+const CONTRACT_REFUSALS: ReadonlySet<string> = new Set([
+  'mission_spend_ceiling_unknown', 'mission_spend_ceiling_invalid', 'mission_repair_rounds_unknown',
+  'mission_repair_rounds_invalid', 'namespace_spend_ceiling_exceeded', 'namespace_repair_ceiling_exceeded',
+]);
+
+/**
+ * `ledger-status --contract <file>`: READ-ONLY. Reads the qualifying-pair ledger three times, one second
+ * apart, through the same reader and the same authorization the paid run uses, and prints every prior run
+ * with its classification and counted flag, then one closed verdict line:
+ *   FITS        all three reads authorize the next run, so the next run's ceiling fits under the pair cap;
+ *   FULL        a read was clean but the cap, the run count or an unverified prior forbids another run;
+ *   UNREADABLE  any read could not be read, the reads disagree, or the ledger is absent. Never FITS.
+ * It creates no tag, writes no file, contacts no provider and changes no admission. Exit 0 FITS, 1 FULL,
+ * 3 UNREADABLE, 4 CONTRACT (the contract, not the ledger, refused), 2 usage or an exported run id.
+ */
+export async function ledgerStatusCommand(input: {
+  readonly contractPath: string | null;
+  readonly env: Readonly<Record<string, string | undefined>>;
+  readonly out: (line: string) => void;
+  readonly readFile?: (path: string) => string;
+  readonly fetchImpl?: typeof fetch;
+  readonly transport?: JuliusReadTransport;
+  readonly reads?: number;
+  readonly sleep?: (ms: number) => Promise<void>;
+}): Promise<number> {
+  const { out } = input;
+  if (input.contractPath === null) { out('Usage: julius-live-mission ledger-status --contract <mission.json>'); return 2; }
+  // An exported run id would EXCLUDE that run from the count and could print a false FITS.
+  if ((input.env.JULIUS_SERVER_RUN_ID ?? '') !== '' || (input.env.JULIUS_RUN_ID ?? '') !== '') {
+    out('ledger-status refuses to run while JULIUS_SERVER_RUN_ID or JULIUS_RUN_ID is set: it would exclude that run from the count. Unset it and run again.');
+    return 2;
+  }
+  const contract = contractForGate(input.contractPath, input.readFile ?? ((path) => readFileSync(path, 'utf8')), out);
+  if (contract === null) return 2;
+  if (!(JULIUS_QUALIFYING_PAIR_NAMESPACES as readonly string[]).includes(contract.markerNamespace)) {
+    out('ledger_verdict=UNREADABLE reason=not_a_qualifying_pair_namespace');
+    return 3;
+  }
+  const reads = input.reads ?? 3;
+  const sleep = input.sleep ?? ((ms: number) => new Promise<void>((resolve) => { setTimeout(resolve, ms); }));
+  const verdicts: LedgerVerdict[] = [];
+  const shapes: string[] = [];
+  let reason = 'none';
+  let priorKnown: number | null = null;
+  for (let index = 0; index < reads; index += 1) {
+    if (index > 0) await sleep(1_000);
+    const lines: string[] = [];
+    const classified = await readQualifyingPairLedger({
+      contract, env: input.env, out: (line) => { lines.push(line); },
+      ...(input.fetchImpl === undefined ? {} : { fetchImpl: input.fetchImpl }),
+      transport: input.transport ?? {},
+    });
+    const authorization = authorizeJuliusLiveSpend({
+      namespace: contract.markerNamespace,
+      spendUsd: contract.limits?.spendUsd ?? null,
+      repairCycles: contract.limits?.repairCycles ?? null,
+      ledger: classified.ledger,
+    });
+    let verdict: LedgerVerdict;
+    if (authorization.authorized) verdict = 'FITS';
+    else if (CONTRACT_REFUSALS.has(authorization.reasonCode)) verdict = 'CONTRACT';
+    else if (authorization.reasonCode === 'spend_ledger_unreadable' || authorization.reasonCode === 'qualifying_pair_spend_absent') verdict = 'UNREADABLE';
+    else verdict = 'FULL';
+    if (!authorization.authorized && index === 0) reason = authorization.reasonCode;
+    if (classified.ledger.readable && index === 0) {
+      priorKnown = classified.ledger.priorRuns.reduce((sum, run) => sum + run.knownUsdMicros, 0);
+    }
+    verdicts.push(verdict);
+    shapes.push(lines.filter((line) => line.startsWith('prior_run ') || line.startsWith('prior_runs ledger=')).sort().join('\n'));
+    if (index === 0) for (const line of lines) out(line);
+    out(`read ${String(index + 1)} verdict=${verdict}`);
+  }
+  const consistent = verdicts.every((v) => v === verdicts[0]) && shapes.every((shape) => shape === shapes[0]);
+  const final: LedgerVerdict = consistent ? (verdicts[0] as LedgerVerdict) : 'UNREADABLE';
+  const ceiling = Math.round((contract.limits?.spendUsd ?? 0) * 1_000_000);
+  const figures = priorKnown === null
+    ? 'prior_counted_usd_micros=UNKNOWN headroom_after_usd_micros=UNKNOWN'
+    : `prior_counted_usd_micros=${String(priorKnown)} headroom_after_usd_micros=${String(JULIUS_QUALIFYING_PAIR_CAP_USD_MICROS - priorKnown - ceiling)}`;
+  // The hash binds an approval to EXACTLY the classifications that were reviewed: SHA-256 of the sorted
+  // `prior_run` and `prior_runs ledger=` lines of the first read, which all three reads agreed on.
+  const classificationSha256 = consistent && priorKnown !== null
+    ? createHash('sha256').update(`${shapes[0] as string}\n`, 'utf8').digest('hex')
+    : 'UNKNOWN';
+  out(`ledger_verdict=${final} reads=${String(reads)} consistent=${consistent ? 'yes' : 'no'} reason=${consistent ? reason : 'reads_disagree'} pair_cap_usd_micros=${String(JULIUS_QUALIFYING_PAIR_CAP_USD_MICROS)} next_run_ceiling_usd_micros=${String(ceiling)} ${figures} classification_sha256=${classificationSha256}`);
+  return final === 'FITS' ? 0 : final === 'FULL' ? 1 : final === 'CONTRACT' ? 4 : 3;
 }
 
 function contractForGate(path: string | null, readFile: (path: string) => string, out: (line: string) => void): LiveMissionContractFile | null {
@@ -712,6 +824,7 @@ export async function attemptMarkersCommand(input: {
   readonly out: (line: string) => void;
   readonly readFile?: (path: string) => string;
   readonly fetchImpl?: typeof fetch;
+  readonly transport?: JuliusReadTransport;
 }): Promise<number> {
   const { out } = input;
   if (input.contractPath === null) { out('Usage: julius-live-mission attempt-markers --contract <mission.json>'); return 2; }
@@ -722,6 +835,13 @@ export async function attemptMarkersCommand(input: {
     token: input.env.GITHUB_TOKEN ?? input.env.GH_TOKEN ?? '',
     namespace: contract.markerNamespace,
     ...(input.fetchImpl === undefined ? {} : { fetchImpl: input.fetchImpl }),
+    transport: {
+      ...(input.transport ?? {}),
+      onRetry: (attempt, cause) => {
+        input.transport?.onRetry?.(attempt, cause);
+        out(`ledger-retry: attempt ${String(attempt)} reason=${cause}`);
+      },
+    },
   });
   if (!markers.readable) { out('attempt_markers_counted=UNKNOWN'); return 1; }
   for (const proof of markers.proofs) out(juliusAttemptMarkerLine(proof));
@@ -753,6 +873,9 @@ async function main(argv: readonly string[]): Promise<number> {
   }
   /* THE PRE-MARKER GATES. Matched exactly, like `observe-research`; each
    * returns before a database, a run or a provider exists. */
+  if (argv[0] === 'ledger-status') {
+    return ledgerStatusCommand({ contractPath: option('contract'), env: process.env, out });
+  }
   if (argv[0] === 'authorize-spend') {
     return authorizeSpendCommand({ contractPath: option('contract'), env: process.env, out });
   }

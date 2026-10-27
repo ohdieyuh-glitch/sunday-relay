@@ -386,6 +386,12 @@ export interface JuliusPriorRunObservation {
   readonly artifacts: unknown;
   readonly liveEvidence: ReadonlyMap<string, string> | null;
   readonly verdict: ReadonlyMap<string, string> | null;
+  /**
+   * True only when the reader proved, from the run's own GitHub-held job record, that the LIVE step refused
+   * at its spend gate before any run row or provider could exist. The reader sets it only where the
+   * evidence bundle is absent (an upload blocked under the billing lock). Absent or false proves nothing.
+   */
+  readonly refusedBeforeProvider?: boolean;
 }
 
 export interface JuliusPriorRunProof {
@@ -561,6 +567,12 @@ export function classifyJuliusPriorRun(
 
   // Proof (b): the run's own evidence bundle and its grade.
   if (juliusBoundArtifactId(observation.artifacts, JULIUS_LIVE_EVIDENCE_ARTIFACT, binding) === null) {
+    // Proof (c), only where the bundle is ABSENT: the run's own job log shows the entrypoint refused at its
+    // spend gate, before any run row or provider could exist. A bundle that exists is always judged on its
+    // rows; this never overrides evidence, it only stands in for evidence that could not be uploaded.
+    if (observation.refusedBeforeProvider === true) {
+      return proof(binding, 'NOT_EXECUTED', 'no_provider_execution_refused_before_provider');
+    }
     return proof(binding, 'UNKNOWN', 'evidence_unreadable');
   }
   const evidence = observation.liveEvidence;

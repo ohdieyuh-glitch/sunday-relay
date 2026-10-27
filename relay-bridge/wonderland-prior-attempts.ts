@@ -84,6 +84,12 @@ export function ghApiGetArgs(url: string): readonly string[] | null {
   if (!url.startsWith(API_ORIGIN)) return null;
   const path = url.slice(API_ORIGIN.length);
   if (path === '' || path.startsWith('/') || /[\s\\]|\.\.|^-/u.test(path)) return null;
+  // A job log carries the runner's colour codes, and gh 2.100 refuses to print terminal escape sequences
+  // ("pass --allow-escape-sequences", exit 1) unless told to. Only the job-log path is given the flag, so
+  // the Start route reads the same log the workflow does and reaches the same count.
+  if (/^repos\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/actions\/jobs\/[0-9]{1,20}\/logs$/u.test(path)) {
+    return ['api', '-X', 'GET', '--allow-escape-sequences', path];
+  }
   return ['api', '-X', 'GET', path];
 }
 
