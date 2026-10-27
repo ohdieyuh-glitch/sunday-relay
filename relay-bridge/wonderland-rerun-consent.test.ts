@@ -897,7 +897,7 @@ describe('the in-flight guard: one paid run of a mission at a time', () => {
       handleWonderlandMissionStartRoute(startRequest(run, extra), ports, { claimTool: () => tool });
     const claimsOf = (run: string) => readAdmissionDocument(storePath).claims.filter((event) => event.wonderlandRunId === run);
     const journalPath = () => join(dir, readdirSync(dir).find((entry) => entry.endsWith('.operator.json')) ?? '');
-    return { dir, storePath, gh, start, claimsOf, journalPath, cleanup() { ports.close(); rmSync(dir, { recursive: true, force: true }); } };
+    return { dir, storePath, ports, gh, start, claimsOf, journalPath, cleanup() { ports.close(); rmSync(dir, { recursive: true, force: true }); } };
   }
 
   it('A dispatched and its run still going: B is 409 julius_paid_run_in_flight, nothing written, retry true; once that run completed, B goes on', async () => {
@@ -1004,10 +1004,99 @@ describe('the in-flight guard: one paid run of a mission at a time', () => {
         return row;
       };
       expect(inFlightPeers(document(), rowOf(RUN_B))).toEqual([]);
-      expect((await fx.start(RUN_A))?.status).toBe(202);
+      // DISPATCHING: a reservation whose gh child died is already a peer.
+      const real = fx.gh.spawn.run.bind(fx.gh.spawn);
+      fx.gh.spawn.run = (args) => {
+        if (args[0] === 'workflow') throw new Error('bridge killed mid-dispatch');
+        return real(args);
+      };
+      expect((await fx.start(RUN_A))?.status).toBe(503);
+      expect(fx.claimsOf(RUN_A).map((event) => event.state)).toEqual(['dispatching']);
       expect(inFlightPeers(document(), rowOf(RUN_B)).map((row) => row.runId)).toEqual([RUN_A]);
       expect(inFlightPeers(document(), rowOf(RUN_A))).toEqual([]);
       expect(inFlightPeers(document(), { ...rowOf(RUN_B), missionId: 'julius-other-1' })).toEqual([]);
+    } finally {
+      fx.cleanup();
+    }
+    // DISPATCHED: the same, after a dispatch that returned.
+    const done = await pair(reader(ZERO), () => listing(KEY_A, 'in_progress'));
+    try {
+      const document = () => readAdmissionDocument(done.storePath);
+      const rowB = document().admissions.find((entry) => entry.runId === RUN_B);
+      if (rowB === undefined) throw new Error('missing row');
+      expect((await done.start(RUN_A))?.status).toBe(202);
+      expect(done.claimsOf(RUN_A).at(-1)?.state).toBe('dispatched');
+      expect(inFlightPeers(document(), rowB).map((row) => row.runId)).toEqual([RUN_A]);
+    } finally {
+      done.cleanup();
+    }
+  });
+
+  it('R10: a peer stuck in dispatching (its gh child died) blocks the next Start of the mission', async () => {
+    const fx = await pair(reader(ZERO), () => ({ code: 0, stdout: '[]', stderr: '' }));
+    try {
+      const real = fx.gh.spawn.run.bind(fx.gh.spawn);
+      let killed = true;
+      fx.gh.spawn.run = (args) => {
+        if (args[0] === 'workflow' && killed) {
+          killed = false;
+          throw new Error('bridge killed mid-dispatch');
+        }
+        return real(args);
+      };
+      expect((await fx.start(RUN_A))?.status).toBe(503);
+      const refused = await fx.start(RUN_B);
+      expect(kindOf(refused?.body)).toBe('julius_paid_run_in_flight');
+      expect(refused?.body).toMatchObject({ inFlightWljRunId: RUN_A });
+      // The killed child never reached the fake gh, and B spawned nothing.
+      expect(workflowRuns(fx.gh.calls)).toEqual([]);
+      expect(fx.claimsOf(RUN_B)).toEqual([]);
+    } finally {
+      fx.cleanup();
+    }
+  });
+
+  it('R5: two claim cores race; B passed the in-flight check before A reserved; the re-check under the lock refuses B', async () => {
+    const fx = await pair(reader(ZERO), () => listing(KEY_A, 'in_progress'));
+    try {
+      let release: () => void = () => undefined;
+      const gate = new Promise<void>((resolve) => { release = resolve; });
+      let entered: () => void = () => undefined;
+      const reading = new Promise<void>((resolve) => { entered = resolve; });
+      const gated: PriorAttemptReader = {
+        read: async () => {
+          entered();
+          await gate;
+          return ZERO;
+        },
+        readCompleted: () => Promise.resolve(ZERO),
+      };
+      const ghB = fakeGh({ runList: () => listing(KEY_A, 'in_progress') });
+      const toolB = createOperatorClaimTool(openAdmissionFile(fx.storePath), ghB.spawn, { nowIso: () => WHEN }, gated);
+      const startB = handleWonderlandMissionStartRoute(startRequest(RUN_B), fx.ports, { claimTool: () => toolB });
+      await reading;
+      // B saw no peer and read 0. Now A reserves and dispatches in another claim core.
+      expect((await fx.start(RUN_A))?.status).toBe(202);
+      release();
+      const b = await startB;
+      expect(b?.status).toBe(409);
+      expect(kindOf(b?.body)).toBe('julius_paid_run_in_flight');
+      expect(b?.body).toMatchObject({ inFlightWljRunId: RUN_A });
+      expect(workflowRuns(ghB.calls)).toEqual([]);
+      expect(fx.claimsOf(RUN_B)).toEqual([]);
+    } finally {
+      fx.cleanup();
+    }
+  });
+
+  it('R20: under the lock, a peer proven settled before the lock does not block; only a peer outside that set does', async () => {
+    const fx = await pair(reader(ZERO), () => listing(KEY_A, 'completed'));
+    try {
+      expect((await fx.start(RUN_A))?.status).toBe(202);
+      // A is dispatched and its run completed: settled outside the lock, so the in-lock check must let B through.
+      const b = await fx.start(RUN_B);
+      expect(b?.status, JSON.stringify(b?.body)).toBe(202);
+      expect(workflowRuns(fx.gh.calls)).toHaveLength(2);
     } finally {
       fx.cleanup();
     }
