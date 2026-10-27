@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -12,6 +12,7 @@ import { createLocalShellPort, J1_INDEX_HASH_COMMAND, J1_SEED_COMMAND, type J1Se
 import { juliusAttemptStartCommand } from './julius/coder-workspace';
 import { CLAUDE_SUBSCRIPTION_TOKEN_ENV, CODER_CLAUDE_EXECUTABLE_ENV } from './hosted-coding-agent/hosted-auth';
 import { juliusHostedToolAuthority, type HostedHookOutput } from './hosted-coding-agent/hosted-tool-authority';
+import { HOSTED_ALLOWED_TOOLS, HOSTED_DISALLOWED_TOOLS, hostedChildEnv } from './hosted-coding-agent/hosted-envelope';
 
 /* PART 2b (reviewer): the coder child's environment and the coder's file tools can reach NOTHING a key lives in.
    Only the CODER CHILD needs this confinement: the architect and reviewer fetches run inside the bridge process itself, which holds
@@ -185,5 +186,62 @@ START ${'c'.repeat(40)}
   });
   it('MUTANT: a different SDK cwd would be caught by the same comparison', () => {
     expect(norm('/other/dir')).not.toBe(norm(join(tmpdir(), 'j1-r4-workspace')));
+  });
+});
+
+/* X-6 (REVIEW): the LIVE step's process holds a contents:write GITHUB_TOKEN. The coder CLI is a same-uid HOST child
+   of that process, so the token is reachable only through what the model can make that CLI do. These cases prove
+   each route is closed: the child env has no token; the file tools cannot read /proc (an ancestor's environ, its
+   own, or a glob/grep over it); no execution tool is allowed; and every command the coder runs (including the
+   self-test) runs in the executor's container, which has its own pid namespace and no network. */
+describe('X-6 CANARY: the coder cannot reach the LIVE step\'s job token', () => {
+  const root = mkdtempSync(join(tmpdir(), 'j1-x6-'));
+  const work = join(root, 'work');
+  mkdirSync(join(work, 'out'), { recursive: true });
+  writeFileSync(join(work, 'out', 'normalized.json'), '{}');
+  const authority = juliusHostedToolAuthority({ workspacePath: work });
+  const denied = async (tool: string, input: Record<string, unknown>): Promise<boolean> => {
+    const out = await authority({ tool_name: tool, tool_input: input });
+    return 'hookSpecificOutput' in out && out.hookSpecificOutput.permissionDecision === 'deny';
+  };
+
+  it('the file tools refuse every /proc route to an environ: own, parent, init, any pid, by glob and by grep', async () => {
+    for (const path of ['/proc/self/environ', '/proc/1/environ', `/proc/${String(process.ppid)}/environ`, `/proc/${String(process.pid)}/environ`, '/proc/self/root/proc/1/environ']) {
+      expect(await denied('Read', { file_path: path }), `Read ${path}`).toBe(true);
+      expect(await denied('Grep', { pattern: 'GITHUB_TOKEN', path }), `Grep ${path}`).toBe(true);
+      expect(await denied('Edit', { file_path: path, old_string: 'a', new_string: 'b' }), `Edit ${path}`).toBe(true);
+    }
+    expect(await denied('Glob', { pattern: '/proc/*/environ' })).toBe(true);
+    expect(await denied('Glob', { pattern: '*/environ', path: '/proc' })).toBe(true);
+    expect(await denied('Grep', { pattern: 'GITHUB_TOKEN', path: '/proc' })).toBe(true);
+    expect(await denied('Read', { file_path: `${work}/../../../../../../proc/self/environ` })).toBe(true);
+    // Control: the workspace itself is readable, so the denials above are the authority's, not a broken harness.
+    expect(await denied('Read', { file_path: join(work, 'out', 'normalized.json') })).toBe(false);
+  });
+
+  it('the child env carries no token, and no execution tool is allowed to the coder', () => {
+    const saved = { GITHUB_TOKEN: process.env.GITHUB_TOKEN, GH_TOKEN: process.env.GH_TOKEN };
+    process.env.GITHUB_TOKEN = CANARY; process.env.GH_TOKEN = CANARY;
+    try {
+      const env = hostedChildEnv({ apiKey: 'k', path: process.env.PATH, home: process.env.HOME, model: J1_CODER_MODEL });
+      expect(JSON.stringify(env)).not.toContain(CANARY);
+      expect(Object.keys(env).filter((name) => /TOKEN|GITHUB|GH_/u.test(name))).toEqual([]);
+    } finally {
+      for (const [name, value] of Object.entries(saved)) { if (value === undefined) delete process.env[name]; else process.env[name] = value; }
+    }
+    for (const tool of ['Bash', 'BashOutput', 'KillShell', 'Task', 'WebFetch', 'NotebookEdit']) {
+      expect(HOSTED_DISALLOWED_TOOLS, tool).toContain(tool);
+      expect(HOSTED_ALLOWED_TOOLS, tool).not.toContain(tool);
+    }
+  });
+
+  it('every coder command runs in the executor container: its own pid namespace (never --pid host), no network, no host /proc', () => {
+    const adapter = readFileSync(resolve(__dirname, '../src/relay/workspace/julius-tools/docker-sandbox-adapter.ts'), 'utf8');
+    expect(adapter).toContain("'--network','none'");
+    expect(adapter).toContain("'--cap-drop=ALL'");
+    expect(adapter).not.toMatch(/'--pid'|--pid=|pid=host|--ipc=host|\/proc:|--privileged/u);
+    const selfTest = readFileSync(resolve(__dirname, 'julius/coder-self-test.ts'), 'utf8');
+    expect(selfTest).toContain('inside the sandbox');
+    rmSync(root, { recursive: true, force: true });
   });
 });
