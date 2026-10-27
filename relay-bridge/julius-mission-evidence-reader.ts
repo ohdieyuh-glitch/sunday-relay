@@ -26,9 +26,9 @@ import { juliusMissionTraceId } from '../scripts/julius-mission-trace.mjs';
 import { projectJuliusSlotViews, type JuliusTimelineEntry } from '../src/relay/mission/julius/julius-runtime-api';
 
 export const JULIUS_SPEND_TAG_SCHEMA = 'julius-run-spent.v1' as const;
-const EVIDENCE_ARTIFACT = 'julius-live-evidence';
+export const EVIDENCE_ARTIFACT = 'julius-live-evidence';
 /** The grade job's own artifact. A verdict anywhere else is not read. */
-const VERDICT_ARTIFACT = 'julius-inworld-verdict';
+export const VERDICT_ARTIFACT = 'julius-inworld-verdict';
 /** The grade job's one step that exits with the checker's status (julius-first-live-mission.yml). */
 const GRADE_STEP = 'J1: stage the pinned checker from git objects and grade';
 /** J1_PINNED_CHECKER_FILE_SHA256 (relay-bridge/julius-inworld-checker.ts), inlined so this reader does not reach the J1 dispatch modules. A test holds the two equal. */
@@ -254,6 +254,45 @@ export interface JuliusMissionWorkflowRun {
 export interface JuliusMissionGitHub {
   readAnnotatedTagMessage(tagRef: string): Promise<string | null>;
   readWorkflowRun(workflowRunId: string, workflowRunAttempt: string): Promise<JuliusMissionWorkflowRun | null>;
+}
+
+/** The run fields the result record is bound on (the gh port's `JuliusRunSummary` is a superset). */
+export interface JuliusMissionRunSummary {
+  readonly id: string;
+  readonly attempt: number;
+  readonly status: string;
+  readonly conclusion: string | null;
+  readonly event: string;
+  readonly headBranch: string;
+  readonly headSha: string;
+  readonly path: string;
+}
+
+/** One job of one run attempt, names and states only (the gh port's `JuliusRunJob` is a superset). */
+export interface JuliusMissionRunJob {
+  readonly name: string;
+  readonly status: string;
+  readonly conclusion: string | null;
+  readonly steps: readonly { readonly name: string; readonly status: string; readonly conclusion: string | null }[];
+}
+
+/** One commit status (the gh port's `JuliusCommitStatus` is a superset). */
+export interface JuliusMissionCommitStatus {
+  readonly context: string;
+  readonly state: string;
+  readonly description: string;
+  readonly creator: string;
+  readonly targetUrl?: string | null;
+}
+
+/**
+ * THE RUN'S OWN RECORD, for the result tag (X′ §4): the run, its jobs and its
+ * commit statuses, read-only. The same port the live events route reads.
+ */
+export interface JuliusMissionRunRecords {
+  readRun(workflowRunId: string): Promise<JuliusMissionRunSummary | null>;
+  readRunJobs(workflowRunId: string, attempt: number): Promise<readonly JuliusMissionRunJob[] | null>;
+  readCommitStatuses(sha: string): Promise<readonly JuliusMissionCommitStatus[] | null>;
 }
 
 const NAMESPACE = /^[a-z][a-z0-9-]{2,48}$/u;
@@ -646,7 +685,7 @@ function archiveFrom(evidence: JuliusMissionWorkflowArtifact | undefined, run: J
   };
 }
 
-export function createJuliusMissionEvidenceReader(github: JuliusMissionGitHub): JuliusMissionEvidenceReader {
+export function createJuliusMissionEvidenceReader(github: JuliusMissionGitHub, records?: JuliusMissionRunRecords): JuliusMissionEvidenceReader {
   return {
     async read(wljRunId: string): Promise<unknown> {
       const derived = deriveJuliusSpentTag(wljRunId);
@@ -673,53 +712,22 @@ export function createJuliusMissionEvidenceReader(github: JuliusMissionGitHub): 
         || observed.status !== 'completed') {
         return null;
       }
-      // A graded FAIL fails the grade job, and so the run. That run is read only when the
-      // grade step is the one thing that failed, and is returned only if its verdict is FAIL.
-      const gradedFailure = observed.conclusion === 'failure'
-        && observed.failedSteps.length > 0
-        && observed.failedSteps.every((step) => step === GRADE_STEP);
-      if (observed.conclusion !== 'success' && !gradedFailure) return null;
-      const evidence = observed.artifacts.find((artifact) => artifact.name === EVIDENCE_ARTIFACT);
-      const marker = observed.artifacts.find((artifact) => artifact.name === `${spendTag.namespace}-completed`);
-      if (!markerAgrees(marker, spendTag)) return null;
-      if (!resultCompleted(fileText(evidence, 'live-mission.evidence.txt'), derived.runId)) return null;
-      if (!runtimeAgrees(fileText(evidence, 'runs.tsv'), derived.runId)) return null;
-      const diagnosticRows = rowsForRun(fileText(evidence, 'worker-diagnostics.tsv'), derived.runId);
-      const runsText = fileText(evidence, 'runs.tsv');
-      // The bridge binds the evidence to the operator's dispatch by the run's creation time.
-      // A run whose read carried none is not completion: unknown is not a time.
-      if (observed.createdAt === null) return null;
-      const completion: JuliusMissionCompletionEvidence = {
-        juliusFinalState: 'COMPLETED',
-        spendTag: { ...spendTag, workflowRunCreatedAt: observed.createdAt },
-        // The admission step writes this run's seven-line reservation and does not
-        // compute knownUsdMicros, unknownCostComponents, unverifiableApiSpend, or
-        // spendVerified. cost-accounting.tsv is missionCost. The reservation is
-        // spendTag.reservedUsdMicros.
-        spendAccounting: null,
-        coderCost: coderCostFrom(diagnosticRows),
-        missionCost: missionCostFrom(fileText(evidence, 'cost-accounting.tsv'), derived.runId),
-        providerReceipt: coderReceipt(diagnosticRows),
-        archive: archiveFrom(evidence, observed),
-        workArtifactRefs: workRefsFrom(fileText(evidence, 'evidence.tsv'), derived.runId),
-        projectBrainRevision: brainRevision(runsText, derived.runId),
-        phases: phasesFrom(fileText(evidence, 'slot-events.tsv'), derived.runId),
-        traceId: juliusMissionTraceId(derived.runId),
-        traceparent: null,
-        ...checkerVerdictFrom(
-          fileText(observed.artifacts.find((artifact) => artifact.name === VERDICT_ARTIFACT), 'checker-verdict.txt'),
-          derived.runId,
-          (taskId, contextId) => publishedFinalMessageSha256(fileText(evidence, `${taskId.replace(/:/gu, '_')}.${contextId.replace(/:/gu, '_')}.redacted.json`), taskId, contextId, derived.runId),
-        ),
-      };
-      // Anything but a FAIL verdict on a run the grade failed is not this run's outcome.
-      if (gradedFailure && completion.checkerVerdict !== 'FAIL') return null;
-      return completion;
+      // THE ARTIFACT PATH WINS WHEN ITS ARTIFACTS ARE THERE. Only a finished run whose evidence
+      // bundle or verdict artifact is absent (X′: uploads refused under the billing lock) is read
+      // from the result record, and only when every binding in readBoundResultRecord holds.
+      const present = (name: string): boolean => observed.artifacts.some((artifact) => artifact.name === name && artifact.files !== null);
+      if ((present(EVIDENCE_ARTIFACT) && present(VERDICT_ARTIFACT)) || records === undefined) {
+        return completionFromArtifacts(observed, spendTag, derived.runId);
+      }
+      const bound = await readBoundResultRecord(github, records, spendTag, derived.runId);
+      const viaRecord = bound === null || observed.createdAt === null ? null : completionFromRecord(bound, spendTag, observed.createdAt, derived.runId);
+      return viaRecord ?? completionFromArtifacts(observed, spendTag, derived.runId);
     },
 
     /**
      * The same spend-tag binding as `read`, for a FINISHED run of any
      * conclusion: a run that stopped on an unknown outcome did not succeed.
+     * X′: when the run has no evidence artifact, the bound result record is read.
      */
     async readOutcomeUnknown(wljRunId: string): Promise<unknown> {
       const derived = deriveJuliusSpentTag(wljRunId);
@@ -747,9 +755,339 @@ export function createJuliusMissionEvidenceReader(github: JuliusMissionGitHub): 
         return null;
       }
       const evidence = observed.artifacts.find((artifact) => artifact.name === EVIDENCE_ARTIFACT);
-      const found = outcomeUnknownFrom(fileText(evidence, 'failures.tsv'), derived.runId, JULIUS_OUTCOME_UNKNOWN_CAUSES);
-      return found === null ? null : { ...found, workflowRunId: observed.workflowRunId };
+      if (evidence?.files != null || records === undefined) {
+        const found = outcomeUnknownFrom(fileText(evidence, 'failures.tsv'), derived.runId, JULIUS_OUTCOME_UNKNOWN_CAUSES);
+        return found === null ? null : { ...found, workflowRunId: observed.workflowRunId };
+      }
+      const bound = await readBoundResultRecord(github, records, spendTag, derived.runId);
+      // The run's own jobs must say LIVE failed: the record's word alone is not an outcome.
+      if (bound === null || bound.record.outcomeUnknown === null || !bound.liveFailed) return null;
+      return { ...bound.record.outcomeUnknown, workflowRunId: observed.workflowRunId };
     },
+  };
+}
+
+/** Today's reading: the spend tag's run, its completion marker and its evidence and verdict artifacts. */
+function completionFromArtifacts(
+  observed: JuliusMissionWorkflowRun,
+  spendTag: Omit<JuliusMissionSpendTagEvidence, 'workflowRunCreatedAt'>,
+  runId: string,
+): JuliusMissionCompletionEvidence | null {
+  // A graded FAIL fails the grade job, and so the run. That run is read only when the
+  // grade step is the one thing that failed, and is returned only if its verdict is FAIL.
+  const gradedFailure = observed.conclusion === 'failure'
+    && observed.failedSteps.length > 0
+    && observed.failedSteps.every((step) => step === GRADE_STEP);
+  if (observed.conclusion !== 'success' && !gradedFailure) return null;
+  const evidence = observed.artifacts.find((artifact) => artifact.name === EVIDENCE_ARTIFACT);
+  const marker = observed.artifacts.find((artifact) => artifact.name === `${spendTag.namespace}-completed`);
+  if (!markerAgrees(marker, spendTag)) return null;
+  if (!resultCompleted(fileText(evidence, 'live-mission.evidence.txt'), runId)) return null;
+  if (!runtimeAgrees(fileText(evidence, 'runs.tsv'), runId)) return null;
+  const diagnosticRows = rowsForRun(fileText(evidence, 'worker-diagnostics.tsv'), runId);
+  const runsText = fileText(evidence, 'runs.tsv');
+  // The bridge binds the evidence to the operator's dispatch by the run's creation time.
+  // A run whose read carried none is not completion: unknown is not a time.
+  if (observed.createdAt === null) return null;
+  const completion: JuliusMissionCompletionEvidence = {
+    juliusFinalState: 'COMPLETED',
+    spendTag: { ...spendTag, workflowRunCreatedAt: observed.createdAt },
+    // The admission step writes this run's seven-line reservation and does not
+    // compute knownUsdMicros, unknownCostComponents, unverifiableApiSpend, or
+    // spendVerified. cost-accounting.tsv is missionCost. The reservation is
+    // spendTag.reservedUsdMicros.
+    spendAccounting: null,
+    coderCost: coderCostFrom(diagnosticRows),
+    missionCost: missionCostFrom(fileText(evidence, 'cost-accounting.tsv'), runId),
+    providerReceipt: coderReceipt(diagnosticRows),
+    archive: archiveFrom(evidence, observed),
+    workArtifactRefs: workRefsFrom(fileText(evidence, 'evidence.tsv'), runId),
+    projectBrainRevision: brainRevision(runsText, runId),
+    phases: phasesFrom(fileText(evidence, 'slot-events.tsv'), runId),
+    traceId: juliusMissionTraceId(runId),
+    traceparent: null,
+    ...checkerVerdictFrom(
+      fileText(observed.artifacts.find((artifact) => artifact.name === VERDICT_ARTIFACT), 'checker-verdict.txt'),
+      runId,
+      (taskId, contextId) => publishedFinalMessageSha256(fileText(evidence, `${taskId.replace(/:/gu, '_')}.${contextId.replace(/:/gu, '_')}.redacted.json`), taskId, contextId, runId),
+    ),
+  };
+  // Anything but a FAIL verdict on a run the grade failed is not this run's outcome.
+  if (gradedFailure && completion.checkerVerdict !== 'FAIL') return null;
+  return completion;
+}
+
+/* ------------------------------------------------------------------------------------------------
+ * X′ §4: THE RESULT RECORD, when the artifacts are absent.
+ *
+ * The grade job's record step writes the annotated tag
+ * refs/tags/julius-run-record-<suffix>-result (closed julius-run-result.v1 lines, no model text)
+ * and ONE `julius-run-result` commit status on head_sha whose description is
+ * `v1 sha256:<sha256 of the tag body>`. Neither is run-bound on its own: any workflow in this
+ * repository whose job token has contents: write and statuses: write can write both with a
+ * self-chosen body and target_url. So the reading is bound to the run the PROTECTED SPEND TAG
+ * names, through that run's own jobs (which no other run can write):
+ *   (i)   the run at the spend tag's workflow_run_id: the paid workflow's path, attempt 1, the
+ *         spend tag's head, event workflow_dispatch, branch main, completed;
+ *   (ii)  PASS only when the grade job and its GRADE_STEP concluded success, its PASS step
+ *         concluded success AND its FAIL step was skipped, and the LIVE job and step succeeded;
+ *   (iii) FAIL only when the grade job and GRADE_STEP concluded success, its FAIL step concluded
+ *         success AND its PASS step was skipped (REVIEW ruling D-b: symmetric);
+ *   (iv)  anything else is NOT_RUN (unverified), whatever the tag says;
+ *   (v)   the tag and status hash checks hold as well.
+ * Completion itself needs the LIVE job AND its LIVE step to have concluded success.
+ * ---------------------------------------------------------------------------------------------- */
+
+export const JULIUS_RUN_RESULT_SCHEMA = 'julius-run-result.v1';
+export const JULIUS_RUN_RESULT_CONTEXT = 'julius-run-result';
+const PAID_WORKFLOW_PATH = '.github/workflows/julius-first-live-mission.yml';
+const LIVE_JOB = 'Preflight, then the live mission';
+const LIVE_STEP = 'LIVE: run the first real Julius mission';
+const GRADE_JOB = 'J1: grade the final message with the pinned hidden checker';
+/** Runs only when the pinned checker's own verdict file says PASS (julius-first-live-mission.yml). */
+const PASS_STEP = "J1: the pinned checker's verdict is PASS";
+/** Runs only when the pinned checker's own verdict file says FAIL. */
+const FAIL_STEP = "J1: the pinned checker's verdict is FAIL";
+const STATUS_BOT = 'github-actions[bot]';
+const RESULT_KEYS = [
+  'run', 'namespace', 'workflow_run_id', 'workflow_run_attempt', 'head_sha', 'final_state', 'completed_at', 'verdict',
+  'checker_sha256', 'combined_pin_sha256', 'judged_trimmed_sha256', 'published_trimmed_sha256', 'final_message_sha256',
+  'outcome_unknown', 'cost_basis', 'usd_micros', 'grader_sha256', 'node_sha256', 'node_version',
+] as const;
+/**
+ * J1_GRADE_PINS.combinedSha256 (scripts/julius-inworld-grade.mjs), inlined like the checker pin; a drift test
+ * holds the two equal. Every staged grading input (contract, checker, oracle, seed) is in this one digest.
+ */
+export const J1_GRADE_COMBINED_PIN_SHA256 = '0ca020dbfd2f971a8c112444961aa57ea0d113b0c1d86336f420fcae126eafd3';
+const NODE_VERSION = /^v[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/u;
+const SHA_OR_NONE = /^(?:[0-9a-f]{64}|none)$/u;
+const OUTCOME_ROLE = /^[A-Z_]{1,40}$/u;
+const OUTCOME_TASK = /^[A-Za-z0-9:_-]{1,128}$/u;
+const TARGET_URL = /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/actions\/runs\/([1-9][0-9]{0,19})$/u;
+
+export interface JuliusRunResultRecord {
+  readonly run: string;
+  readonly namespace: string;
+  readonly workflowRunId: string;
+  readonly workflowRunAttempt: string;
+  readonly headSha: string;
+  readonly finalState: 'COMPLETED' | 'FAILED' | 'INTERRUPTED';
+  readonly completedAt: string | null;
+  readonly verdict: JuliusCheckerVerdict;
+  readonly checkerSha256: string | null;
+  readonly combinedPinSha256: string | null;
+  readonly judgedTrimmedSha256: string | null;
+  readonly publishedTrimmedSha256: string | null;
+  readonly finalMessageSha256: string | null;
+  readonly outcomeUnknown: { readonly cause: JuliusOutcomeUnknownCause; readonly role: string | null; readonly taskId: string | null } | null;
+  readonly costBasis: 'COMPLETE' | 'PARTIAL' | 'UNKNOWN';
+  readonly usdMicros: number | null;
+  /** The grader's own sha256 as it ran (scripts/julius-inworld-grade.mjs at the run's commit), recorded. */
+  readonly graderSha256: string | null;
+  /** The node binary the grade job ran, recorded (no pin): its sha256 and `node --version`. */
+  readonly nodeSha256: string | null;
+  readonly nodeVersion: string | null;
+}
+
+/**
+ * BYTE-EXACT (REVIEW finding X-3). The record step writes every line ended by exactly one `\n` and nothing
+ * else; the git tag object stores the message as given, so the message read back must be those bytes. Nothing
+ * is normalized: a carriage return, a missing final newline, or a trailing blank line is not this record.
+ */
+export function juliusRunResultBodyIsExact(message: string): boolean {
+  return message.endsWith('\n') && !message.endsWith('\n\n') && !message.includes('\r');
+}
+
+/** julius-run-result.v1, closed: every key once, in order, every value in its shape. Null is not a record. */
+export function parseJuliusRunResultRecord(message: string): JuliusRunResultRecord | null {
+  if (!juliusRunResultBodyIsExact(message)) return null;
+  const lines = message.split('\n');
+  lines.pop();
+  if (lines.length !== RESULT_KEYS.length + 1 || lines[0] !== JULIUS_RUN_RESULT_SCHEMA) return null;
+  const field = new Map<string, string>();
+  for (const [index, key] of RESULT_KEYS.entries()) {
+    const line = lines[index + 1] ?? '';
+    if (!line.startsWith(`${key}=`)) return null;
+    field.set(key, line.slice(key.length + 1));
+  }
+  const get = (key: (typeof RESULT_KEYS)[number]): string => field.get(key) ?? '';
+  const sha = (key: (typeof RESULT_KEYS)[number]): string | null | undefined => {
+    const value = get(key);
+    return SHA_OR_NONE.test(value) ? (value === 'none' ? null : value) : undefined;
+  };
+  const finalState = get('final_state');
+  const verdict = get('verdict');
+  const completedAt = get('completed_at');
+  const costBasis = get('cost_basis');
+  const usd = get('usd_micros');
+  if (!NAMESPACE.test(get('namespace')) || !DIGITS.test(get('workflow_run_id')) || !DIGITS.test(get('workflow_run_attempt')) || !SHA40.test(get('head_sha'))) return null;
+  if (finalState !== 'COMPLETED' && finalState !== 'FAILED' && finalState !== 'INTERRUPTED') return null;
+  if (verdict !== 'PASS' && verdict !== 'FAIL' && verdict !== 'NOT_RUN') return null;
+  if (completedAt !== 'none' && !STAMP.test(completedAt)) return null;
+  if ((finalState === 'COMPLETED') !== (completedAt !== 'none')) return null;
+  if (costBasis !== 'COMPLETE' && costBasis !== 'PARTIAL' && costBasis !== 'UNKNOWN') return null;
+  const usdMicros = usd === 'UNKNOWN' ? null : nonNegative(usd);
+  if ((usdMicros === null) !== (costBasis === 'UNKNOWN') || (usd !== 'UNKNOWN' && usdMicros === null)) return null;
+  const hashes = ['checker_sha256', 'combined_pin_sha256', 'judged_trimmed_sha256', 'published_trimmed_sha256', 'final_message_sha256'] as const;
+  const read = hashes.map(sha);
+  if (read.some((value) => value === undefined)) return null;
+  const [checkerSha256, combinedPinSha256, judgedTrimmedSha256, publishedTrimmedSha256, finalMessageSha256] = read as (string | null)[];
+  const graderSha256 = sha('grader_sha256');
+  const nodeSha256 = sha('node_sha256');
+  const nodeVersion = get('node_version');
+  if (graderSha256 === undefined || nodeSha256 === undefined || (nodeVersion !== 'none' && !NODE_VERSION.test(nodeVersion))) return null;
+  const unknownRaw = get('outcome_unknown');
+  let outcomeUnknown: JuliusRunResultRecord['outcomeUnknown'] = null;
+  if (unknownRaw !== 'none') {
+    const [cause, role, task, extra] = unknownRaw.split('/');
+    if (extra !== undefined || cause === undefined || role === undefined || task === undefined) return null;
+    if (!(JULIUS_OUTCOME_UNKNOWN_CAUSES as readonly string[]).includes(cause)) return null;
+    if (role !== 'none' && !OUTCOME_ROLE.test(role)) return null;
+    if (task !== 'none' && !OUTCOME_TASK.test(task)) return null;
+    outcomeUnknown = { cause: cause as JuliusOutcomeUnknownCause, role: role === 'none' ? null : role, taskId: task === 'none' ? null : task };
+  }
+  return {
+    run: get('run'),
+    namespace: get('namespace'),
+    workflowRunId: get('workflow_run_id'),
+    workflowRunAttempt: get('workflow_run_attempt'),
+    headSha: get('head_sha'),
+    finalState,
+    completedAt: completedAt === 'none' ? null : completedAt,
+    verdict,
+    checkerSha256: checkerSha256 ?? null,
+    combinedPinSha256: combinedPinSha256 ?? null,
+    judgedTrimmedSha256: judgedTrimmedSha256 ?? null,
+    publishedTrimmedSha256: publishedTrimmedSha256 ?? null,
+    finalMessageSha256: finalMessageSha256 ?? null,
+    outcomeUnknown,
+    costBasis,
+    usdMicros,
+    graderSha256,
+    nodeSha256,
+    nodeVersion: nodeVersion === 'none' ? null : nodeVersion,
+  };
+}
+
+interface BoundResultRecord {
+  readonly record: JuliusRunResultRecord;
+  /** The verdict the run's OWN jobs allow: PASS or FAIL only as (ii) and (iii) say, otherwise NOT_RUN. */
+  readonly verdict: JuliusCheckerVerdict;
+  /** The LIVE job and its LIVE step concluded success. */
+  readonly completed: boolean;
+  /** The LIVE job and its LIVE step concluded failure. */
+  readonly liveFailed: boolean;
+}
+
+function onlyOne<T>(items: readonly T[], match: (item: T) => boolean): T | null {
+  const found = items.filter(match);
+  return found.length === 1 ? found[0] as T : null;
+}
+
+/**
+ * The result record of the run the SPEND TAG names, or null. The run id and attempt are the spend
+ * tag's, never the result tag's. Every read that throws is null: unverified, never a guess.
+ */
+async function readBoundResultRecord(
+  github: JuliusMissionGitHub,
+  records: JuliusMissionRunRecords,
+  spendTag: Omit<JuliusMissionSpendTagEvidence, 'workflowRunCreatedAt'>,
+  runId: string,
+): Promise<BoundResultRecord | null> {
+  const derived = deriveJuliusSpentTag(runId);
+  if (!derived.ok) return null;
+  // (i) The run itself, at the spend tag's id: the paid workflow, attempt 1, the tag's head, dispatched on main.
+  if (spendTag.workflowRunAttempt !== '1') return null;
+  let run: JuliusMissionRunSummary | null;
+  let jobs: readonly JuliusMissionRunJob[] | null;
+  let message: string | null;
+  let statuses: readonly JuliusMissionCommitStatus[] | null;
+  try {
+    run = await records.readRun(spendTag.workflowRunId);
+    if (run === null || run.id !== spendTag.workflowRunId || run.attempt !== 1 || run.headSha !== spendTag.headSha
+      || run.path !== PAID_WORKFLOW_PATH || run.event !== 'workflow_dispatch' || run.headBranch !== 'main' || run.status !== 'completed') {
+      return null;
+    }
+    jobs = await records.readRunJobs(spendTag.workflowRunId, 1);
+    message = await github.readAnnotatedTagMessage(`refs/tags/julius-run-record-${derived.suffix}-result`);
+    statuses = await records.readCommitStatuses(spendTag.headSha);
+  } catch {
+    return null;
+  }
+  if (jobs === null || message === null || statuses === null) return null;
+  const record = parseJuliusRunResultRecord(message);
+  if (record === null) return null;
+  // The record names exactly the spend tag's run.
+  if (record.run !== runId || record.namespace !== spendTag.namespace || record.workflowRunId !== spendTag.workflowRunId
+    || record.workflowRunAttempt !== spendTag.workflowRunAttempt || record.headSha !== spendTag.headSha) {
+    return null;
+  }
+  // (v) Exactly one julius-run-result status on the head, from the job token, naming this run, over these bytes.
+  // X-1: ANOTHER RUN at the same head may post its own julius-run-result. Only the statuses from the job
+  // token that name THIS run (the spend tag's) AND carry THIS body's digest are candidates, and exactly one
+  // must remain: two candidates, or none, is unverified.
+  const description = `v1 sha256:${sha256(message)}`;
+  const candidates = statuses.filter((entry) => entry.context === JULIUS_RUN_RESULT_CONTEXT && entry.creator === STATUS_BOT
+    && TARGET_URL.exec(entry.targetUrl ?? '')?.[1] === spendTag.workflowRunId && entry.description === description);
+  const status = candidates.length === 1 ? candidates[0] as JuliusMissionCommitStatus : null;
+  if (status === null) return null;
+  if (status.state !== (record.verdict === 'PASS' ? 'success' : 'failure')) return null;
+  // The run's own jobs.
+  const liveJob = onlyOne(jobs, (job) => job.name === LIVE_JOB);
+  const liveStep = liveJob === null ? null : onlyOne(liveJob.steps, (step) => step.name === LIVE_STEP);
+  const gradeJob = onlyOne(jobs, (job) => job.name === GRADE_JOB);
+  const gradeStep = gradeJob === null ? null : onlyOne(gradeJob.steps, (step) => step.name === GRADE_STEP);
+  const passStep = gradeJob === null ? null : onlyOne(gradeJob.steps, (step) => step.name === PASS_STEP);
+  const failStep = gradeJob === null ? null : onlyOne(gradeJob.steps, (step) => step.name === FAIL_STEP);
+  const done =(item: { readonly status: string; readonly conclusion: string | null } | null, conclusion: string): boolean => item !== null && item.status === 'completed' && item.conclusion === conclusion;
+  const completed = done(liveJob, 'success') && done(liveStep, 'success');
+  const liveFailed = done(liveJob, 'failure') && done(liveStep, 'failure');
+  // The verdict names the pinned checker, and the bytes it judged are the bytes the run published.
+  // X-4: every staged grading input is fingerprinted by the combined pin, which must be the pinned one.
+  const judged = record.judgedTrimmedSha256 !== null && record.checkerSha256 === J1_PINNED_CHECKER_FILE_SHA256
+    && record.combinedPinSha256 === J1_GRADE_COMBINED_PIN_SHA256
+    && record.publishedTrimmedSha256 === record.judgedTrimmedSha256;
+  // SYMMETRIC (D-b): exactly one verdict step ran in THIS run, and it is the one the tag names.
+  const graded = judged && completed && done(gradeJob, 'success') && done(gradeStep, 'success');
+  let verdict: JuliusCheckerVerdict = 'NOT_RUN';
+  if (record.verdict === 'PASS' && graded && done(passStep, 'success') && done(failStep, 'skipped')) verdict = 'PASS';
+  if (record.verdict === 'FAIL' && graded && done(failStep, 'success') && done(passStep, 'skipped')) verdict = 'FAIL';
+  return { record, verdict, completed, liveFailed };
+}
+
+/** What the record can say: completion, the bound verdict, the outcome-unknown cause and the cost. Never the slot views. */
+function completionFromRecord(
+  bound: BoundResultRecord,
+  spendTag: Omit<JuliusMissionSpendTagEvidence, 'workflowRunCreatedAt'>,
+  workflowRunCreatedAt: string,
+  runId: string,
+): JuliusMissionCompletionEvidence | null {
+  const { record } = bound;
+  if (record.finalState !== 'COMPLETED' || !bound.completed) return null;
+  const checker: JuliusCheckerEvidence | null = record.judgedTrimmedSha256 === null && record.checkerSha256 === null ? null : {
+    reason: null,
+    taskId: null,
+    judgedTrimmedSha256: record.judgedTrimmedSha256,
+    gameDigest: record.judgedTrimmedSha256 === null ? null : record.judgedTrimmedSha256.slice(0, 12),
+    checkerSha256: record.checkerSha256,
+  };
+  return {
+    juliusFinalState: 'COMPLETED',
+    spendTag: { ...spendTag, workflowRunCreatedAt },
+    spendAccounting: null,
+    coderCost: null,
+    missionCost: record.usdMicros === null
+      ? null
+      : { knownUsdMicros: record.usdMicros, unknownComponents: record.costBasis === 'COMPLETE' ? 0 : null, complete: record.costBasis === 'COMPLETE' },
+    providerReceipt: null,
+    archive: null,
+    workArtifactRefs: null,
+    projectBrainRevision: null,
+    phases: null,
+    traceId: juliusMissionTraceId(runId),
+    traceparent: null,
+    checkerVerdict: bound.verdict,
+    checker,
   };
 }
 

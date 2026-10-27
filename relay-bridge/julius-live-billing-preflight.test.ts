@@ -56,8 +56,10 @@ const TOKEN_SENTINEL = 'FAKETESTNOTREAL-oauth-sentinel-0000';
 const READY_RIG: Record<string, string> = Object.freeze({
   PATH: dirname(process.execPath),
   NODE_PATH: join(process.cwd(), 'node_modules'),
-  OPENAI_API_KEY: 'FAKETESTNOTREAL-openai',
-  OPENAI_PROMPT_ARCHITECT_MODEL: 'gpt-5.6-sol',
+  // The J1 rig: the Agentic Architect on its own Anthropic key. No OpenAI variable is set.
+  JULIUS_ARCHITECT_PROVIDER: 'anthropic',
+  ANTHROPIC_ARCHITECT_API_KEY: 'FAKETESTNOTREAL-anthropic-architect',
+  RELAY_ANTHROPIC_ARCHITECT_MODEL: 'claude-opus-5-5',
   RELAY_PROMPT_ARCHITECT_MODE: 'live',
   ANTHROPIC_API_KEY: 'FAKETESTNOTREAL-anthropic',
   RELAY_HOSTED_CODING_MODEL: 'claude-opus-5-5',

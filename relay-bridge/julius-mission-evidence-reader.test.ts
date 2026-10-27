@@ -8,6 +8,8 @@ import { juliusMissionTraceId } from '../scripts/julius-mission-trace.mjs';
 import {
   checkerVerdictFrom,
   createJuliusMissionEvidenceReader,
+  J1_GRADE_COMBINED_PIN_SHA256,
+  parseJuliusRunResultRecord,
   outcomeUnknownFrom,
   type JuliusMissionCompletionEvidence,
   type JuliusMissionGitHub,
@@ -15,6 +17,7 @@ import {
 } from './julius-mission-evidence-reader';
 import { J1_PINNED_CHECKER_FILE_SHA256 } from './julius-inworld-checker';
 import { acceptJuliusOutcomeUnknown, JULIUS_OUTCOME_UNKNOWN_CAUSES } from './julius-mission-evidence';
+import { acceptJuliusMissionEvidence } from './julius-mission-evidence';
 import { cachedEvidenceReader } from './wonderland-live-wiring';
 
 const WLJ = 'wlj_01234567-89ab-4cde-8fab-0123456789ab';
@@ -728,5 +731,314 @@ describe('an ambiguous provider outcome is read from the run\'s own failure reco
     const calls = source.calls.length;
     expect(await cached.readOutcomeUnknown?.(WLJ)).toMatchObject({ cause: 'HANDED_OUTCOME_UNKNOWN' });
     expect(source.calls.length).toBe(calls);
+  });
+});
+
+/* ------------------------------------------------------------------------------------------------
+ * X′ §4: /result from the RESULT RECORD when the artifacts are absent, bound to the run the
+ * protected spend tag names through that run's own jobs (the REVIEW run-binding amendment).
+ * ---------------------------------------------------------------------------------------------- */
+describe('X′ §4: the result record, bound to the spend record, the pinned checker, judged==published, the bot status AND the run', () => {
+  const SUFFIX = '0123456789ab4cde8fab0123456789ab';
+  const RESULT_REF = `refs/tags/julius-run-record-${SUFFIX}-result`;
+  const JUDGED = 'b'.repeat(64);
+  const LIVE_JOB = 'Preflight, then the live mission';
+  const LIVE_STEP = 'LIVE: run the first real Julius mission';
+  const GRADE_JOB = 'J1: grade the final message with the pinned hidden checker';
+  const GRADE_STEP = 'J1: stage the pinned checker from git objects and grade';
+  const PASS_STEP = "J1: the pinned checker's verdict is PASS";
+  const FAIL_STEP = "J1: the pinned checker's verdict is FAIL";
+
+  type Fields = Record<string, string>;
+  const resultBody = (over: Fields = {}): string => {
+    const fields: Fields = {
+      run: WLJ, namespace: 'julius-first-live', workflow_run_id: RUN, workflow_run_attempt: ATTEMPT, head_sha: SHA,
+      final_state: 'COMPLETED', completed_at: '2026-10-24T13:00:00Z', verdict: 'PASS',
+      checker_sha256: J1_PINNED_CHECKER_FILE_SHA256, combined_pin_sha256: J1_GRADE_COMBINED_PIN_SHA256,
+      judged_trimmed_sha256: JUDGED, published_trimmed_sha256: JUDGED, final_message_sha256: JUDGED,
+      outcome_unknown: 'none', cost_basis: 'COMPLETE', usd_micros: '1234567',
+      grader_sha256: 'e'.repeat(64), node_sha256: 'd'.repeat(64), node_version: 'v22.23.2',
+      ...over,
+    };
+    return `${['julius-run-result.v1', ...Object.entries(fields).map(([key, value]) => `${key}=${value}`)].join('\n')}\n`;
+  };
+  const digest = (body: string): string => createHash('sha256').update(body).digest('hex');
+
+  interface World {
+    spendTag?: string | null;
+    result?: string | null;
+    run?: Record<string, unknown> | null;
+    jobs?: readonly Record<string, unknown>[] | null;
+    statuses?: readonly Record<string, unknown>[] | null;
+    artifacts?: JuliusMissionWorkflowRun['artifacts'];
+    jobsByRun?: Readonly<Record<string, readonly Record<string, unknown>[]>>;
+  }
+  const step = (name: string, conclusion: string | null) => ({ name, status: conclusion === null ? 'in_progress' : 'completed', conclusion });
+  const job = (name: string, conclusion: string | null, steps: readonly ReturnType<typeof step>[]) => ({ name, status: conclusion === null ? 'in_progress' : 'completed', conclusion, steps });
+  const passingJobs = (over: { live?: string | null; liveStep?: string | null; grade?: string | null; gradeStep?: string | null; pass?: string | null; fail?: string | null } = {}) => [
+    job('spend-tag', 'success', []),
+    job(LIVE_JOB, over.live === undefined ? 'success' : over.live, [step(LIVE_STEP, over.liveStep === undefined ? 'success' : over.liveStep)]),
+    job(GRADE_JOB, over.grade === undefined ? 'success' : over.grade, [
+      step(GRADE_STEP, over.gradeStep === undefined ? 'success' : over.gradeStep),
+      ...(over.pass === null ? [] : [step(PASS_STEP, over.pass === undefined ? 'success' : over.pass)]),
+      ...(over.fail === null ? [] : [step(FAIL_STEP, over.fail === undefined ? 'skipped' : over.fail)]),
+    ]),
+  ];
+  /** A run whose own checker said FAIL: the grade job and step succeed (a FAIL exits 0), FAIL ran, PASS skipped. */
+  const failingJobs = () => passingJobs({ pass: 'skipped', fail: 'success' });
+  const botStatus = (body: string, over: Record<string, unknown> = {}) => ({
+    context: 'julius-run-result', state: 'success', description: `v1 sha256:${digest(body)}`, creator: 'github-actions[bot]',
+    targetUrl: `https://github.com/ohdieyuh-glitch/sunday-relay/actions/runs/${RUN}`, ...over,
+  });
+  const theRun = (over: Record<string, unknown> = {}) => ({
+    id: RUN, attempt: 1, status: 'completed', conclusion: 'success', event: 'workflow_dispatch', headBranch: 'main', headSha: SHA,
+    path: '.github/workflows/julius-first-live-mission.yml', ...over,
+  });
+
+  function world(input: World = {}) {
+    const body = input.result === undefined ? resultBody() : input.result;
+    const calls: string[] = [];
+    const githubPort: JuliusMissionGitHub = {
+      async readAnnotatedTagMessage(tagRef) {
+        calls.push(`tag ${tagRef}`);
+        if (tagRef === RESULT_REF) return body;
+        return input.spendTag === undefined ? tagMessage(WLJ) : input.spendTag;
+      },
+      async readWorkflowRun() { return workflow({ artifacts: input.artifacts ?? [] }); },
+    };
+    const records = {
+      async readRun(id: string) { calls.push(`run ${id}`); return input.run === undefined ? theRun({ id }) : input.run; },
+      async readRunJobs(id: string, attempt: number) {
+        calls.push(`jobs ${id} ${String(attempt)}`);
+        if (input.jobsByRun?.[id] !== undefined) return input.jobsByRun[id];
+        return input.jobs === undefined ? passingJobs() : input.jobs;
+      },
+      async readCommitStatuses(sha: string) {
+        calls.push(`statuses ${sha}`);
+        return input.statuses === undefined ? (body === null ? [] : [botStatus(body)]) : input.statuses;
+      },
+    };
+    return { reader: createJuliusMissionEvidenceReader(githubPort, records as never), calls };
+  }
+  const verdictOf = async (input: World = {}): Promise<string | null> => {
+    const reading = await world(input).reader.read(WLJ) as JuliusMissionCompletionEvidence | null;
+    return reading === null ? null : reading.checkerVerdict;
+  };
+
+  it('PASS through the tag form with every binding correct, read at the SPEND tag\'s run id and attempt', async () => {
+    const { reader, calls } = world();
+    const reading = await reader.read(WLJ) as JuliusMissionCompletionEvidence;
+    expect(reading.juliusFinalState).toBe('COMPLETED');
+    expect(reading.checkerVerdict).toBe('PASS');
+    expect(reading.checker).toEqual({ reason: null, taskId: null, judgedTrimmedSha256: JUDGED, gameDigest: JUDGED.slice(0, 12), checkerSha256: J1_PINNED_CHECKER_FILE_SHA256 });
+    expect(reading.missionCost).toEqual({ knownUsdMicros: 1234567, unknownComponents: 0, complete: true });
+    expect(reading.spendTag.workflowRunId).toBe(RUN);
+    expect(reading.archive).toBeNull();
+    expect(reading.phases).toBeNull();
+    expect(calls).toContain(`run ${RUN}`);
+    expect(calls).toContain(`jobs ${RUN} 1`);
+    expect(calls).toContain(`statuses ${SHA}`);
+    // And the route's own acceptance keeps it.
+    expect(acceptJuliusMissionEvidence(WLJ, reading).completion?.checkerVerdict).toBe('PASS');
+  });
+
+  it('THE ARTIFACT PATH WINS WHEN PRESENT: a run with its evidence and verdict artifacts never reads the result record', async () => {
+    const { reader, calls } = world({ artifacts: [
+      { name: 'julius-live-evidence', files: [{ path: 'live-mission.evidence.txt', text: RESULT }] },
+      { name: 'julius-first-live-completed', files: [{ path: 'marker.txt', text: MARKER }] },
+      { name: 'julius-inworld-verdict', files: [{ path: 'checker-verdict.txt', text: 'schema=julius-inworld-verdict.v1\nverdict=NOT_RUN\n' }] },
+    ] });
+    const reading = await reader.read(WLJ) as JuliusMissionCompletionEvidence;
+    expect(reading.checkerVerdict).toBe('NOT_RUN');
+    expect(calls).not.toContain(`tag ${RESULT_REF}`);
+    expect(calls.some((call) => call.startsWith('jobs '))).toBe(false);
+  });
+
+  it('MUTATION: a forged PASS tag plus a VALID bot status, with the grade step FAILED, is never PASS', async () => {
+    expect(await verdictOf({ jobs: passingJobs({ gradeStep: 'failure', grade: 'failure', pass: 'skipped' }) })).not.toBe('PASS');
+    // Even if the attacker's world kept the PASS step green: the grade step decides.
+    expect(await verdictOf({ jobs: passingJobs({ gradeStep: 'failure' }) })).not.toBe('PASS');
+  });
+
+  it('MUTATION: the same with the grade JOB missing, or its PASS step skipped (a real FAIL also exits 0), is never PASS', async () => {
+    expect(await verdictOf({ jobs: passingJobs().filter((entry) => entry.name !== GRADE_JOB) })).not.toBe('PASS');
+    expect(await verdictOf({ jobs: passingJobs({ pass: 'skipped' }) })).not.toBe('PASS');
+    expect(await verdictOf({ jobs: passingJobs({ pass: null }) })).not.toBe('PASS');
+    expect(await verdictOf({ jobs: passingJobs({ grade: null, gradeStep: null }) })).not.toBe('PASS');
+    expect(await verdictOf({ jobs: passingJobs({ grade: 'cancelled' }) })).not.toBe('PASS');
+  });
+
+  it('MUTATION: the same with LIVE failed is not even completion', async () => {
+    expect(await verdictOf({ jobs: passingJobs({ live: 'failure' }) })).toBeNull();
+    expect(await verdictOf({ jobs: passingJobs({ liveStep: 'failure' }) })).toBeNull();
+    expect(await verdictOf({ jobs: passingJobs({ liveStep: 'skipped' }) })).toBeNull();
+    expect(await verdictOf({ jobs: passingJobs().filter((entry) => entry.name !== LIVE_JOB) })).toBeNull();
+  });
+
+  it('MUTATION: the run id is the SPEND tag\'s, never the result tag\'s', async () => {
+    // A forger points the result tag at its own green run 9999; the spend tag's run 4242 failed grading.
+    const forged = resultBody({ workflow_run_id: '9999' });
+    const { reader, calls } = world({
+      result: forged,
+      statuses: [botStatus(forged, { targetUrl: 'https://github.com/ohdieyuh-glitch/sunday-relay/actions/runs/9999' })],
+      jobsByRun: { 9999: passingJobs(), [RUN]: passingJobs({ gradeStep: 'failure', grade: 'failure', pass: 'skipped' }) },
+    });
+    expect(await reader.read(WLJ)).toBeNull();
+    expect(calls).not.toContain('run 9999');
+    expect(calls).not.toContain('jobs 9999 1');
+  });
+
+  it('D-b SYMMETRIC: a real FAIL shows FAIL (the FAIL step ran, the PASS step was skipped); otherwise unverified', async () => {
+    const fail = resultBody({ verdict: 'FAIL' });
+    const failStatus = (body: string) => [botStatus(body, { state: 'failure' })];
+    const reading = await world({ result: fail, statuses: failStatus(fail), jobs: failingJobs() }).reader.read(WLJ) as JuliusMissionCompletionEvidence;
+    expect(reading.juliusFinalState).toBe('COMPLETED');
+    expect(reading.checkerVerdict).toBe('FAIL');
+    expect(acceptJuliusMissionEvidence(WLJ, reading).completion?.checkerVerdict).toBe('FAIL');
+    // The FAIL step missing, skipped, or failed; the PASS step not skipped; the grade step failed: each unverified.
+    for (const jobs of [
+      passingJobs({ pass: 'skipped', fail: null }), passingJobs({ pass: 'skipped', fail: 'skipped' }), passingJobs({ pass: 'skipped', fail: 'failure' }),
+      passingJobs({ pass: null, fail: 'success' }), passingJobs({ gradeStep: 'failure', grade: 'failure', pass: 'skipped', fail: 'skipped' }),
+    ]) expect(await verdictOf({ result: fail, statuses: failStatus(fail), jobs }), JSON.stringify(jobs.at(-1))).toBe('NOT_RUN');
+    const notRun = resultBody({ verdict: 'NOT_RUN' });
+    expect(await verdictOf({ result: notRun, statuses: failStatus(notRun) })).toBe('NOT_RUN');
+  });
+
+  it('X-1: another run\'s julius-run-result at the same head does not break a genuine PASS', async () => {
+    const body = resultBody();
+    const otherBody = resultBody({ workflow_run_id: '9999' });
+    const other = botStatus(otherBody, { targetUrl: 'https://github.com/ohdieyuh-glitch/sunday-relay/actions/runs/9999' });
+    expect(await verdictOf({ statuses: [other, botStatus(body)] })).toBe('PASS');
+    expect(await verdictOf({ statuses: [botStatus(body), other, botStatus(otherBody, { state: 'failure', targetUrl: 'https://github.com/ohdieyuh-glitch/sunday-relay/actions/runs/9998' })] })).toBe('PASS');
+  });
+
+  it('X-1: two statuses that both name this run and this digest are unverified', async () => {
+    expect(await verdictOf({ statuses: [botStatus(resultBody()), botStatus(resultBody())] })).toBeNull();
+  });
+
+  it('X-1: a forged status with the right run id and the WRONG digest is not a candidate: alone it is unverified, beside the real one it is ignored', async () => {
+    const forged = botStatus(resultBody(), { description: `v1 sha256:${'0'.repeat(64)}` });
+    expect(await verdictOf({ statuses: [forged] })).toBeNull();
+    expect(await verdictOf({ statuses: [forged, botStatus(resultBody())] })).toBe('PASS');
+    // Nor is one from another creator, even with the right run and digest.
+    expect(await verdictOf({ statuses: [botStatus(resultBody(), { creator: 'ohdieyuh-glitch' })] })).toBeNull();
+  });
+
+  it('X-3: the record is BYTE-EXACT: a CR, a missing final LF or a trailing blank line is not the record (no normalization)', () => {
+    const body = resultBody();
+    expect(parseJuliusRunResultRecord(body)).not.toBeNull();
+    for (const bad of [body.replace(/\n/gu, '\r\n'), body.slice(0, -1), `${body}\n`, body.replace('\nrun=', '\r\nrun=')]) {
+      expect(parseJuliusRunResultRecord(bad), JSON.stringify(bad.slice(-12))).toBeNull();
+    }
+  });
+
+  it('X-3: the status digest is sha256 of the tag message bytes as read, not of any normalized form', async () => {
+    const body = resultBody();
+    expect(await verdictOf({ statuses: [botStatus(body, { description: `v1 sha256:${digest(`${body}\n`)}` })] })).toBeNull();
+    expect(await verdictOf({ statuses: [botStatus(body, { description: `v1 sha256:${digest(body.slice(0, -1))}` })] })).toBeNull();
+    expect(await verdictOf({})).toBe('PASS');
+  });
+
+  it('X-4: the combined pin of every staged grading input must be the pinned one; the grader and node fingerprints are recorded', async () => {
+    expect(await verdictOf({ result: resultBody({ combined_pin_sha256: 'c'.repeat(64) }) })).toBe('NOT_RUN');
+    expect(await verdictOf({ result: resultBody({ combined_pin_sha256: 'none' }) })).toBe('NOT_RUN');
+    expect(parseJuliusRunResultRecord(resultBody())).toMatchObject({ graderSha256: 'e'.repeat(64), nodeSha256: 'd'.repeat(64), nodeVersion: 'v22.23.2' });
+    expect(parseJuliusRunResultRecord(resultBody({ grader_sha256: 'none', node_sha256: 'none', node_version: 'none' }))).toMatchObject({ graderSha256: null, nodeSha256: null, nodeVersion: null });
+    for (const over of [{ grader_sha256: 'x' }, { node_sha256: 'D'.repeat(64) }, { node_version: '22.1.0' }, { node_version: 'v22.1.0 extra' }] as readonly Record<string, string>[]) {
+      expect(parseJuliusRunResultRecord(resultBody(over)), JSON.stringify(over)).toBeNull();
+    }
+  });
+
+  it('MUTATION D-b: a forged PASS tag over a real FAIL is unverified', async () => {
+    expect(await verdictOf({ jobs: failingJobs() })).toBe('NOT_RUN');
+  });
+
+  it('MUTATION D-b: a forged FAIL tag over a real PASS is unverified', async () => {
+    const fail = resultBody({ verdict: 'FAIL' });
+    expect(await verdictOf({ result: fail, statuses: [botStatus(fail, { state: 'failure' })], jobs: passingJobs() })).toBe('NOT_RUN');
+  });
+
+  it('MUTATION D-b: BOTH verdict steps succeeded is unverified, whichever the tag says', async () => {
+    const both = passingJobs({ pass: 'success', fail: 'success' });
+    expect(await verdictOf({ jobs: both })).toBe('NOT_RUN');
+    const fail = resultBody({ verdict: 'FAIL' });
+    expect(await verdictOf({ result: fail, statuses: [botStatus(fail, { state: 'failure' })], jobs: both })).toBe('NOT_RUN');
+  });
+
+  it('(i) the run itself: path, attempt 1, head, workflow_dispatch, main, completed; each violation is unverified', async () => {
+    for (const over of [
+      { path: '.github/workflows/relay-ci.yml' }, { attempt: 2 }, { headSha: 'f'.repeat(40) }, { event: 'push' },
+      { headBranch: 'julius/forged' }, { status: 'in_progress' }, { id: '4243' },
+    ]) expect(await verdictOf({ run: theRun(over) }), JSON.stringify(over)).toBeNull();
+    expect(await verdictOf({ run: null })).toBeNull();
+    expect(await verdictOf({ spendTag: tagMessage(WLJ).replace('workflow_run_attempt=1', 'workflow_run_attempt=2') })).toBeNull();
+  });
+
+  it('each single violation of the tag or the status falls back to unverified', async () => {
+    const cases: readonly [string, World][] = [
+      ['wrong run', { result: resultBody({ run: 'wlj_11111111-89ab-4cde-8fab-0123456789ab' }) }],
+      ['wrong attempt', { result: resultBody({ workflow_run_attempt: '2' }) }],
+      ['wrong sha', { result: resultBody({ head_sha: 'e'.repeat(40) }) }],
+      ['wrong namespace', { result: resultBody({ namespace: 'julius-inworld-data-1' }) }],
+      ['not v1', { result: resultBody().replace('julius-run-result.v1', 'julius-run-result.v0') }],
+      ['a smuggled line', { result: `${resultBody()}extra=1\n` }],
+      ['no tag', { result: null }],
+      ['status not from the bot', { statuses: [botStatus(resultBody(), { creator: 'ohdieyuh-glitch' })] }],
+      ['status hash mismatch', { statuses: [botStatus(resultBody(), { description: `v1 sha256:${'0'.repeat(64)}` })] }],
+      ['status names another run', { statuses: [botStatus(resultBody(), { targetUrl: 'https://github.com/ohdieyuh-glitch/sunday-relay/actions/runs/9999' })] }],
+      ['status without a target', { statuses: [botStatus(resultBody(), { targetUrl: null })] }],
+      ['status state contradicts', { statuses: [botStatus(resultBody(), { state: 'failure' })] }],
+      ['two statuses', { statuses: [botStatus(resultBody()), botStatus(resultBody())] }],
+      ['missing status', { statuses: [] }],
+      ['statuses unreadable', { statuses: null }],
+      ['jobs unreadable', { jobs: null }],
+    ];
+    for (const [label, input] of cases) expect(await verdictOf(input), label).toBeNull();
+  });
+
+  it('the pinned checker and judged == published are required for a PASS', async () => {
+    expect(await verdictOf({ result: resultBody({ checker_sha256: 'd'.repeat(64) }), statuses: undefined })).toBe('NOT_RUN');
+    expect(await verdictOf({ result: resultBody({ published_trimmed_sha256: 'e'.repeat(64) }) })).toBe('NOT_RUN');
+    expect(await verdictOf({ result: resultBody({ published_trimmed_sha256: 'none' }) })).toBe('NOT_RUN');
+  });
+
+  it('MUTATION GUARD: skip the status binding and a forged tag still must not PASS (the run binding alone holds it)', async () => {
+    // No status at all: unverified. A forged PASS over a run whose PASS step never ran: not PASS.
+    expect(await verdictOf({ statuses: [] })).toBeNull();
+    expect(await verdictOf({ jobs: passingJobs({ pass: 'skipped' }) })).toBe('NOT_RUN');
+  });
+
+  it('FAIL CLOSED: any read that throws is unverified, and a reader with no run records reads artifacts only', async () => {
+    const throwing = (which: 'readRun' | 'readRunJobs' | 'readCommitStatuses') => {
+      const base = world();
+      const githubPort: JuliusMissionGitHub = { async readAnnotatedTagMessage(ref) { return ref === RESULT_REF ? resultBody() : tagMessage(WLJ); }, async readWorkflowRun() { return workflow(); } };
+      const records = {
+        readRun: async () => theRun(), readRunJobs: async () => passingJobs(), readCommitStatuses: async () => [botStatus(resultBody())],
+        [which]: async () => { throw new Error('unreadable'); },
+      };
+      void base;
+      return createJuliusMissionEvidenceReader(githubPort, records as never);
+    };
+    for (const which of ['readRun', 'readRunJobs', 'readCommitStatuses'] as const) expect(await throwing(which).read(WLJ), which).toBeNull();
+    const noRecords = createJuliusMissionEvidenceReader({ async readAnnotatedTagMessage() { return tagMessage(WLJ); }, async readWorkflowRun() { return workflow(); } });
+    expect(await noRecords.read(WLJ)).toBeNull();
+  });
+
+  it('outcome-unknown from the record only when the run\'s own LIVE job and step FAILED', async () => {
+    const body = resultBody({ final_state: 'FAILED', completed_at: 'none', verdict: 'NOT_RUN', outcome_unknown: 'HANDED_TIMEOUT_OUTCOME_UNKNOWN/CODING_AGENT/build:1', judged_trimmed_sha256: 'none', published_trimmed_sha256: 'none', final_message_sha256: 'none' });
+    const statuses = [botStatus(body, { state: 'failure' })];
+    const failed = world({ result: body, statuses, jobs: passingJobs({ live: 'failure', liveStep: 'failure', pass: 'skipped' }) });
+    expect(await failed.reader.readOutcomeUnknown?.(WLJ)).toEqual({ cause: 'HANDED_TIMEOUT_OUTCOME_UNKNOWN', role: 'CODING_AGENT', taskId: 'build:1', workflowRunId: RUN });
+    expect(acceptJuliusOutcomeUnknown(await failed.reader.readOutcomeUnknown?.(WLJ), RUN)).not.toBeNull();
+    const green = world({ result: body, statuses });
+    expect(await green.reader.readOutcomeUnknown?.(WLJ)).toBeNull();
+    expect(await failed.reader.read(WLJ)).toBeNull();
+  });
+});
+
+describe('X-4: the reader\'s inlined combined pin is the grader\'s', () => {
+  it('J1_GRADE_COMBINED_PIN_SHA256 equals J1_GRADE_PINS.combinedSha256', async () => {
+    const { J1_GRADE_PINS } = await import('../scripts/julius-inworld-grade.mjs');
+    expect(J1_GRADE_COMBINED_PIN_SHA256).toBe(J1_GRADE_PINS.combinedSha256);
   });
 });

@@ -117,7 +117,19 @@ export function wonderlandAdmissionRequestFrom(request: {
   };
 }
 
-export function createWonderlandStatusBridge(ports: WonderlandAdmissionRoutePorts): {
+/**
+ * The two prior-run counts the paid workflow gates on for one admitted
+ * mission, each an integer or UNKNOWN: `attempted` (the attempted-marker
+ * gate) and `completed` (the step-9 gate: completed markers plus the recorded
+ * constant). Injected by the composition root; this module starts no process
+ * and reads no network.
+ */
+export type WonderlandStatusPriorAttempts = (missionId: string) => Promise<{
+  readonly attempted: number | 'UNKNOWN';
+  readonly completed: number | 'UNKNOWN';
+}>;
+
+export function createWonderlandStatusBridge(ports: WonderlandAdmissionRoutePorts, priorAttempts?: WonderlandStatusPriorAttempts): {
   readonly path: string;
   handle(request: {
     readonly method: string;
@@ -136,7 +148,7 @@ export function createWonderlandStatusBridge(ports: WonderlandAdmissionRoutePort
 } {
   return {
     path: WONDERLAND_STATUS_PATH,
-    handle: (request) => handleWonderlandStatusRoute(wonderlandAdmissionRequestFrom(request), ports),
+    handle: (request) => handleWonderlandStatusRoute(wonderlandAdmissionRequestFrom(request), ports, priorAttempts),
   };
 }
 
@@ -370,10 +382,20 @@ export function handleWonderlandAdmissionRoute(
  * Reads the admission file. A missing file is an unknown run. A held row
  * stays held. A stored state or cause outside the closed unions is returned
  * as `state: "unknown"` with no cause. `unknown` is never terminal.
+ *
+ * Every 200 also carries, at top level, `priorAttempted` (the counted
+ * attempted markers: an integer >= 0, or "UNKNOWN"), `priorCompleted` (the
+ * step-9 count, completed markers plus the recorded constant: an integer >= 0,
+ * or "UNKNOWN") and `rerunConsentRequired` (true exactly when both are
+ * integers and at least one is above 0), so the client shows the second
+ * phrase field only then. They are read only while the admission is startable
+ * (`awaiting_operator`); in any other state nothing is read and they are
+ * "UNKNOWN", "UNKNOWN" and false. The phrase itself is never in this body.
  */
 export function handleWonderlandStatusRoute(
   request: WonderlandAdmissionRouteRequest,
   ports: WonderlandAdmissionRoutePorts,
+  priorAttempts?: WonderlandStatusPriorAttempts,
 ): Promise<{ status: number; body: unknown } | null> {
   if (!isWonderlandStatusRoute(request.path)) return Promise.resolve(null);
   const guarded = juliusLoopbackGuard(request, ports);
@@ -385,7 +407,44 @@ export function handleWonderlandStatusRoute(
   } catch {
     runId = '';
   }
-  return readAdmittedWonderlandStatus(request, ports, runId, guarded.native.playerId);
+  return readAdmittedStatusWithMission(request, ports, runId, guarded.native.playerId).then(async (read) => {
+    if (read.status !== 200 || read.body === null || typeof read.body !== 'object') return { status: read.status, body: read.body };
+    const view = read.body as Record<string, unknown>;
+    const whole = (value: unknown): number | 'UNKNOWN' => (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 'UNKNOWN');
+    let priorAttempted: number | 'UNKNOWN' = 'UNKNOWN';
+    let priorCompleted: number | 'UNKNOWN' = 'UNKNOWN';
+    const missionId = read.missionId ?? null;
+    if (view.state === 'awaiting_operator' && missionId !== null && priorAttempts !== undefined) {
+      try {
+        const counts = await priorAttempts(missionId);
+        priorAttempted = whole(counts?.attempted);
+        priorCompleted = whole(counts?.completed);
+      } catch {
+        priorAttempted = 'UNKNOWN';
+        priorCompleted = 'UNKNOWN';
+      }
+    }
+    return { status: 200, body: withRerunConsent(view, priorAttempted, priorCompleted) };
+  });
+}
+
+/**
+ * The status body plus the three rerun fields, at top level. Existing fields
+ * are untouched. Consent is required only when both counts are known and at
+ * least one is above 0; either UNKNOWN means not required (Start is refused).
+ */
+export function withRerunConsent(
+  view: Record<string, unknown>,
+  priorAttempted: number | 'UNKNOWN',
+  priorCompleted: number | 'UNKNOWN',
+): Record<string, unknown> {
+  const known = typeof priorAttempted === 'number' && typeof priorCompleted === 'number';
+  return {
+    ...view,
+    priorAttempted,
+    priorCompleted,
+    rerunConsentRequired: known && (priorAttempted > 0 || priorCompleted > 0),
+  };
 }
 
 /**
@@ -401,6 +460,16 @@ export function readAdmittedWonderlandStatus(
   runId: string,
   playerId: string,
 ): Promise<{ status: number; body: unknown }> {
+  return readAdmittedStatusWithMission(request, ports, runId, playerId).then((read) => ({ status: read.status, body: read.body }));
+}
+
+/** The same read, plus the admitted row's mission slug on a 200 (never sent to the client). */
+function readAdmittedStatusWithMission(
+  request: WonderlandAdmissionRouteRequest,
+  ports: WonderlandAdmissionRoutePorts,
+  runId: string,
+  playerId: string,
+): Promise<{ status: number; body: unknown; missionId?: string | null }> {
   const storePath = (ports.env.JULIUS_WONDERLAND_ADMISSION_STORE ?? '').trim();
   if (storePath === '' || !isLocalStorePath(storePath)) {
     return Promise.resolve(err(503, 'julius_dispatch_unavailable', 'Wonderland admission store is not available. Nothing was reserved.'));
@@ -427,7 +496,11 @@ export function readAdmittedWonderlandStatus(
   const owner = admission.ownerPlayerId ?? (ports.env.JULIUS_J1_FOUNDER_PLAYER_ID ?? '').trim();
   if (owner === '' || owner !== playerId) return Promise.resolve(STATUS_NOT_FOUND);
   try {
-    return Promise.resolve({ status: 200, body: statusView(storePath, admission, document, identity.serverRunId, request.nowMs) });
+    return Promise.resolve({
+      status: 200,
+      body: statusView(storePath, admission, document, identity.serverRunId, request.nowMs),
+      missionId: admission.missionId,
+    });
   } catch (error) {
     if (isAdmissionFileClosed(error)) {
       return Promise.resolve(err(503, 'julius_dispatch_unavailable', 'Wonderland admission store is not available. Nothing was reserved.'));
@@ -566,7 +639,7 @@ function claimCause(claim: ClaimEvent): string | null {
   if (claim.halt !== null) return claim.halt;
   // `workflow_run_unspent` (written by reconcile) is not in the client's closed cause list:
   // the client sees `dispatch_failed` with no cause, and the journal keeps why.
-  if (claim.dispatchError === 'workflow_run_unspent') return null;
+  if (claim.dispatchError === 'workflow_run_unspent' || claim.dispatchError === 'workflow_run_absent') return null;
   return claim.dispatchError;
 }
 

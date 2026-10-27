@@ -71,7 +71,7 @@ jobs:
     # The julius-landing environment accepts deployments from main only. The founder keeps that branch policy. This `if` is the workflow's own enforcement of the same fact.
     if: github.ref == 'refs/heads/main'
     environment: julius-landing
-    runs-on: ubuntu-latest
+    runs-on: julius-paid
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4

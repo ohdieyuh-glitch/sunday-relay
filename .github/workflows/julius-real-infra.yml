@@ -7,8 +7,8 @@ permissions:
   contents: read
 jobs:
   sibling-control-plane:
-    if: ${{ !startsWith(github.ref, 'refs/heads/julius-governed-audit/') && !startsWith(github.head_ref, 'julius-governed-audit/') && !startsWith(github.base_ref, 'julius-governed-audit/') }}
-    runs-on: ubuntu-24.04
+    if: ${{ !startsWith(github.ref, 'refs/heads/julius-governed-audit/') && !startsWith(github.head_ref, 'julius-governed-audit/') && !startsWith(github.base_ref, 'julius-governed-audit/') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: julius-ci
     timeout-minutes: 45
     env:
       JULIUS_CALLER_ID: julius-prod
@@ -177,14 +177,15 @@ jobs:
     # started with, and the host-visible one the sibling job above has always
     # used. The executor's own diagnostics (safe lines only) are printed for
     # both, so a refusal names its stage and class instead of vanishing.
-    if: ${{ !startsWith(github.ref, 'refs/heads/julius-governed-audit/') && !startsWith(github.head_ref, 'julius-governed-audit/') && !startsWith(github.base_ref, 'julius-governed-audit/') }}
-    runs-on: ubuntu-24.04
+    if: ${{ !startsWith(github.ref, 'refs/heads/julius-governed-audit/') && !startsWith(github.head_ref, 'julius-governed-audit/') && !startsWith(github.base_ref, 'julius-governed-audit/') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: julius-ci
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         receipts: [executor-private, host-visible]
     env:
+      JULIUS_LIVE_PG_PORT: '55433'
       JULIUS_CALLER_ID: julius-live
       JULIUS_TENANT_ID: tenant
       JULIUS_PROJECT_ID: prj-julius-first-live
@@ -460,8 +461,8 @@ jobs:
     # sandboxes, and its quarantine case reconciles every `julius.sandbox` container on the daemon with an empty receipts
     # store, so it must never share a daemon with a live executor. The same pinned images; a throwaway PostgreSQL; the
     # same todo gate as the real-PostgreSQL step: a case that did not run is not a case that passed.
-    if: ${{ !startsWith(github.ref, 'refs/heads/julius-governed-audit/') && !startsWith(github.head_ref, 'julius-governed-audit/') && !startsWith(github.base_ref, 'julius-governed-audit/') }}
-    runs-on: ubuntu-24.04
+    if: ${{ !startsWith(github.ref, 'refs/heads/julius-governed-audit/') && !startsWith(github.head_ref, 'julius-governed-audit/') && !startsWith(github.base_ref, 'julius-governed-audit/') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: julius-ci
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -532,10 +533,11 @@ jobs:
     #
     # ZERO SPEND BY CONSTRUCTION: no `environment:`, no secret anywhere in this job, no token in any step's env, no
     # provider, no executor, no LIVE. Its only network is npm ci and the PostgreSQL image pull.
-    if: ${{ !startsWith(github.ref, 'refs/heads/julius-governed-audit/') && !startsWith(github.head_ref, 'julius-governed-audit/') && !startsWith(github.base_ref, 'julius-governed-audit/') }}
-    runs-on: ubuntu-24.04
+    if: ${{ !startsWith(github.ref, 'refs/heads/julius-governed-audit/') && !startsWith(github.head_ref, 'julius-governed-audit/') && !startsWith(github.base_ref, 'julius-governed-audit/') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: julius-ci
     timeout-minutes: 20
     env:
+      JULIUS_LIVE_PG_PORT: '55433'
       PGUSER: julius
       PGDATABASE: julius
       # SYNTHETIC: the WITHOUT run this job plays, by a workflow run id no real run has, and its Julius run id.

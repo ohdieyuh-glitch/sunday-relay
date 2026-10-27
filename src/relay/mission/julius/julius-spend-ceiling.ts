@@ -727,6 +727,90 @@ export function juliusAttemptMarkerBindings(listing: unknown, markerName: string
   return bindings;
 }
 
+/**
+ * THE ATTEMPTED RECORD AS A TAG (X′ §2). The paid job writes the annotated tag
+ * `refs/tags/julius-run-record-<suffix>-attempted` with its job token BEFORE the
+ * LIVE step can run, beside the best-effort `<namespace>-attempted` artifact.
+ * The prefix is deliberately NOT `julius-run-spent-`: the spent-tag listing
+ * rejects every ref under its own prefix that is not exactly a spend suffix, so
+ * a record tag there would make the $60 ledger unreadable.
+ *
+ *   julius-run-attempted.v1
+ *   run=<wlj_ id | run: id>
+ *   namespace=<marker namespace>
+ *   workflow_run_id=<digits>
+ *   workflow_run_attempt=<digits>
+ *   head_sha=<40 lowercase hex>
+ *   attempted_at=<UTC, second precision, Z>
+ *   contract_sha256=<64 lowercase hex>
+ */
+export const JULIUS_RUN_RECORD_TAG_PREFIX = 'refs/tags/julius-run-record-';
+export const JULIUS_RUN_ATTEMPTED_SCHEMA = 'julius-run-attempted.v1';
+const ATTEMPTED_KEYS = ['run', 'namespace', 'workflow_run_id', 'workflow_run_attempt', 'head_sha', 'attempted_at', 'contract_sha256'] as const;
+const RECORD_NAMESPACE = /^[a-z][a-z0-9-]{2,48}$/u;
+const RECORD_WLJ = /^wlj_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
+const RECORD_LEGACY = /^run:[0-9a-f]{24}$/u;
+const RECORD_STAMP = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$/u;
+const RECORD_SHA256 = /^[0-9a-f]{64}$/u;
+
+/** The spend suffix of an admission id: the same 32 or 24 hex the spent tag carries. */
+export function juliusRunRecordSuffix(runId: string): string | null {
+  if (RECORD_WLJ.test(runId)) return runId.slice('wlj_'.length).replaceAll('-', '');
+  if (RECORD_LEGACY.test(runId)) return runId.slice('run:'.length);
+  return null;
+}
+
+export type JuliusAttemptRecordTagParse =
+  /** This namespace's record, bound to the workflow run that wrote it. */
+  | { readonly kind: 'bound'; readonly binding: JuliusWorkflowRunBinding }
+  /** This namespace's, by its readable namespace line, but not otherwise a record: counted, UNKNOWN. */
+  | { readonly kind: 'counted_unbound'; readonly basis: string }
+  /** A well-formed record of another namespace. */
+  | { readonly kind: 'other_namespace' }
+  /** A `julius-run-record-*` ref that is not an attempted record (the result record): not read here. */
+  | { readonly kind: 'not_attempted' }
+  /** Nothing this reader can attribute: the whole listing is unreadable. */
+  | { readonly kind: 'unreadable' };
+
+/**
+ * ONE REF OF THE `matching-refs/tags/julius-run-record-` LISTING, PURE.
+ * `message` is the annotated tag's body, or null for a lightweight tag (which is
+ * unreadable: only an annotated tag carries a body to bind). Fail-closed: a body
+ * that does not parse is counted UNKNOWN for its own namespace when that line can
+ * be read, and otherwise makes the listing unreadable. Never zero.
+ */
+export function parseJuliusAttemptRecordTag(ref: string, message: string | null, namespace: string): JuliusAttemptRecordTagParse {
+  if (!ref.startsWith(JULIUS_RUN_RECORD_TAG_PREFIX)) return { kind: 'unreadable' };
+  if (!ref.endsWith('-attempted')) return { kind: 'not_attempted' };
+  if (message === null) return { kind: 'unreadable' };
+  const lines = message.split('\n').map((line) => line.replace(/\r$/u, ''));
+  while (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
+  const namespaceLines = lines.filter((line) => line.startsWith('namespace='));
+  const statedNamespace = namespaceLines.length === 1 ? (namespaceLines[0] as string).slice('namespace='.length) : null;
+  if (statedNamespace === null || !RECORD_NAMESPACE.test(statedNamespace)) return { kind: 'unreadable' };
+  const ours = statedNamespace === namespace;
+  const unbound = (basis: string): JuliusAttemptRecordTagParse => (ours ? { kind: 'counted_unbound', basis } : { kind: 'other_namespace' });
+  if (lines.length !== ATTEMPTED_KEYS.length + 1 || lines[0] !== JULIUS_RUN_ATTEMPTED_SCHEMA) return unbound('record_tag_unparseable');
+  const fields = new Map<string, string>();
+  for (const [index, key] of ATTEMPTED_KEYS.entries()) {
+    const line = lines[index + 1] as string;
+    if (!line.startsWith(`${key}=`)) return unbound('record_tag_unparseable');
+    fields.set(key, line.slice(key.length + 1));
+  }
+  const runId = fields.get('run') ?? '';
+  const suffix = juliusRunRecordSuffix(runId);
+  const workflowRunId = fields.get('workflow_run_id') ?? '';
+  const workflowRunAttempt = fields.get('workflow_run_attempt') ?? '';
+  const headSha = fields.get('head_sha') ?? '';
+  if (suffix === null || ref !== `${JULIUS_RUN_RECORD_TAG_PREFIX}${suffix}-attempted`) return unbound('record_tag_ref_mismatch');
+  if (!RUN_DIGITS.test(workflowRunId) || !RUN_DIGITS.test(workflowRunAttempt) || !HEAD_SHA.test(headSha)
+    || !RECORD_STAMP.test(fields.get('attempted_at') ?? '') || !RECORD_SHA256.test(fields.get('contract_sha256') ?? '')) {
+    return unbound('record_tag_unparseable');
+  }
+  if (!ours) return { kind: 'other_namespace' };
+  return { kind: 'bound', binding: { workflowRunId, workflowRunAttempt, headSha } };
+}
+
 export function juliusAttemptMarkerLine(proofOfRun: JuliusPriorRunProof): string {
   return [
     'attempt_marker',

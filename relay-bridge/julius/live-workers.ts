@@ -46,8 +46,8 @@ import {
 import {
   runGptArchitect,
   type GptArchitectConfig,
-  type GptRunOutcome,
 } from '../../src/relay/connectors/gpt-architect';
+import type { AnthropicRefusalEvidence, ArchitectRunOutcome, ArchitectRunner } from '../../src/relay/connectors/gpt-architect/anthropic-architect-runner';
 import { validateArchitectPlan, type ArchitectPlanReasonCode } from '../../src/relay/mission/prompt-architect/prompt-architect-plan';
 import { sanitizeJuliusGuidanceProposal } from '../../src/relay/mission/julius/julius-continuous-lifecycle';
 import { sanitizeJuliusRebuttal } from '../../src/relay/mission/julius/julius-disagreement';
@@ -475,6 +475,34 @@ const correctionAffordable = (allocation: JuliusDispatchAllocation | undefined):
   allocation === undefined || allocation.usdMicros > 0;
 
 /**
+ * A CORRECTION RE-ASK IS STARTED ONLY IF IT CAN FINISH INSIDE THE DISPATCH.
+ *
+ * The plan call and its correction share ONE window: the coordinator cuts the
+ * whole dispatch at the worker's declared deadline (`dispatchWithinDeadline`,
+ * which hands that instant to the adapter as `deadlineAtMs`). A correction
+ * started too late would be cut mid-flight, which is a TIMEOUT after the
+ * handoff: OUTCOME UNKNOWN and never retried. So its output budget is what the
+ * remaining window can generate at a conservative 40 tokens a second, after a
+ * 30 s margin, capped at the configured ceiling. Below 6,000 tokens no useful
+ * correction fits, and none is started: the dispatch ends with the known,
+ * billed, non-retryable validation failure instead.
+ *
+ * `null` means no deadline was handed over (a caller outside the coordinator):
+ * the ceiling applies, exactly as before.
+ */
+export const ARCHITECT_CORRECTION_TOKENS_PER_SECOND = 40;
+export const ARCHITECT_CORRECTION_MARGIN_MS = 30_000;
+export const ARCHITECT_CORRECTION_MIN_TOKENS = 6_000;
+export function architectCorrectionMaxTokens(deadlineAtMs: number | undefined, nowMs: number, ceiling: number): number | null | 'skip' {
+  if (deadlineAtMs === undefined || !Number.isFinite(deadlineAtMs)) return null;
+  const affordable = Math.floor(((deadlineAtMs - nowMs - ARCHITECT_CORRECTION_MARGIN_MS) / 1000) * ARCHITECT_CORRECTION_TOKENS_PER_SECOND);
+  // The floor is the smaller of 6,000 and the ceiling itself: a deployment whose whole ceiling is below 6,000 (the
+  // connector default is 4,000) is not refused every correction by a floor its own first call never reached.
+  const floor = Math.min(ARCHITECT_CORRECTION_MIN_TOKENS, ceiling);
+  return affordable < floor ? 'skip' : Math.min(ceiling, affordable);
+}
+
+/**
  * HOW TO ASK AGAIN FOR A REVIEW THAT ARRIVED IN THE WRONG SHAPE.
  *
  * Keyed on the CLOSED failure shape the Hermes reader assigned, so nothing the
@@ -653,7 +681,7 @@ const reviewerDiagnostics = (input: {
  * `architect-diagnostics.test.ts` fails when a site stops doing it.
  */
 const providerFacts = (
-  outcome: GptRunOutcome,
+  outcome: ArchitectRunOutcome,
   startedAtMs: number,
   maxOutputTokens: number,
   /**
@@ -769,7 +797,7 @@ export function juliusReviewerBillingPath(
   }
 }
 
-const planDiagnostics = (input: {
+const planDiagnosticsFor = (input: {
   readonly requestedModel: string | null;
   readonly servedModel?: string | null;
   readonly responseId?: string | null;
@@ -807,11 +835,13 @@ const planDiagnostics = (input: {
   /** The reasoning effort the connector put in the request / the provider echoed. Absent unless there is one. */
   readonly effortSent?: string | null;
   readonly effortEchoed?: string | null;
+  /** Which architect answered. Absent is the OpenAI architect, exactly as before. */
+  readonly provider?: 'openai' | 'anthropic';
 }): Record<string, unknown> => ({
   outcome: input.outcome ?? 'failed',
   stage: 'plan',
-  transport: 'openai',
-  provider: 'openai',
+  transport: input.provider ?? 'openai',
+  provider: input.provider ?? 'openai',
   requestedModel: input.requestedModel,
   // Evidence: the model the provider said answered, never the one requested.
   servedModel: input.servedModel ?? null,
@@ -972,6 +1002,43 @@ function contractProposalFromPlan(plan: unknown): Record<string, unknown> | unde
   return Object.keys(proposal).length === 0 ? undefined : proposal;
 }
 
+/**
+ * THE ANTHROPIC ARCHITECT'S REFUSAL, IN COLUMNS THAT ALREADY EXIST.
+ *
+ * `provider_http_status`, `provider_request_id`, `provider_request_availability`
+ * and `provider_request_unavailable_reason` are the dump's own columns, read
+ * through the domain allowlist (`safeReviewDiagnostics`). `error.type` goes to
+ * `failure_shape` as `anthropic_error_<type>`, or `anthropic_error_unparseable`
+ * when a type was sent that is not a safe token. Nothing branches on
+ * `failure_shape` for an architect row: it is written for the reader. The OpenAI
+ * architect's outcome has none of these, so its rows are unchanged.
+ */
+export function architectRefusalFacts(outcome: ArchitectRunOutcome): Record<string, unknown> {
+  const facts: Record<string, unknown> = {};
+  if ('providerRequestId' in outcome || 'providerRequestUnavailableReason' in outcome) {
+    const id = outcome.providerRequestId ?? null;
+    facts.providerRequestId = id;
+    facts.providerRequestAvailability = id === null ? 'UNAVAILABLE' : 'CAPTURED';
+    facts.providerRequestUnavailableReason = id === null ? outcome.providerRequestUnavailableReason ?? null : null;
+  }
+  const refusal = 'refusal' in outcome ? outcome.refusal : undefined;
+  if (refusal !== undefined) {
+    facts.providerHttpStatus = refusal.httpStatus;
+    if (refusal.errorType !== null) facts.failureShape = `anthropic_error_${refusal.errorType}`;
+    else if (refusal.errorTypeUnparseable) facts.failureShape = 'anthropic_error_unparseable';
+  }
+  return facts;
+}
+
+/** THE ONE STDOUT LINE for a refused architect request. Every field is an integer or a safe token. */
+export function architectProviderRefusalLine(provider: 'openai' | 'anthropic', refusal: AnthropicRefusalEvidence): string {
+  const n = (value: number | null): string => (value === null ? 'unknown' : String(value));
+  return `provider_refusal role=PROMPT_ARCHITECT provider=${provider} http=${refusal.httpStatus} type=${refusal.errorType ?? 'unknown'}`
+    + ` limit_tokens=${n(refusal.rateLimit.tokensLimit)} remaining_tokens=${n(refusal.rateLimit.tokensRemaining)}`
+    + ` limit_requests=${n(refusal.rateLimit.requestsLimit)} remaining_requests=${n(refusal.rateLimit.requestsRemaining)}`
+    + ` request_id=${refusal.requestId ?? 'unavailable'}`;
+}
+
 export function createLiveArchitectAdapter(input: {
   readonly worker: JuliusWorker;
   readonly contexts: CompiledContextSource;
@@ -980,13 +1047,19 @@ export function createLiveArchitectAdapter(input: {
   readonly apiKey: string;
   /** The mission's sealed research policy, the same source the mediator decides with. */
   readonly researchPolicyFor?: ResearchPolicySource;
-  /** Injectable for offline tests; defaults to the real connector. */
-  readonly run?: typeof runGptArchitect;
+  /** Injectable for offline tests; defaults to the real OpenAI connector. The paid J1 composition passes `createJ1ArchitectRunner()`. */
+  readonly run?: ArchitectRunner;
+  /** Where the one `provider_refusal` line goes. Absent prints nothing. */
+  readonly report?: (line: string) => void;
 }): JuliusProviderAdapter {
   if (!input.config.liveMode || input.config.model === null || !input.apiKey) {
     throw new Error('architect_adapter_requires_live_config');
   }
-  const run = input.run ?? runGptArchitect;
+  const run: ArchitectRunner = input.run ?? runGptArchitect;
+  /* The worker's provider names the transport on every diagnostic row; the OpenAI architect's rows are unchanged. */
+  const architectProvider: 'openai' | 'anthropic' = input.worker.providerId === 'anthropic' ? 'anthropic' : 'openai';
+  const planDiagnostics = (facts: Parameters<typeof planDiagnosticsFor>[0]): Record<string, unknown> =>
+    planDiagnosticsFor({ ...facts, provider: architectProvider });
   return {
     adapterId: input.worker.adapterId,
     async dispatch(dispatch): Promise<JuliusProviderResult> {
@@ -1059,12 +1132,21 @@ export function createLiveArchitectAdapter(input: {
       const baseCharter = `${roleCharter}\n\n${RESEARCH_FIELD_GUIDANCE}\n\n${researchAuthorityFor(input.researchPolicyFor, snapshot.packet.missionId, input.worker.role)}`;
       let attempts = 0;
       let correction: string | null = null;
+      /* The correction's output budget, from the coordinator's own deadline (`architectCorrectionMaxTokens`). */
+      let correctionMaxTokens: number | null = null;
+      const correctionAllowed = (): boolean => {
+        if (!(attempts < PLAN_ATTEMPT_LIMIT && correctionAffordable(dispatch.allocation))) return false;
+        const budget = architectCorrectionMaxTokens(dispatch.deadlineAtMs, Date.now(), input.config.maxOutputTokens);
+        if (budget === 'skip') return false;
+        correctionMaxTokens = budget;
+        return true;
+      };
       for (;;) {
       attempts += 1;
       const startedAtMs = Date.now();
-      const outcome: GptRunOutcome = await run({
+      const outcome: ArchitectRunOutcome = await run({
         apiKey: input.apiKey,
-        config: input.config,
+        config: correctionMaxTokens === null ? input.config : { ...input.config, maxOutputTokens: correctionMaxTokens },
         // The correction goes in the INSTRUCTIONS, beside the charter it did
         // not follow — not into the mission packet, which is Julius's own
         // compiled context and is not the place to record a model's mistake.
@@ -1115,7 +1197,8 @@ export function createLiveArchitectAdapter(input: {
          * nobody took. `validationPassed` is null either way: this path returns
          * before Julius validates, so it never had a verdict to report. */
         const responded = typeof outcome.responseId === 'string' && outcome.responseId.length > 0;
-        const failed = planDiagnostics({
+        const failed = {
+          ...planDiagnostics({
           // Absent when the call never reached the provider; never zero for a
           // call that did. `undefined` becomes null in the row, which is the
           // honest reading of "no answer to report".
@@ -1124,7 +1207,12 @@ export function createLiveArchitectAdapter(input: {
           jsonParseable: responded ? false : null,
           validationPassed: null,
           attempts,
-        });
+          }),
+          // The Anthropic architect's refusal evidence, in the EXISTING columns only.
+          ...architectRefusalFacts(outcome),
+        };
+        const refusal = 'refusal' in outcome ? outcome.refusal : undefined;
+        if (refusal !== undefined) input.report?.(architectProviderRefusalLine(architectProvider, refusal));
         /*
          * NOT EVEN A 401, A 403 OR A 429 MAY SAY NOTHING RAN HERE, although each
          * is the provider refusing THIS request unprocessed. The refusal ends the
@@ -1149,6 +1237,29 @@ export function createLiveArchitectAdapter(input: {
             throw new JuliusDispatchError('TIMEOUT', true, 'Prompt Architect provider timed out.', outcome.failureClass, failed);
           case 'model_unavailable':
             throw new JuliusDispatchError('PROVIDER_UNAVAILABLE', false, 'Prompt Architect model is unavailable.', outcome.failureClass, failed);
+          case 'insufficient_credit':
+            /*
+             * THE ACCOUNT'S BALANCE REFUSED THE CALL. AUTH_CONFIGURATION, never
+             * retryable: funding an account is the operator's configuration, and
+             * the paid-slot report already reads AUTH_CONFIGURATION as
+             * PROVIDER_BLOCKED. It is the provider's explicit rejection before
+             * processing, so this request's outcome is KNOWN, but it does not
+             * attest `runtimeStarted: false`: a correction call may follow an
+             * answer this dispatch already paid for, exactly as the 401/403/429
+             * note above says. Non-retryable is what keeps it from ever buying a
+             * second call, whichever way the hold settles.
+             */
+            throw new JuliusDispatchError('AUTH_CONFIGURATION', false, 'Agentic Architect account has insufficient credit.', outcome.failureClass, failed);
+          case 'architect_schema_unsupported':
+            /*
+             * PRE-SEND, AND PROVABLY SO: the runner refused the answer schema
+             * before it built a request (`anthropicStructuredOutputSchema`), so
+             * this attempt reached no provider. A correction re-ask sends the
+             * same schema, so this class can only end the first attempt; the
+             * attestation is made only then. Never retryable: the schema is code.
+             */
+            throw new JuliusDispatchError('INVALID_REQUEST', false, 'The Agentic Architect answer schema is not one Anthropic structured outputs accept; nothing was sent.', outcome.failureClass,
+              { ...failed, ...(attempts === 1 ? { runtimeStarted: false } : {}) });
           case 'refused':
             // The provider declined the REQUEST, not the caller: INVALID_REQUEST,
             // the code the Coding Agent's CONTENT_REFUSED carries, so one
@@ -1193,7 +1304,7 @@ export function createLiveArchitectAdapter(input: {
       let parseFailed = false;
       try { parsed = JSON.parse(outcome.outputText); } catch { parseFailed = true; }
       if (parseFailed) {
-        if (attempts < PLAN_ATTEMPT_LIMIT && correctionAffordable(dispatch.allocation)) {
+        if (correctionAllowed()) {
           correction = 'CORRECTION — your previous answer was REFUSED: it was not parseable JSON. Answer with exactly one JSON object conforming to the output schema, and nothing else — no prose before or after it, and no code fence.';
           continue;
         }
@@ -1237,7 +1348,7 @@ export function createLiveArchitectAdapter(input: {
         }).ok;
         const consistencyOk = sanitizeJuliusConsistency({ value: source.consistency, revision: 1 }).ok;
         if (!architectureOk || !consistencyOk) {
-          if (attempts < PLAN_ATTEMPT_LIMIT && correctionAffordable(dispatch.allocation)) {
+          if (correctionAllowed()) {
             correction = 'CORRECTION — your previous answer was REFUSED: it did not form a usable architecture consultation. Answer with exactly one JSON object conforming to the output schema. "architecture" must state the whole design — at least one component, boundary, dependency, decision, assumption, question or risk — and "consistency" must carry an assessment of exactly ALIGNED, DRIFT_NON_BLOCKING, DRIFT_REQUIRES_REPAIR or REPLAN_REQUIRED. ALIGNED must name no drift; anything else must name drift AND cite at least one evidence reference; DRIFT_REQUIRES_REPAIR and REPLAN_REQUIRED must name drift whose kind is a boundary that moved, not a rename or a reformat, and DRIFT_REQUIRES_REPAIR must name the drifting task ids. No field may name a Mission Contract term, and no field may declare work verified, accepted or complete.';
             continue;
           }
@@ -1296,7 +1407,7 @@ export function createLiveArchitectAdapter(input: {
          * it must resolve the disagreement against.
          */
         if (!sanitizeJuliusRebuttal(parsed).ok) {
-          if (attempts < PLAN_ATTEMPT_LIMIT && correctionAffordable(dispatch.allocation)) {
+          if (correctionAllowed()) {
             correction = 'CORRECTION — your previous answer was REFUSED: it did not form a usable rebuttal. Answer with exactly one JSON object conforming to the output schema. "position" must be exactly CONCEDES or MAINTAINS; a MAINTAINS position must carry at least one evidence entry with a locator and your own claim about it; no field may name a Mission Contract term, and no field may declare work verified, accepted or complete.';
             continue;
           }
@@ -1349,7 +1460,7 @@ export function createLiveArchitectAdapter(input: {
       }
       if (guiding) {
         if (sanitizeJuliusGuidanceProposal(parsed) === null) {
-          if (attempts < PLAN_ATTEMPT_LIMIT && correctionAffordable(dispatch.allocation)) {
+          if (correctionAllowed()) {
             correction = 'CORRECTION — your previous answer was REFUSED: it did not form a usable guidance packet. Answer with exactly one JSON object conforming to the output schema. Every listed field must be present, every string must be substantive, and no field naming a Mission Contract term may appear.';
             continue;
           }
@@ -1419,7 +1530,7 @@ export function createLiveArchitectAdapter(input: {
       }
       const validation = validateArchitectPlan(parsed);
       if (!validation.ok) {
-        const remedy = attempts < PLAN_ATTEMPT_LIMIT && correctionAffordable(dispatch.allocation)
+        const remedy = correctionAllowed()
           ? planCorrection(validation.reasonCode, validation.reasonField ?? null)
           : null;
         if (remedy !== null) { correction = remedy; continue; }

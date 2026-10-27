@@ -6,8 +6,12 @@ import {
   JULIUS_NAMESPACE_CEILINGS,
   JULIUS_QUALIFYING_PAIR_CAP_USD_MICROS,
   JULIUS_QUALIFYING_PAIR_NAMESPACES,
+  JULIUS_RUN_ATTEMPTED_SCHEMA,
+  JULIUS_RUN_RECORD_TAG_PREFIX,
   authorizeJuliusLiveSpend,
   interpretJuliusSpentTags,
+  juliusRunRecordSuffix,
+  parseJuliusAttemptRecordTag,
   juliusSpentTagMessage,
   summarizeJuliusPriorRunSpend,
   type JuliusPriorRunSpend,
@@ -471,5 +475,41 @@ describe('a wlj spent tag counts toward the $60 cap', () => {
     });
     expect(unknown.authorized).toBe(false);
     if (!unknown.authorized) expect(unknown.reasonCode).toBe('qualifying_pair_spend_unverified');
+  });
+});
+
+describe('X′ §1/§2: the record tags live outside the spend namespace, and parse fail-closed', () => {
+  const WLJ = 'wlj_01234567-89ab-4cde-8fab-0123456789ab';
+  const HEX = '0123456789ab4cde8fab0123456789ab';
+  const NS = 'julius-inworld-data-1';
+  const body = (lines: readonly string[]) => `${lines.join('\n')}\n`;
+  const good = [
+    JULIUS_RUN_ATTEMPTED_SCHEMA, `run=${WLJ}`, `namespace=${NS}`, 'workflow_run_id=4242', 'workflow_run_attempt=1',
+    `head_sha=${'a'.repeat(40)}`, 'attempted_at=2026-10-26T09:41:00Z', `contract_sha256=${'f'.repeat(64)}`,
+  ];
+  const ref = `${JULIUS_RUN_RECORD_TAG_PREFIX}${HEX}-attempted`;
+
+  it('a julius-run-record ref fed to the SPENT-TAG listing would make it unreadable: that is why it has its own prefix', () => {
+    const spent = { ref: `refs/tags/julius-run-spent-${HEX}`, message: `${juliusSpentTagMessage({ runId: WLJ, namespace: NS, reservedUsdMicros: 30_000_000 }) ?? ''}\n` };
+    expect(interpretJuliusSpentTags({ namespace: NS, tags: [spent] }).readable).toBe(true);
+    expect(interpretJuliusSpentTags({ namespace: NS, tags: [spent, { ref: `refs/tags/julius-run-spent-${HEX}-attempted`, message: body(good) }] })).toEqual({ readable: false });
+    expect(JULIUS_RUN_RECORD_TAG_PREFIX.startsWith('refs/tags/julius-run-spent-')).toBe(false);
+    expect('refs/tags/julius-run-spent-'.startsWith(JULIUS_RUN_RECORD_TAG_PREFIX)).toBe(false);
+  });
+
+  it('parses the workflow\'s body; a lightweight tag, an unreadable namespace or a foreign prefix is unreadable; a broken body of this namespace counts', () => {
+    expect(parseJuliusAttemptRecordTag(ref, body(good), NS)).toEqual({ kind: 'bound', binding: { workflowRunId: '4242', workflowRunAttempt: '1', headSha: 'a'.repeat(40) } });
+    expect(parseJuliusAttemptRecordTag(ref, null, NS)).toEqual({ kind: 'unreadable' });
+    expect(parseJuliusAttemptRecordTag(`refs/tags/julius-run-spent-${HEX}`, body(good), NS)).toEqual({ kind: 'unreadable' });
+    expect(parseJuliusAttemptRecordTag(ref, body(good.filter((line) => !line.startsWith('namespace='))), NS)).toEqual({ kind: 'unreadable' });
+    expect(parseJuliusAttemptRecordTag(ref, body([...good, `namespace=${NS}`]), NS)).toEqual({ kind: 'unreadable' });
+    expect(parseJuliusAttemptRecordTag(ref, body(good.slice(0, 7)), NS)).toEqual({ kind: 'counted_unbound', basis: 'record_tag_unparseable' });
+    expect(parseJuliusAttemptRecordTag(ref, body(good.map((line) => (line.startsWith('head_sha=') ? 'head_sha=xyz' : line))), NS)).toEqual({ kind: 'counted_unbound', basis: 'record_tag_unparseable' });
+    expect(parseJuliusAttemptRecordTag(`${JULIUS_RUN_RECORD_TAG_PREFIX}${'0'.repeat(32)}-attempted`, body(good), NS)).toEqual({ kind: 'counted_unbound', basis: 'record_tag_ref_mismatch' });
+    expect(parseJuliusAttemptRecordTag(ref, body(good), 'julius-first-live')).toEqual({ kind: 'other_namespace' });
+    expect(parseJuliusAttemptRecordTag(ref.replace(/-attempted$/u, '-result'), 'anything', NS)).toEqual({ kind: 'not_attempted' });
+    expect(juliusRunRecordSuffix(WLJ)).toBe(HEX);
+    expect(juliusRunRecordSuffix('run:0123456789abcdef01234567')).toBe('0123456789abcdef01234567');
+    expect(juliusRunRecordSuffix('wlj_nope')).toBeNull();
   });
 });

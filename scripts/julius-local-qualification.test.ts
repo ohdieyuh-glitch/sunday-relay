@@ -68,6 +68,12 @@ function workflowJobEnv(): Map<string, string> {
       .replace('${{ inputs.mission }}', MISSION);
     env.set(match[1]!, value);
   }
+  // BRANCH S X sets the PostgreSQL host port in the job env (the julius-paid runner's WSL2 distro shares
+  // 127.0.0.1:5432 with Docker Desktop's forward). The launcher sets its own port OUTSIDE the mirrored
+  // block, a different one (the founder's rig and the runner distro share one network namespace), so the
+  // two are compared below, not mirrored.
+  expect(env.get('JULIUS_LIVE_PG_PORT'), 'X: the workflow names its PostgreSQL port').toBe('55433');
+  env.delete('JULIUS_LIVE_PG_PORT');
   return env;
 }
 
@@ -90,6 +96,10 @@ function launcherJobEnv(): Map<string, string> {
  * here is how a new difference is argued in; nothing else can make one pass.
  */
 const LOCAL_DIFFERENCES: Record<string, { readonly local: string; readonly why: string }> = {
+  JULIUS_ARCHITECT_PROVIDER: {
+    local: 'openai',
+    why: 'the founder-machine launcher keeps the OpenAI architect; the hosted J1 workflow runs the Anthropic Agentic Architect',
+  },
   PGDATABASE: {
     local: 'julius_qualification',
     why: 'a name of its own, so nothing that reaches the wrong port can find a database called "julius" there',
@@ -119,13 +129,14 @@ describe('the local launch mirrors the workflow job, and names every difference'
     const outside = (launcher.slice(0, begin) + launcher.slice(end)).split('\n')
       .map((line) => /^export ([A-Z][A-Z0-9_]*)=(.*)$/u.exec(line))
       .filter((match): match is RegExpExecArray => match !== null);
-    expect(outside.map((match) => match[1])).toEqual(['JULIUS_CLAUDE_AUTH', 'JULIUS_LIVE_PG_PORT']);
+    expect(outside.map((match) => match[1])).toEqual(['JULIUS_CLAUDE_AUTH', 'JULIUS_LIVE_PG_PORT', 'OPENAI_PROMPT_ARCHITECT_MODEL']);
     const auth = outside[0]![2]!;
     expect((CLAUDE_AUTH_MODES as readonly string[]).includes(auth), 'a mode the composition knows').toBe(true);
     expect(auth).toBe('CLAUDE_SUBSCRIPTION');
     const port = outside[1]![2]!;
     expect(port).toMatch(/^[0-9]+$/u);
     expect(port, '127.0.0.1:5432 inside WSL2 is the live store\'s forward').not.toBe('5432');
+    expect(port, 'the local rig and the julius-paid runner (Branch S X: 55433) must not share a port').not.toBe('55433');
     // The hosted workflow bills the API key. The launcher keeps the subscription
     // and still refuses any ANTHROPIC_* route. The two steps that start the
     // coder set ANTHROPIC_API, and they do not copy the launcher's mode.
@@ -133,8 +144,8 @@ describe('the local launch mirrors the workflow job, and names every difference'
     expect(modes, 'the roles preflight and the LIVE step, and no other').toEqual(['ANTHROPIC_API', 'ANTHROPIC_API']);
     expect(modes).not.toContain(auth);
     // CI UNCHANGED for the rest: every other switch added for the local rig defaults to the old
-    // behaviour, and the workflow sets none of them.
-    for (const name of ['JULIUS_LIVE_PG_PORT', 'HERMES_PHASE', 'HERMES_PYTHON', 'HERMES_VENV_DIR', 'HERMES_SRC_DIR']) {
+    // behaviour, and the workflow sets none of them. JULIUS_LIVE_PG_PORT is Branch S X's, pinned above.
+    for (const name of ['HERMES_PHASE', 'HERMES_PYTHON', 'HERMES_VENV_DIR', 'HERMES_SRC_DIR']) {
       expect(workflow, `the workflow must not set ${name}`).not.toContain(name);
     }
   });

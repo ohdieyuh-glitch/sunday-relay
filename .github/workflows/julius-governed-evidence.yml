@@ -15,8 +15,8 @@ permissions:
 jobs:
   evidence:
     name: Print reviewer key, head, and rulesets
-    if: ${{ !startsWith(github.ref, 'refs/heads/julius-governed-audit/') && !startsWith(github.head_ref, 'julius-governed-audit/') && !startsWith(github.base_ref, 'julius-governed-audit/') }}
-    runs-on: ubuntu-latest
+    if: ${{ !startsWith(github.ref, 'refs/heads/julius-governed-audit/') && !startsWith(github.head_ref, 'julius-governed-audit/') && !startsWith(github.base_ref, 'julius-governed-audit/') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: julius-ci
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4

@@ -88,12 +88,12 @@ describe('model pins are read from the workflow env, never filled in', () => {
     expect(read.ok).toBe(true);
     if (!read.ok) return;
     expect(read.pins).toEqual({
-      architectModel: 'gpt-5.6-sol',
+      architectModel: 'claude-opus-5-5',
       codingModel: 'claude-opus-5-5',
       reviewerProvider: 'xai',
       reviewerModel: 'grok-build-0.1',
     });
-    expect(source).toContain("grep -q 'architect=gpt-5.6-sol'");
+    expect(source).toContain("grep -q 'architect=claude-opus-5-5 '");
     expect(source).toContain("grep -q 'coder=claude-opus-5-5'");
     expect(source).toContain("grep -q 'reviewer=xai/grok-build-0.1'");
   });
@@ -105,6 +105,17 @@ describe('model pins are read from the workflow env, never filled in', () => {
     const duplicated = parseWorkflowModelPins('RELAY_HERMES_MODEL: grok-build-0.1\nRELAY_HERMES_MODEL: grok-other\n');
     expect(duplicated.ok).toBe(false);
     expect(duplicated.pins.reviewerModel).toBeNull();
+  });
+
+  it('the Anthropic architect pin is the architect, and two architect pins fail closed', () => {
+    const anthropic = parseWorkflowModelPins('RELAY_ANTHROPIC_ARCHITECT_MODEL: claude-opus-5-5\n');
+    expect(anthropic.ok && anthropic.pins.architectModel).toBe('claude-opus-5-5');
+    const both = parseWorkflowModelPins('OPENAI_PROMPT_ARCHITECT_MODEL: gpt-5.6-sol\nRELAY_ANTHROPIC_ARCHITECT_MODEL: claude-opus-5-5\n');
+    expect(both.ok).toBe(false);
+    expect(both.pins.architectModel).toBeNull();
+    // The paid workflow pins the Anthropic architect only.
+    const source = readFileSync(join(__dirname, '../../../../.github/workflows/julius-first-live-mission.yml'), 'utf8');
+    expect(source).not.toMatch(/^\s+OPENAI_PROMPT_ARCHITECT_MODEL:/mu);
   });
 });
 

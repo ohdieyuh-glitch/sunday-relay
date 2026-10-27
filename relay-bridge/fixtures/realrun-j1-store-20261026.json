@@ -1,0 +1,283 @@
+{
+  "source": "C:/dev/iwonder/_pilot_qa/bridge_realrun_state (copied read-only 2026-10-26); gh run list --json databaseId,displayTitle,status,conclusion,event,headBranch,attempt (read-only, 2026-10-26). Owner ids replaced with the test founder. No secret: ids and hashes only.",
+  "store": {
+    "schemaVersion": 3,
+    "rows": [
+      {
+        "phase": "run_admission",
+        "runId": "wlj_23f50bac-67d8-497c-b31f-1db02311ae93",
+        "serverRunId": "wlj_23f50bac-67d8-497c-b31f-1db02311ae93",
+        "keyHash": "0fdc1fdab68fdc6e0da9a51fb5190ba7ad9bef753c8588b1cbc601a8430b25ee",
+        "dispatchId": "adm_d8341c6ad336258a5eff1bc4ba2cd43c",
+        "missionId": "julius-inworld-data-1",
+        "requestId": "f44cbf235c3c26c7c96a3efea15d972c",
+        "clientLogSha256": "437d0d254a7353341bbb60770d81dd6105ff5bc13022eca4944ceab83468bff0",
+        "clientUiActionUtc": "2026-10-25T22:04:34.337Z",
+        "receivedAt": "2026-10-25T22:04:34.339Z",
+        "ledgerRef": "julius-wonderland-admission:adm_d8341c6ad336258a5eff1bc4ba2cd43c",
+        "resultSha256": null,
+        "state": "ADMISSION_HELD",
+        "modelPins": {
+          "architectModel": "gpt-5.6-sol",
+          "codingModel": "claude-opus-5-5",
+          "reviewerProvider": "xai",
+          "reviewerModel": "grok-build-0.1"
+        }
+      },
+      {
+        "phase": "run_admission",
+        "runId": "wlj_1ed344d1-16f4-48fa-baa2-9f7cc8602e36",
+        "serverRunId": "wlj_1ed344d1-16f4-48fa-baa2-9f7cc8602e36",
+        "keyHash": "15a8555ddd8fd4544319b5e3b2553d5ac2384acef54e9f3323fa9cb5a7feef3d",
+        "dispatchId": "adm_7d7ba85bf67b60bd379042c33b5f5a59",
+        "missionId": "julius-inworld-data-1",
+        "requestId": "cd26145dd859dd37affe7d3045de3b7a",
+        "clientLogSha256": "b8a9560f9afa19aa51d6b0aaf643be15d352916eb1aecf57ab9380b9c3a691de",
+        "clientUiActionUtc": "2026-10-26T02:16:52.804Z",
+        "receivedAt": "2026-10-26T02:16:52.811Z",
+        "ledgerRef": "julius-wonderland-admission:adm_7d7ba85bf67b60bd379042c33b5f5a59",
+        "resultSha256": null,
+        "state": "ADMISSION_HELD",
+        "modelPins": {
+          "architectModel": "gpt-5.6-sol",
+          "codingModel": "claude-opus-5-5",
+          "reviewerProvider": "xai",
+          "reviewerModel": "grok-build-0.1"
+        }
+      },
+      {
+        "phase": "run_admission",
+        "runId": "wlj_309e375d-c2c6-4a63-8590-b417c07dd433",
+        "serverRunId": "wlj_309e375d-c2c6-4a63-8590-b417c07dd433",
+        "keyHash": "340cd8014e407384a79e9c94ad60927610ad477481a99d76c07b119bb752bad3",
+        "dispatchId": "adm_f47af5369eb25ffb22e36b36223496df",
+        "missionId": "julius-inworld-data-1",
+        "requestId": "e96f5bf4a999393968d0d05c24ba3e60",
+        "clientLogSha256": "44499f3d34f2a49599a47862aa6324abf3df7c45243ec80e1e98db77c6c3cf50",
+        "clientUiActionUtc": "2026-10-26T06:14:10.840Z",
+        "receivedAt": "2026-10-26T06:14:10.842Z",
+        "ledgerRef": "julius-wonderland-admission:adm_f47af5369eb25ffb22e36b36223496df",
+        "resultSha256": null,
+        "state": "ADMISSION_HELD",
+        "modelPins": {
+          "architectModel": "gpt-5.6-sol",
+          "codingModel": "claude-opus-5-5",
+          "reviewerProvider": "xai",
+          "reviewerModel": "grok-build-0.1"
+        }
+      },
+      {
+        "phase": "run_admission",
+        "runId": "wlj_0c96b0f9-2879-4426-b464-fb132ae658fa",
+        "serverRunId": "wlj_0c96b0f9-2879-4426-b464-fb132ae658fa",
+        "keyHash": "1c4964150ba9f133f6213bf1efbfc193453aa30b2caa7ce75a7d70caab90adc5",
+        "dispatchId": "adm_e5c3e3c96e1d2ced190cdfd830ee673a",
+        "missionId": "julius-inworld-data-1",
+        "requestId": "9da7d7bc6ff5ee34213c62912aa89f3f",
+        "clientLogSha256": "845f7e19d4d69c2f3b9864c99a4bee44a6a16b65b6ccec80c25431c5d2d74158",
+        "clientUiActionUtc": "2026-10-26T09:25:35.246Z",
+        "receivedAt": "2026-10-26T09:25:35.248Z",
+        "ledgerRef": "julius-wonderland-admission:adm_e5c3e3c96e1d2ced190cdfd830ee673a",
+        "resultSha256": null,
+        "modelPins": {
+          "architectModel": "gpt-5.6-sol",
+          "codingModel": "claude-opus-5-5",
+          "reviewerProvider": "xai",
+          "reviewerModel": "grok-build-0.1"
+        },
+        "state": "ADMISSION_HELD"
+      }
+    ]
+  },
+  "journal": {
+    "schemaVersion": 3,
+    "revision": 8,
+    "claims": [
+      {
+        "wonderlandRunId": "wlj_23f50bac-67d8-497c-b31f-1db02311ae93",
+        "serverRunId": "wlj_23f50bac-67d8-497c-b31f-1db02311ae93",
+        "state": "dispatching",
+        "spentTag": "julius-run-spent-23f50bac67d8497cb31f1db02311ae93",
+        "spentTagState": "absent",
+        "at": "2026-10-25T22:50:08.473Z",
+        "dispatchAttempted": false,
+        "dispatchError": null,
+        "halt": null,
+        "workflowRunId": null,
+        "githubDate": "2026-10-25T22:51:49Z"
+      },
+      {
+        "wonderlandRunId": "wlj_23f50bac-67d8-497c-b31f-1db02311ae93",
+        "serverRunId": "wlj_23f50bac-67d8-497c-b31f-1db02311ae93",
+        "state": "dispatched",
+        "spentTag": "julius-run-spent-23f50bac67d8497cb31f1db02311ae93",
+        "spentTagState": "absent",
+        "at": "2026-10-25T22:50:08.473Z",
+        "dispatchAttempted": true,
+        "dispatchError": null,
+        "halt": null,
+        "workflowRunId": "40242149156",
+        "githubDate": "2026-10-25T22:51:49Z"
+      },
+      {
+        "wonderlandRunId": "wlj_1ed344d1-16f4-48fa-baa2-9f7cc8602e36",
+        "serverRunId": "wlj_1ed344d1-16f4-48fa-baa2-9f7cc8602e36",
+        "state": "dispatching",
+        "spentTag": "julius-run-spent-1ed344d116f448fabaa29f7cc8602e36",
+        "spentTagState": "absent",
+        "at": "2026-10-26T02:17:07.355Z",
+        "dispatchAttempted": false,
+        "dispatchError": null,
+        "halt": null,
+        "workflowRunId": null,
+        "githubDate": "2026-10-26T02:18:48Z"
+      },
+      {
+        "wonderlandRunId": "wlj_1ed344d1-16f4-48fa-baa2-9f7cc8602e36",
+        "serverRunId": "wlj_1ed344d1-16f4-48fa-baa2-9f7cc8602e36",
+        "state": "dispatched",
+        "spentTag": "julius-run-spent-1ed344d116f448fabaa29f7cc8602e36",
+        "spentTagState": "absent",
+        "at": "2026-10-26T02:17:07.355Z",
+        "dispatchAttempted": true,
+        "dispatchError": null,
+        "halt": null,
+        "workflowRunId": "40258482240",
+        "githubDate": "2026-10-26T02:18:48Z"
+      },
+      {
+        "wonderlandRunId": "wlj_309e375d-c2c6-4a63-8590-b417c07dd433",
+        "serverRunId": "wlj_309e375d-c2c6-4a63-8590-b417c07dd433",
+        "state": "dispatching",
+        "spentTag": "julius-run-spent-309e375dc2c64a638590b417c07dd433",
+        "spentTagState": "absent",
+        "at": "2026-10-26T06:14:40.696Z",
+        "dispatchAttempted": false,
+        "dispatchError": null,
+        "halt": null,
+        "workflowRunId": null,
+        "githubDate": "2026-10-26T06:16:22Z"
+      },
+      {
+        "wonderlandRunId": "wlj_309e375d-c2c6-4a63-8590-b417c07dd433",
+        "serverRunId": "wlj_309e375d-c2c6-4a63-8590-b417c07dd433",
+        "state": "dispatched",
+        "spentTag": "julius-run-spent-309e375dc2c64a638590b417c07dd433",
+        "spentTagState": "absent",
+        "at": "2026-10-26T06:14:40.696Z",
+        "dispatchAttempted": true,
+        "dispatchError": null,
+        "halt": null,
+        "workflowRunId": "40278849833",
+        "githubDate": "2026-10-26T06:16:22Z"
+      },
+      {
+        "wonderlandRunId": "wlj_0c96b0f9-2879-4426-b464-fb132ae658fa",
+        "serverRunId": "wlj_0c96b0f9-2879-4426-b464-fb132ae658fa",
+        "state": "dispatching",
+        "spentTag": "julius-run-spent-0c96b0f928794426b464fb132ae658fa",
+        "spentTagState": "absent",
+        "at": "2026-10-26T09:25:49.231Z",
+        "dispatchAttempted": false,
+        "dispatchError": null,
+        "halt": null,
+        "workflowRunId": null,
+        "githubDate": "2026-10-26T09:27:30Z"
+      },
+      {
+        "wonderlandRunId": "wlj_0c96b0f9-2879-4426-b464-fb132ae658fa",
+        "serverRunId": "wlj_0c96b0f9-2879-4426-b464-fb132ae658fa",
+        "state": "dispatched",
+        "spentTag": "julius-run-spent-0c96b0f928794426b464fb132ae658fa",
+        "spentTagState": "absent",
+        "at": "2026-10-26T09:25:49.231Z",
+        "dispatchAttempted": true,
+        "dispatchError": null,
+        "halt": null,
+        "workflowRunId": "40299692757",
+        "githubDate": "2026-10-26T09:27:30Z"
+      }
+    ],
+    "progress": [],
+    "owners": {
+      "wlj_23f50bac-67d8-497c-b31f-1db02311ae93": "founder",
+      "wlj_1ed344d1-16f4-48fa-baa2-9f7cc8602e36": "founder",
+      "wlj_309e375d-c2c6-4a63-8590-b417c07dd433": "founder",
+      "wlj_0c96b0f9-2879-4426-b464-fb132ae658fa": "founder"
+    }
+  },
+  "runList": [
+    {
+      "attempt": 1,
+      "conclusion": "failure",
+      "databaseId": 40299692757,
+      "displayTitle": "julius mission=julius-inworld-data-1 lane=lab mode=paid key=1c4964150ba9f133f6213bf1efbfc193453aa30b2caa7ce75a7d70caab90adc5",
+      "event": "workflow_dispatch",
+      "headBranch": "main",
+      "status": "completed"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "failure",
+      "databaseId": 40278849833,
+      "displayTitle": "julius mission=julius-inworld-data-1 lane=lab mode=paid key=340cd8014e407384a79e9c94ad60927610ad477481a99d76c07b119bb752bad3",
+      "event": "workflow_dispatch",
+      "headBranch": "main",
+      "status": "completed"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "failure",
+      "databaseId": 40258482240,
+      "displayTitle": "julius mission=julius-inworld-data-1 lane=lab mode=paid key=15a8555ddd8fd4544319b5e3b2553d5ac2384acef54e9f3323fa9cb5a7feef3d",
+      "event": "workflow_dispatch",
+      "headBranch": "main",
+      "status": "completed"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "cancelled",
+      "databaseId": 40242149156,
+      "displayTitle": "julius mission=julius-inworld-data-1 lane=lab mode=paid key=0fdc1fdab68fdc6e0da9a51fb5190ba7ad9bef753c8588b1cbc601a8430b25ee",
+      "event": "workflow_dispatch",
+      "headBranch": "main",
+      "status": "completed"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "success",
+      "databaseId": 40238988153,
+      "displayTitle": "julius mission=julius-inworld-data-1 lane=lab mode=preflight key=none",
+      "event": "workflow_dispatch",
+      "headBranch": "main",
+      "status": "completed"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "failure",
+      "databaseId": 40230911550,
+      "displayTitle": "julius mission=julius-inworld-data-1 lane=lab mode=preflight key=none",
+      "event": "workflow_dispatch",
+      "headBranch": "main",
+      "status": "completed"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "failure",
+      "databaseId": 40228072875,
+      "displayTitle": "julius mission=julius-inworld-data-1 lane=lab mode=preflight key=none",
+      "event": "workflow_dispatch",
+      "headBranch": "main",
+      "status": "completed"
+    },
+    {
+      "attempt": 1,
+      "conclusion": "failure",
+      "databaseId": 40227598578,
+      "displayTitle": "julius mission=julius-inworld-data-1 lane=lab mode=preflight key=none",
+      "event": "workflow_dispatch",
+      "headBranch": "main",
+      "status": "completed"
+    }
+  ]
+}

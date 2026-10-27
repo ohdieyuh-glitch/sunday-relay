@@ -9,7 +9,8 @@
  *
  * It serves two readers:
  * - `JuliusMissionGitHub`, for YUJI's evidence reader (the spent tag and the
- *   finished run's artifacts), so /result and /progress can reach completed;
+ *   finished run's artifacts, and X′'s result record tag), so /result and
+ *   /progress can reach completed;
  * - `JuliusRunJobsReader`, for the live events route (the run and its jobs'
  *   step states while it executes).
  *
@@ -26,6 +27,7 @@ import type {
   JuliusMissionWorkflowArtifactFile,
   JuliusMissionWorkflowRun,
 } from './julius-mission-evidence-reader';
+import { EVIDENCE_ARTIFACT, VERDICT_ARTIFACT } from './julius-mission-evidence-reader';
 
 /** One `gh` invocation. The production runner (wonderland-live-wiring.ts) starts `gh`; tests pass a fake. */
 export interface GhReadRunner {
@@ -74,6 +76,8 @@ export interface JuliusCommitStatus {
   readonly description: string;
   readonly creator: string;
   readonly createdAt: string | null;
+  /** The status's target_url, for the result record's run binding (X′ §4). Null when absent. */
+  readonly targetUrl?: string | null;
 }
 
 export interface JuliusRunJobsReader {
@@ -86,13 +90,17 @@ const REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
 const RUN_ID = /^[1-9][0-9]{0,19}$/u;
 const ATTEMPT = /^[1-9][0-9]{0,4}$/u;
 const SHA40 = /^[0-9a-f]{40}$/u;
-const SPENT_TAG_REF = /^refs\/tags\/(julius-run-spent-(?:[0-9a-f]{24}|[0-9a-f]{32}))$/u;
+/** The spent tag, and (X′ §4) the result record tag. No other ref is read. */
+const SPENT_TAG_REF = /^refs\/tags\/(julius-run-spent-(?:[0-9a-f]{24}|[0-9a-f]{32})|julius-run-record-(?:[0-9a-f]{24}|[0-9a-f]{32})-result)$/u;
 const ARTIFACT_NAME = /^[A-Za-z0-9._-]{1,120}$/u;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/u;
 const NAME_MAX = 300;
+/** The most pages of 100 commit statuses one read follows (REVIEW ruling D-e). */
+export const STATUS_PAGES_MAX = 10;
 
-/** The evidence reader reads these artifacts and no others; their bytes are fetched only for a finished run. */
-export const EVIDENCE_ARTIFACT_NAMES: ReadonlySet<string> = new Set(['julius-live-evidence', 'julius-inworld-grade']);
+/** The evidence reader reads these artifacts and no others; their bytes are fetched only for a finished run. The names are the reader's own
+ * constants, so the two cannot drift apart: a hand-typed 'julius-inworld-grade' here once meant the grade job's verdict was never downloaded. */
+export const EVIDENCE_ARTIFACT_NAMES: ReadonlySet<string> = new Set([EVIDENCE_ARTIFACT, VERDICT_ARTIFACT]);
 const COMPLETED_MARKER = /^[a-z][a-z0-9-]{2,48}-completed$/u;
 /** Bound on the bytes one finished run's artifacts may bring into the bridge. */
 export const ARTIFACT_BYTES_MAX = 32 * 1024 * 1024;
@@ -147,12 +155,20 @@ export function createGhMissionGitHub(options: GhMissionGitHubOptions): JuliusMi
 
   const readCommitStatuses = async (sha: string): Promise<readonly JuliusCommitStatus[] | null> => {
     if (!SHA40.test(sha)) return null;
-    const body = await api(`repos/${repo}/commits/${sha}/statuses?per_page=100`);
-    if (!Array.isArray(body)) return null;
+    // PAGINATED (REVIEW ruling D-e), newest first, up to STATUS_PAGES_MAX pages of 100: a paid run posts
+    // hundreds of `julius-live-progress` statuses on the same head. GitHub's `rel="next"` for this list is
+    // the next `page`, so the pages are walked by number and a short page is the last one. A status past
+    // the cap is not read, so a `julius-run-result` beyond it is not found: unverified, never a guess.
+    // Any page that does not answer with a list makes the whole read unreadable.
     const statuses: JuliusCommitStatus[] = [];
-    for (const raw of body) {
-      const status = commitStatus(raw);
-      if (status !== null) statuses.push(status);
+    for (let page = 1; page <= STATUS_PAGES_MAX; page += 1) {
+      const body = await api(`repos/${repo}/commits/${sha}/statuses?per_page=100${page === 1 ? '' : `&page=${String(page)}`}`);
+      if (!Array.isArray(body)) return null;
+      for (const raw of body) {
+        const status = commitStatus(raw);
+        if (status !== null) statuses.push(status);
+      }
+      if (body.length < 100) break;
     }
     return statuses;
   };
@@ -313,6 +329,7 @@ function commitStatus(value: unknown): JuliusCommitStatus | null {
     description: typeof status.description === 'string' ? status.description.slice(0, 200) : '',
     creator: typeof creator?.login === 'string' ? creator.login : '',
     createdAt: isoOrNull(status.created_at),
+    targetUrl: typeof status.target_url === 'string' && status.target_url.length <= 500 ? status.target_url : null,
   };
 }
 

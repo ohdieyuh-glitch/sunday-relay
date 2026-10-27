@@ -79,7 +79,8 @@ import { createDurableArtifactExchange, juliusReviewerBillingPath, type JuliusAr
 import { createJuliusDurableArtifacts, juliusWorkArtifactRoot } from './julius/durable-artifacts';
 import { LocalJuliusArtifactStore } from '../src/relay/workspace/julius-tools/local-artifact-store';
 import { JuliusWorkArtifactPostgresRepository } from '../src/relay/persistence/julius-work-artifact-postgres';
-import { ORG_ATTRIBUTION_UNVERIFIED, readAnthropicOrgAttribution } from './julius/anthropic-org-attribution';
+import { ORG_ATTRIBUTION_UNVERIFIED, agreeWithGate, gateVerifiedOrganizations, readAnthropicOrgAttribution, readJ1OrgAttributions } from './julius/anthropic-org-attribution';
+import { J1_ROLE_CREDENTIALS, resolveArchitectCredential, type VerifiedRoleOrganizations } from './julius/live-composition';
 import { liveEvidenceLines } from './julius/live-evidence-lines';
 import {
   liveClaudeAuthRefusedLine, liveExecutionScopeLine, liveLearningFailedLine, liveOneLine, liveResearchLines, liveTickAccountLine,
@@ -234,8 +235,9 @@ export function liveLedgerState(store: unknown): 'BOUND' | 'UNBOUND' {
  *
  * The founder's accounting requirement is that the record can tell an API bill
  * from a subscription for every role, so the preflight states all three:
- *   - the Prompt Architect is API-billed BY CONSTRUCTION: the live architect
- *     cannot exist without its OpenAI key;
+ *   - the Agentic Architect (the PROMPT_ARCHITECT role) is API-billed BY
+ *     CONSTRUCTION: the live architect cannot exist without its own API key
+ *     (OpenAI, or ANTHROPIC_ARCHITECT_API_KEY for the J1 Anthropic architect);
  *   - the Coding Agent is whatever the auth decision above resolved, which is
  *     `null` here when that decision failed (and the preflight is then blocked
  *     for its own reason);
@@ -847,7 +849,14 @@ async function main(argv: readonly string[]): Promise<number> {
   out('JULIUS LIVE MISSION — preflight');
   out(`  mission: ${contract.missionId} (project ${contract.projectId})`);
   out(`  requested models: architect=${preflight.requested.architectModel ?? 'MISSING'} coder=${preflight.requested.codingModel ?? 'MISSING'} reviewer=${preflight.requested.reviewerProvider ?? 'MISSING'}/${preflight.requested.reviewerModel ?? 'MISSING'}`);
-  for (const row of presence(env, ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', CLAUDE_SUBSCRIPTION_TOKEN_ENV, 'XAI_API_KEY', ...JULIUS_RUNTIME_DATABASE_ENV_NAMES, ...EXECUTOR_ENV])) out(row);
+  for (const row of presence(env, ['OPENAI_API_KEY', 'ANTHROPIC_ARCHITECT_API_KEY', 'ANTHROPIC_API_KEY', CLAUDE_SUBSCRIPTION_TOKEN_ENV, 'XAI_API_KEY', ...JULIUS_RUNTIME_DATABASE_ENV_NAMES, ...EXECUTOR_ENV])) out(row);
+  /* WHICH ACCOUNT PAYS FOR EACH ROLE, by variable name (`J1_ROLE_CREDENTIALS`). Printed for the Anthropic architect only. */
+  const architectOnAnthropic = resolveArchitectCredential(env).provider === 'anthropic';
+  if (architectOnAnthropic) {
+    for (const row of J1_ROLE_CREDENTIALS) {
+      out(`  role credential: ${row.displayName} (${row.role}) provider=${row.provider} key=${row.keyEnv} expected_org=${row.expectedOrgEnv ?? 'n/a'} model=${row.modelEnv}`);
+    }
+  }
   out('  note: the local Hermes reviewer bills through the hermes profile of this operator account; XAI_API_KEY presence is reported for the record.');
 
   /**
@@ -1105,9 +1114,51 @@ async function main(argv: readonly string[]): Promise<number> {
         tenancy: { tenantId: contract.tenantId },
       }),
     });
+    /**
+     * WHICH ANTHROPIC ORGANIZATION EACH API KEY BILLS, BEFORE A RUN EXISTS.
+     *
+     * API mode is the paid workflow's coder. The organization id is the one
+     * header on a spend-free models read, compared with that role's expected id.
+     * A missing expected id, a missing header, or a different id is
+     * `ORG_ATTRIBUTION_UNVERIFIED` and submit is not called. Subscription mode
+     * has no API organization to attribute.
+     *
+     * THE AGENTIC ARCHITECT ON ANTHROPIC is a second account: its key is read
+     * against JULIUS_EXPECTED_ANTHROPIC_ARCHITECT_ORG_ID, the coder's against
+     * JULIUS_EXPECTED_ANTHROPIC_ORG_ID, and the two verified organizations must
+     * differ. The verified ids are handed to the composition, which refuses
+     * `architect_not_independent` without them.
+     */
+    let verifiedOrganizations: VerifiedRoleOrganizations | null = null;
+    if (architectOnAnthropic) {
+      const gate = readJ1OrgAttributions(env, {
+        architect: preflight.requested.architectModel ?? '',
+        coder: preflight.requested.codingModel ?? '',
+      });
+      for (const line of gate.lines) out(`  ${line}`);
+      if (!gate.ok) {
+        out(`RESULT: BLOCKED — ${gate.reason === 'org_attribution_unverified' ? ORG_ATTRIBUTION_UNVERIFIED : 'ARCHITECT_AND_CODER_SHARE_AN_ORGANIZATION'}. Nothing was submitted. The organization check read model metadata only; no completion was requested.`);
+        return 1;
+      }
+      const agreed = agreeWithGate(gateVerifiedOrganizations(env), gate.organizations);
+      if (!agreed.ok) {
+        out(`RESULT: BLOCKED — ${agreed.reason}: the pre-marker readiness gate's verified organizations (JULIUS_VERIFIED_ARCHITECT_ORG_ID, JULIUS_VERIFIED_CODER_ORG_ID) are absent or differ from this reading. Nothing was submitted.`);
+        return 1;
+      }
+      verifiedOrganizations = agreed.organizations;
+    } else if (coderProvenance?.authentication === 'ANTHROPIC_API_KEY') {
+      const attribution = readAnthropicOrgAttribution(env, preflight.requested.codingModel ?? '');
+      out(`  ${attribution.line}`);
+      if (!attribution.verified) {
+        out(`RESULT: BLOCKED — ${ORG_ATTRIBUTION_UNVERIFIED}. Nothing was submitted. The organization check read model metadata only; no completion was requested.`);
+        return 1;
+      }
+    }
+
     const resolution = resolveLiveWorkers({
       env, projectId: contract.projectId, workspacePath: contract.workspacePath,
       testCommand: contract.testCommand, contexts: handoffs.contexts, artifacts: liveArtifacts, shell,
+      verifiedOrganizations, report: out,
       architectMaxOutputTokens: contract.limits?.architectMaxOutputTokens,
       architectEffort: contract.limits?.architectEffort, coderEffort: contract.limits?.coderEffort, coderSelfTestCalls: contract.limits?.coderSelfTestCalls,
       coderFileCreation,
@@ -1117,24 +1168,6 @@ async function main(argv: readonly string[]): Promise<number> {
       // Each role's problem, then the outcome: an artifact never says nothing (`liveWorkersBlockedLines`).
       for (const line of liveWorkersBlockedLines(resolution.problems)) out(line);
       return 1;
-    }
-
-    /**
-     * WHICH ANTHROPIC ORGANIZATION THE API KEY BILLS, BEFORE A RUN EXISTS.
-     *
-     * API mode is the paid workflow's coder. The organization id is the one
-     * header on a spend-free models read, compared with
-     * `JULIUS_EXPECTED_ANTHROPIC_ORG_ID`. A missing expected id, a missing
-     * header, or a different id is `ORG_ATTRIBUTION_UNVERIFIED` and submit is
-     * not called. Subscription mode has no API organization to attribute.
-     */
-    if (coderProvenance?.authentication === 'ANTHROPIC_API_KEY') {
-      const attribution = readAnthropicOrgAttribution(env, preflight.requested.codingModel ?? '');
-      out(`  ${attribution.line}`);
-      if (!attribution.verified) {
-        out(`RESULT: BLOCKED — ${ORG_ATTRIBUTION_UNVERIFIED}. Nothing was submitted. The organization check read model metadata only; no completion was requested.`);
-        return 1;
-      }
     }
 
     const request = compileBootstrapRequest(contract, resolution.entries.map((entry) => ({

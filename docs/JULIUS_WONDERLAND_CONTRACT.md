@@ -23,7 +23,7 @@ argument and refuses before it reads anything.
 |---|---|---|
 | mission state | `inspectRun` → `JuliusRunView.state` | **served by the API** |
 | C.A.R.D. lifecycle | `JuliusRunView.cardRevision`, `missionContractRevision` | revisions only; the policy body is not exposed |
-| Prompt Architect state | `inspectSlots` → `JuliusSlotView` | **new** |
+| Agentic Architect state (the `PROMPT_ARCHITECT` role) | `inspectSlots` → `JuliusSlotView` | **new** |
 | Coding Agent state | `inspectSlots` → `JuliusSlotView` | **new** |
 | Independent Reviewer state | `inspectSlots` → `JuliusSlotView` | **new** |
 | provider identity | `JuliusSlotView.providerId`, `requestedModel`, `servedModel` | **new**, and null where the provider was silent |

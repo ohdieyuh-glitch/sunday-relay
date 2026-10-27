@@ -18,6 +18,8 @@ import {
   juliusAttemptMarkerBindings,
   juliusBoundArtifactId,
   juliusSpentTagBinding,
+  parseJuliusAttemptRecordTag,
+  JULIUS_RUN_RECORD_TAG_PREFIX,
   JULIUS_INWORLD_VERDICT_ARTIFACT,
   JULIUS_INWORLD_VERDICT_FILE,
   JULIUS_LIVE_EVIDENCE_ARTIFACT,
@@ -186,8 +188,12 @@ export async function readJuliusSpentTagLedger(input: {
 
 /**
  * THE ATTEMPTED MARKERS, on the same proofs. Lists `<namespace>-attempted`
- * artifacts repository-wide and classifies the run that uploaded each one.
- * A listing that fails is unreadable, never zero.
+ * artifacts repository-wide AND the `julius-run-record-<suffix>-attempted`
+ * tags (X′ §2: the tag is the durable record, the artifact best-effort), and
+ * classifies the run behind each one once: a run named by both is one entry
+ * (`workflowRunId` + `headSha`). Either listing failing is unreadable, never
+ * zero. A record tag of this namespace whose body cannot bind a run counts,
+ * UNKNOWN.
  */
 export async function readJuliusAttemptMarkers(input: {
   readonly repository: string;
@@ -205,9 +211,13 @@ export async function readJuliusAttemptMarkers(input: {
     `https://api.github.com/repos/${input.repository}/actions/artifacts?name=${markerName}&per_page=100`,
     headers,
   );
-  const bindings = juliusAttemptMarkerBindings(listing, markerName);
-  if (bindings === null) return { readable: false };
-  const proofs: JuliusPriorRunProof[] = [];
+  const artifactBindings = juliusAttemptMarkerBindings(listing, markerName);
+  if (artifactBindings === null) return { readable: false };
+  // THE SECOND SOURCE (X′ §2): the attempted record tags. Either listing unreadable is unreadable.
+  const records = await readJuliusAttemptRecordTags({ repository: input.repository, headers, fetchImpl, namespace: input.namespace });
+  if (records === null) return { readable: false };
+  const bindings = [...artifactBindings, ...records.bindings];
+  const proofs: JuliusPriorRunProof[] = [...records.unbound];
   const seen = new Set<string>();
   for (const binding of bindings) {
     const key = `${binding.workflowRunId}\t${binding.headSha}`;
@@ -221,6 +231,57 @@ export async function readJuliusAttemptMarkers(input: {
     proofs.push(classifyJuliusPriorRun(observation, ''));
   }
   return { readable: true, proofs };
+}
+
+/** The binding a counted record tag gets when its body cannot name a run: UNKNOWN, printed as such. */
+const UNBOUND_RECORD: JuliusWorkflowRunBinding = Object.freeze({ workflowRunId: 'UNKNOWN', workflowRunAttempt: 'UNKNOWN', headSha: 'UNKNOWN' });
+
+/**
+ * `git/matching-refs/tags/julius-run-record-`, the `-attempted` refs only, each
+ * annotated body parsed by {@link parseJuliusAttemptRecordTag}. Null when the
+ * listing, a page, or any ref it must attribute cannot be read. The spent-tag
+ * listing never sees these refs: its prefix is `julius-run-spent-`.
+ */
+async function readJuliusAttemptRecordTags(input: {
+  readonly repository: string;
+  readonly headers: Readonly<Record<string, string>>;
+  readonly fetchImpl: typeof fetch;
+  readonly namespace: string;
+}): Promise<{ readonly bindings: readonly JuliusWorkflowRunBinding[]; readonly unbound: readonly JuliusPriorRunProof[] } | null> {
+  const bindings: JuliusWorkflowRunBinding[] = [];
+  const unbound: JuliusPriorRunProof[] = [];
+  try {
+    let url: string | null = `https://api.github.com/repos/${input.repository}/git/matching-refs/tags/julius-run-record-`;
+    let pages = 0;
+    while (url !== null) {
+      if (pages === 5) return null;
+      pages += 1;
+      const response = await input.fetchImpl(url, { headers: input.headers });
+      if (!response.ok) return null;
+      const body: unknown = await response.json();
+      if (!Array.isArray(body)) return null;
+      for (const entry of body) {
+        const ref = entry !== null && typeof entry === 'object' && !Array.isArray(entry) ? (entry as Record<string, unknown>).ref : undefined;
+        if (typeof ref !== 'string') return null;
+        // The result record is not an attempt; its body is not fetched here.
+        if (ref.startsWith(JULIUS_RUN_RECORD_TAG_PREFIX) && !ref.endsWith('-attempted')) continue;
+        const tag = await readOneSpentTag(entry, input.repository, input.headers, input.fetchImpl);
+        if (tag === 'unreadable') return null;
+        const parsed = parseJuliusAttemptRecordTag(tag.ref, tag.message, input.namespace);
+        if (parsed.kind === 'unreadable') return null;
+        if (parsed.kind === 'bound') bindings.push(parsed.binding);
+        if (parsed.kind === 'counted_unbound') {
+          unbound.push({ binding: UNBOUND_RECORD, classification: 'UNKNOWN', basis: parsed.basis, knownChargesUsdMicros: null });
+        }
+      }
+      const next = nextGitHubPage(response.headers.get('link'));
+      if (next === 'rejected') return null;
+      url = next;
+    }
+  } catch {
+    return null;
+  }
+  return { bindings, unbound };
 }
 
 function bindingOf(tags: readonly JuliusSpentTag[], entry: JuliusPriorRunAudit): JuliusWorkflowRunBinding | null {

@@ -24,7 +24,6 @@ function readersFrom(start: string): string[] {
  */
 const SERVER_KEY_READERS = [
   'relay-bridge/hosted-coding-agent/hosted-envelope.ts',
-  'relay-bridge/julius/live-composition.ts',
   'relay-bridge/openai-architect.ts',
   'src/relay/connectors/claude-code/capability-probe.ts',
   'src/relay/connectors/gpt-architect/config.ts',

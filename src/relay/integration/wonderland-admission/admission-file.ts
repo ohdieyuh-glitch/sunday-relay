@@ -480,8 +480,12 @@ const WORKFLOW_HALTS = ['RUN_ID_ALREADY_SPENT', 'SPENT_TAG_UNVERIFIED'] as const
  * `workflow_run_unspent` is written only by `reconcile`: GitHub shows the
  * dispatched run completed without success and no spent tag exists, so the
  * workflow ended before it spent the id.
+ * `workflow_run_absent` is written only by `reconcile` too: a reservation
+ * older than the grace period on GitHub's own clock, a readable run list with
+ * no run for its dispatch key, and no spent tag. The `gh workflow run` child
+ * never reached GitHub (the bridge stopped first). It carries no workflow run.
  */
-const DISPATCH_ERRORS = ['gh_workflow_run_failed', 'SPENT_TAG_UNVERIFIED', 'workflow_run_unspent'] as const;
+const DISPATCH_ERRORS = ['gh_workflow_run_failed', 'SPENT_TAG_UNVERIFIED', 'workflow_run_unspent', 'workflow_run_absent'] as const;
 const JOURNAL_KEYS = ['schemaVersion', 'revision', 'claims', 'progress', 'owners'] as const;
 const OWNER_ID = /^[A-Za-z0-9_-]{1,128}$/;
 /**
@@ -494,9 +498,13 @@ const PROGRESS_CAUSE = /^[\x20-\x7e]{1,200}$/;
 const CLAIM_KEYS = [
   'wonderlandRunId', 'serverRunId', 'state', 'spentTag', 'spentTagState', 'at',
   'dispatchAttempted', 'dispatchError', 'halt', 'workflowRunId', 'githubDate',
+  'acknowledgedRerun', 'priorAttempted', 'priorCompleted',
 ] as const;
-/** Keys a claim written before they existed may lack. Absent reads as null. */
-const OPTIONAL_CLAIM_KEYS: readonly string[] = ['workflowRunId', 'githubDate'];
+/**
+ * Keys a claim written before they existed may lack. Absent `workflowRunId`
+ * and `githubDate` read as null; absent `acknowledgedRerun` reads as false.
+ */
+const OPTIONAL_CLAIM_KEYS: readonly string[] = ['workflowRunId', 'githubDate', 'acknowledgedRerun', 'priorAttempted', 'priorCompleted'];
 /** GitHub's `Date:` header as ISO UTC, second precision. */
 const GITHUB_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 /** A GitHub Actions workflow run id. Null until dispatch learns one. */
@@ -538,6 +546,22 @@ export interface ClaimEvent {
    * evidence.
    */
   readonly githubDate: string | null;
+  /**
+   * True only when the founder's paired Wonderland session typed
+   * `RERUN PAID MISSION` for THIS admission and the bridge read a proven
+   * prior paid attempt (`priorAttempted` > 0) before the reservation. Then,
+   * and only then, the dispatch carried `acknowledge_rerun`. Absent means
+   * false: a legacy journal, or a first run. Set on the reservation and
+   * carried unchanged by every later event of the same claim.
+   */
+  readonly acknowledgedRerun?: true;
+  /** The counted prior paid attempts the consent was given over. Present exactly when `acknowledgedRerun` is. */
+  readonly priorAttempted?: number;
+  /**
+   * The step-9 count the consent was given over: `<ns>-completed` markers plus
+   * main's recorded constant. Present exactly when `acknowledgedRerun` is.
+   */
+  readonly priorCompleted?: number;
 }
 
 /** True for a decimal GitHub workflow run id that fits in a signed 64-bit integer. */
@@ -937,6 +961,7 @@ function claimStamp(claim: ClaimEvent): string {
     claim.halt ?? '',
     claim.workflowRunId ?? '',
     claim.githubDate ?? '',
+    claim.acknowledgedRerun === true ? `rerun:${String(claim.priorAttempted ?? '')}:${String(claim.priorCompleted ?? '')}` : '',
   ].join('\0');
 }
 
@@ -963,6 +988,7 @@ function parseClaim(value: unknown, schemaVersion: OperatorJournal['schemaVersio
     ? storedWorkflowRunId(claim.workflowRunId)
     : null;
   const githubDate = Object.hasOwn(claim, 'githubDate') ? storedGithubDate(claim.githubDate) : null;
+  const rerun = storedRerun(claim);
   const identity = identifyAdmissionRun(claim.wonderlandRunId, claim.serverRunId);
   const form = schemaVersion === LEGACY_ADMISSION_SCHEMA_VERSION ? 'legacy' : 'wlj';
   if (!identity.ok || identity.form !== form) throw new AdmissionFileClosedError('corrupt');
@@ -986,7 +1012,9 @@ function parseClaim(value: unknown, schemaVersion: OperatorJournal['schemaVersio
     if (claim.dispatchAttempted !== true) throw new AdmissionFileClosedError('corrupt');
     if (recordedHalt === 'SPENT_TAG_UNVERIFIED') {
       if (error !== 'SPENT_TAG_UNVERIFIED') throw new AdmissionFileClosedError('corrupt');
-    } else if (recordedHalt !== null || (error !== 'gh_workflow_run_failed' && error !== 'workflow_run_unspent')) {
+    } else if (recordedHalt !== null || (error !== 'gh_workflow_run_failed' && error !== 'workflow_run_unspent' && error !== 'workflow_run_absent')) {
+      throw new AdmissionFileClosedError('corrupt');
+    } else if (error === 'workflow_run_absent' && workflowRunId !== null) {
       throw new AdmissionFileClosedError('corrupt');
     }
   } else if (error !== null) {
@@ -1012,7 +1040,7 @@ function parseClaim(value: unknown, schemaVersion: OperatorJournal['schemaVersio
   const dispatchError: DispatchError | null = state === 'dispatch_failed'
     ? (recordedHalt === 'SPENT_TAG_UNVERIFIED'
       ? 'SPENT_TAG_UNVERIFIED'
-      : error === 'workflow_run_unspent' ? 'workflow_run_unspent' : 'gh_workflow_run_failed')
+      : error === 'workflow_run_unspent' || error === 'workflow_run_absent' ? error : 'gh_workflow_run_failed')
     : null;
   return {
     wonderlandRunId: identity.wljRunId,
@@ -1026,7 +1054,28 @@ function parseClaim(value: unknown, schemaVersion: OperatorJournal['schemaVersio
     halt: state === 'dispatched' || state === 'dispatching' ? null : recordedHalt,
     workflowRunId,
     githubDate,
+    ...rerun,
   };
+}
+
+/**
+ * `acknowledgedRerun`, `priorAttempted` and `priorCompleted` travel together:
+ * all absent (or an explicit `false` with no count) is no rerun consent;
+ * `true` needs both counts whole, at least one of them above 0. Anything else
+ * is corrupt.
+ */
+function storedRerun(claim: Record<string, unknown>): { readonly acknowledgedRerun?: true; readonly priorAttempted?: number; readonly priorCompleted?: number } {
+  const hasAck = Object.hasOwn(claim, 'acknowledgedRerun');
+  const hasCount = Object.hasOwn(claim, 'priorAttempted') || Object.hasOwn(claim, 'priorCompleted');
+  if (!hasAck && !hasCount) return {};
+  if (hasAck && claim.acknowledgedRerun === false && !hasCount) return {};
+  const whole = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+  const attempted = claim.priorAttempted;
+  const completed = claim.priorCompleted;
+  if (claim.acknowledgedRerun === true && whole(attempted) && whole(completed) && attempted + completed >= 1) {
+    return { acknowledgedRerun: true, priorAttempted: attempted, priorCompleted: completed };
+  }
+  throw new AdmissionFileClosedError('corrupt');
 }
 
 function storedGithubDate(value: unknown): string | null {

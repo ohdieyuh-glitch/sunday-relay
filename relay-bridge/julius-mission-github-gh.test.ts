@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { createGhMissionGitHub, GithubUnreadableError, type GhReadRunner } from './julius-mission-github-gh';
+import { createGhMissionGitHub, EVIDENCE_ARTIFACT_NAMES, GithubUnreadableError, STATUS_PAGES_MAX, type GhReadRunner } from './julius-mission-github-gh';
 import { cachedEvidenceReader, EVIDENCE_RECHECK_MS, wonderlandLiveReadsFrom } from './wonderland-live-wiring';
 
 const REPO = 'ohdieyuh-glitch/sunday-relay';
@@ -14,12 +14,13 @@ const TAG = 'refs/tags/julius-run-spent-0b7a1c2e4f3d4a6b8c2d3e4f5a6b7c8d';
 /** Every argv this port may hand `gh`: a GET of one allowlisted path, or one artifact download. */
 const ALLOWED_API = [
   /^repos\/ohdieyuh-glitch\/sunday-relay\/git\/ref\/tags\/julius-run-spent-[0-9a-f]{32}$/u,
+  /^repos\/ohdieyuh-glitch\/sunday-relay\/git\/ref\/tags\/julius-run-record-[0-9a-f]{32}-result$/u,
   /^repos\/ohdieyuh-glitch\/sunday-relay\/git\/tags\/[0-9a-f]{40}$/u,
   /^repos\/ohdieyuh-glitch\/sunday-relay\/actions\/runs\/\d+$/u,
   /^repos\/ohdieyuh-glitch\/sunday-relay\/actions\/runs\/\d+\/attempts\/\d+$/u,
   /^repos\/ohdieyuh-glitch\/sunday-relay\/actions\/runs\/\d+\/attempts\/\d+\/jobs\?per_page=100$/u,
   /^repos\/ohdieyuh-glitch\/sunday-relay\/actions\/runs\/\d+\/artifacts\?per_page=100$/u,
-  /^repos\/ohdieyuh-glitch\/sunday-relay\/commits\/[0-9a-f]{40}\/statuses\?per_page=100$/u,
+  /^repos\/ohdieyuh-glitch\/sunday-relay\/commits\/[0-9a-f]{40}\/statuses\?per_page=100(?:&page=(?:[2-9]|10))?$/u,
 ];
 
 function expectReadOnly(calls: readonly (readonly string[])[]): void {
@@ -96,6 +97,52 @@ describe('the read-only gh port', () => {
     expectReadOnly(runner.calls);
   });
 
+  it('D-e: commit statuses are read across pages; a short page ends the walk, an unreadable page makes the read unreadable', async () => {
+    const at = (page: number) => `${base}/commits/${SHA}/statuses?per_page=100${page === 1 ? '' : `&page=${String(page)}`}`;
+    const progress = (n: number) => Array.from({ length: n }, (_, i) => ({ id: 1000 + i, context: 'julius-live-progress', state: 'pending', description: 'v1', creator: { login: 'github-actions[bot]' } }));
+    const result = { id: 7, context: 'julius-run-result', state: 'success', description: 'v1 sha256:x', creator: { login: 'github-actions[bot]' }, target_url: 'https://github.com/x/y/actions/runs/1' };
+    const runner = fake({ [at(1)]: json(progress(100)), [at(2)]: json(progress(100)), [at(3)]: json([...progress(20), result]) });
+    const statuses = await createGhMissionGitHub({ repo: REPO, runner }).readCommitStatuses(SHA);
+    expect(statuses?.length).toBe(221);
+    expect(statuses?.filter((status) => status.context === 'julius-run-result')).toHaveLength(1);
+    expect(runner.calls.map((call) => call[3])).toEqual([at(1), at(2), at(3)]);
+    expectReadOnly(runner.calls);
+    const broken = fake({ [at(1)]: json(progress(100)), [at(2)]: { code: 0, stdout: '{"message":"not a list"}' } });
+    expect(await createGhMissionGitHub({ repo: REPO, runner: broken }).readCommitStatuses(SHA)).toBeNull();
+  });
+
+  it('D-e: the walk stops at STATUS_PAGES_MAX (10) pages; a result past the cap is not read', async () => {
+    expect(STATUS_PAGES_MAX).toBe(10);
+    const at = (page: number) => `${base}/commits/${SHA}/statuses?per_page=100${page === 1 ? '' : `&page=${String(page)}`}`;
+    const full = Array.from({ length: 100 }, (_, i) => ({ id: 1 + i, context: 'julius-live-progress', state: 'pending', description: 'v1', creator: { login: 'github-actions[bot]' } }));
+    const routes: Record<string, { code: number; stdout: string }> = {};
+    for (let page = 1; page <= 10; page += 1) routes[at(page)] = json(full);
+    routes[at(11)] = json([{ id: 9, context: 'julius-run-result', state: 'success', description: 'v1', creator: { login: 'github-actions[bot]' } }]);
+    const runner = fake(routes);
+    const statuses = await createGhMissionGitHub({ repo: REPO, runner }).readCommitStatuses(SHA);
+    expect(runner.calls).toHaveLength(10);
+    expect(statuses?.some((status) => status.context === 'julius-run-result')).toBe(false);
+  });
+
+  it('X′ §4: reads the result record tag the same way; no other record ref is read', async () => {
+    const RESULT = 'refs/tags/julius-run-record-0b7a1c2e4f3d4a6b8c2d3e4f5a6b7c8d-result';
+    const runner = fake({
+      [`${base}/git/ref/tags/julius-run-record-0b7a1c2e4f3d4a6b8c2d3e4f5a6b7c8d-result`]: json({ object: { type: 'tag', sha: TAG_SHA } }),
+      [`${base}/git/tags/${TAG_SHA}`]: json({ message: 'julius-run-result.v1\nrun=x\n' }),
+    });
+    const github = createGhMissionGitHub({ repo: REPO, runner });
+    expect(await github.readAnnotatedTagMessage(RESULT)).toBe('julius-run-result.v1\nrun=x\n');
+    const none = fake({});
+    const refused = createGhMissionGitHub({ repo: REPO, runner: none });
+    for (const ref of [
+      'refs/tags/julius-run-record-0b7a1c2e4f3d4a6b8c2d3e4f5a6b7c8d-attempted',
+      'refs/tags/julius-run-record-0b7a1c2e4f3d4a6b8c2d3e4f5a6b7c8d-result-x',
+      'refs/tags/julius-run-record-../../x-result',
+    ]) expect(await refused.readAnnotatedTagMessage(ref), ref).toBeNull();
+    expect(none.calls).toEqual([]);
+    expectReadOnly(runner.calls);
+  });
+
   it('a running run lists its artifacts but fetches no bytes; a finished run downloads only the reader\'s artifacts, bounded', async () => {
     const attempt = (status: string) => json({ id: Number(RUN), run_attempt: 1, head_sha: SHA, status, conclusion: status === 'completed' ? 'success' : null, created_at: '2026-10-23T17:19:00Z' });
     const jobs = json({ jobs: [{ id: 1, name: 'Preflight, then the live mission', status: 'completed', conclusion: 'failure', steps: [
@@ -104,7 +151,7 @@ describe('the read-only gh port', () => {
     const artifacts = json({ artifacts: [
       { name: 'julius-live-evidence', size_in_bytes: 100, expired: false },
       { name: 'julius-inworld-data-1-completed', size_in_bytes: 10, expired: false },
-      { name: 'julius-inworld-grade', size_in_bytes: 10, expired: false },
+      { name: 'julius-inworld-verdict', size_in_bytes: 10, expired: false },
       { name: 'some-other-artifact', size_in_bytes: 10, expired: false },
       { name: 'julius-live-evidence-old', size_in_bytes: 10, expired: true },
     ] });
@@ -123,7 +170,7 @@ describe('the read-only gh port', () => {
     });
     const live = await createGhMissionGitHub({ repo: REPO, runner: running }).readWorkflowRun(RUN, '1');
     expect(live?.artifacts.map((artifact) => [artifact.name, artifact.files])).toEqual([
-      ['julius-live-evidence', null], ['julius-inworld-data-1-completed', null], ['julius-inworld-grade', null],
+      ['julius-live-evidence', null], ['julius-inworld-data-1-completed', null], ['julius-inworld-verdict', null],
     ]);
     expect(running.calls.some((args) => args[0] === 'run')).toBe(false);
     const finished = fake({
@@ -132,7 +179,7 @@ describe('the read-only gh port', () => {
       [`${base}/actions/runs/${RUN}/artifacts?per_page=100`]: artifacts,
       'download julius-live-evidence': (args) => { downloadedTo = args[8] ?? ''; return download(args); },
       'download julius-inworld-data-1-completed': download,
-      'download julius-inworld-grade': download,
+      'download julius-inworld-verdict': download,
     });
     const done = await createGhMissionGitHub({ repo: REPO, runner: finished }).readWorkflowRun(RUN, '1');
     expect(done).toMatchObject({ workflowRunId: RUN, headSha: SHA, status: 'completed', conclusion: 'success', createdAt: '2026-10-23T17:19:00Z', failedSteps: ['LIVE: run the first real Julius mission'] });
@@ -142,10 +189,27 @@ describe('the read-only gh port', () => {
       { path: 'nested/runs.tsv', text: 'run_id\tstate\n' },
     ]);
     expect(finished.calls.filter((args) => args[0] === 'run').map((args) => args[6])).toEqual([
-      'julius-live-evidence', 'julius-inworld-data-1-completed', 'julius-inworld-grade',
+      'julius-live-evidence', 'julius-inworld-data-1-completed', 'julius-inworld-verdict',
     ]);
     expect(existsSync(downloadedTo)).toBe(false);
     expectReadOnly([...running.calls, ...finished.calls]);
+  });
+
+  it('downloads exactly the artifacts the paid workflow uploads for evidence and verdict, so a graded verdict can reach /result', () => {
+    // Every `name:` under an upload-artifact step of the paid workflow; the reader's names must each be one of them.
+    const workflow = readFileSync(join('.github', 'workflows', 'julius-first-live-mission.yml'), 'utf8');
+    const lines = workflow.split('\n');
+    const uploaded = new Set<string>();
+    // No bare early `return` here: ci-test-accounting reads one as a test that can end without asserting.
+    lines.forEach((line, i) => {
+      if (/^\s*- uses: actions\/upload-artifact@/u.test(line)) {
+        const name = lines.slice(i + 1, i + 7).map((next) => /^\s+name:\s*(\S.*)$/u.exec(next)?.[1]).find((hit) => hit !== undefined);
+        if (name !== undefined) uploaded.add(name.trim());
+      }
+    });
+    expect(uploaded.has('julius-inworld-verdict')).toBe(true);
+    for (const name of EVIDENCE_ARTIFACT_NAMES) expect(uploaded.has(name), name).toBe(true);
+    expect([...EVIDENCE_ARTIFACT_NAMES].sort()).toEqual(['julius-inworld-verdict', 'julius-live-evidence']);
   });
 
   it('reads job steps and commit statuses as names and states only', async () => {
@@ -165,7 +229,7 @@ describe('the read-only gh port', () => {
       steps: [{ number: 1, name: 'Set up job', status: 'completed', conclusion: 'success', startedAt: '2026-10-23T17:19:01Z', completedAt: '2026-10-23T17:19:02Z' }],
     }]);
     expect(await github.readCommitStatuses(SHA)).toEqual([{
-      id: '99', context: 'julius-live-progress', state: 'pending', description: 'v1 r1.a1.0b7a1c2e s1 idle', creator: 'github-actions[bot]', createdAt: '2026-10-23T17:20:00Z',
+      id: '99', context: 'julius-live-progress', state: 'pending', description: 'v1 r1.a1.0b7a1c2e s1 idle', creator: 'github-actions[bot]', createdAt: '2026-10-23T17:20:00Z', targetUrl: 'https://example.invalid',
     }]);
     expectReadOnly(runner.calls);
   });

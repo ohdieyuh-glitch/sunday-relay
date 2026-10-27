@@ -122,7 +122,7 @@ export interface ReviewedModelPins {
   readonly reviewerModel: string | null;
 }
 
-const PIN_LINE = /^(OPENAI_PROMPT_ARCHITECT_MODEL|RELAY_HOSTED_CODING_MODEL|RELAY_HERMES_PROVIDER|RELAY_HERMES_MODEL):\s*(\S+)\s*$/;
+const PIN_LINE = /^(OPENAI_PROMPT_ARCHITECT_MODEL|RELAY_ANTHROPIC_ARCHITECT_MODEL|RELAY_HOSTED_CODING_MODEL|RELAY_HERMES_PROVIDER|RELAY_HERMES_MODEL):\s*(\S+)\s*$/;
 
 /**
  * Read the three role pins from the paid workflow's env block. Missing stays
@@ -135,6 +135,7 @@ export function parseWorkflowModelPins(source: string): { ok: true; pins: Review
   };
   const found: Record<string, string[]> = {
     OPENAI_PROMPT_ARCHITECT_MODEL: [],
+    RELAY_ANTHROPIC_ARCHITECT_MODEL: [],
     RELAY_HOSTED_CODING_MODEL: [],
     RELAY_HERMES_PROVIDER: [],
     RELAY_HERMES_MODEL: [],
@@ -150,11 +151,16 @@ export function parseWorkflowModelPins(source: string): { ok: true; pins: Review
   if (duplicated.length > 0) {
     return { ok: false, problem: `duplicated workflow pin: ${duplicated.join(',')}`, pins: empty };
   }
+  // ONE ARCHITECT PIN. The J1 Agentic Architect is pinned by RELAY_ANTHROPIC_ARCHITECT_MODEL;
+  // a workflow that pinned both architects would not say which one ran.
+  if (found.OPENAI_PROMPT_ARCHITECT_MODEL.length > 0 && found.RELAY_ANTHROPIC_ARCHITECT_MODEL.length > 0) {
+    return { ok: false, problem: 'duplicated workflow pin: two architect models', pins: empty };
+  }
   const one = (name: string): string | null => found[name][0] ?? null;
   return {
     ok: true,
     pins: {
-      architectModel: one('OPENAI_PROMPT_ARCHITECT_MODEL'),
+      architectModel: one('RELAY_ANTHROPIC_ARCHITECT_MODEL') ?? one('OPENAI_PROMPT_ARCHITECT_MODEL'),
       codingModel: one('RELAY_HOSTED_CODING_MODEL'),
       reviewerProvider: one('RELAY_HERMES_PROVIDER'),
       reviewerModel: one('RELAY_HERMES_MODEL'),

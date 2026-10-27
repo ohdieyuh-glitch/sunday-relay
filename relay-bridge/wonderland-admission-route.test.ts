@@ -456,7 +456,7 @@ describe('POST /wonderland/julius/dispatch', () => {
     const result = await handleWonderlandAdmissionRoute(request(), ports);
     const pins = (result?.body as { data: { modelPins: { architectModel: string; codingModel: string; reviewerProvider: string; reviewerModel: string } } }).data.modelPins;
     expect(pins).toEqual({
-      architectModel: 'gpt-5.6-sol',
+      architectModel: 'claude-opus-5-5',
       codingModel: 'claude-opus-5-5',
       reviewerProvider: 'xai',
       reviewerModel: 'grok-build-0.1',

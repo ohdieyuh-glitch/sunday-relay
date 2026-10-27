@@ -37,7 +37,7 @@ const reasons = (result: ReturnType<typeof bindRoleSlots>): string[] =>
 describe('the role-slot registry', () => {
   it('names the hosted live requested models, separate from any qualified served model', () => {
     expect(JULIUS_LIVE_REQUESTED_MODELS).toEqual({
-      prompt_architect: 'gpt-5.6-sol',
+      prompt_architect: 'claude-opus-5-5',
       coding_agent: 'claude-opus-5-5',
       reviewer: 'grok-build-0.1',
     });
