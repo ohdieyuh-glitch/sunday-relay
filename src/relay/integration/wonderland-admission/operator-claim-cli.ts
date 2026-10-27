@@ -27,6 +27,7 @@ import {
   type GhResult,
   type GhSpawner,
   type OperatorView,
+  type PriorAttemptReader,
   type ReconcileResult,
   type StatusResult,
 } from './operator-claim';
@@ -38,6 +39,9 @@ const USAGE = [
   '  claim  --store <file> --wonderland-run <wlj_> --server-run <run:> --repo <owner/name> --lane <lane> [--workflow <yml>]',
   '         Dry-run: print the exact gh command. Writes no claim record and spawns nothing.',
   '  claim  ... --dispatch --confirm \'RUN LIVE MISSION\'',
+  '         This CLI reads no prior-attempt counts, so --dispatch is always refused as',
+  '         julius_prior_attempts_unknown before anything is claimed. Start a paid run from',
+  '         the founder\'s paired Wonderland session instead.',
   '         gh reads the spent tag. If it is absent, the claim is reserved and gh runs the workflow once.',
   '         The workflow, the mission contract and the lane grant are read at main first: an',
   '         undeclared input or a lane the mission is not granted dispatches nothing.',
@@ -63,6 +67,13 @@ export interface OperatorClaimCliDeps {
   readonly spawn: GhSpawner;
   readonly nowIso: () => string;
   readonly readWorkflow: (path: string) => string;
+  /**
+   * The prior-attempt reader. This CLI wires none, so a CLI `--dispatch` reads
+   * UNKNOWN and is refused before anything is claimed: the paid rerun gate is
+   * proven only on the bridge, and only the founder's Wonderland session can
+   * carry the rerun phrase. Tests inject a reader.
+   */
+  readonly priorAttempts?: PriorAttemptReader;
 }
 
 export async function runOperatorClaimCli(
@@ -101,7 +112,7 @@ export async function runOperatorClaimCli(
   } catch (error) {
     return failClosed(io, error);
   }
-  const tool = createOperatorClaimTool(file, deps.spawn, { nowIso: deps.nowIso });
+  const tool = createOperatorClaimTool(file, deps.spawn, { nowIso: deps.nowIso }, deps.priorAttempts);
   if (parsed.command === 'status') {
     if (parsed.dispatch || parsed.flags.has('confirm') || parsed.flags.has('lane') || parsed.flags.has('repo')) {
       io.err(USAGE);

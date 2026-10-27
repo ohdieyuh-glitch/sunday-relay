@@ -53,6 +53,8 @@
 
 import {
   applyWonderlandStatusTransition,
+  isWonderlandStatusState,
+  isWonderlandStatusTerminal,
   MISSION_SLUG,
   PAID_SLOT_DISPATCH_KEY,
   PAID_WORKFLOW_FILE,
@@ -107,6 +109,158 @@ export const WORKFLOW_RUN_ID_INPUT_YAML = [
 ].join('\n');
 
 export const OPERATOR_DISPATCH_CONFIRMATION = 'RUN LIVE MISSION';
+
+/**
+ * THE SECOND PHRASE, for a paid admission over a PROVEN prior paid attempt.
+ * This is the one string it is compared with. It is never a default: a claim
+ * carries it only as `ClaimInput.rerunConfirmation`, which only the Wonderland
+ * Start route sets, and only from the founder's paired session's own body
+ * field `acknowledgeRerun`. No environment variable, flag, config or replay
+ * supplies it.
+ */
+export const RERUN_PAID_MISSION_CONFIRMATION = 'RERUN PAID MISSION';
+
+/** The paid workflow's input the second phrase is passed under. */
+export const WORKFLOW_RERUN_INPUT = 'acknowledge_rerun';
+
+/**
+ * One of the paid workflow's prior-run counts for the admission's contract
+ * namespace. Unreadable is UNKNOWN, never zero.
+ * - `read`: the attempted-marker count, as `julius-live-mission.cjs
+ *   attempt-markers` reads it (the proofs that are not NOT_EXECUTED).
+ * - `readCompleted`: the `<namespace>-completed` marker count, as the
+ *   workflow's step-9 gate counts it (`gh api .../actions/artifacts?name=
+ *   <ns>-completed&per_page=100 --jq '[.artifacts[] | select(.expired ==
+ *   false)] | length'`).
+ */
+export type PriorAttemptRead =
+  | { readonly readable: false }
+  | { readonly readable: true; readonly counted: number };
+
+/** Injected by the composition root (the bridge). Read-only. */
+export interface PriorAttemptReader {
+  read(input: { readonly repo: string; readonly namespace: string }): Promise<PriorAttemptRead>;
+  readCompleted(input: { readonly repo: string; readonly namespace: string }): Promise<PriorAttemptRead>;
+}
+
+/** No reader wired: the prior-attempt state is UNKNOWN, so no paid dispatch. */
+export const UNWIRED_PRIOR_ATTEMPTS: PriorAttemptReader = {
+  read: () => Promise.resolve({ readable: false }),
+  readCompleted: () => Promise.resolve({ readable: false }),
+};
+
+/** A prior-run count as shown and decided on: a whole number, or UNKNOWN. */
+export type PriorCount = number | 'UNKNOWN';
+
+/**
+ * A reader's answer as a count. Only an object whose `readable` is exactly
+ * `true` and whose `counted` is a whole safe number is a count; `null`, a
+ * truthy non-boolean `readable`, a string, NaN, Infinity or an unsafe integer
+ * is UNKNOWN.
+ */
+export function priorCount(read: PriorAttemptRead | null | undefined): PriorCount {
+  if (read === null || typeof read !== 'object' || read.readable !== true) return 'UNKNOWN';
+  const counted: unknown = read.counted;
+  return typeof counted === 'number' && Number.isSafeInteger(counted) && counted >= 0 ? counted : 'UNKNOWN';
+}
+
+/** `markerNamespace` of a contract read at main, as the paid workflow's gate reads it, or null. */
+export function contractMarkerNamespace(contractSource: string): string | null {
+  let contract: unknown;
+  try {
+    contract = JSON.parse(contractSource);
+  } catch {
+    return null;
+  }
+  if (contract === null || typeof contract !== 'object' || Array.isArray(contract)) return null;
+  const namespace = (contract as Record<string, unknown>).markerNamespace;
+  return typeof namespace === 'string' && /^[a-z][a-z0-9-]{2,48}$/u.test(namespace) ? namespace : null;
+}
+
+const RECORDED_CASE_OPEN = /^[ ]*case "\$MARKER_NAMESPACE" in[ ]*$/u;
+const RECORDED_CASE_ARM = /^[ ]*([a-z][a-z0-9-]{2,48}|\*)\)[ ]+RECORDED_PAID_ATTEMPTS=([0-9]{1,6})[ ]*;;[ ]*(?:#.*)?$/u;
+const RECORDED_CASE_CLOSE = /^[ ]*esac[ ]*$/u;
+
+/**
+ * The step-9 gate's hand-maintained `RECORDED_PAID_ATTEMPTS` table, read from
+ * main's workflow text (what `gh workflow run --ref main` runs), never run.
+ * Strict: exactly one `case "$MARKER_NAMESPACE" in` block, exactly one
+ * `RECORDED_PAID_ATTEMPTS=` assignment per arm and none outside it, each arm
+ * one line, distinct namespaces, and exactly one `*)` default as the last arm.
+ * Anything else is null, which the rerun gate reads as UNKNOWN.
+ */
+export function parseRecordedPaidAttempts(workflowSource: string): { readonly byNamespace: ReadonlyMap<string, number>; readonly fallback: number } | null {
+  const lines = workflowSource.replaceAll('\r\n', '\n').split('\n');
+  const opens = lines.flatMap((line, index) => (RECORDED_CASE_OPEN.test(line) ? [index] : []));
+  if (opens.length !== 1) return null;
+  const assignments = lines.filter((line) => line.includes('RECORDED_PAID_ATTEMPTS=')).length;
+  const byNamespace = new Map<string, number>();
+  let fallback: number | null = null;
+  let arms = 0;
+  for (let index = (opens[0] ?? 0) + 1; index < lines.length; index += 1) {
+    const line = lines[index] ?? '';
+    if (RECORDED_CASE_CLOSE.test(line)) {
+      return fallback === null || arms !== assignments ? null : { byNamespace, fallback };
+    }
+    const arm = RECORDED_CASE_ARM.exec(line);
+    if (arm === null || fallback !== null) return null;
+    arms += 1;
+    const value = Number(arm[2]);
+    if (arm[1] === '*') fallback = value;
+    else if (byNamespace.has(arm[1] ?? '')) return null;
+    else byNamespace.set(arm[1] ?? '', value);
+  }
+  return null;
+}
+
+/** The recorded prior paid attempts main's workflow holds for one namespace, or null when unreadable. */
+export function recordedPaidAttempts(workflowSource: string, namespace: string): number | null {
+  const table = parseRecordedPaidAttempts(workflowSource);
+  if (table === null) return null;
+  return table.byNamespace.get(namespace) ?? table.fallback;
+}
+
+/** The step-9 count: `<ns>-completed` markers plus the recorded constant. Either unknown is UNKNOWN. */
+export function priorCompletedCount(completed: PriorAttemptRead, recorded: number | null): PriorCount {
+  const markers = priorCount(completed);
+  if (markers === 'UNKNOWN' || recorded === null || !Number.isSafeInteger(recorded) || recorded < 0) return 'UNKNOWN';
+  return markers + recorded;
+}
+
+/**
+ * Whether a paid dispatch may go on, from the two prior-run counts the paid
+ * workflow gates on and the phrase the founder typed for THIS claim. Pure.
+ * - Either count UNKNOWN refuses, whatever was typed: the phrase unlocks a
+ *   proven count only.
+ * - Both 0 goes on with no `acknowledge_rerun`; a typed phrase is ignored.
+ * - Either above 0 goes on with `acknowledge_rerun` only when the exact phrase
+ *   was typed.
+ */
+export type RerunDecision =
+  | { readonly ok: true; readonly acknowledgedRerun: boolean; readonly priorAttempted: number; readonly priorCompleted: number }
+  | {
+    readonly ok: false;
+    readonly kind: 'julius_prior_attempts_unknown' | 'julius_rerun_consent_required';
+    readonly priorAttempted: PriorCount;
+    readonly priorCompleted: PriorCount;
+  };
+
+export function decideRerun(
+  prior: { readonly attempted: PriorCount; readonly completed: PriorCount },
+  rerunConfirmation: string | null | undefined,
+): RerunDecision {
+  const valid = (count: PriorCount): count is number => typeof count === 'number' && Number.isSafeInteger(count) && count >= 0;
+  const priorAttempted = valid(prior.attempted) ? prior.attempted : 'UNKNOWN';
+  const priorCompleted = valid(prior.completed) ? prior.completed : 'UNKNOWN';
+  if (priorAttempted === 'UNKNOWN' || priorCompleted === 'UNKNOWN') {
+    return { ok: false, kind: 'julius_prior_attempts_unknown', priorAttempted, priorCompleted };
+  }
+  if (priorAttempted === 0 && priorCompleted === 0) return { ok: true, acknowledgedRerun: false, priorAttempted, priorCompleted };
+  if (rerunConfirmation === RERUN_PAID_MISSION_CONFIRMATION) {
+    return { ok: true, acknowledgedRerun: true, priorAttempted, priorCompleted };
+  }
+  return { ok: false, kind: 'julius_rerun_consent_required', priorAttempted, priorCompleted };
+}
 
 export const OPERATOR_LANES = ['qualification', 'qualification-repair', 'lab', 'regression'] as const;
 export type OperatorLane = (typeof OPERATOR_LANES)[number];
@@ -175,6 +329,12 @@ export interface ClaimInput {
   readonly workflowSource: string;
   readonly dispatch: boolean;
   readonly confirmation: string | null;
+  /**
+   * The founder's second phrase, typed for THIS admission in the paired
+   * Wonderland session. Only the Start route sets it. It counts only when the
+   * bridge proves a prior paid attempt; it never unlocks UNKNOWN.
+   */
+  readonly rerunConfirmation?: string | null;
 }
 
 /** Server clock. Tests inject this. Callers cannot pass it on a claim. */
@@ -204,6 +364,12 @@ export type ClaimResult =
     readonly record: OperatorView | null;
     readonly command: null;
     readonly requiredInput: string | null;
+    /** On a rerun refusal: the counted prior paid attempts, or UNKNOWN. */
+    readonly priorAttempted?: number | 'UNKNOWN';
+    /** On a rerun refusal: completed markers plus the recorded constant, or UNKNOWN. */
+    readonly priorCompleted?: number | 'UNKNOWN';
+    /** On `julius_paid_run_in_flight`: the other admission of the same mission whose paid run is not settled. */
+    readonly inFlightWljRunId?: string;
   };
 
 export type StatusResult =
@@ -289,6 +455,12 @@ export function workflowDispatchArgs(input: {
    */
   readonly confirmLive?: boolean;
   /**
+   * True only for a reservation whose rerun decision was "proven prior
+   * attempt, founder typed the phrase". Only then does the argv carry
+   * `acknowledge_rerun`.
+   */
+  readonly acknowledgeRerun?: boolean;
+  /**
    * Journal progress already loaded for this store. Checked before the
    * on-disk re-read so a note the caller has already seen cannot be skipped.
    */
@@ -310,6 +482,9 @@ export function workflowDispatchArgs(input: {
     '-f', `lane=${input.lane}`,
     '-f', `dispatch_key=${input.dispatchKey}`,
     ...(input.confirmLive === true ? ['-f', `confirm_live=${OPERATOR_DISPATCH_CONFIRMATION}`] : []),
+    ...(input.confirmLive === true && input.acknowledgeRerun === true
+      ? ['-f', `${WORKFLOW_RERUN_INPUT}=${RERUN_PAID_MISSION_CONFIRMATION}`]
+      : []),
     '-f', `${WORKFLOW_RUN_ID_INPUT}=${input.serverRunId}`,
   ];
 }
@@ -590,13 +765,14 @@ export function createOperatorClaimTool(
   file: AdmissionFile,
   spawn: GhSpawner,
   clock: OperatorClaimClock = { nowIso: () => new Date().toISOString() },
+  priorAttempts: PriorAttemptReader = UNWIRED_PRIOR_ATTEMPTS,
 ): OperatorClaimTool {
   // Claims from one tool run one after another, so a second claim in this
   // process sees the first one's reservation before it reads the spent tag.
   let claims: Promise<unknown> = Promise.resolve();
   return {
     claim(input) {
-      const next = (): Promise<ClaimResult> => claimPhased(file, input, spawn, clock);
+      const next = (): Promise<ClaimResult> => claimPhased(file, input, spawn, clock, priorAttempts);
       const run = claims.then(next, next);
       claims = run.then(() => undefined, () => undefined);
       return run;
@@ -617,9 +793,12 @@ export function openOperatorClaimTool(
   storePath: string,
   spawn: GhSpawner,
   clock?: OperatorClaimClock,
+  priorAttempts: PriorAttemptReader = UNWIRED_PRIOR_ATTEMPTS,
 ): OperatorClaimTool {
   const file = openAdmissionFile(storePath);
-  return clock === undefined ? createOperatorClaimTool(file, spawn) : createOperatorClaimTool(file, spawn, clock);
+  return clock === undefined
+    ? createOperatorClaimTool(file, spawn, undefined, priorAttempts)
+    : createOperatorClaimTool(file, spawn, clock, priorAttempts);
 }
 
 /**
@@ -638,11 +817,57 @@ async function claimPhased(
   input: ClaimInput,
   spawn: GhSpawner,
   clock: OperatorClaimClock,
+  priorAttempts: PriorAttemptReader,
 ): Promise<ClaimResult> {
   const checked = await file.exclusive((io) => Promise.resolve(checkClaim(io, file.path, input, clock)));
   if (checked.kind === 'done') return checked.result;
   const onMain = mainRefusal(spawn, input, checked.admission);
-  if (onMain !== null) return onMain;
+  if (!onMain.ok) return onMain.result;
+  // THE IN-FLIGHT GUARD: another admission of this mission whose paid run may
+  // not have uploaded its attempted marker yet would make the count read 0
+  // too early. Refused before anything is read, written or dispatched.
+  const peers = await file.exclusive((io) => Promise.resolve(inFlightPeers(io.read(), checked.admission)));
+  const unsettled = peers.length === 0 ? null : unsettledPeer(spawn, input.repo, peers);
+  if (unsettled !== null) return inFlightRefusal(checked.admission, unsettled);
+  const settledPeers: ReadonlySet<string> = new Set(peers.map(peerKey));
+  // THE RERUN GATE, before any claim is written or anything dispatched: the
+  // two counts the paid workflow gates on for this contract's namespace, the
+  // step-9 completed markers plus main's recorded constant, and the
+  // attempted markers. A refusal here writes nothing, so the admission stays
+  // held and claimable.
+  const readOne = async (which: 'read' | 'readCompleted'): Promise<PriorAttemptRead> => {
+    if (onMain.namespace === '') return { readable: false };
+    try {
+      // Whatever the reader answers (null, a malformed object) is checked here, inside the try:
+      // anything that is not a count is UNKNOWN, a 409, never a throw.
+      const answer: unknown = await priorAttempts[which]({ repo: input.repo, namespace: onMain.namespace });
+      const counted = priorCount(answer as PriorAttemptRead | null);
+      return counted === 'UNKNOWN' ? { readable: false } : { readable: true, counted };
+    } catch {
+      return { readable: false };
+    }
+  };
+  const prior = {
+    attempted: priorCount(await readOne('read')),
+    completed: priorCompletedCount(await readOne('readCompleted'), recordedPaidAttempts(onMain.workflow, onMain.namespace)),
+  };
+  const rerun = decideRerun(prior, input.rerunConfirmation);
+  if (!rerun.ok) return rerunRefusal(rerun, toView(checked.admission, null));
+  if (rerun.acknowledgedRerun && !workflowDispatchInputNames(onMain.workflow).includes(WORKFLOW_RERUN_INPUT)) {
+    return fail(
+      'workflow_dispatch_input_missing',
+      `The paid workflow does not declare workflow_dispatch input ${WORKFLOW_RERUN_INPUT}. Nothing was claimed or dispatched.`,
+      toView(checked.admission, null),
+    );
+  }
+  const consent: RerunConsent = {
+    wonderlandRunId: checked.admission.runId,
+    serverRunId: checked.admission.serverRunId,
+    prior,
+    acknowledgedRerun: rerun.acknowledgedRerun,
+    priorAttempted: rerun.priorAttempted,
+    priorCompleted: rerun.priorCompleted,
+  };
   const tagRead = spawn.run(spentTagApiArgs(input.repo, checked.admission.serverRunId));
   const tag = interpretSpentTagResponse(tagRead);
   if (tag === 'unreadable') {
@@ -660,7 +885,7 @@ async function claimPhased(
       toView(checked.admission, null),
     );
   }
-  const reserved = await file.exclusive((io) => Promise.resolve(reserveClaim(io, file.path, input, clock, tag, githubDate)));
+  const reserved = await file.exclusive((io) => Promise.resolve(reserveClaim(io, file.path, input, clock, tag, githubDate, consent, settledPeers)));
   if (reserved.kind === 'done') return reserved.result;
   const ran = spawn.run(reserved.liveArgs);
   return file.exclusive((io) => Promise.resolve(recordDispatchOutcome(io, input, reserved, ran)));
@@ -669,9 +894,16 @@ async function claimPhased(
 /**
  * The dispatch runs `--ref main`, so what is checked is `main`: the workflow
  * declares every input the argv passes, and the mission's contract there is
- * granted the lane. Null when both hold.
+ * granted the lane. When both hold: the workflow and the contract's marker
+ * namespace (null when the contract names none it can be read for, which the
+ * rerun gate then reads as UNKNOWN).
  */
-function mainRefusal(spawn: GhSpawner, input: ClaimInput, admission: StoredAdmission): ClaimResult | null {
+function mainRefusal(
+  spawn: GhSpawner,
+  input: ClaimInput,
+  admission: StoredAdmission,
+): { readonly ok: false; readonly result: ClaimResult } | { readonly ok: true; readonly workflow: string; readonly namespace: string } {
+  const refused = (result: ClaimResult) => ({ ok: false as const, result });
   const record = toView(admission, null);
   const read = (path: string): string | null => {
     const result = spawn.run(mainContentsArgs(input.repo, path));
@@ -679,29 +911,29 @@ function mainRefusal(spawn: GhSpawner, input: ClaimInput, admission: StoredAdmis
   };
   const workflow = read(`.github/workflows/${PAID_WORKFLOW_FILE}`);
   if (workflow === null) {
-    return fail('main_workflow_unreadable', 'The paid workflow could not be read at main. Nothing was claimed or dispatched.', record);
+    return refused(fail('main_workflow_unreadable', 'The paid workflow could not be read at main. Nothing was claimed or dispatched.', record));
   }
   const inputs = workflowInputsRefusal(workflow, admission);
-  if (inputs !== null) return inputs;
+  if (inputs !== null) return refused(inputs);
   const contract = read(missionContractPath(admission.missionId ?? ''));
   const checker = contract === null ? null : read(LANE_GRANT_SOURCE);
   const grants = checker === null ? null : parseLaneGrants(checker);
   const granted = contract === null || grants === null ? null : grantedLanes(contract, grants);
-  if (granted === null) {
-    return fail(
+  if (contract === null || granted === null) {
+    return refused(fail(
       'lane_grant_unreadable',
       'The mission contract or the lane grant could not be read at main. Nothing was claimed or dispatched.',
       record,
-    );
+    ));
   }
   if (!granted.includes(input.lane as OperatorLane)) {
-    return fail(
+    return refused(fail(
       'lane_not_granted',
       `The lane ${input.lane} is not granted to ${admission.missionId ?? 'this mission'} on main; it may claim ${granted.join(', ')}. Nothing was claimed or dispatched.`,
       record,
-    );
+    ));
   }
-  return null;
+  return { ok: true, workflow, namespace: contractMarkerNamespace(contract) ?? '' };
 }
 
 function workflowInputsRefusal(workflowSource: string, admission: StoredAdmission): ClaimResult | null {
@@ -728,6 +960,110 @@ type Checked =
   | { readonly kind: 'done'; readonly result: ClaimResult }
   | { readonly kind: 'plan'; readonly admission: StoredAdmission; readonly nowIso: string; readonly command: string };
 
+/**
+ * The rerun decision made before the reservation, bound to the one admission
+ * it was made for. `reserveClaim` asserts that binding under the lock
+ * ({@link rerunConsentBinds}); it does not re-read the counts.
+ */
+export interface RerunConsent {
+  readonly wonderlandRunId: string;
+  readonly serverRunId: string;
+  readonly prior: { readonly attempted: PriorCount; readonly completed: PriorCount };
+  readonly acknowledgedRerun: boolean;
+  readonly priorAttempted: number;
+  readonly priorCompleted: number;
+}
+
+/**
+ * THE BINDING ASSERTION under the reservation lock. It re-reads nothing: the
+ * counts are the ones read before the lock. It holds only when the consent was
+ * built for exactly this admission (both run ids), and when its recorded
+ * outcome is the one `decideRerun` gives for its own counts and THIS claim's
+ * phrase, so a consent built for another admission, another phrase, or with
+ * fields edited after the decision cannot reserve.
+ */
+export function rerunConsentBinds(
+  consent: RerunConsent,
+  admission: { readonly runId: string; readonly serverRunId: string },
+  rerunConfirmation: string | null | undefined,
+): boolean {
+  if (consent.wonderlandRunId !== admission.runId || consent.serverRunId !== admission.serverRunId) return false;
+  const decided = decideRerun(consent.prior, rerunConfirmation);
+  return decided.ok
+    && decided.acknowledgedRerun === consent.acknowledgedRerun
+    && decided.priorAttempted === consent.priorAttempted
+    && decided.priorCompleted === consent.priorCompleted;
+}
+
+/** What every event of one claim carries: present only for an acknowledged rerun. */
+type RerunFields = { readonly acknowledgedRerun?: true; readonly priorAttempted?: number; readonly priorCompleted?: number };
+
+function rerunFields(acknowledged: boolean, priorAttempted: number | undefined, priorCompleted: number | undefined): RerunFields {
+  return acknowledged && typeof priorAttempted === 'number' && typeof priorCompleted === 'number'
+    ? { acknowledgedRerun: true, priorAttempted, priorCompleted }
+    : {};
+}
+
+/** Latest claim states after which that admission's paid run may still be running, or about to tag or mark. */
+const IN_FLIGHT_CLAIM_STATES: ReadonlySet<string> = new Set(['dispatching', 'dispatched']);
+
+const peerKey = (peer: StoredAdmission): string => `${peer.runId}\0${peer.serverRunId}`;
+
+/**
+ * The OTHER admissions of the same mission whose latest claim is
+ * `dispatching` or `dispatched` and whose journal holds no terminal progress
+ * note (`isWonderlandStatusTerminal`). `dispatch_failed` and `already_spent`
+ * are terminal claim states and never in flight. Journal only.
+ */
+export function inFlightPeers(document: OperatorDocument, admission: StoredAdmission): StoredAdmission[] {
+  return document.admissions.filter((row) => {
+    if (row.runId === admission.runId && row.serverRunId === admission.serverRunId) return false;
+    if (row.missionId === null || row.missionId !== admission.missionId) return false;
+    const latest = latestClaim(document, row.runId, row.serverRunId);
+    if (latest === null || !IN_FLIGHT_CLAIM_STATES.has(latest.state)) return false;
+    const note = [...(document.progress ?? [])].reverse().find((entry) => entry.serverRunId === row.serverRunId) ?? null;
+    return !(note !== null && isWonderlandStatusState(note.state) && isWonderlandStatusTerminal(note.state));
+  });
+}
+
+/**
+ * The first peer whose paid run GitHub does not show as finished, or null when
+ * every peer is settled. Settled means: the paid runs on main named
+ * `key=<the peer's dispatch key>` (`gh run list`, read-only, the reconcile
+ * read) are at least one, and every one of them is `completed`, so whatever
+ * attempted or completed marker it would upload is already listed. A list
+ * that cannot be read, or shows no run for the key, is not settled.
+ */
+export function unsettledPeer(spawn: GhSpawner, repo: string, peers: readonly StoredAdmission[]): StoredAdmission | null {
+  const listing = spawn.run(paidRunListArgs(repo));
+  for (const peer of peers) {
+    const runs = runsForDispatchKey(listing, peer.keyHash);
+    if (runs === null || runs.length === 0 || runs.some((run) => run.status !== 'completed')) return peer;
+  }
+  return null;
+}
+
+function inFlightRefusal(admission: StoredAdmission, peer: StoredAdmission): ClaimResult {
+  return {
+    ...fail(
+      'julius_paid_run_in_flight',
+      `Another paid run of ${admission.missionId ?? 'this mission'} (${peer.runId}) has not finished on GitHub, so its prior-attempt markers may not be listed yet. Nothing was claimed or dispatched; this admission is still held. Start again once that run has finished.`,
+      toView(admission, null),
+    ),
+    inFlightWljRunId: peer.runId,
+  } as ClaimResult;
+}
+
+function rerunRefusal(decision: Extract<RerunDecision, { ok: false }>, record: OperatorView): ClaimResult {
+  const message = decision.kind === 'julius_prior_attempts_unknown'
+    ? 'The paid workflow\'s prior-attempt markers could not be read, so whether this mission was already paid for is UNKNOWN. The rerun phrase cannot unlock an unknown state. Nothing was claimed or dispatched; the admission is still held.'
+    : `This mission already has ${String(decision.priorAttempted)} counted paid attempt(s) and ${String(decision.priorCompleted)} completed or recorded prior paid run(s). Starting it again needs the founder's second confirmation, RERUN PAID MISSION. Nothing was claimed or dispatched; the admission is still held.`;
+  return {
+    ok: false, kind: decision.kind, message, record, command: null, requiredInput: null,
+    priorAttempted: decision.priorAttempted, priorCompleted: decision.priorCompleted,
+  };
+}
+
 interface Reservation {
   readonly kind: 'reserved';
   readonly admission: StoredAdmission;
@@ -735,6 +1071,7 @@ interface Reservation {
   readonly githubDate: string | null;
   readonly liveArgs: readonly string[];
   readonly command: string;
+  readonly rerun: RerunFields;
 }
 
 type Reserved = { readonly kind: 'done'; readonly result: ClaimResult } | Reservation;
@@ -843,11 +1180,25 @@ function reserveClaim(
   clock: OperatorClaimClock,
   tag: 'present' | 'absent',
   githubDate: string | null,
+  consent: RerunConsent,
+  settledPeers: ReadonlySet<string>,
 ): Reserved {
   // The record may have moved while the spent tag was read: check again.
   const checked = checkClaim(io, storePath, input, clock);
   if (checked.kind === 'done') return checked;
   const { admission, nowIso, command } = checked;
+  // An admission of this mission that started its paid run since the
+  // in-flight check (another process) was not proven settled: refuse.
+  const lateStarter = inFlightPeers(io.read(), admission).find((peer) => !settledPeers.has(peerKey(peer)));
+  if (lateStarter !== undefined) return { kind: 'done', result: inFlightRefusal(admission, lateStarter) };
+  // A BINDING ASSERTION, not a second decision: the counts are not re-read here.
+  if (!rerunConsentBinds(consent, admission, input.rerunConfirmation)) {
+    return {
+      kind: 'done',
+      result: fail('julius_rerun_consent_not_bound', 'The rerun consent is not this admission\'s. Nothing was claimed or dispatched.', toView(admission, null)),
+    };
+  }
+  const rerun = rerunFields(consent.acknowledgedRerun, consent.priorAttempted, consent.priorCompleted);
   const document = io.read();
   if (sealedExpiry(storePath, document, admission.serverRunId) !== null) {
     return { kind: 'done', result: expiredRefusal(admission) };
@@ -860,6 +1211,7 @@ function reserveClaim(
       dispatchError: null,
       halt: 'RUN_ID_ALREADY_SPENT',
       githubDate,
+      rerun,
     });
     io.write(appendClaim(document, event));
     if (!claimWasRecorded(storePath, event)) return { kind: 'done', result: expiredRefusal(admission) };
@@ -879,6 +1231,7 @@ function reserveClaim(
     dispatchError: null,
     halt: null,
     githubDate,
+    rerun,
   });
   io.write(appendClaim(document, reservation));
   if (!claimWasRecorded(storePath, reservation)) return { kind: 'done', result: expiredRefusal(admission) };
@@ -889,11 +1242,12 @@ function reserveClaim(
     dispatchKey: admission.keyHash,
     serverRunId: admission.serverRunId,
     confirmLive: true,
+    acknowledgeRerun: reservation.acknowledgedRerun === true,
     progress: io.read().progress,
     storePath,
   });
   if (liveArgs === null) return { kind: 'done', result: expiredRefusal(admission) };
-  return { kind: 'reserved', admission, at: nowIso, githubDate, liveArgs, command };
+  return { kind: 'reserved', admission, at: nowIso, githubDate, liveArgs, command, rerun };
 }
 
 /**
@@ -907,7 +1261,7 @@ function recordDispatchOutcome(
   reserved: Reservation,
   ran: GhResult,
 ): ClaimResult {
-  const { admission, at, githubDate, command } = reserved;
+  const { admission, at, githubDate, command, rerun } = reserved;
   const document = io.read();
   const halt = interpretWorkflowHalt(ran);
   const workflowRunId = learnWorkflowRunId(ran, input.repo);
@@ -920,6 +1274,7 @@ function recordDispatchOutcome(
       halt,
       workflowRunId,
       githubDate,
+      rerun,
     });
     io.write(appendClaim(document, spent));
     return fail(
@@ -938,6 +1293,7 @@ function recordDispatchOutcome(
       halt: unverified ? 'SPENT_TAG_UNVERIFIED' : null,
       workflowRunId,
       githubDate,
+      rerun,
     });
     io.write(appendClaim(document, failed));
     return fail(
@@ -956,6 +1312,7 @@ function recordDispatchOutcome(
     halt: null,
     workflowRunId,
     githubDate,
+    rerun,
   });
   io.write(appendClaim(document, dispatched));
   return {
@@ -967,6 +1324,25 @@ function recordDispatchOutcome(
     dispatchedWorkflow: true,
     requiredInput: null,
   };
+}
+
+/**
+ * How long a `dispatching` reservation with no run on GitHub is given before
+ * `reconcile` may call the dispatch absent: 15 minutes, on GitHub's clock.
+ */
+export const RECONCILE_ABSENT_GRACE_MS = 15 * 60 * 1000;
+
+/**
+ * True only when both instants are GitHub's own (`githubDate` at the
+ * reservation, and the `Date:` header of a read made now) and at least the
+ * grace period lies between them. Either missing or unreadable is false.
+ */
+export function reservationOutlivedGrace(reservedGithubDate: string | null, nowGithubDate: string | null): boolean {
+  if (reservedGithubDate === null || nowGithubDate === null) return false;
+  const reserved = Date.parse(reservedGithubDate);
+  const now = Date.parse(nowGithubDate);
+  if (!Number.isFinite(reserved) || !Number.isFinite(now)) return false;
+  return now - reserved >= RECONCILE_ABSENT_GRACE_MS;
 }
 
 type ReconcileChecked =
@@ -987,9 +1363,18 @@ type ReconcileChecked =
  * the run id and raises its attempt; any attempt above 1 leaves the record
  * `dispatching`, since #459 refuses a paid attempt above 1 and such a run is
  * not this dispatch's.
- * Anything else (no run, two runs, a run still going, a tag naming another
- * run) leaves `dispatching` and says what GitHub showed. The outcome keeps the
- * reservation's timestamp and GitHub clock. Nothing is deleted or rewritten.
+ * - `dispatch_failed` (`workflow_run_absent`) when the `gh workflow run` child
+ *   never reached GitHub, which needs ALL of: (a) the reservation is at least
+ *   {@link RECONCILE_ABSENT_GRACE_MS} old on GITHUB'S clock (its `githubDate`
+ *   against the `Date:` header of the spent-tag read made now, never this
+ *   machine's clock); (b) the readable run list shows NO run for the dispatch
+ *   key; (c) the spent tag read after it is ABSENT. Without this, a bridge that
+ *   stopped between the reservation and the dispatch would hold that mission's
+ *   in-flight guard forever.
+ * Anything else (no run inside the grace period, two runs, a run still going,
+ * a tag naming another run, any read failing) leaves `dispatching` and says
+ * what GitHub showed. The outcome keeps the reservation's timestamp and GitHub
+ * clock. Nothing is deleted or rewritten.
  */
 async function reconcilePhased(file: AdmissionFile, input: ReconcileInput, spawn: GhSpawner): Promise<ReconcileResult> {
   const checked = await file.exclusive((io) => Promise.resolve(checkReconcile(io, input)));
@@ -1032,6 +1417,18 @@ async function reconcilePhased(file: AdmissionFile, input: ReconcileInput, spawn
       halt: null,
       workflowRunId: firstAttempt.workflowRunId,
       githubDate: reservation.githubDate,
+      rerun: rerunFields(reservation.acknowledgedRerun === true, reservation.priorAttempted, reservation.priorCompleted),
+    });
+  } else if (tag === 'absent' && matchedRuns.length === 0 && reservationOutlivedGrace(reservation.githubDate, githubDateFromResponse(tagRead))) {
+    outcome = baseEvent(admission, reservation.at, {
+      state: 'dispatch_failed',
+      spentTagState: 'absent',
+      dispatchAttempted: true,
+      dispatchError: 'workflow_run_absent',
+      halt: null,
+      workflowRunId: null,
+      githubDate: reservation.githubDate,
+      rerun: rerunFields(reservation.acknowledgedRerun === true, reservation.priorAttempted, reservation.priorCompleted),
     });
   } else if (tag === 'absent' && firstAttempt !== null && firstAttempt.status === 'completed' && firstAttempt.conclusion !== 'success') {
     outcome = baseEvent(admission, reservation.at, {
@@ -1042,6 +1439,7 @@ async function reconcilePhased(file: AdmissionFile, input: ReconcileInput, spawn
       halt: null,
       workflowRunId: firstAttempt.workflowRunId,
       githubDate: reservation.githubDate,
+      rerun: rerunFields(reservation.acknowledgedRerun === true, reservation.priorAttempted, reservation.priorCompleted),
     });
   }
   if (outcome === null) {
@@ -1098,7 +1496,7 @@ function checkReconcile(io: AdmissionFileIo, input: ReconcileInput): ReconcileCh
 }
 
 function claimKey(event: ClaimEvent): string {
-  return JSON.stringify([event.state, event.at, event.dispatchAttempted, event.githubDate, event.workflowRunId]);
+  return JSON.stringify([event.state, event.at, event.dispatchAttempted, event.githubDate, event.workflowRunId, event.acknowledgedRerun === true, event.priorAttempted ?? null, event.priorCompleted ?? null]);
 }
 
 function statusInside(
@@ -1212,6 +1610,7 @@ function guardedDispatchArgs(input: {
   readonly dispatchKey: string;
   readonly serverRunId: string;
   readonly confirmLive: boolean;
+  readonly acknowledgeRerun?: boolean;
   readonly progress: readonly StoredProgress[];
   readonly storePath: string;
 }): readonly string[] | null {
@@ -1229,7 +1628,10 @@ function claimWasRecorded(storePath: string, reserved: ClaimEvent): boolean {
     && event.serverRunId === reserved.serverRunId
     && event.state === reserved.state
     && event.at === reserved.at
-    && event.dispatchAttempted === reserved.dispatchAttempted);
+    && event.dispatchAttempted === reserved.dispatchAttempted
+    && (event.acknowledgedRerun === true) === (reserved.acknowledgedRerun === true)
+    && event.priorAttempted === reserved.priorAttempted
+    && event.priorCompleted === reserved.priorCompleted);
 }
 
 function replay(record: OperatorView): ClaimResult {
@@ -1315,6 +1717,17 @@ function appendClaim(document: OperatorDocument, event: ClaimEvent): OperatorDoc
  * or admitted -> already_spent (tag read present). `dispatched` always carries
  * dispatchAttempted: it is written only after the spawned child returned.
  */
+/**
+ * The rerun fields travel together: none at all, or `acknowledgedRerun: true`
+ * with both counts whole and at least one above 0 (consent is only ever
+ * recorded over a proven prior run).
+ */
+function validRerunFields(event: ClaimEvent): boolean {
+  const whole = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+  if (event.acknowledgedRerun !== true) return event.priorAttempted === undefined && event.priorCompleted === undefined;
+  return whole(event.priorAttempted) && whole(event.priorCompleted) && event.priorAttempted + event.priorCompleted >= 1;
+}
+
 export function legalTransition(prior: ClaimEvent | null, event: ClaimEvent): boolean {
   if (event.state === 'already_spent') {
     if (event.halt !== 'RUN_ID_ALREADY_SPENT' || event.dispatchError !== null || event.spentTagState !== 'present') {
@@ -1325,6 +1738,7 @@ export function legalTransition(prior: ClaimEvent | null, event: ClaimEvent): bo
   }
   if ((event.state === 'dispatched' || event.state === 'dispatching') && (event.halt !== null || event.dispatchError !== null)) return false;
   if (event.halt === 'SPENT_TAG_UNVERIFIED' && event.state !== 'dispatch_failed') return false;
+  if (!validRerunFields(event)) return false;
   if (prior === null) {
     if (event.state === 'dispatching') return !event.dispatchAttempted && event.spentTagState === 'absent';
     if (event.state === 'already_spent') return !event.dispatchAttempted;
@@ -1332,13 +1746,18 @@ export function legalTransition(prior: ClaimEvent | null, event: ClaimEvent): bo
   }
   if (prior.state !== 'dispatching') return false;
   if (!event.dispatchAttempted) return false;
+  // The rerun consent is the reservation's: an outcome can neither add it, drop it, nor change its count.
+  if ((event.acknowledgedRerun === true) !== (prior.acknowledgedRerun === true)
+    || event.priorAttempted !== prior.priorAttempted || event.priorCompleted !== prior.priorCompleted) return false;
   // The outcome keeps the reservation's GitHub clock: it is the dispatch's, not the outcome write's.
   if (event.githubDate !== prior.githubDate) return false;
   if (event.state === 'already_spent') return true;
   if (event.state === 'dispatch_failed') {
     if (event.halt === 'SPENT_TAG_UNVERIFIED') return event.dispatchError === 'SPENT_TAG_UNVERIFIED';
     return event.halt === null
-      && (event.dispatchError === 'gh_workflow_run_failed' || event.dispatchError === 'workflow_run_unspent');
+      && (event.dispatchError === 'gh_workflow_run_failed' || event.dispatchError === 'workflow_run_unspent'
+        // A dispatch that never reached GitHub names no workflow run.
+        || (event.dispatchError === 'workflow_run_absent' && event.workflowRunId === null));
   }
   return event.state === 'dispatched';
 }
@@ -1351,6 +1770,7 @@ function baseEvent(admission: StoredAdmission, at: string, fields: {
   readonly halt: ClaimEvent['halt'];
   readonly workflowRunId?: string | null;
   readonly githubDate: string | null;
+  readonly rerun?: RerunFields;
 }): ClaimEvent {
   return {
     wonderlandRunId: admission.runId,
@@ -1364,6 +1784,7 @@ function baseEvent(admission: StoredAdmission, at: string, fields: {
     halt: fields.halt,
     workflowRunId: fields.workflowRunId ?? null,
     githubDate: fields.githubDate,
+    ...rerunFields(fields.rerun?.acknowledgedRerun === true, fields.rerun?.priorAttempted, fields.rerun?.priorCompleted),
   };
 }
 

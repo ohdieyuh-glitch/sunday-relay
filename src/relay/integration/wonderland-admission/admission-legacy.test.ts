@@ -159,7 +159,7 @@ describe('legacy schema v2 rows', () => {
     };
     try {
       const opened = openAdmissionFile(file);
-      const claims = createOperatorClaimTool(opened, spawn, { nowIso: () => WHEN });
+      const claims = createOperatorClaimTool(opened, spawn, { nowIso: () => WHEN }, { read: () => Promise.resolve({ readable: true, counted: 0 }), readCompleted: () => Promise.resolve({ readable: true, counted: 0 }) });
       const claimed = await claims.claim({
         wonderlandRunId: RUN,
         serverRunId: LEGACY,

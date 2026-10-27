@@ -155,6 +155,9 @@ describe('wonderland status', () => {
           workflowRunId: null,
           state: 'awaiting_operator',
           updatedAt: WHEN,
+          priorAttempted: 'UNKNOWN',
+          priorCompleted: 'UNKNOWN',
+          rerunConsentRequired: false,
         },
       });
       expect(readAdmissionDocument(storePath).claims).toEqual([]);
@@ -189,6 +192,9 @@ describe('wonderland status', () => {
           workflowRunId: null,
         state: 'awaiting_operator',
         updatedAt: WHEN,
+        priorAttempted: 'UNKNOWN',
+        priorCompleted: 'UNKNOWN',
+        rerunConsentRequired: false,
       });
       expect(readFileSync(storePath, 'utf8')).toBe(before);
       expect(readFileSync(journalPath, 'utf8')).toBe(journalBefore);
@@ -208,6 +214,9 @@ describe('wonderland status', () => {
         state: 'failed',
         cause: 'AWAITING_OPERATOR_EXPIRED',
         updatedAt: new Date(expiredAtMs).toISOString(),
+        priorAttempted: 'UNKNOWN',
+        priorCompleted: 'UNKNOWN',
+        rerunConsentRequired: false,
       };
       expect(closed?.body).toEqual(expiredBody);
       expect(readFileSync(storePath, 'utf8')).toBe(before);
@@ -419,7 +428,7 @@ describe('wonderland status', () => {
     const workflowSource = [
       'on:', '  workflow_dispatch:', '    inputs:',
       ...['confirm_live', 'mission', 'lane', 'dispatch_key', 'run_id'].map((name) => `      ${name}:\n        default: ''`),
-      '',
+      'jobs:\n  paid:\n    steps:\n      - run: |\n          case "$MARKER_NAMESPACE" in\n            julius-first-live) RECORDED_PAID_ATTEMPTS=1 ;;  # run 33697109210\n            *)                 RECORDED_PAID_ATTEMPTS=0 ;;\n          esac\n',
     ].join('\n');
     const input = {
       wonderlandRunId: RUN, serverRunId: SERVER, repo: 'founder/sunday-relay', lane: 'lab', workflowSource,
@@ -444,7 +453,7 @@ describe('wonderland status', () => {
           if (args[0] === 'api') return { code: 1, stdout: 'HTTP/2.0 404 Not Found\nDate: Fri, 23 Oct 2026 17:18:05 GMT\n', stderr: '' };
           throw new Error('operator_process_killed');
         },
-      }, { nowIso: () => WHEN });
+      }, { nowIso: () => WHEN }, { read: () => Promise.resolve({ readable: true, counted: 0 }), readCompleted: () => Promise.resolve({ readable: true, counted: 0 }) });
       const dry = await tool.claim({ ...input, dispatch: false, confirmation: null });
       expect(dry.ok && dry.claimed).toBe(false);
       const afterDry = await handleWonderlandStatusRoute(statusRequest(SERVER), ports);
@@ -562,6 +571,9 @@ describe('wonderland status', () => {
           workflowRunId: null,
           state: 'unknown',
           updatedAt: '2026-10-23T18:00:00.000Z',
+          priorAttempted: 'UNKNOWN',
+          priorCompleted: 'UNKNOWN',
+          rerunConsentRequired: false,
         },
       });
       expect(running?.body).not.toHaveProperty('cause');
@@ -593,12 +605,13 @@ describe('wonderland status', () => {
       already_spent: 'already_spent',
     };
     // Every writer token is listed. Null: shown as its state with no cause (reconcile's
-    // `workflow_run_unspent` is not in the client's closed cause list).
+    // `workflow_run_unspent` and `workflow_run_absent` are not in the client's closed cause list).
     const writerCauses: Record<WorkflowHalt | DispatchError, WonderlandStatusCause | null> = {
       RUN_ID_ALREADY_SPENT: 'RUN_ID_ALREADY_SPENT',
       SPENT_TAG_UNVERIFIED: 'SPENT_TAG_UNVERIFIED',
       gh_workflow_run_failed: 'gh_workflow_run_failed',
       workflow_run_unspent: null,
+      workflow_run_absent: null,
     };
     const clockCauses: readonly WonderlandStatusCause[] = ['AWAITING_OPERATOR_EXPIRED'];
     for (const [stored, state] of Object.entries(admissionStatus) as Array<[AdmissionState, WonderlandStatusState]>) {
@@ -636,6 +649,9 @@ describe('wonderland status', () => {
           workflowRunId: null,
             state,
             updatedAt: '2026-10-23T18:00:00.000Z',
+            priorAttempted: 'UNKNOWN',
+            priorCompleted: 'UNKNOWN',
+            rerunConsentRequired: false,
           },
         });
         expect(status?.body, state).not.toHaveProperty('cause');
@@ -656,6 +672,9 @@ describe('wonderland status', () => {
             state: 'dispatch_failed',
             cause,
             updatedAt: '2026-10-23T18:00:00.000Z',
+            priorAttempted: 'UNKNOWN',
+            priorCompleted: 'UNKNOWN',
+            rerunConsentRequired: false,
           },
         });
         expect(readFileSync(storePath, 'utf8')).toBe(before);
@@ -670,6 +689,9 @@ describe('wonderland status', () => {
         workflowRunId: null,
         state: 'unknown',
         updatedAt: '2026-10-23T18:00:00.000Z',
+        priorAttempted: 'UNKNOWN',
+        priorCompleted: 'UNKNOWN',
+        rerunConsentRequired: false,
       });
       expect(badCause?.body).not.toHaveProperty('cause');
 
