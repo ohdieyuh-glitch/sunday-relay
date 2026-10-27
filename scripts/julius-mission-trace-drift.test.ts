@@ -8,12 +8,17 @@ import { describe, expect, it } from 'vitest';
  * 7e71a122fe03a2538904ab4b8651e034dcf2c1f3. These copies stay byte-identical.
  * A drift fails this test. The `.mjs` blob is the one the workflow and the
  * runtime call; it imports only `node:crypto`.
+ *
+ * The doc is the one exception: it was corrected after 7e71a122 and its blob
+ * re-pinned. `/progress` serves `spanId` and `traceparent` as null on every
+ * phase; the BRIDGE copy said each phase carried a span id. The pin is the
+ * `git hash-object` of the corrected file, which `gitBlobSha1` reproduces.
  */
 const OWNED_BY_BRIDGE_AT_7E71A122: Readonly<Record<string, string>> = {
   'scripts/julius-mission-trace.mjs': '8b9e799f39f0d7a70db4e3a22e486b565bb9e523',
   'scripts/julius-mission-trace.d.mts': 'be12ea93c2ac35cbf80870ec3b7e638502cf19bd',
   'scripts/julius-mission-trace.test.ts': 'c733b1358d447bdf6fa6b218ba4291a4fdbc1e28',
-  'docs/JULIUS_MISSION_TRACE.md': '53c78797a9fbec93c6518615d6ee9b53816a1e74',
+  'docs/JULIUS_MISSION_TRACE.md': 'd81ba5bd3961e0d14b8ca01184343d214532d792',
 };
 
 function gitBlobSha1(bytes: Buffer): string {

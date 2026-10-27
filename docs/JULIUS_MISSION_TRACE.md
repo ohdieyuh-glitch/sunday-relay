@@ -36,7 +36,7 @@ julius-span.v1:<wljRunId>:<role>:<stage>:<attempt>
 
 `juliusMissionTraceparent(traceId, spanId)` returns `00-<traceId>-<spanId>-01` when both ids are lowercase hex of the right length and neither is all zeros. The flag `01` means sampled. Anything else returns null.
 
-The mission record carries `traceId` and is not itself a span, so its `traceparent` is null. Each phase that has a role, a stage, and an attempt carries `spanId` and that phase's `traceparent`.
+The mission record carries `traceId` and is not itself a span, so its `spanId` and `traceparent` are null. The module can derive a `spanId` and a `traceparent` for any phase that has a role, a stage, and an attempt. The bridge does not serve them yet: see below.
 
 ## Known answers
 
@@ -59,7 +59,7 @@ Further span ids for `wlj_0b7a1c2e-4f3d-4a6b-8c2d-3e4f5a6b7c8d`:
 
 ## Where it is served
 
-`GET /relay-api/wonderland/julius/missions/{wljRunId}/result` and `GET .../progress` include `traceId`. `/progress` includes `spanId` on each phase that names a role, a stage, and an attempt.
+`GET /relay-api/wonderland/julius/missions/{wljRunId}/result` and `GET .../progress` include `traceId`. On `/progress`, every phase carries `spanId: null` and `traceparent: null`, even a phase that names a role, a stage, and an attempt. The evidence reader assigns both as null and the bridge does not derive them. A `spanId` or `traceparent` supplied in evidence is not copied. Serving per-phase span ids is a follow-up. Today the paid-run archive is the only place that records them, derived from `worker-diagnostics.tsv`.
 
 The companion `GET` on `bridge/wonderland-julius-companion-route-20261024` is not in this branch. Adding `traceId` there is a follow-up on that branch. This change does not edit it.
 
