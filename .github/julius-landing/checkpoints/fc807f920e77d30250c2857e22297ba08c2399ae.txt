@@ -1,13 +1,13 @@
 JULIUS-CHECKPOINT-V1
 repo: ohdieyuh-glitch/sunday-relay
 prior: 2528ac5c0f0d4303051123a7592ef18e3552ba74
-checkpoint: 99914bd55c47eb7d18f7a56876145a948b7f67c5
+checkpoint: fc807f920e77d30250c2857e22297ba08c2399ae
 key-spki-sha256: 12c9b1853c4c33322241273f386b0fd08fdefd08134c911dd4024c5bb5cdff13
-nonce: 2b51e79db77067d570f3832353c834ca
-issued: 2026-10-27T03:00:00Z
-expires: 2027-01-24T03:00:00Z
+nonce: 8f8e098ba1c00cbaed3791548d791bf3
+issued: 2026-10-27T16:30:07Z
+expires: 2027-01-23T16:40:08Z
 by: INDEPENDENT_REVIEW
-count: 63
+count: 66
 1.sha: 3f20fc1ace7b157d4ff2673959c98998564ef43b
 1.tree: 75a61ea2721429a4c7f0849ecc6fffec9e8f6e7f
 1.basis: PR #392. The founder's exact-head APPROVED review at 5936fde4 (same tree), and Kaisin INDEPENDENT_REVIEW records ce9963 and 08a19b. These are unsigned, self-registered reviewer records, NOT Skywalker's review. The basis is carried verbatim from docs/provenance/checkpoint-2528ac5c-f539cab2.unsigned.txt and was not re-reviewed by the independent review session.
@@ -197,6 +197,15 @@ count: 63
 63.sha: 99914bd55c47eb7d18f7a56876145a948b7f67c5
 63.tree: b1fa9394075f710ac6c7d5624b9c03b7df313f3a
 63.basis: R6 combined target: a two-parent commit whose first parent is main cc296692 and whose second parent is the combined head 0b4d636b, with the identical tree. Its diff from main is exactly four components, each byte-identical to what the independent review session reviewed: #486, the Anthropic Agentic Architect (cc296692..b2764b76, diff sha256 6c4cc8f6…); X′, artifact-independent paid path (b2764b76..f43cb585, 0958d097…); D-R1, founder rerun consent (fd7d438d..7035aa34, 32584220…); and a test-only integration delta (c11ee6ed…). The file sets are disjoint. Exact-head independent reviews: X′ PASS at a2a80f73 plus the f43cb585 test pin; D-R1 PASS at 7035aa34; the combined proofs verified at 0b4d636b. The required checks are green on this commit on the julius-ci self-hosted runner.
+64.sha: f9cd816f0087a772ee8c3243995f41ea0c568dd6
+64.tree: b09ba0a8a1a6f9e57c3316f7beb6535ab3e2c960
+64.basis: Installer commit of the dual-signed checkpoint attestation for 99914bd5 (the R6 combined bootstrap the founder ran; App-authored, single parent 99914bd5, checkpoint directory only).
+65.sha: 598741524f87783baef99a2d6a40cf0dba8baa8c
+65.tree: c0e05bb263147c180a52aae2cee017808db3a153
+65.basis: PR #474 (mission-trace doc drift and the Windows bash stand-in harness: docs and tests only), landed by the governed lander: an exact-head INDEPENDENT_REVIEW clearance at 376f1008 (tree c0e05bb2, base f9cd816f); audit ref julius-governed-audit/pr/474.
+66.sha: fc807f920e77d30250c2857e22297ba08c2399ae
+66.tree: a76fc2bc1eb84e974e90da6a7caba9c3b23bc1fe
+66.basis: R7 queue bootstrap target (PR #490): the governed queue gains one line, 489, and its pinned test entry. Two files, two added lines, no other path. Reviewed by the independent review session at this exact commit on main 598741524f.
 tcb-count: 20
 tcb.1.path: .github/julius-landing/reviewer-ed25519.pub
 tcb.1.sha256: d1be6e15b19f0be375d300c9ae3530c32c59c22e072f3d26a6f5026e395b5815
@@ -209,7 +218,7 @@ tcb.4.sha256: 1e0ffa3c4e04c9e79f65b272b4fd17e1f7c9971213b2b2620b1b39b016c45a39
 tcb.5.path: .github/julius-landing/governed-land.mjs
 tcb.5.sha256: 1e605b744581ee6690e598746cbfd5d5cb54880a675b8455f668ee6b2b067dc9
 tcb.6.path: .github/julius-landing/governed-queue.txt
-tcb.6.sha256: d74f5e449f9958d97f26fe062e29ee7f86ee2dd12b7c68c17ea5c3561c2b4b6b
+tcb.6.sha256: c3a79fd0934bee1ac0241658f0a00b2cb30e1e7fd91d008d57384e9ac7e875b1
 tcb.7.path: .github/julius-landing/main-ruleset.json
 tcb.7.sha256: 186d7ad0c64266f221e58abc69454fc240ef8328af171054e4c4facb50a45df8
 tcb.8.path: .github/julius-landing/reviewer-tools.mjs
