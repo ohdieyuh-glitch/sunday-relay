@@ -1,13 +1,13 @@
 JULIUS-CHECKPOINT-V1
 repo: ohdieyuh-glitch/sunday-relay
 prior: 2528ac5c0f0d4303051123a7592ef18e3552ba74
-checkpoint: 41bb01d903736915cc064f5b2f9f521756939716
+checkpoint: 99914bd55c47eb7d18f7a56876145a948b7f67c5
 key-spki-sha256: 12c9b1853c4c33322241273f386b0fd08fdefd08134c911dd4024c5bb5cdff13
-nonce: bad6663c0774bd31d67ee4e4bb174dc1
-issued: 2026-10-26T11:05:00Z
-expires: 2027-01-23T11:05:00Z
+nonce: 2b51e79db77067d570f3832353c834ca
+issued: 2026-10-27T03:00:00Z
+expires: 2027-01-24T03:00:00Z
 by: INDEPENDENT_REVIEW
-count: 61
+count: 63
 1.sha: 3f20fc1ace7b157d4ff2673959c98998564ef43b
 1.tree: 75a61ea2721429a4c7f0849ecc6fffec9e8f6e7f
 1.basis: PR #392. The founder's exact-head APPROVED review at 5936fde4 (same tree), and Kaisin INDEPENDENT_REVIEW records ce9963 and 08a19b. These are unsigned, self-registered reviewer records, NOT Skywalker's review. The basis is carried verbatim from docs/provenance/checkpoint-2528ac5c-f539cab2.unsigned.txt and was not re-reviewed by the independent review session.
@@ -191,6 +191,12 @@ count: 61
 61.sha: 41bb01d903736915cc064f5b2f9f521756939716
 61.tree: 362c54b6354988b979585d37b3e6f83bda8a346b
 61.basis: PR #487: the governed queue gains two lines, 486 and "485 depends: 486" (and their pinned test entries). Reviewed by the independent review session at this exact commit on main f5fe5e61: two files, four added lines, no other path.
+62.sha: cc296692a0af65004d914ea136695acbffbfaef4
+62.tree: c0ba29e1ca2d54faf8d94f54f9edac054a07bc82
+62.basis: Installer commit of the dual-signed checkpoint attestation for 41bb01d9 (the R5 queue bootstrap the founder ran; App-authored, single parent 41bb01d9, checkpoint directory only).
+63.sha: 99914bd55c47eb7d18f7a56876145a948b7f67c5
+63.tree: b1fa9394075f710ac6c7d5624b9c03b7df313f3a
+63.basis: R6 combined target: a two-parent commit whose first parent is main cc296692 and whose second parent is the combined head 0b4d636b, with the identical tree. Its diff from main is exactly four components, each byte-identical to what the independent review session reviewed: #486, the Anthropic Agentic Architect (cc296692..b2764b76, diff sha256 6c4cc8f6…); X′, artifact-independent paid path (b2764b76..f43cb585, 0958d097…); D-R1, founder rerun consent (fd7d438d..7035aa34, 32584220…); and a test-only integration delta (c11ee6ed…). The file sets are disjoint. Exact-head independent reviews: X′ PASS at a2a80f73 plus the f43cb585 test pin; D-R1 PASS at 7035aa34; the combined proofs verified at 0b4d636b. The required checks are green on this commit on the julius-ci self-hosted runner.
 tcb-count: 20
 tcb.1.path: .github/julius-landing/reviewer-ed25519.pub
 tcb.1.sha256: d1be6e15b19f0be375d300c9ae3530c32c59c22e072f3d26a6f5026e395b5815
@@ -213,11 +219,11 @@ tcb.9.sha256: 7dbc1023a0c4418089ce09825ea56aaf190b734f610481e28724ed4e85de3b9b
 tcb.10.path: .github/julius-landing/required-checks.txt
 tcb.10.sha256: b9acf72beac5e81d0ce38fcf9473c1d8769d5814351646325802ed0f6270230d
 tcb.11.path: .github/workflows/julius-accept-main.yml
-tcb.11.sha256: 7fae4aff35d7cbe7be5b6f9316b9c6d074d3e357d0de6b1f980260784110832c
+tcb.11.sha256: 9b51c546b40e5f3fe505c51d5a4be3ecbeeb6602b506112a569e43f0a87f3103
 tcb.12.path: .github/workflows/julius-land.yml
-tcb.12.sha256: add270000a106efdf38b28b6dd9718fda1b42d62a0b820c11ee1e2faa8e8033e
+tcb.12.sha256: 18d58c69c5b9300c1ec67eb8fd9ecd3eba21cb2606d4bb06a8e430a8bba195ac
 tcb.13.path: .github/workflows/julius-governed-land.yml
-tcb.13.sha256: 94e80bcf8f0731afac8bb8567ca58d0554ee32d22ebc4dcbb87a35eb27a0b8d9
+tcb.13.sha256: 95c8e1290977111bd9acc73de81d598a8df67978aecf4dbe8052f5746606c7b4
 tcb.14.path: scripts/julius-main-provenance.mjs
 tcb.14.sha256: e428e9b3b6723b88052efdccb552396b72c4a2dd6df00e2a7d1e1b9c9ab27954
 tcb.15.path: scripts/julius-main-provenance.d.mts
