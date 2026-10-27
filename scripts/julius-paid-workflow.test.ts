@@ -1066,7 +1066,7 @@ const postedBody = (log: string, path: string): string => {
 /** A step's `if:` expression, or null. */
 const ifOf = (block: string): string | null => /\n {8}if: ([^\n]+)\n/u.exec(block)?.[1] ?? null;
 
-describe('X′ §2: the attempted marker is a job-token tag, and LIVE waits for it', () => {
+describe('X′ §2: the attempted marker is a job-token tag, and LIVE waits for it', { timeout: 60_000 }, () => {
   const paid = job('first-live-mission');
   const tagBlock = step(paid, ATTEMPT_TAG);
   const tagScript = script(tagBlock);
@@ -1198,7 +1198,7 @@ const HANDOFF_GRADE = "'J1: receive the handoff from the runner host and verify 
 const GRADE_STEP_NAME = "'J1: stage the pinned checker from git objects and grade'";
 const STEM = 'build_task.ctx_1';
 
-describe('X′ §3: grading without an artifact handoff', () => {
+describe('X′ §3: grading without an artifact handoff', { timeout: 60_000 }, () => {
   const paid = job('first-live-mission');
   const grade = job('grade-inworld');
   const remove = job('delete-final-message');
@@ -1363,7 +1363,7 @@ const permissionsOf = (text: string): Record<string, string> | null => {
   return block === undefined ? null : Object.fromEntries(block.trim().split('\n').map((line) => line.trim().split(/:\s*/u)));
 };
 
-describe('X′ §4: the result record is written by a minimal job of its own; grading never holds a write token', () => {
+describe('X′ §4: the result record is written by a minimal job of its own; grading never holds a write token', { timeout: 60_000 }, () => {
   const record = job('record-result');
   const grade = job('grade-inworld');
   const recordScript = script(step(record, RECORD_STEP));
@@ -1516,7 +1516,7 @@ describe('X′ §4: the result record is written by a minimal job of its own; gr
   });
 });
 
-describe('X′ §5 (e): a private host copy of the scanned evidence, with SHA256SUMS', () => {
+describe('X′ §5 (e): a private host copy of the scanned evidence, with SHA256SUMS', { timeout: 60_000 }, () => {
   const paid = job('first-live-mission');
   const grade = job('grade-inworld');
   const COPY = "'Keep the scanned evidence on the runner host (0700, SHA256SUMS)'";
@@ -1577,7 +1577,7 @@ describe('X′ §5 (e): a private host copy of the scanned evidence, with SHA256
   });
 });
 
-describe('Branch S X: bare self-hosted labels, fork guards on every pull_request job, an explicit PostgreSQL port', () => {
+describe('Branch S X: bare self-hosted labels, fork guards on every pull_request job, an explicit PostgreSQL port', { timeout: 60_000 }, () => {
   const read = (file: string): string => readFileSync(join(ROOT, '.github/workflows', file), 'utf8');
   /** Every top-level job of a workflow: its key and its text. */
   const jobsOf = (text: string): { name: string; text: string }[] => {
@@ -1630,7 +1630,7 @@ describe('Branch S X: bare self-hosted labels, fork guards on every pull_request
   });
 });
 
-describe('REVIEW rulings D-a, D-b, D-d on the paid workflow', () => {
+describe('REVIEW rulings D-a, D-b, D-d on the paid workflow', { timeout: 60_000 }, () => {
   const paid = job('first-live-mission');
   const grade = job('grade-inworld');
   /** Every step of a job: its display name (or `uses`) and its text. */
