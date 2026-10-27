@@ -1,0 +1,8 @@
+julius-run-attempted.v1
+run=wlj_7dd5ad76-ed4f-47c3-b3a6-5a2d9b38636a
+namespace=julius-inworld-data-1
+workflow_run_id=40520432789
+workflow_run_attempt=1
+head_sha=598741524f87783baef99a2d6a40cf0dba8baa8c
+attempted_at=2026-10-27T14:34:06Z
+contract_sha256=bfa90f50f70916ff52180a94537f243300da8dcc51ee06d3952b0f18876226aa
