@@ -141,6 +141,8 @@ function githubFor(runs: readonly RealRun[], options: GithubOptions = {}): { fet
     const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
     seen.push(url);
     if (options.fail?.(url) === true) return new Response('nope', { status: 500 });
+    // X′ §2: the attempted markers are also read as record tags; this fixture has none.
+    if (url === `${API}/git/matching-refs/tags/julius-run-record-`) return Response.json([]);
     if (url === `${API}/git/matching-refs/tags/julius-run-spent-`) {
       return Response.json(tags.map((tag, index) => ({ ref: tag.ref, object: { type: 'tag', sha: String(index).padStart(40, 'c') } })));
     }

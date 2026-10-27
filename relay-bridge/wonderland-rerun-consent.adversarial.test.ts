@@ -351,10 +351,12 @@ describe('REVIEWER adversarial', () => {
     }
     expect(await mk(() => ({ code: 1, stdout: new Uint8Array() })).r.read({ repo: REPO, namespace: ns })).toEqual({ readable: false });
     expect(await mk(() => { throw new Error('boom'); }).r.read({ repo: REPO, namespace: ns })).toEqual({ readable: false });
-    const empty = mk(() => ({ code: 0, stdout: enc('{"total_count":0,"artifacts":[]}') }));
+    // X′ §2: the attempted markers are also read as record tags (`git/matching-refs/tags/julius-run-record-`), a list.
+    const records = (args: readonly string[]): boolean => String(args[3]).includes('/git/matching-refs/tags/julius-run-record-');
+    const empty = mk((args) => ({ code: 0, stdout: enc(records(args) ? '[]' : '{"total_count":0,"artifacts":[]}') }));
     expect(await empty.r.read({ repo: REPO, namespace: ns })).toEqual({ readable: true, counted: 0 });
     expect(empty.seen.every((a) => a[0] === 'api' && a[1] === '-X' && a[2] === 'GET')).toBe(true);
-    const one = mk((args) => (String(args[3]).includes('/actions/artifacts?name=')
+    const one = mk((args) => (records(args) ? { code: 0, stdout: enc('[]') } : String(args[3]).includes('/actions/artifacts?name=')
       ? { code: 0, stdout: enc(`{"total_count":1,"artifacts":[{"name":"${ns}-attempted","expired":false,"workflow_run":{"id":40278849833,"head_sha":"${'a'.repeat(40)}"}}]}`) }
       : { code: 1, stdout: new Uint8Array() }));
     expect(await one.r.read({ repo: REPO, namespace: ns })).toEqual({ readable: true, counted: 1 });
