@@ -1,6 +1,0 @@
-[
-  { "id": "mill", "name": "Moonmill Post", "aliases": ["moonmill", "mill"] },
-  { "id": "dock", "name": "Lantern Dock", "aliases": ["lantern dock", "dock"] },
-  { "id": "glen", "name": "Foxglove Glen", "aliases": ["foxglove", "glen"] },
-  { "id": "spire", "name": "Clocktower Spire", "aliases": ["clocktower", "spire"] }
-]
