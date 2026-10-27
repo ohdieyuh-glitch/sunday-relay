@@ -605,12 +605,13 @@ describe('wonderland status', () => {
       already_spent: 'already_spent',
     };
     // Every writer token is listed. Null: shown as its state with no cause (reconcile's
-    // `workflow_run_unspent` is not in the client's closed cause list).
+    // `workflow_run_unspent` and `workflow_run_absent` are not in the client's closed cause list).
     const writerCauses: Record<WorkflowHalt | DispatchError, WonderlandStatusCause | null> = {
       RUN_ID_ALREADY_SPENT: 'RUN_ID_ALREADY_SPENT',
       SPENT_TAG_UNVERIFIED: 'SPENT_TAG_UNVERIFIED',
       gh_workflow_run_failed: 'gh_workflow_run_failed',
       workflow_run_unspent: null,
+      workflow_run_absent: null,
     };
     const clockCauses: readonly WonderlandStatusCause[] = ['AWAITING_OPERATOR_EXPIRED'];
     for (const [stored, state] of Object.entries(admissionStatus) as Array<[AdmissionState, WonderlandStatusState]>) {

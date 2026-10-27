@@ -15,6 +15,7 @@ import { PAID_WORKFLOW_FILE } from '../src/relay/integration/wonderland-admissio
 import { openAdmissionFile, readAdmissionDocument, type ClaimEvent } from '../src/relay/integration/wonderland-admission/admission-file';
 import {
   LANE_GRANT_SOURCE,
+  RECONCILE_ABSENT_GRACE_MS,
   RERUN_PAID_MISSION_CONFIRMATION,
   createOperatorClaimTool,
   decideRerun,
@@ -26,6 +27,7 @@ import {
   priorCount,
   recordedPaidAttempts,
   rerunConsentBinds,
+  reservationOutlivedGrace,
   runsForDispatchKey,
   unsettledPeer,
   workflowDispatchArgs,
@@ -1332,5 +1334,160 @@ describe('TODAY\'S REAL PEERS are settled: the founder\'s next J1 Start is not r
     } finally {
       fx.cleanup();
     }
+  });
+});
+
+describe('R-2: a reservation whose gh child never reached GitHub is not a permanent block', () => {
+  const KEY_A = ADMIT_KEY;
+  const KEY_B = '22222222-3333-4444-8555-666666666666';
+  const RESERVED_AT = 'Fri, 23 Oct 2026 17:18:05 GMT';
+  const RESERVED_ISO = '2026-10-23T17:18:05Z';
+  const after = (ms: number) => new Date(Date.parse(RESERVED_ISO) + ms).toUTCString();
+  const absentAt = (date: string | null): GhResult => ({
+    code: 1,
+    stdout: `HTTP/2.0 404 Not Found\n${date === null ? '' : `Date: ${date}\n`}\n{"message":"Not Found"}\n`,
+    stderr: '',
+  });
+  const EMPTY_LIST: GhResult = { code: 0, stdout: '[]', stderr: '' };
+  const dispatchKey = (key: string) => createHash('sha256').update(key).digest('hex');
+  const runFor = (key: string, status: string): GhResult => ({
+    code: 0,
+    stdout: JSON.stringify([{
+      databaseId: 40250000001, displayTitle: `julius mission=${MISSION} lane=lab mode=paid key=${dispatchKey(key)}`,
+      status, conclusion: '', event: 'workflow_dispatch', headBranch: 'main', attempt: 1,
+    }]),
+    stderr: '',
+  });
+
+  /**
+   * A and B of one mission in ONE store. A's reservation is written with
+   * GitHub's clock at RESERVED_AT, then its gh workflow run child dies before
+   * reaching GitHub, so A stays `dispatching`. `world` is what GitHub answers
+   * from then on: the run list and the spent-tag read (with its Date header).
+   */
+  async function stuck(world: { runList: () => GhResult; spentTag: () => GhResult }) {
+    const dir = mkdtempSync(join(tmpdir(), 'wlj-stuck-'));
+    const storePath = join(dir, 'admission.json');
+    const ports = service(storePath);
+    for (const [run, key, trigger] of [[RUN_A, KEY_A, 'trigger_01'], [RUN_B, KEY_B, 'trigger_02']] as const) {
+      const created = await handleWonderlandAdmissionRoute(base(run, {
+        path: WONDERLAND_ADMISSION_PATH,
+        url: `${WONDERLAND_ADMISSION_PATH}?projectId=${PROJECT}`,
+        idempotencyKey: key,
+        rawBody: JSON.stringify({ runId: run, clientTriggerId: trigger, clientLogSha256: 'ab'.repeat(32), clientUiActionUtc: WHEN }),
+      }), ports);
+      expect(created?.status).toBe(202);
+    }
+    let phase: 'reserve' | 'later' = 'reserve';
+    const calls: string[][] = [];
+    const contents = fakeGh();
+    const spawn: GhSpawner = {
+      run(args) {
+        calls.push([...args]);
+        if (args.some((arg) => arg.includes('/contents/'))) return contents.spawn.run(args);
+        if (phase === 'reserve') {
+          if (args[0] === 'workflow') {
+            phase = 'later';
+            throw new Error('bridge stopped before gh workflow run reached GitHub');
+          }
+          if (args[0] === 'api') return absentAt(RESERVED_AT);
+        }
+        if (args[0] === 'run') return world.runList();
+        if (args[0] === 'api') return world.spentTag();
+        if (args[0] === 'workflow') return { code: 0, stdout: `https://github.com/${REPO}/actions/runs/${WORKFLOW_RUN}\n`, stderr: '' };
+        return { code: 99, stdout: '', stderr: '' };
+      },
+    };
+    const tool = createOperatorClaimTool(openAdmissionFile(storePath), spawn, { nowIso: () => WHEN }, reader(ZERO));
+    const start = (run: string) => handleWonderlandMissionStartRoute(startRequest(run), ports, { claimTool: () => tool });
+    expect((await start(RUN_A))?.status).toBe(503);
+    const claimsOf = (run: string) => readAdmissionDocument(storePath).claims.filter((event) => event.wonderlandRunId === run);
+    expect(claimsOf(RUN_A).map((event) => [event.state, event.githubDate])).toEqual([['dispatching', RESERVED_ISO]]);
+    const reconcile = () => tool.reconcile({ wonderlandRunId: RUN_A, serverRunId: RUN_A, repo: REPO });
+    const journalPath = () => join(dir, readdirSync(dir).find((entry) => entry.endsWith('.operator.json')) ?? '');
+    return { calls, start, claimsOf, reconcile, journalPath, storePath, cleanup() { ports.close(); rmSync(dir, { recursive: true, force: true }); } };
+  }
+
+  it('without reconcile the stuck peer blocks B, as before', async () => {
+    const fx = await stuck({ runList: () => EMPTY_LIST, spentTag: () => absentAt(after(60 * 60 * 1000)) });
+    try {
+      expect(kindOf((await fx.start(RUN_B))?.body)).toBe('julius_paid_run_in_flight');
+    } finally {
+      fx.cleanup();
+    }
+  });
+
+  it('ALL legs met (15 min on GitHub\'s clock, no run for the key, tag absent): reconcile writes dispatch_failed / workflow_run_absent, and B proceeds', async () => {
+    const fx = await stuck({ runList: () => EMPTY_LIST, spentTag: () => absentAt(after(15 * 60 * 1000)) });
+    try {
+      const result = await fx.reconcile();
+      expect(result).toMatchObject({ ok: true, reconciled: true, record: { state: 'dispatch_failed', dispatchError: 'workflow_run_absent', workflowRunId: null } });
+      const events = fx.claimsOf(RUN_A);
+      expect(events.map((event) => event.state)).toEqual(['dispatching', 'dispatch_failed']);
+      // The outcome keeps the reservation's timestamp and GitHub clock.
+      expect(events[1]).toMatchObject({ at: events[0]?.at, githubDate: RESERVED_ISO, dispatchAttempted: true, spentTagState: 'absent', halt: null });
+      const next = await fx.start(RUN_B);
+      expect(next?.status, JSON.stringify(next?.body)).toBe(202);
+      // A is final and never retried.
+      expect((await fx.reconcile())).toMatchObject({ ok: true, reconciled: false });
+      // A workflow_run_absent outcome that names a workflow run is corrupt on read.
+      const journal = JSON.parse(readFileSync(fx.journalPath(), 'utf8')) as { claims: Record<string, unknown>[] };
+      const absent = journal.claims.find((claim) => claim.dispatchError === 'workflow_run_absent');
+      if (absent === undefined) throw new Error('no absent outcome');
+      absent.workflowRunId = WORKFLOW_RUN;
+      writeFileSync(fx.journalPath(), `${JSON.stringify(journal)}\n`);
+      expect(() => readAdmissionDocument(fx.storePath)).toThrow();
+    } finally {
+      fx.cleanup();
+    }
+  });
+
+  it('each leg not met, or any read failing, writes nothing and B stays blocked', async () => {
+    const cases: [string, { runList: () => GhResult; spentTag: () => GhResult }, string][] = [
+      ['grace not elapsed on GitHub\'s clock (14:59)', { runList: () => EMPTY_LIST, spentTag: () => absentAt(after(15 * 60 * 1000 - 1000)) }, 'reconcile_indeterminate'],
+      ['GitHub\'s clock behind the reservation', { runList: () => EMPTY_LIST, spentTag: () => absentAt(after(-60 * 60 * 1000)) }, 'reconcile_indeterminate'],
+      ['a run for the key exists', { runList: () => runFor(KEY_A, 'in_progress'), spentTag: () => absentAt(after(60 * 60 * 1000)) }, 'reconcile_indeterminate'],
+      ['the spent tag is present', { runList: () => EMPTY_LIST, spentTag: () => ({ code: 0, stdout: `HTTP/2.0 200 OK\nDate: ${after(60 * 60 * 1000)}\n\n{"ref":"refs/tags/x","object":{"type":"commit","sha":"${'ab'.repeat(20)}"}}\n`, stderr: '' }) }, 'spent_tag_unverified'],
+      ['the run list is unreadable', { runList: () => ({ code: 1, stdout: '', stderr: 'HTTP 502' }), spentTag: () => absentAt(after(60 * 60 * 1000)) }, 'workflow_runs_unreadable'],
+      ['the spent tag is unreadable', { runList: () => EMPTY_LIST, spentTag: () => ({ code: 1, stdout: '', stderr: 'HTTP 502' }) }, 'spent_tag_unreadable'],
+      ['GitHub\'s Date header is unreadable', { runList: () => EMPTY_LIST, spentTag: () => absentAt(null) }, 'reconcile_indeterminate'],
+    ];
+    for (const [label, world, kind] of cases) {
+      const fx = await stuck(world);
+      try {
+        const result = await fx.reconcile();
+        expect(result.ok, label).toBe(false);
+        if (!result.ok) expect(result.kind, label).toBe(kind);
+        expect(fx.claimsOf(RUN_A).map((event) => event.state), label).toEqual(['dispatching']);
+        expect(kindOf((await fx.start(RUN_B))?.body), label).toBe('julius_paid_run_in_flight');
+      } finally {
+        fx.cleanup();
+      }
+    }
+  });
+
+  it('the grace is measured on GitHub\'s clock only: this machine\'s clock (days later) never satisfies it', () => {
+    expect(RECONCILE_ABSENT_GRACE_MS).toBe(15 * 60 * 1000);
+    expect(reservationOutlivedGrace(RESERVED_ISO, '2026-10-23T17:33:05Z')).toBe(true);
+    expect(reservationOutlivedGrace(RESERVED_ISO, '2026-10-23T17:33:04Z')).toBe(false);
+    expect(reservationOutlivedGrace(null, '2026-10-24T00:00:00Z')).toBe(false);
+    expect(reservationOutlivedGrace(RESERVED_ISO, null)).toBe(false);
+    expect(reservationOutlivedGrace('not a date', '2026-10-24T00:00:00Z')).toBe(false);
+    expect(Date.now() - Date.parse(RESERVED_ISO), 'the local clock alone would say yes').toBeGreaterThan(RECONCILE_ABSENT_GRACE_MS);
+  });
+
+  it('legalTransition: dispatching -> dispatch_failed / workflow_run_absent only with no workflow run and the reservation\'s GitHub clock', () => {
+    const reservation: ClaimEvent = {
+      wonderlandRunId: RUN_A, serverRunId: RUN_A, state: 'dispatching', spentTag: 'julius-run-spent-x', spentTagState: 'absent',
+      at: WHEN, dispatchAttempted: false, dispatchError: null, halt: null, workflowRunId: null, githubDate: RESERVED_ISO,
+    };
+    const absent: ClaimEvent = { ...reservation, state: 'dispatch_failed', dispatchAttempted: true, dispatchError: 'workflow_run_absent' };
+    expect(legalTransition(reservation, absent)).toBe(true);
+    expect(legalTransition(reservation, { ...absent, githubDate: '2026-10-23T18:00:00Z' }), 'GitHub clock changed').toBe(false);
+    expect(legalTransition(reservation, { ...absent, workflowRunId: WORKFLOW_RUN }), 'names a run').toBe(false);
+    expect(legalTransition(null, absent), 'no reservation').toBe(false);
+    expect(legalTransition(reservation, { ...absent, dispatchAttempted: false }), 'not attempted').toBe(false);
+    const dispatched: ClaimEvent = { ...reservation, state: 'dispatched', dispatchAttempted: true, workflowRunId: WORKFLOW_RUN };
+    expect(legalTransition(dispatched, absent), 'only from dispatching').toBe(false);
   });
 });

@@ -1326,6 +1326,25 @@ function recordDispatchOutcome(
   };
 }
 
+/**
+ * How long a `dispatching` reservation with no run on GitHub is given before
+ * `reconcile` may call the dispatch absent: 15 minutes, on GitHub's clock.
+ */
+export const RECONCILE_ABSENT_GRACE_MS = 15 * 60 * 1000;
+
+/**
+ * True only when both instants are GitHub's own (`githubDate` at the
+ * reservation, and the `Date:` header of a read made now) and at least the
+ * grace period lies between them. Either missing or unreadable is false.
+ */
+export function reservationOutlivedGrace(reservedGithubDate: string | null, nowGithubDate: string | null): boolean {
+  if (reservedGithubDate === null || nowGithubDate === null) return false;
+  const reserved = Date.parse(reservedGithubDate);
+  const now = Date.parse(nowGithubDate);
+  if (!Number.isFinite(reserved) || !Number.isFinite(now)) return false;
+  return now - reserved >= RECONCILE_ABSENT_GRACE_MS;
+}
+
 type ReconcileChecked =
   | { readonly kind: 'done'; readonly result: ReconcileResult }
   | { readonly kind: 'stuck'; readonly admission: StoredAdmission; readonly reservation: ClaimEvent };
@@ -1344,9 +1363,18 @@ type ReconcileChecked =
  * the run id and raises its attempt; any attempt above 1 leaves the record
  * `dispatching`, since #459 refuses a paid attempt above 1 and such a run is
  * not this dispatch's.
- * Anything else (no run, two runs, a run still going, a tag naming another
- * run) leaves `dispatching` and says what GitHub showed. The outcome keeps the
- * reservation's timestamp and GitHub clock. Nothing is deleted or rewritten.
+ * - `dispatch_failed` (`workflow_run_absent`) when the `gh workflow run` child
+ *   never reached GitHub, which needs ALL of: (a) the reservation is at least
+ *   {@link RECONCILE_ABSENT_GRACE_MS} old on GITHUB'S clock (its `githubDate`
+ *   against the `Date:` header of the spent-tag read made now, never this
+ *   machine's clock); (b) the readable run list shows NO run for the dispatch
+ *   key; (c) the spent tag read after it is ABSENT. Without this, a bridge that
+ *   stopped between the reservation and the dispatch would hold that mission's
+ *   in-flight guard forever.
+ * Anything else (no run inside the grace period, two runs, a run still going,
+ * a tag naming another run, any read failing) leaves `dispatching` and says
+ * what GitHub showed. The outcome keeps the reservation's timestamp and GitHub
+ * clock. Nothing is deleted or rewritten.
  */
 async function reconcilePhased(file: AdmissionFile, input: ReconcileInput, spawn: GhSpawner): Promise<ReconcileResult> {
   const checked = await file.exclusive((io) => Promise.resolve(checkReconcile(io, input)));
@@ -1388,6 +1416,17 @@ async function reconcilePhased(file: AdmissionFile, input: ReconcileInput, spawn
       dispatchError: null,
       halt: null,
       workflowRunId: firstAttempt.workflowRunId,
+      githubDate: reservation.githubDate,
+      rerun: rerunFields(reservation.acknowledgedRerun === true, reservation.priorAttempted, reservation.priorCompleted),
+    });
+  } else if (tag === 'absent' && matchedRuns.length === 0 && reservationOutlivedGrace(reservation.githubDate, githubDateFromResponse(tagRead))) {
+    outcome = baseEvent(admission, reservation.at, {
+      state: 'dispatch_failed',
+      spentTagState: 'absent',
+      dispatchAttempted: true,
+      dispatchError: 'workflow_run_absent',
+      halt: null,
+      workflowRunId: null,
       githubDate: reservation.githubDate,
       rerun: rerunFields(reservation.acknowledgedRerun === true, reservation.priorAttempted, reservation.priorCompleted),
     });
@@ -1716,7 +1755,9 @@ export function legalTransition(prior: ClaimEvent | null, event: ClaimEvent): bo
   if (event.state === 'dispatch_failed') {
     if (event.halt === 'SPENT_TAG_UNVERIFIED') return event.dispatchError === 'SPENT_TAG_UNVERIFIED';
     return event.halt === null
-      && (event.dispatchError === 'gh_workflow_run_failed' || event.dispatchError === 'workflow_run_unspent');
+      && (event.dispatchError === 'gh_workflow_run_failed' || event.dispatchError === 'workflow_run_unspent'
+        // A dispatch that never reached GitHub names no workflow run.
+        || (event.dispatchError === 'workflow_run_absent' && event.workflowRunId === null));
   }
   return event.state === 'dispatched';
 }

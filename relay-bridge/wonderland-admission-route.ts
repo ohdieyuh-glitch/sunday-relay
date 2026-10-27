@@ -639,7 +639,7 @@ function claimCause(claim: ClaimEvent): string | null {
   if (claim.halt !== null) return claim.halt;
   // `workflow_run_unspent` (written by reconcile) is not in the client's closed cause list:
   // the client sees `dispatch_failed` with no cause, and the journal keeps why.
-  if (claim.dispatchError === 'workflow_run_unspent') return null;
+  if (claim.dispatchError === 'workflow_run_unspent' || claim.dispatchError === 'workflow_run_absent') return null;
   return claim.dispatchError;
 }
 

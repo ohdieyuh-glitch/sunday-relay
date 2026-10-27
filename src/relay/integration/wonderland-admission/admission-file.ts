@@ -480,8 +480,12 @@ const WORKFLOW_HALTS = ['RUN_ID_ALREADY_SPENT', 'SPENT_TAG_UNVERIFIED'] as const
  * `workflow_run_unspent` is written only by `reconcile`: GitHub shows the
  * dispatched run completed without success and no spent tag exists, so the
  * workflow ended before it spent the id.
+ * `workflow_run_absent` is written only by `reconcile` too: a reservation
+ * older than the grace period on GitHub's own clock, a readable run list with
+ * no run for its dispatch key, and no spent tag. The `gh workflow run` child
+ * never reached GitHub (the bridge stopped first). It carries no workflow run.
  */
-const DISPATCH_ERRORS = ['gh_workflow_run_failed', 'SPENT_TAG_UNVERIFIED', 'workflow_run_unspent'] as const;
+const DISPATCH_ERRORS = ['gh_workflow_run_failed', 'SPENT_TAG_UNVERIFIED', 'workflow_run_unspent', 'workflow_run_absent'] as const;
 const JOURNAL_KEYS = ['schemaVersion', 'revision', 'claims', 'progress', 'owners'] as const;
 const OWNER_ID = /^[A-Za-z0-9_-]{1,128}$/;
 /**
@@ -1008,7 +1012,9 @@ function parseClaim(value: unknown, schemaVersion: OperatorJournal['schemaVersio
     if (claim.dispatchAttempted !== true) throw new AdmissionFileClosedError('corrupt');
     if (recordedHalt === 'SPENT_TAG_UNVERIFIED') {
       if (error !== 'SPENT_TAG_UNVERIFIED') throw new AdmissionFileClosedError('corrupt');
-    } else if (recordedHalt !== null || (error !== 'gh_workflow_run_failed' && error !== 'workflow_run_unspent')) {
+    } else if (recordedHalt !== null || (error !== 'gh_workflow_run_failed' && error !== 'workflow_run_unspent' && error !== 'workflow_run_absent')) {
+      throw new AdmissionFileClosedError('corrupt');
+    } else if (error === 'workflow_run_absent' && workflowRunId !== null) {
       throw new AdmissionFileClosedError('corrupt');
     }
   } else if (error !== null) {
@@ -1034,7 +1040,7 @@ function parseClaim(value: unknown, schemaVersion: OperatorJournal['schemaVersio
   const dispatchError: DispatchError | null = state === 'dispatch_failed'
     ? (recordedHalt === 'SPENT_TAG_UNVERIFIED'
       ? 'SPENT_TAG_UNVERIFIED'
-      : error === 'workflow_run_unspent' ? 'workflow_run_unspent' : 'gh_workflow_run_failed')
+      : error === 'workflow_run_unspent' || error === 'workflow_run_absent' ? error : 'gh_workflow_run_failed')
     : null;
   return {
     wonderlandRunId: identity.wljRunId,
