@@ -279,7 +279,8 @@ describe('scenario 2 — a transient provider failure, a fallback, and a complet
   const build = () => {
     const harness = createJuliusHarness({
       workers: [
-        { worker: CODER, script: [{ kind: 'fail', code: 'PROVIDER_UNAVAILABLE' }] },
+        // Attested unprocessed: an unattested failure after the handoff is OUTCOME UNKNOWN and is not rerouted (D2).
+        { worker: CODER, script: [{ kind: 'fail', code: 'PROVIDER_UNAVAILABLE', runtimeStarted: false }] },
         { worker: BACKUP_CODER, script: [{ kind: 'succeed', evidence: [{ type: 'TEST', status: 'PASSED', safeSummary: 'Suite green.' }] }] },
       ],
       card: cardPolicy({
@@ -326,7 +327,7 @@ describe('scenario 2 — a transient provider failure, a fallback, and a complet
   it('refuses the fallback when C.A.R.D. denies it, and does not quietly succeed', async () => {
     const harness = createJuliusHarness({
       workers: [
-        { worker: CODER, script: [{ kind: 'fail', code: 'PROVIDER_UNAVAILABLE' }] },
+        { worker: CODER, script: [{ kind: 'fail', code: 'PROVIDER_UNAVAILABLE', runtimeStarted: false }] },
         { worker: BACKUP_CODER, script: [{ kind: 'succeed' }] },
       ],
       card: cardPolicy({

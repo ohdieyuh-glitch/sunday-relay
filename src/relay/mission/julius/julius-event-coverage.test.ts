@@ -160,7 +160,8 @@ describe('the runtime really emits them', () => {
   it('emits provider.failure, reroute.selected and fallback.selected on a reroute', async () => {
     const harness = createJuliusHarness({
       workers: [
-        { worker: CODER, script: [{ kind: 'fail', code: 'PROVIDER_UNAVAILABLE' }] },
+        // Attested unprocessed: an unattested failure after the handoff is OUTCOME UNKNOWN and is not rerouted (D2).
+        { worker: CODER, script: [{ kind: 'fail', code: 'PROVIDER_UNAVAILABLE', runtimeStarted: false }] },
         { worker: OTHER, script: [{ kind: 'succeed' }] },
       ],
       card: cardPolicy({ allowedProviders: [CODER.providerId, OTHER.providerId], autonomy: 'AUTONOMOUS' }),
