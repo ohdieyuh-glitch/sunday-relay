@@ -1,0 +1,42 @@
+2026-10-27T14:34:11.0395181Z ##[group]Run set -uo pipefail
+2026-10-27T14:34:11.0396146Z [36;1mset -uo pipefail[0m
+2026-10-27T14:34:11.0397231Z [36;1m# The bundle was built in an earlier step and is invoked directly,[0m
+2026-10-27T14:34:11.0398675Z [36;1m# so this step starts no build and depends on no package manager.[0m
+2026-10-27T14:34:11.0402803Z [36;1mtest -f dist-relay-bridge/julius-live-mission.cjs || { echo 'entrypoint_not_built' >&2; exit 1; }[0m
+2026-10-27T14:34:11.0405622Z [36;1mset +e[0m
+2026-10-27T14:34:11.0407950Z [36;1mnode dist-relay-bridge/julius-live-mission.cjs \[0m
+2026-10-27T14:34:11.0410183Z [36;1m  run --contract "$CONTRACT" --confirm-live --max-ticks "$MAX_TICKS" | tee live-mission.log[0m
+2026-10-27T14:34:11.0412605Z [36;1mstatus=${PIPESTATUS[0]}[0m
+2026-10-27T14:34:11.0413452Z [36;1mset -e[0m
+2026-10-27T14:34:11.0414190Z [36;1mecho "julius_exit=$status"[0m
+2026-10-27T14:34:11.0415086Z [36;1mexit "$status"[0m
+2026-10-27T14:34:11.0446628Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-27T14:34:11.0447692Z env:
+2026-10-27T14:34:11.0517629Z ##[endgroup]
+2026-10-27T14:34:11.3562493Z JULIUS LIVE MISSION — preflight
+2026-10-27T14:34:11.3564761Z   mission: mission:julius-inworld-data-1 (project prj-julius-inworld-data-1)
+2026-10-27T14:34:11.3576009Z   requested models: architect=claude-opus-5-5 coder=claude-opus-5-5 reviewer=xai/grok-build-0.1
+2026-10-27T14:34:11.3577566Z   OPENAI_API_KEY: MISSING
+2026-10-27T14:34:11.3578447Z   ANTHROPIC_ARCHITECT_API_KEY: SET
+2026-10-27T14:34:11.3579410Z   ANTHROPIC_API_KEY: SET
+2026-10-27T14:34:11.3580293Z   CLAUDE_CODE_OAUTH_TOKEN: MISSING
+2026-10-27T14:34:11.3581146Z   XAI_API_KEY: MISSING
+2026-10-27T14:34:11.3581956Z   JULIUS_DATABASE_URL: MISSING
+2026-10-27T14:34:11.3582872Z   DATABASE_URL: SET
+2026-10-27T14:34:11.3623084Z   JULIUS_EXECUTOR_ENDPOINT: SET
+2026-10-27T14:34:11.3625955Z   JULIUS_SCOPED_CREDENTIALS: SET
+2026-10-27T14:34:11.3626850Z   EXECUTOR_KEY_ID: SET
+2026-10-27T14:34:11.3628709Z   JULIUS_PUBLIC_KEY_PATH: SET
+2026-10-27T14:34:11.3629531Z   JULIUS_CALLER_ID: SET
+2026-10-27T14:34:11.3632376Z   role credential: Agentic Architect (PROMPT_ARCHITECT) provider=anthropic key=ANTHROPIC_ARCHITECT_API_KEY expected_org=JULIUS_EXPECTED_ANTHROPIC_ARCHITECT_ORG_ID model=RELAY_ANTHROPIC_ARCHITECT_MODEL
+2026-10-27T14:34:11.3635833Z   role credential: Coding Agent (CODING_AGENT) provider=anthropic key=ANTHROPIC_API_KEY expected_org=JULIUS_EXPECTED_ANTHROPIC_ORG_ID model=RELAY_HOSTED_CODING_MODEL
+2026-10-27T14:34:11.3638168Z   role credential: Independent Reviewer (INDEPENDENT_REVIEWER) provider=xai key=XAI_API_KEY expected_org=n/a model=RELAY_HERMES_MODEL
+2026-10-27T14:34:11.3639909Z   note: the local Hermes reviewer bills through the hermes profile of this operator account; XAI_API_KEY presence is reported for the record.
+2026-10-27T14:34:11.3657703Z   CLAUDE AUTH: API KEY provider=ANTHROPIC execution=CLAUDE_AGENT_SDK plan=n/a api_key_used=true api_cost_applicable=true
+2026-10-27T14:34:11.3659908Z   claude auth source: anthropic_api_key
+2026-10-27T14:34:11.3661476Z   billing paths: architect=API_BILLED coder=API_BILLED reviewer=API_BILLED
+2026-10-27T14:34:11.3662944Z   live_ledger: BOUND
+2026-10-27T14:34:22.0237858Z prior_runs ledger=UNREADABLE counted=UNKNOWN
+2026-10-27T14:34:22.0239634Z RESULT: BLOCKED — spend_ledger_unreadable: Prior-spend facts could not be read. They are not treated as zero, and no provider balance was verified.
+2026-10-27T14:34:22.0341570Z julius_exit=1
+2026-10-27T14:34:22.0355136Z ##[error]Process completed with exit code 1.

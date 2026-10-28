@@ -1,0 +1,919 @@
+{
+ "total_count": 6,
+ "jobs": [
+  {
+   "id": 122245742373,
+   "run_id": 40520432789,
+   "run_attempt": 1,
+   "head_sha": "598741524f87783baef99a2d6a40cf0dba8baa8c",
+   "name": "spend-tag",
+   "status": "completed",
+   "conclusion": "success",
+   "started_at": "2026-10-27T14:22:11Z",
+   "completed_at": "2026-10-27T14:22:34Z",
+   "runner_name": "julius-paid-Kaisin",
+   "runner_group_name": "Default",
+   "labels": [
+    "julius-paid"
+   ],
+   "workflow_name": "julius mission=julius-inworld-data-1 lane=lab mode=paid key=d1cdb4308652e460e05b0f6b6849b9f9d77a39f249a3d14b4cfcaa01de8ae58d",
+   "steps": [
+    {
+     "name": "Set up job",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 1,
+     "started_at": "2026-10-27T14:22:12Z",
+     "completed_at": "2026-10-27T14:22:14Z"
+    },
+    {
+     "name": "Set up runner",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 2,
+     "started_at": "2026-10-27T14:22:14Z",
+     "completed_at": "2026-10-27T14:22:14Z"
+    },
+    {
+     "name": "Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 3,
+     "started_at": "2026-10-27T14:22:14Z",
+     "completed_at": "2026-10-27T14:22:21Z"
+    },
+    {
+     "name": "Gate: one spent tag for this admission run id, before any provider call",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 4,
+     "started_at": "2026-10-27T14:22:21Z",
+     "completed_at": "2026-10-27T14:22:25Z"
+    },
+    {
+     "name": "Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 7,
+     "started_at": "2026-10-27T14:22:25Z",
+     "completed_at": "2026-10-27T14:22:26Z"
+    },
+    {
+     "name": "Complete runner",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 8,
+     "started_at": "2026-10-27T14:22:26Z",
+     "completed_at": "2026-10-27T14:22:26Z"
+    },
+    {
+     "name": "Complete job",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 9,
+     "started_at": "2026-10-27T14:22:26Z",
+     "completed_at": "2026-10-27T14:22:26Z"
+    }
+   ]
+  },
+  {
+   "id": 122245992633,
+   "run_id": 40520432789,
+   "run_attempt": 1,
+   "head_sha": "598741524f87783baef99a2d6a40cf0dba8baa8c",
+   "name": "paid-slot",
+   "status": "completed",
+   "conclusion": "success",
+   "started_at": "2026-10-27T14:22:38Z",
+   "completed_at": "2026-10-27T14:25:54Z",
+   "runner_name": "julius-paid-Kaisin",
+   "runner_group_name": "Default",
+   "labels": [
+    "julius-paid"
+   ],
+   "workflow_name": "julius mission=julius-inworld-data-1 lane=lab mode=paid key=d1cdb4308652e460e05b0f6b6849b9f9d77a39f249a3d14b4cfcaa01de8ae58d",
+   "steps": [
+    {
+     "name": "Set up job",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 1,
+     "started_at": "2026-10-27T14:22:39Z",
+     "completed_at": "2026-10-27T14:22:43Z"
+    },
+    {
+     "name": "Set up runner",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 2,
+     "started_at": "2026-10-27T14:22:43Z",
+     "completed_at": "2026-10-27T14:22:43Z"
+    },
+    {
+     "name": "Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 3,
+     "started_at": "2026-10-27T14:22:43Z",
+     "completed_at": "2026-10-27T14:22:46Z"
+    },
+    {
+     "name": "Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 4,
+     "started_at": "2026-10-27T14:22:46Z",
+     "completed_at": "2026-10-27T14:22:47Z"
+    },
+    {
+     "name": "Gate: admission runs only reviewed, current, not rolled-back code",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 5,
+     "started_at": "2026-10-27T14:22:47Z",
+     "completed_at": "2026-10-27T14:25:20Z"
+    },
+    {
+     "name": "Gate: the paid-run queue claim is well formed",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 6,
+     "started_at": "2026-10-27T14:25:20Z",
+     "completed_at": "2026-10-27T14:25:20Z"
+    },
+    {
+     "name": "Admission: wait for the paid provider slot",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 7,
+     "started_at": "2026-10-27T14:25:20Z",
+     "completed_at": "2026-10-27T14:25:47Z"
+    },
+    {
+     "name": "Post Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 12,
+     "started_at": "2026-10-27T14:25:47Z",
+     "completed_at": "2026-10-27T14:25:47Z"
+    },
+    {
+     "name": "Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 13,
+     "started_at": "2026-10-27T14:25:47Z",
+     "completed_at": "2026-10-27T14:25:48Z"
+    },
+    {
+     "name": "Complete runner",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 14,
+     "started_at": "2026-10-27T14:25:48Z",
+     "completed_at": "2026-10-27T14:25:48Z"
+    },
+    {
+     "name": "Complete job",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 15,
+     "started_at": "2026-10-27T14:25:48Z",
+     "completed_at": "2026-10-27T14:25:48Z"
+    }
+   ]
+  },
+  {
+   "id": 122247863302,
+   "run_id": 40520432789,
+   "run_attempt": 1,
+   "head_sha": "598741524f87783baef99a2d6a40cf0dba8baa8c",
+   "name": "Preflight, then the live mission",
+   "status": "completed",
+   "conclusion": "failure",
+   "started_at": "2026-10-27T14:25:59Z",
+   "completed_at": "2026-10-27T14:35:15Z",
+   "runner_name": "julius-paid-Kaisin",
+   "runner_group_name": "Default",
+   "labels": [
+    "julius-paid"
+   ],
+   "workflow_name": "julius mission=julius-inworld-data-1 lane=lab mode=paid key=d1cdb4308652e460e05b0f6b6849b9f9d77a39f249a3d14b4cfcaa01de8ae58d",
+   "steps": [
+    {
+     "name": "Set up job",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 1,
+     "started_at": "2026-10-27T14:25:59Z",
+     "completed_at": "2026-10-27T14:26:03Z"
+    },
+    {
+     "name": "Set up runner",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 2,
+     "started_at": "2026-10-27T14:26:03Z",
+     "completed_at": "2026-10-27T14:26:04Z"
+    },
+    {
+     "name": "Gate: a paid run is attempt 1 only",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 3,
+     "started_at": "2026-10-27T14:26:04Z",
+     "completed_at": "2026-10-27T14:26:04Z"
+    },
+    {
+     "name": "Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 4,
+     "started_at": "2026-10-27T14:26:04Z",
+     "completed_at": "2026-10-27T14:26:09Z"
+    },
+    {
+     "name": "Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 5,
+     "started_at": "2026-10-27T14:26:09Z",
+     "completed_at": "2026-10-27T14:26:10Z"
+    },
+    {
+     "name": "Gate: the code this job will run is reviewed, current and not rolled back",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 6,
+     "started_at": "2026-10-27T14:26:10Z",
+     "completed_at": "2026-10-27T14:28:39Z"
+    },
+    {
+     "name": "Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 7,
+     "started_at": "2026-10-27T14:28:39Z",
+     "completed_at": "2026-10-27T14:30:56Z"
+    },
+    {
+     "name": "Gate: the dispatch inputs are well formed",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 8,
+     "started_at": "2026-10-27T14:30:56Z",
+     "completed_at": "2026-10-27T14:30:56Z"
+    },
+    {
+     "name": "Gate: the learning-pair arm the contract declares, and the store it needs",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 9,
+     "started_at": "2026-10-27T14:30:56Z",
+     "completed_at": "2026-10-27T14:30:56Z"
+    },
+    {
+     "name": "Gate: no paid mission has been attempted or completed for THIS contract",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 10,
+     "started_at": "2026-10-27T14:30:56Z",
+     "completed_at": "2026-10-27T14:30:57Z"
+    },
+    {
+     "name": "Install",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 11,
+     "started_at": "2026-10-27T14:30:57Z",
+     "completed_at": "2026-10-27T14:31:25Z"
+    },
+    {
+     "name": "Gate: coder uses the Anthropic API key",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 12,
+     "started_at": "2026-10-27T14:31:25Z",
+     "completed_at": "2026-10-27T14:31:25Z"
+    },
+    {
+     "name": "Subscription smoke: refused",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 13,
+     "started_at": "2026-10-27T14:31:25Z",
+     "completed_at": "2026-10-27T14:31:25Z"
+    },
+    {
+     "name": "Build the executor, the preflight probe and the live entrypoint",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 14,
+     "started_at": "2026-10-27T14:31:25Z",
+     "completed_at": "2026-10-27T14:31:26Z"
+    },
+    {
+     "name": "Gate: attempted markers and the combined cap, before the attempted marker",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 15,
+     "started_at": "2026-10-27T14:31:26Z",
+     "completed_at": "2026-10-27T14:31:46Z"
+    },
+    {
+     "name": "Build the pinned sandbox and executor images",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 16,
+     "started_at": "2026-10-27T14:31:46Z",
+     "completed_at": "2026-10-27T14:31:50Z"
+    },
+    {
+     "name": "Create the ephemeral scoped credentials",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 17,
+     "started_at": "2026-10-27T14:31:50Z",
+     "completed_at": "2026-10-27T14:31:50Z"
+    },
+    {
+     "name": "Provision the disposable mission workspace",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 18,
+     "started_at": "2026-10-27T14:31:50Z",
+     "completed_at": "2026-10-27T14:31:51Z"
+    },
+    {
+     "name": "Start PostgreSQL 16 and the independent executor",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 19,
+     "started_at": "2026-10-27T14:31:51Z",
+     "completed_at": "2026-10-27T14:31:59Z"
+    },
+    {
+     "name": "Learning pair arm WITH: restore arm WITHOUT's store before anything migrates or bootstraps",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 20,
+     "started_at": "2026-10-27T14:31:59Z",
+     "completed_at": "2026-10-27T14:31:59Z"
+    },
+    {
+     "name": "Preflight: Julius cannot reach the executor signing key",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 21,
+     "started_at": "2026-10-27T14:31:59Z",
+     "completed_at": "2026-10-27T14:31:59Z"
+    },
+    {
+     "name": "Preflight: the receipt transport is private to root and the executor",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 22,
+     "started_at": "2026-10-27T14:31:59Z",
+     "completed_at": "2026-10-27T14:32:00Z"
+    },
+    {
+     "name": "Preflight: durable store, executor, attestation, sandbox, in-sandbox git",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 23,
+     "started_at": "2026-10-27T14:32:00Z",
+     "completed_at": "2026-10-27T14:32:19Z"
+    },
+    {
+     "name": "Preflight: install Hermes and bootstrap the ephemeral reviewer profile",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 24,
+     "started_at": "2026-10-27T14:32:19Z",
+     "completed_at": "2026-10-27T14:34:01Z"
+    },
+    {
+     "name": "Preflight: the Mission Contract is valid and bounded",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 25,
+     "started_at": "2026-10-27T14:34:01Z",
+     "completed_at": "2026-10-27T14:34:01Z"
+    },
+    {
+     "name": "Preflight: observe the research the contract grants, through Relay's own bounded fetch",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 26,
+     "started_at": "2026-10-27T14:34:01Z",
+     "completed_at": "2026-10-27T14:34:01Z"
+    },
+    {
+     "name": "Preflight: each provider accepts its credential and serves the pinned model, nothing generated",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 27,
+     "started_at": "2026-10-27T14:34:01Z",
+     "completed_at": "2026-10-27T14:34:04Z"
+    },
+    {
+     "name": "Preflight: all three roles resolve to the expected models, nothing dispatched",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 28,
+     "started_at": "2026-10-27T14:34:04Z",
+     "completed_at": "2026-10-27T14:34:05Z"
+    },
+    {
+     "name": "Preflight complete — stopping here (no confirm_live given)",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 29,
+     "started_at": "2026-10-27T14:34:05Z",
+     "completed_at": "2026-10-27T14:34:05Z"
+    },
+    {
+     "name": "Record that a paid mission was attempted (before any provider can be reached)",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 30,
+     "started_at": "2026-10-27T14:34:05Z",
+     "completed_at": "2026-10-27T14:34:05Z"
+    },
+    {
+     "name": "Record the attempt durably (git tag)",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 31,
+     "started_at": "2026-10-27T14:34:05Z",
+     "completed_at": "2026-10-27T14:34:09Z"
+    },
+    {
+     "name": "Run actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 32,
+     "started_at": "2026-10-27T14:34:09Z",
+     "completed_at": "2026-10-27T14:34:10Z"
+    },
+    {
+     "name": "J1: make the final-message directory",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 33,
+     "started_at": "2026-10-27T14:34:10Z",
+     "completed_at": "2026-10-27T14:34:11Z"
+    },
+    {
+     "name": "Live progress: start the phase publisher (best-effort)",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 34,
+     "started_at": "2026-10-27T14:34:11Z",
+     "completed_at": "2026-10-27T14:34:11Z"
+    },
+    {
+     "name": "LIVE: run the first real Julius mission",
+     "status": "completed",
+     "conclusion": "failure",
+     "number": 35,
+     "started_at": "2026-10-27T14:34:11Z",
+     "completed_at": "2026-10-27T14:34:22Z"
+    },
+    {
+     "name": "Live progress: stop the phase publisher",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 36,
+     "started_at": "2026-10-27T14:34:22Z",
+     "completed_at": "2026-10-27T14:34:24Z"
+    },
+    {
+     "name": "Record that a paid mission completed",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 37,
+     "started_at": "2026-10-27T14:34:24Z",
+     "completed_at": "2026-10-27T14:34:24Z"
+    },
+    {
+     "name": "Run actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 38,
+     "started_at": "2026-10-27T14:34:24Z",
+     "completed_at": "2026-10-27T14:34:24Z"
+    },
+    {
+     "name": "Learning pair arm WITHOUT: dump this run's store, restorable, for its WITH arm",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 39,
+     "started_at": "2026-10-27T14:34:24Z",
+     "completed_at": "2026-10-27T14:34:24Z"
+    },
+    {
+     "name": "Learning pair arm WITHOUT: refuse to publish a store that contains credential material",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 40,
+     "started_at": "2026-10-27T14:34:24Z",
+     "completed_at": "2026-10-27T14:34:24Z"
+    },
+    {
+     "name": "Run actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 41,
+     "started_at": "2026-10-27T14:34:24Z",
+     "completed_at": "2026-10-27T14:34:24Z"
+    },
+    {
+     "name": "Collect the redacted validation evidence",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 42,
+     "started_at": "2026-10-27T14:34:24Z",
+     "completed_at": "2026-10-27T14:35:00Z"
+    },
+    {
+     "name": "J1: publish the redacted final message",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 43,
+     "started_at": "2026-10-27T14:35:00Z",
+     "completed_at": "2026-10-27T14:35:00Z"
+    },
+    {
+     "name": "Refuse to publish evidence that contains credential material",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 44,
+     "started_at": "2026-10-27T14:35:00Z",
+     "completed_at": "2026-10-27T14:35:00Z"
+    },
+    {
+     "name": "The evidence bundle resolves every artifact it names (strict)",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 45,
+     "started_at": "2026-10-27T14:35:00Z",
+     "completed_at": "2026-10-27T14:35:00Z"
+    },
+    {
+     "name": "Result record: summarize this run in closed fields",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 46,
+     "started_at": "2026-10-27T14:35:00Z",
+     "completed_at": "2026-10-27T14:35:00Z"
+    },
+    {
+     "name": "J1: hand the final message and the scanned evidence to the grade job (runner host, 0700)",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 47,
+     "started_at": "2026-10-27T14:35:00Z",
+     "completed_at": "2026-10-27T14:35:01Z"
+    },
+    {
+     "name": "Run actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 48,
+     "started_at": "2026-10-27T14:35:01Z",
+     "completed_at": "2026-10-27T14:35:06Z"
+    },
+    {
+     "name": "Archive export: say whether this run's state was preserved",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 49,
+     "started_at": "2026-10-27T14:35:06Z",
+     "completed_at": "2026-10-27T14:35:06Z"
+    },
+    {
+     "name": "Destroy everything this job created",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 50,
+     "started_at": "2026-10-27T14:35:06Z",
+     "completed_at": "2026-10-27T14:35:07Z"
+    },
+    {
+     "name": "Keep the scanned evidence on the runner host (0700, SHA256SUMS)",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 51,
+     "started_at": "2026-10-27T14:35:07Z",
+     "completed_at": "2026-10-27T14:35:07Z"
+    },
+    {
+     "name": "Post Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 99,
+     "started_at": "2026-10-27T14:35:07Z",
+     "completed_at": "2026-10-27T14:35:07Z"
+    },
+    {
+     "name": "Post Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 100,
+     "started_at": "2026-10-27T14:35:07Z",
+     "completed_at": "2026-10-27T14:35:07Z"
+    },
+    {
+     "name": "Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 101,
+     "started_at": "2026-10-27T14:35:07Z",
+     "completed_at": "2026-10-27T14:35:08Z"
+    },
+    {
+     "name": "Complete runner",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 102,
+     "started_at": "2026-10-27T14:35:08Z",
+     "completed_at": "2026-10-27T14:35:08Z"
+    },
+    {
+     "name": "Complete job",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 103,
+     "started_at": "2026-10-27T14:35:08Z",
+     "completed_at": "2026-10-27T14:35:08Z"
+    }
+   ]
+  },
+  {
+   "id": 122253165774,
+   "run_id": 40520432789,
+   "run_attempt": 1,
+   "head_sha": "598741524f87783baef99a2d6a40cf0dba8baa8c",
+   "name": "J1: grade the final message with the pinned hidden checker",
+   "status": "completed",
+   "conclusion": "success",
+   "started_at": "2026-10-27T14:35:18Z",
+   "completed_at": "2026-10-27T14:35:42Z",
+   "runner_name": "julius-paid-Kaisin",
+   "runner_group_name": "Default",
+   "labels": [
+    "julius-paid"
+   ],
+   "workflow_name": "julius mission=julius-inworld-data-1 lane=lab mode=paid key=d1cdb4308652e460e05b0f6b6849b9f9d77a39f249a3d14b4cfcaa01de8ae58d",
+   "steps": [
+    {
+     "name": "Set up job",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 1,
+     "started_at": "2026-10-27T14:35:19Z",
+     "completed_at": "2026-10-27T14:35:24Z"
+    },
+    {
+     "name": "Set up runner",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 2,
+     "started_at": "2026-10-27T14:35:24Z",
+     "completed_at": "2026-10-27T14:35:25Z"
+    },
+    {
+     "name": "Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 3,
+     "started_at": "2026-10-27T14:35:25Z",
+     "completed_at": "2026-10-27T14:35:29Z"
+    },
+    {
+     "name": "Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 4,
+     "started_at": "2026-10-27T14:35:29Z",
+     "completed_at": "2026-10-27T14:35:30Z"
+    },
+    {
+     "name": "J1: receive the handoff from the runner host and verify every hash",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 5,
+     "started_at": "2026-10-27T14:35:30Z",
+     "completed_at": "2026-10-27T14:35:30Z"
+    },
+    {
+     "name": "J1: stage the pinned checker from git objects and grade",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 6,
+     "started_at": "2026-10-27T14:35:30Z",
+     "completed_at": "2026-10-27T14:35:30Z"
+    },
+    {
+     "name": "J1: read the verdict for the result record (closed fields)",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 7,
+     "started_at": "2026-10-27T14:35:30Z",
+     "completed_at": "2026-10-27T14:35:31Z"
+    },
+    {
+     "name": "Add the verdict to the runner host evidence copy (0700, SHA256SUMS)",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 8,
+     "started_at": "2026-10-27T14:35:31Z",
+     "completed_at": "2026-10-27T14:35:31Z"
+    },
+    {
+     "name": "J1: the pinned checker's verdict is PASS",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 9,
+     "started_at": "2026-10-27T14:35:31Z",
+     "completed_at": "2026-10-27T14:35:31Z"
+    },
+    {
+     "name": "J1: the pinned checker's verdict is FAIL",
+     "status": "completed",
+     "conclusion": "skipped",
+     "number": 10,
+     "started_at": "2026-10-27T14:35:31Z",
+     "completed_at": "2026-10-27T14:35:31Z"
+    },
+    {
+     "name": "Run actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 11,
+     "started_at": "2026-10-27T14:35:31Z",
+     "completed_at": "2026-10-27T14:35:32Z"
+    },
+    {
+     "name": "Post Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 20,
+     "started_at": "2026-10-27T14:35:32Z",
+     "completed_at": "2026-10-27T14:35:32Z"
+    },
+    {
+     "name": "Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 21,
+     "started_at": "2026-10-27T14:35:32Z",
+     "completed_at": "2026-10-27T14:35:33Z"
+    },
+    {
+     "name": "Complete runner",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 22,
+     "started_at": "2026-10-27T14:35:33Z",
+     "completed_at": "2026-10-27T14:35:33Z"
+    },
+    {
+     "name": "Complete job",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 23,
+     "started_at": "2026-10-27T14:35:33Z",
+     "completed_at": "2026-10-27T14:35:33Z"
+    }
+   ]
+  },
+  {
+   "id": 122253429407,
+   "run_id": 40520432789,
+   "run_attempt": 1,
+   "head_sha": "598741524f87783baef99a2d6a40cf0dba8baa8c",
+   "name": "J1: record the result (tag and status)",
+   "status": "completed",
+   "conclusion": "success",
+   "started_at": "2026-10-27T14:35:45Z",
+   "completed_at": "2026-10-27T14:35:58Z",
+   "runner_name": "julius-paid-Kaisin",
+   "runner_group_name": "Default",
+   "labels": [
+    "julius-paid"
+   ],
+   "workflow_name": "julius mission=julius-inworld-data-1 lane=lab mode=paid key=d1cdb4308652e460e05b0f6b6849b9f9d77a39f249a3d14b4cfcaa01de8ae58d",
+   "steps": [
+    {
+     "name": "Set up job",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 1,
+     "started_at": "2026-10-27T14:35:46Z",
+     "completed_at": "2026-10-27T14:35:47Z"
+    },
+    {
+     "name": "Set up runner",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 2,
+     "started_at": "2026-10-27T14:35:47Z",
+     "completed_at": "2026-10-27T14:35:47Z"
+    },
+    {
+     "name": "J1: write the result tag and the julius-run-result status",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 3,
+     "started_at": "2026-10-27T14:35:47Z",
+     "completed_at": "2026-10-27T14:35:53Z"
+    },
+    {
+     "name": "Complete runner",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 6,
+     "started_at": "2026-10-27T14:35:53Z",
+     "completed_at": "2026-10-27T14:35:53Z"
+    },
+    {
+     "name": "Complete job",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 7,
+     "started_at": "2026-10-27T14:35:53Z",
+     "completed_at": "2026-10-27T14:35:53Z"
+    }
+   ]
+  },
+  {
+   "id": 122253430411,
+   "run_id": 40520432789,
+   "run_attempt": 1,
+   "head_sha": "598741524f87783baef99a2d6a40cf0dba8baa8c",
+   "name": "J1: delete the graded final message",
+   "status": "completed",
+   "conclusion": "success",
+   "started_at": "2026-10-27T14:36:01Z",
+   "completed_at": "2026-10-27T14:36:11Z",
+   "runner_name": "julius-paid-Kaisin",
+   "runner_group_name": "Default",
+   "labels": [
+    "julius-paid"
+   ],
+   "workflow_name": "julius mission=julius-inworld-data-1 lane=lab mode=paid key=d1cdb4308652e460e05b0f6b6849b9f9d77a39f249a3d14b4cfcaa01de8ae58d",
+   "steps": [
+    {
+     "name": "Set up job",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 1,
+     "started_at": "2026-10-27T14:36:02Z",
+     "completed_at": "2026-10-27T14:36:02Z"
+    },
+    {
+     "name": "Set up runner",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 2,
+     "started_at": "2026-10-27T14:36:02Z",
+     "completed_at": "2026-10-27T14:36:02Z"
+    },
+    {
+     "name": "J1: delete the graded final message",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 3,
+     "started_at": "2026-10-27T14:36:02Z",
+     "completed_at": "2026-10-27T14:36:02Z"
+    },
+    {
+     "name": "J1: delete this run's j1-final-message artifact, if one exists (best-effort)",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 4,
+     "started_at": "2026-10-27T14:36:02Z",
+     "completed_at": "2026-10-27T14:36:03Z"
+    },
+    {
+     "name": "Complete runner",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 8,
+     "started_at": "2026-10-27T14:36:03Z",
+     "completed_at": "2026-10-27T14:36:03Z"
+    },
+    {
+     "name": "Complete job",
+     "status": "completed",
+     "conclusion": "success",
+     "number": 9,
+     "started_at": "2026-10-27T14:36:03Z",
+     "completed_at": "2026-10-27T14:36:03Z"
+    }
+   ]
+  }
+ ]
+}

@@ -18,9 +18,11 @@ import {
   readJuliusPriorRunSpend,
   readJuliusSpentTagLedger,
   readZipTextFiles,
+  withTransportRetry,
+  type JuliusUnreadableReason,
   type SqlQueryable,
 } from './julius-prior-spend';
-import { attemptMarkersCommand, authorizeSpendCommand } from '../julius-live-mission';
+import { attemptMarkersCommand, authorizeQualifyingPairSpend, authorizeSpendCommand } from '../julius-live-mission';
 
 function pool(handler: (sql: string, values: readonly unknown[] | undefined) => { rows: Record<string, unknown>[] }): SqlQueryable {
   return {
@@ -151,6 +153,7 @@ describe('the spent-tag listing is the durable record the cap reads', () => {
       token: TOKEN,
       namespace: 'julius-live-mission-5',
       fetchImpl: github(() => { throw new Error('network down'); }),
+      transport: { backoffMs: [0, 0, 0], sleep: async () => undefined },
     });
     expect(dropped).toEqual({ readable: false });
     const missing = await readJuliusSpentTagLedger({
@@ -823,5 +826,168 @@ describe('REVIEW pins: the classified listing never drops or zeroes a run it can
     }, base.wlj);
     expect(proof.basis).not.toBe('no_provider_execution_live_never_ran');
     expect(proof.classification).toBe('UNKNOWN');
+  });
+});
+
+/**
+ * PAID RUN 40520432789 (2026-10-27). The LIVE step's in-run spend check printed
+ * `prior_runs ledger=UNREADABLE` 10.66 s after it began (a fresh connection that never
+ * completed its handshake) and refused the attempt BEFORE any provider call. The identical read
+ * had passed 3 minutes earlier and passes again now: the failure was transport, the reader had
+ * no retry and logged no reason. These tests reproduce it and hold the repair to its limits.
+ */
+describe('the spent-tag reader survives a transient transport failure and nothing else', () => {
+  const NO_WAIT = { backoffMs: [0, 0, 0], sleep: async () => undefined } as const;
+  const PRIOR = 'abcdef0123456789abcdef01';
+  const MESSAGE = juliusSpentTagMessage({ runId: `run:${PRIOR}`, namespace: 'julius-live-mission-5', reservedUsdMicros: 30_000_000 });
+  const LISTING = JSON.stringify([{ ref: `refs/tags/julius-run-spent-${PRIOR}`, object: { type: 'tag', sha: 'b'.repeat(40) } }]);
+  const EXPECTED_PRIOR = {
+    runId: `run:${PRIOR}`, knownUsdMicros: 30_000_000, unknownCostComponents: 0, unverifiableApiSpend: false, spendVerified: true,
+  };
+
+  /** A GitHub that answers the listing and the tag object, with a scripted fault on chosen call numbers. */
+  function scripted(faults: Readonly<Record<number, 'throw' | number>>): { fetchImpl: typeof fetch; calls: string[] } {
+    const calls: string[] = [];
+    const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      calls.push(`${init?.method ?? 'GET'} ${url.replace('https://api.github.com/repos/ohdieyuh-glitch/sunday-relay', '')}`);
+      const fault = faults[calls.length];
+      if (fault === 'throw') throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'UND_ERR_CONNECT_TIMEOUT' } });
+      if (typeof fault === 'number') return new Response('fault', { status: fault });
+      if (url.endsWith('/julius-run-spent-')) return new Response(LISTING, { status: 200 });
+      return new Response(JSON.stringify({ message: MESSAGE }), { status: 200 });
+    }) as typeof fetch;
+    return { fetchImpl, calls };
+  }
+
+  async function ledger(faults: Readonly<Record<number, 'throw' | number>>, transport: Parameters<typeof withTransportRetry>[1] = NO_WAIT) {
+    const reasons: JuliusUnreadableReason[] = [];
+    const { fetchImpl, calls } = scripted(faults);
+    const result = await readJuliusClassifiedSpentTags({
+      repository: 'ohdieyuh-glitch/sunday-relay', token: TOKEN, namespace: 'julius-live-mission-5',
+      fetchImpl, transport, report: (reason) => { reasons.push(reason); },
+    });
+    return { result, calls, reasons };
+  }
+
+  it('REPRODUCES 40520432789: without a retry, one thrown connect is an unreadable ledger; with it, the same read is readable', async () => {
+    const without = await ledger({ 1: 'throw' }, { backoffMs: [], sleep: async () => undefined });
+    expect(without.result.ledger).toEqual({ readable: false });
+    expect(without.reasons).toEqual(['transport']);
+
+    const retried: string[] = [];
+    const withRetry = await ledger({ 1: 'throw' }, { ...NO_WAIT, onRetry: (n, cause) => { retried.push(`${String(n)}:${cause}`); } });
+    expect(withRetry.result.ledger).toEqual({ readable: true, priorRuns: [EXPECTED_PRIOR], durableRecord: 'PRESENT' });
+    expect(withRetry.reasons).toEqual([]);
+    expect(retried).toEqual(['1:transport']);
+    expect(withRetry.calls).toHaveLength(3);
+    const healthy = await ledger({});
+    expect(withRetry.result).toEqual(healthy.result);
+  });
+
+  it.each([2, 3])('a throw on call %i (the tag object) is retried the same way and gives the identical ledger', async (call) => {
+    const faulted = await ledger({ [call]: 'throw' });
+    const healthy = await ledger({});
+    expect(faulted.result).toEqual(healthy.result);
+    expect(faulted.result.ledger.readable).toBe(true);
+  });
+
+  it('three retries at 2/4/8 s bound it: a fetch that throws every time is unreadable, never zero, after exactly four calls', async () => {
+    const slept: number[] = [];
+    const always = await ledger({ 1: 'throw', 2: 'throw', 3: 'throw', 4: 'throw', 5: 'throw' }, {
+      backoffMs: [2_000, 4_000, 8_000], sleep: async (ms) => { slept.push(ms); },
+    });
+    expect(always.result).toEqual({ ledger: { readable: false }, audit: [] });
+    expect(always.calls).toHaveLength(4);
+    expect(slept).toEqual([2_000, 4_000, 8_000]);
+    expect(always.reasons).toEqual(['transport']);
+  });
+
+  it.each([400, 401, 403, 404, 422, 429, 500])('HTTP %i is a real answer: unreadable at once, ONE call, no retry, and the status is the printed reason', async (status) => {
+    const answered = await ledger({ 1: status });
+    expect(answered.result.ledger).toEqual({ readable: false });
+    expect(answered.calls).toHaveLength(1);
+    expect(answered.reasons).toEqual([`http_${String(status)}`]);
+  });
+
+  it('a 502/503/504 gateway answer is retried, and a gateway that never recovers is unreadable', async () => {
+    const recovers = await ledger({ 1: 503, 2: 502 });
+    const healthy = await ledger({});
+    expect(recovers.result).toEqual(healthy.result);
+    expect(recovers.calls).toHaveLength(4);
+    const never = await ledger({ 1: 504, 2: 504, 3: 504, 4: 504 });
+    expect(never.result.ledger).toEqual({ readable: false });
+    expect(never.calls).toHaveLength(4);
+    expect(never.reasons).toEqual(['http_504']);
+  });
+
+  it('only an idempotent GET is ever repeated', async () => {
+    let calls = 0;
+    const post = withTransportRetry((async () => { calls += 1; throw new TypeError('fetch failed'); }) as unknown as typeof fetch, NO_WAIT);
+    await expect(post('https://api.github.com/x', { method: 'POST' })).rejects.toThrow('fetch failed');
+    expect(calls).toBe(1);
+  });
+
+  it('every other failure prints a closed reason and stays unreadable: body shape, page cap, tag object, configuration', async () => {
+    const reasonFor = async (fetchImpl: typeof fetch, repository = 'ohdieyuh-glitch/sunday-relay', token = TOKEN) => {
+      const reasons: JuliusUnreadableReason[] = [];
+      const result = await readJuliusClassifiedSpentTags({
+        repository, token, namespace: 'julius-live-mission-5', fetchImpl, transport: NO_WAIT, report: (r) => { reasons.push(r); },
+      });
+      expect(result.ledger).toEqual({ readable: false });
+      return reasons;
+    };
+    expect(await reasonFor(github(() => new Response('{"not":"a list"}', { status: 200 })))).toEqual(['body_shape']);
+    expect(await reasonFor(github(() => new Response('not json', { status: 200 })))).toEqual(['body_shape']);
+    expect(await reasonFor(github(() => new Response(JSON.stringify([{ ref: 'refs/tags/julius-run-spent-x', object: { type: 'blob' } }]), { status: 200 })))).toEqual(['tag_object']);
+    expect(await reasonFor(github(() => new Response('[]', { status: 200, headers: { link: '<https://api.github.com/next>; rel="next"' } })))).toEqual(['page_cap']);
+    expect(await reasonFor(github(() => { throw new Error('must not be called'); }), '', '')).toEqual(['config']);
+  });
+
+  it('a listing the classifier itself cannot accept prints the closed reason "classification", and stays unreadable', async () => {
+    const reasons: JuliusUnreadableReason[] = [];
+    // A ref that is not a well-formed spent-tag name (not 24/32 hex): the interpreter refuses the whole listing.
+    const badTag = JSON.stringify([{ ref: 'refs/tags/julius-run-spent-not-a-run-id', object: { type: 'tag', sha: 'b'.repeat(40) } }]);
+    const fetchImpl = (async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.endsWith('/julius-run-spent-')) return new Response(badTag, { status: 200 });
+      return new Response(JSON.stringify({ message: 'julius-run-spent.v1\nrun=run:abcdef0123456789abcdef01\nnamespace=julius-live-mission-5\nreservedUsdMicros=not-a-number' }), { status: 200 });
+    }) as typeof fetch;
+    const result = await readJuliusClassifiedSpentTags({
+      repository: 'ohdieyuh-glitch/sunday-relay', token: TOKEN, namespace: 'julius-live-mission-5', fetchImpl, transport: NO_WAIT,
+      report: (reason) => { reasons.push(reason); },
+    });
+    expect(result.ledger).toEqual({ readable: false });
+    expect(reasons).toEqual(['classification']);
+  });
+
+  it('is OPT-IN: a caller that passes no transport (the Wonderland Start route) still gets exactly one attempt, byte for byte', async () => {
+    const { fetchImpl, calls } = scripted({ 1: 'throw' });
+    const result = await readJuliusClassifiedSpentTags({
+      repository: 'ohdieyuh-glitch/sunday-relay', token: TOKEN, namespace: 'julius-live-mission-5', fetchImpl,
+    });
+    expect(result.ledger).toEqual({ readable: false });
+    expect(calls).toHaveLength(1);
+    const markers = scripted({ 1: 502 });
+    const unread = await readJuliusAttemptMarkers({
+      repository: 'ohdieyuh-glitch/sunday-relay', token: TOKEN, namespace: 'julius-inworld-data-1', fetchImpl: markers.fetchImpl,
+    });
+    expect(unread).toEqual({ readable: false });
+    expect(markers.calls).toHaveLength(1);
+  });
+
+  it('the live entry prints the closed reason beside UNREADABLE, never a URL, header or token', async () => {
+    const lines: string[] = [];
+    const { fetchImpl } = scripted({ 1: 403 });
+    const authorization = await authorizeQualifyingPairSpend({
+      contract: { markerNamespace: 'julius-inworld-data-1', limits: { spendUsd: 30, repairCycles: 3 } },
+      env: { GITHUB_REPOSITORY: 'ohdieyuh-glitch/sunday-relay', GITHUB_TOKEN: TOKEN, JULIUS_SERVER_RUN_ID: 'wlj_00000000-0000-4000-8000-000000000000' },
+      out: (line) => { lines.push(line); },
+      fetchImpl, transport: NO_WAIT,
+    });
+    expect(authorization.authorized).toBe(false);
+    expect(lines).toContain('prior_runs unreadable_reason=http_403');
+    expect(lines).toContain('prior_runs ledger=UNREADABLE counted=UNKNOWN');
+    expect(lines.join('\n')).not.toContain(TOKEN);
   });
 });

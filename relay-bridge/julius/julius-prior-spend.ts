@@ -16,6 +16,7 @@ import {
   classifyJuliusPriorRun,
   classifyJuliusSpentTags,
   juliusAttemptMarkerBindings,
+  juliusArtifactAbsent,
   juliusBoundArtifactId,
   juliusSpentTagBinding,
   parseJuliusAttemptRecordTag,
@@ -24,6 +25,7 @@ import {
   JULIUS_INWORLD_VERDICT_FILE,
   JULIUS_LIVE_EVIDENCE_ARTIFACT,
   JULIUS_EVIDENCE_MANIFEST_FILE,
+  JULIUS_MISSION_JOB_NAME,
   JULIUS_ZERO_ROW_EVIDENCE_FILES,
   summarizeJuliusPriorRunSpend,
   type JuliusPriorRunAudit,
@@ -34,6 +36,7 @@ import {
   type JuliusSpentTag,
   type JuliusSpendLedgerRead,
 } from '../../src/relay/mission/julius/julius-spend-ceiling';
+import { juliusLiveRefusedBeforeProvider } from './julius-refused-before-provider';
 
 export interface SqlQueryable {
   query<T extends Record<string, unknown> = Record<string, unknown>>(
@@ -109,6 +112,64 @@ const GITHUB_REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
 const TAG_OBJECT_SHA = /^[0-9a-f]{40}$/u;
 
 /**
+ * A BOUNDED RETRY FOR THE READER'S OWN TRANSPORT, AND NOTHING ELSE.
+ *
+ * Paid run 40520432789 was refused `spend_ledger_unreadable` 10.66 s after the
+ * reader started: the signature of a fresh connection to api.github.com whose
+ * handshake never completed (undici's connect timeout is 10 s). The read had
+ * no retry, a thrown fetch was unreadable, and the unreadable ledger cost the
+ * attempt and its admission. This retries ONLY what proves nothing was
+ * answered: a THROWN fetch, or a 502/503/504 (a gateway that did not reach
+ * GitHub). Every other response, 429 and 4xx included, is a real answer and
+ * is returned at once. Only an idempotent GET is ever repeated. Three retries
+ * at 2/4/8 s bound it. Exhausted, it throws or returns the last response, so
+ * the caller still reads unreadable. It never turns an unreadable read into a
+ * readable one and never invents a body.
+ */
+export const JULIUS_TRANSPORT_BACKOFF_MS: readonly number[] = Object.freeze([2_000, 4_000, 8_000]);
+const GATEWAY_STATUSES: ReadonlySet<number> = new Set([502, 503, 504]);
+
+export interface JuliusReadTransport {
+  readonly backoffMs?: readonly number[];
+  readonly sleep?: (ms: number) => Promise<void>;
+  /** Called once per retry with its 1-based number and a closed cause. Carries no URL, header or body. */
+  readonly onRetry?: (attempt: number, cause: 'transport' | 'http_502' | 'http_503' | 'http_504') => void;
+}
+
+export function withTransportRetry(base: typeof fetch, transport: JuliusReadTransport = {}): typeof fetch {
+  const backoff = transport.backoffMs ?? JULIUS_TRANSPORT_BACKOFF_MS;
+  const sleep = transport.sleep ?? ((ms: number) => new Promise<void>((resolve) => { setTimeout(resolve, ms); }));
+  return (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    const method = (init?.method ?? 'GET').toUpperCase();
+    if (method !== 'GET') return base(input, init);
+    for (let attempt = 0; ; attempt += 1) {
+      let response: Response;
+      try {
+        response = await base(input, init);
+      } catch (error) {
+        if (attempt >= backoff.length) throw error;
+        transport.onRetry?.(attempt + 1, 'transport');
+        await sleep(backoff[attempt] as number);
+        continue;
+      }
+      if (!GATEWAY_STATUSES.has(response.status) || attempt >= backoff.length) return response;
+      transport.onRetry?.(attempt + 1, `http_${String(response.status)}` as 'http_502' | 'http_503' | 'http_504');
+      await response.body?.cancel().catch(() => undefined);
+      await sleep(backoff[attempt] as number);
+    }
+  }) as typeof fetch;
+}
+
+/**
+ * OPT-IN. A caller that passes no `transport` gets the single attempt it always had: the Wonderland
+ * Start route's `ghApiFetch` answers a failed `gh` with a synthetic 502, which is not a gateway and
+ * must not be repeated. Only the workflow's own entrypoints (`authorize-spend`, `attempt-markers`,
+ * `run`) opt in.
+ */
+/** The closed causes a failed read prints. Never a URL, header, body or token. */
+export type JuliusUnreadableReason = 'config' | 'transport' | `http_${number}` | 'body_shape' | 'page_cap' | 'tag_object' | 'classification';
+
+/**
  * THE DURABLE PRIOR-SPEND RECORD.
  *
  * Lists `refs/tags/julius-run-spent-*` with the job token and reads each
@@ -129,11 +190,18 @@ export async function readJuliusClassifiedSpentTags(input: {
   readonly namespace: string;
   readonly excludeRunId?: string;
   readonly fetchImpl?: typeof fetch;
+  readonly transport?: JuliusReadTransport;
+  /** Told the closed reason when the ledger is unreadable, so the next failure is diagnosable. */
+  readonly report?: (reason: JuliusUnreadableReason) => void;
 }): Promise<{ readonly ledger: JuliusSpendLedgerRead; readonly audit: readonly JuliusPriorRunAudit[] }> {
   const unreadable = { ledger: { readable: false } as const, audit: [] };
-  if (!GITHUB_REPOSITORY.test(input.repository)) return unreadable;
-  if (!tokenIsUsable(input.token)) return unreadable;
-  const fetchImpl = input.fetchImpl ?? fetch;
+  const fail = (reason: JuliusUnreadableReason): typeof unreadable => {
+    input.report?.(reason);
+    return unreadable;
+  };
+  if (!GITHUB_REPOSITORY.test(input.repository)) return fail('config');
+  if (!tokenIsUsable(input.token)) return fail('config');
+  const fetchImpl = input.transport === undefined ? (input.fetchImpl ?? fetch) : withTransportRetry(input.fetchImpl ?? fetch, input.transport);
   const headers = githubHeaders(input.token);
   let tags: JuliusSpentTag[];
   try {
@@ -141,27 +209,31 @@ export async function readJuliusClassifiedSpentTags(input: {
     let url: string | null = `https://api.github.com/repos/${input.repository}/git/matching-refs/tags/julius-run-spent-`;
     let pages = 0;
     while (url !== null) {
-      if (pages === 5) return unreadable;
+      if (pages === 5) return fail('page_cap');
       pages += 1;
       const response = await fetchImpl(url, { headers });
-      if (!response.ok) return unreadable;
-      const body: unknown = await response.json();
-      if (!Array.isArray(body)) return unreadable;
+      if (!response.ok) return fail(`http_${response.status}`);
+      let body: unknown;
+      try { body = await response.json(); } catch { return fail('body_shape'); }
+      if (!Array.isArray(body)) return fail('body_shape');
       for (const entry of body) {
         const tag = await readOneSpentTag(entry, input.repository, headers, fetchImpl);
-        if (tag === 'unreadable') return unreadable;
+        if (tag === 'unreadable') return fail('tag_object');
         tags.push(tag);
       }
       const next = nextGitHubPage(response.headers.get('link'));
-      if (next === 'rejected') return unreadable;
+      if (next === 'rejected') return fail('page_cap');
       url = next;
     }
   } catch {
-    return unreadable;
+    return fail('transport');
   }
   const base = { namespace: input.namespace, excludeRunId: input.excludeRunId, tags };
   const first = classifyJuliusSpentTags(base);
-  if (!first.ledger.readable) return first;
+  if (!first.ledger.readable) {
+    input.report?.('classification');
+    return first;
+  }
   const proofs = new Map<string, JuliusPriorRunProof>();
   for (const entry of first.audit) {
     if (entry.basis !== 'proof_absent' || entry.workflowRunId === null || entry.workflowRunAttempt === null) continue;
@@ -172,7 +244,9 @@ export async function readJuliusClassifiedSpentTags(input: {
     });
     proofs.set(entry.runId, classifyJuliusPriorRun(observation, entry.runId));
   }
-  return classifyJuliusSpentTags({ ...base, proofs });
+  const final = classifyJuliusSpentTags({ ...base, proofs });
+  if (!final.ledger.readable) input.report?.('classification');
+  return final;
 }
 
 /** The ledger the cap counts. One reader: {@link readJuliusClassifiedSpentTags}. */
@@ -182,6 +256,7 @@ export async function readJuliusSpentTagLedger(input: {
   readonly namespace: string;
   readonly excludeRunId?: string;
   readonly fetchImpl?: typeof fetch;
+  readonly transport?: JuliusReadTransport;
 }): Promise<JuliusSpendLedgerRead> {
   return (await readJuliusClassifiedSpentTags(input)).ledger;
 }
@@ -200,10 +275,11 @@ export async function readJuliusAttemptMarkers(input: {
   readonly token: string;
   readonly namespace: string;
   readonly fetchImpl?: typeof fetch;
+  readonly transport?: JuliusReadTransport;
 }): Promise<{ readonly readable: false } | { readonly readable: true; readonly proofs: readonly JuliusPriorRunProof[] }> {
   if (!GITHUB_REPOSITORY.test(input.repository) || !tokenIsUsable(input.token)) return { readable: false };
   if (!/^[a-z][a-z0-9-]{2,48}$/u.test(input.namespace)) return { readable: false };
-  const fetchImpl = input.fetchImpl ?? fetch;
+  const fetchImpl = input.transport === undefined ? (input.fetchImpl ?? fetch) : withTransportRetry(input.fetchImpl ?? fetch, input.transport);
   const headers = githubHeaders(input.token);
   const markerName = `${input.namespace}-attempted`;
   const listing = await readJson(
@@ -350,7 +426,50 @@ export async function observeJuliusWorkflowRun(input: {
   const verdict = verdictId === null
     ? null
     : await readArtifactFiles(input.repository, verdictId, headers, fetchImpl, [JULIUS_INWORLD_VERDICT_FILE]);
-  return { binding, run, jobs, artifacts, liveEvidence, verdict };
+  // PROOF (c) NEEDS THE RUN'S OWN LOG, and only where the evidence bundle is absent (an upload blocked under
+  // the billing lock). A bundle that exists is judged on its rows; the log is never read then.
+  // ABSENT means PROVEN absent (a complete listing with no entry of that name), not a null id: an unreadable,
+  // truncated, expired, duplicate or mis-bound listing is unknown, and unknown never enables the log.
+  const evidenceAbsent = juliusArtifactAbsent(artifacts, JULIUS_LIVE_EVIDENCE_ARTIFACT);
+  const liveLog = evidenceAbsent ? await readMissionJobLog(input.repository, jobs, headers, fetchImpl) : null;
+  const refusedBeforeProvider = evidenceAbsent && juliusLiveRefusedBeforeProvider({ run, jobs, log: liveLog, binding });
+  return { binding, run, jobs, artifacts, liveEvidence, verdict, refusedBeforeProvider };
+}
+
+const JOB_LOG_MAX_BYTES = 8 * 1024 * 1024;
+
+/**
+ * The text of the one mission job's log, or null. `GET /actions/jobs/<id>/logs` answers a redirect to a
+ * signed URL, followed by hand, over https, WITHOUT the token, exactly as the artifact zips are. Needs
+ * Actions: read, which the workflow's job token already holds. Any failure is null, which proves nothing.
+ */
+async function readMissionJobLog(
+  repository: string,
+  jobsBody: unknown,
+  headers: Readonly<Record<string, string>>,
+  fetchImpl: typeof fetch,
+): Promise<string | null> {
+  try {
+    if (jobsBody === null || typeof jobsBody !== 'object' || Array.isArray(jobsBody)) return null;
+    const jobs = (jobsBody as Record<string, unknown>).jobs;
+    if (!Array.isArray(jobs)) return null;
+    const mission = jobs.filter((job): job is Record<string, unknown> => job !== null && typeof job === 'object' && (job as Record<string, unknown>).name === JULIUS_MISSION_JOB_NAME);
+    if (mission.length !== 1) return null;
+    const id = (mission[0] as Record<string, unknown>).id;
+    if (typeof id !== 'number' || !Number.isSafeInteger(id) || id <= 0) return null;
+    let response = await fetchImpl(`https://api.github.com/repos/${repository}/actions/jobs/${String(id)}/logs`, { headers, redirect: 'manual' });
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get('location');
+      if (location === null || !location.startsWith('https://')) return null;
+      response = await fetchImpl(location, { headers: { 'User-Agent': 'sunday-relay' } });
+    }
+    if (!response.ok) return null;
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.byteLength === 0 || bytes.byteLength > JOB_LOG_MAX_BYTES) return null;
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    return null;
+  }
 }
 
 async function readOneSpentTag(

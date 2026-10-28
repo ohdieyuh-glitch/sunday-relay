@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **241 production files** across 20/20 subsystems (2 roots, 207 traced, 9 not composed by the live root, 23 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **242 production files** across 20/20 subsystems (2 roots, 208 traced, 9 not composed by the live root, 23 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -48,7 +48,7 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | live composition (relay-bridge/julius/) | bridge provider stacks (hosted Claude, Hermes, redaction) | 22 | 6 |
 | live composition (relay-bridge/julius/) | connectors (gpt-architect, prompt-architect contracts) | 10 | 1 |
 | live composition (relay-bridge/julius/) | executor + tool substrate (src/relay/workspace/julius-tools/) | 3 | 0 |
-| live composition (relay-bridge/julius/) | kernel (src/relay/mission/julius/) | 36 | 12 |
+| live composition (relay-bridge/julius/) | kernel (src/relay/mission/julius/) | 37 | 12 |
 | live composition (relay-bridge/julius/) | other | 8 | 4 |
 | live composition (relay-bridge/julius/) | persistence (src/relay/persistence/) | 16 | 2 |
 | live composition (relay-bridge/julius/) | Relay↔Julius port (src/relay/integration/julius/) | 2 | 0 |
@@ -442,6 +442,7 @@ C.A.R.D. roles resolved to live adapters — fail closed, naming every missing v
 | production source | role | reached from |
 | --- | --- | --- |
 | `relay-bridge/julius/julius-prior-spend.ts` | traced | `relay-bridge/julius-live-mission.ts` |
+| `relay-bridge/julius/julius-refused-before-provider.ts` | traced | `relay-bridge/julius/julius-prior-spend.ts` |
 | `relay-bridge/julius/live-composition.ts` | traced | `relay-bridge/julius/anthropic-org-attribution.ts` |
 | `relay-bridge/julius/live-workers.ts` | traced | `relay-bridge/julius/executor-effects.ts` |
 | `relay-bridge/julius/research-mediator.ts` | traced | `relay-bridge/julius/live-composition.ts` |
