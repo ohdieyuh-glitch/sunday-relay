@@ -479,6 +479,7 @@ const FILE_RULES = [
   // The live entry's read of prior runs of this mission, so the pair cap is a
   // ledger fact. Path-adjacent to the composition that spends.
   ['relay-bridge/julius/julius-prior-spend.ts', 'LIVE PROVIDER COMPOSITION'],
+  ['relay-bridge/julius/julius-refused-before-provider.ts', 'LIVE PROVIDER COMPOSITION'],
   // The one place the sealed mission policy and Live Reach's bounded fetch
   // meet, and the service it wraps. Composition, both of them: the domain has
   // no network and the connector may not import `/mission`.
