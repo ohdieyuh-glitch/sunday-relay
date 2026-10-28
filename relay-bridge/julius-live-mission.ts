@@ -75,7 +75,7 @@ import { createPostgresMissionKnowledgeStore } from './julius/mission-knowledge'
 import { createPostgresMissionSeedStore } from './julius/mission-seed';
 import { createJuliusPostgresRuntimeStore } from './julius/postgres-store';
 import { createExecutorShellPort } from './julius/executor-effects';
-import { createDurableArtifactExchange, juliusReviewerBillingPath, type JuliusArtifactExchange } from './julius/live-workers';
+import { createDurableArtifactExchange, juliusReviewerBillingPath, printAnthropicAcceptanceProbes, type JuliusArtifactExchange } from './julius/live-workers';
 import { createJuliusDurableArtifacts, juliusWorkArtifactRoot } from './julius/durable-artifacts';
 import { LocalJuliusArtifactStore } from '../src/relay/workspace/julius-tools/local-artifact-store';
 import { JuliusWorkArtifactPostgresRepository } from '../src/relay/persistence/julius-work-artifact-postgres';
@@ -1105,6 +1105,16 @@ async function main(argv: readonly string[]): Promise<number> {
     return 1;
   }
   if (!flag('confirm-live')) {
+    /*
+     * THE $0 ACCEPTANCE PROBES (OBSERVE MODE), in the preflight only. `GET /v1/models` proves a key and an
+     * organization; nothing before this sent a Messages-shaped request, so the first test of the real body was a
+     * paid call (run 40698923582: preflight 200, first real request 400). `count_tokens` is free. Printed, never a
+     * gate yet: one calibrated trial decides what count_tokens accepts, then the production probe becomes one.
+     */
+    await printAnthropicAcceptanceProbes({
+      env, architectOnAnthropic, architectModel: preflight.requested.architectModel ?? null,
+      architectEffort: contract.limits?.architectEffort, coderModel: preflight.requested.codingModel ?? null, out,
+    });
     out('Preflight is ready. This run will spend real provider money and mutate the mission workspace.');
     out('To proceed, re-run with --confirm-live (approval is never inferred).');
     return 5;
