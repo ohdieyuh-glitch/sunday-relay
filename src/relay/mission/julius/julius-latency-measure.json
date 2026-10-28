@@ -1,0 +1,497 @@
+{
+  "schema": "julius-latency-measure.v1",
+  "label": "SIMULATED PROVIDER LATENCY: injected delays around scripted fake providers; not real-provider latency, which is Unknown here.",
+  "runtimeVersion": "julius-runtime.v1",
+  "generatedAt": "2026-10-26T02:36:11.156Z",
+  "baseCommit": "73a4aa3fe0c6a5d23fb6a10f5ac9121016443e28",
+  "environment": {
+    "node": "v22.23.2",
+    "platform": "win32",
+    "release": "10.0.26200",
+    "cpuModel": "Intel(R) Core(TM) 7 240H",
+    "cpuCount": 16
+  },
+  "warmUpCases": 1,
+  "cases": [
+    {
+      "name": "zero-latency/1-missions/1-loop",
+      "label": "SIMULATED PROVIDER LATENCY: injected delays around scripted fake providers; not real-provider latency, which is Unknown here.",
+      "missions": 1,
+      "loops": 1,
+      "claimLimit": 10,
+      "profile": {
+        "kind": "fixed",
+        "ms": 0
+      },
+      "completedMissions": 1,
+      "dispatches": 4,
+      "distinctDispatchedTasks": 4,
+      "serialInjectedMs": 0,
+      "criticalPathInjectedMs": 0,
+      "makespanMs": 12.924,
+      "idealMakespanMs": 0,
+      "inAdapterMs": 0.127,
+      "timerOvershootMs": 0.127,
+      "makespanOverSerial": null,
+      "makespanOverIdeal": null,
+      "juliusMs": 12.756,
+      "juliusPerDispatchMs": 3.189,
+      "juliusOverInjected": null,
+      "busyTicks": 4,
+      "idleTicks": 0,
+      "tickWall": {
+        "count": 4,
+        "meanMs": 3.221,
+        "p50Ms": 2.429,
+        "p95Ms": 5.702,
+        "maxMs": 5.702
+      },
+      "tickJulius": {
+        "count": 4,
+        "meanMs": 3.189,
+        "p50Ms": 2.39,
+        "p95Ms": 5.674,
+        "maxMs": 5.674
+      },
+      "injected": {
+        "count": 4,
+        "meanMs": 0,
+        "p50Ms": 0,
+        "p95Ms": 0,
+        "maxMs": 0
+      }
+    },
+    {
+      "name": "zero-latency/3-missions/1-loop",
+      "label": "SIMULATED PROVIDER LATENCY: injected delays around scripted fake providers; not real-provider latency, which is Unknown here.",
+      "missions": 3,
+      "loops": 1,
+      "claimLimit": 10,
+      "profile": {
+        "kind": "fixed",
+        "ms": 0
+      },
+      "completedMissions": 3,
+      "dispatches": 12,
+      "distinctDispatchedTasks": 12,
+      "serialInjectedMs": 0,
+      "criticalPathInjectedMs": 0,
+      "makespanMs": 30.367,
+      "idealMakespanMs": 0,
+      "inAdapterMs": 0.329,
+      "timerOvershootMs": 0.329,
+      "makespanOverSerial": null,
+      "makespanOverIdeal": null,
+      "juliusMs": 29.948,
+      "juliusPerDispatchMs": 2.496,
+      "juliusOverInjected": null,
+      "busyTicks": 4,
+      "idleTicks": 0,
+      "tickWall": {
+        "count": 4,
+        "meanMs": 7.569,
+        "p50Ms": 7.762,
+        "p95Ms": 9.831,
+        "maxMs": 9.831
+      },
+      "tickJulius": {
+        "count": 4,
+        "meanMs": 7.487,
+        "p50Ms": 7.688,
+        "p95Ms": 9.727,
+        "maxMs": 9.727
+      },
+      "injected": {
+        "count": 12,
+        "meanMs": 0,
+        "p50Ms": 0,
+        "p95Ms": 0,
+        "maxMs": 0
+      }
+    },
+    {
+      "name": "zero-latency/12-missions/1-loop",
+      "label": "SIMULATED PROVIDER LATENCY: injected delays around scripted fake providers; not real-provider latency, which is Unknown here.",
+      "missions": 12,
+      "loops": 1,
+      "claimLimit": 10,
+      "profile": {
+        "kind": "fixed",
+        "ms": 0
+      },
+      "completedMissions": 12,
+      "dispatches": 48,
+      "distinctDispatchedTasks": 48,
+      "serialInjectedMs": 0,
+      "criticalPathInjectedMs": 0,
+      "makespanMs": 107.69,
+      "idealMakespanMs": 0,
+      "inAdapterMs": 1.414,
+      "timerOvershootMs": 1.414,
+      "makespanOverSerial": null,
+      "makespanOverIdeal": null,
+      "juliusMs": 106.161,
+      "juliusPerDispatchMs": 2.212,
+      "juliusOverInjected": null,
+      "busyTicks": 6,
+      "idleTicks": 0,
+      "tickWall": {
+        "count": 6,
+        "meanMs": 17.929,
+        "p50Ms": 18.224,
+        "p95Ms": 29.934,
+        "maxMs": 29.934
+      },
+      "tickJulius": {
+        "count": 6,
+        "meanMs": 17.694,
+        "p50Ms": 17.943,
+        "p95Ms": 29.663,
+        "maxMs": 29.663
+      },
+      "injected": {
+        "count": 48,
+        "meanMs": 0,
+        "p50Ms": 0,
+        "p95Ms": 0,
+        "maxMs": 0
+      }
+    },
+    {
+      "name": "zero-latency/50-missions/1-loop",
+      "label": "SIMULATED PROVIDER LATENCY: injected delays around scripted fake providers; not real-provider latency, which is Unknown here.",
+      "missions": 50,
+      "loops": 1,
+      "claimLimit": 10,
+      "profile": {
+        "kind": "fixed",
+        "ms": 0
+      },
+      "completedMissions": 50,
+      "dispatches": 200,
+      "distinctDispatchedTasks": 200,
+      "serialInjectedMs": 0,
+      "criticalPathInjectedMs": 0,
+      "makespanMs": 450.296,
+      "idealMakespanMs": 0,
+      "inAdapterMs": 6.189,
+      "timerOvershootMs": 6.189,
+      "makespanOverSerial": null,
+      "makespanOverIdeal": null,
+      "juliusMs": 443.521,
+      "juliusPerDispatchMs": 2.218,
+      "juliusOverInjected": null,
+      "busyTicks": 20,
+      "idleTicks": 0,
+      "tickWall": {
+        "count": 20,
+        "meanMs": 22.485,
+        "p50Ms": 18.203,
+        "p95Ms": 40.99,
+        "maxMs": 41.877
+      },
+      "tickJulius": {
+        "count": 20,
+        "meanMs": 22.176,
+        "p50Ms": 17.93,
+        "p95Ms": 40.661,
+        "maxMs": 41.508
+      },
+      "injected": {
+        "count": 200,
+        "meanMs": 0,
+        "p50Ms": 0,
+        "p95Ms": 0,
+        "maxMs": 0
+      }
+    },
+    {
+      "name": "jitter-50-500ms/1-missions/1-loop",
+      "label": "SIMULATED PROVIDER LATENCY: injected delays around scripted fake providers; not real-provider latency, which is Unknown here.",
+      "missions": 1,
+      "loops": 1,
+      "claimLimit": 10,
+      "profile": {
+        "kind": "uniform",
+        "minMs": 50,
+        "maxMs": 500,
+        "seed": 13
+      },
+      "completedMissions": 1,
+      "dispatches": 4,
+      "distinctDispatchedTasks": 4,
+      "serialInjectedMs": 1077,
+      "criticalPathInjectedMs": 1077,
+      "makespanMs": 1114.978,
+      "idealMakespanMs": 1077,
+      "inAdapterMs": 1098.242,
+      "timerOvershootMs": 21.242,
+      "makespanOverSerial": 1.0353,
+      "makespanOverIdeal": 1.0353,
+      "juliusMs": 16.694,
+      "juliusPerDispatchMs": 4.173,
+      "juliusOverInjected": 0.0155,
+      "busyTicks": 4,
+      "idleTicks": 0,
+      "tickWall": {
+        "count": 4,
+        "meanMs": 278.734,
+        "p50Ms": 158.206,
+        "p95Ms": 446.215,
+        "maxMs": 446.215
+      },
+      "tickJulius": {
+        "count": 4,
+        "meanMs": 4.173,
+        "p50Ms": 3.955,
+        "p95Ms": 6.016,
+        "maxMs": 6.016
+      },
+      "injected": {
+        "count": 4,
+        "meanMs": 269.25,
+        "p50Ms": 148,
+        "p95Ms": 435,
+        "maxMs": 435
+      }
+    },
+    {
+      "name": "jitter-50-500ms/3-missions/1-loop",
+      "label": "SIMULATED PROVIDER LATENCY: injected delays around scripted fake providers; not real-provider latency, which is Unknown here.",
+      "missions": 3,
+      "loops": 1,
+      "claimLimit": 10,
+      "profile": {
+        "kind": "uniform",
+        "minMs": 50,
+        "maxMs": 500,
+        "seed": 13
+      },
+      "completedMissions": 3,
+      "dispatches": 12,
+      "distinctDispatchedTasks": 12,
+      "serialInjectedMs": 2544,
+      "criticalPathInjectedMs": 1077,
+      "makespanMs": 2686.981,
+      "idealMakespanMs": 2544,
+      "inAdapterMs": 2644.57,
+      "timerOvershootMs": 100.57,
+      "makespanOverSerial": 1.0562,
+      "makespanOverIdeal": 1.0562,
+      "juliusMs": 42.355,
+      "juliusPerDispatchMs": 3.53,
+      "juliusOverInjected": 0.0166,
+      "busyTicks": 4,
+      "idleTicks": 0,
+      "tickWall": {
+        "count": 4,
+        "meanMs": 671.731,
+        "p50Ms": 565.002,
+        "p95Ms": 916.196,
+        "maxMs": 916.196
+      },
+      "tickJulius": {
+        "count": 4,
+        "meanMs": 10.589,
+        "p50Ms": 7.753,
+        "p95Ms": 15.921,
+        "maxMs": 15.921
+      },
+      "injected": {
+        "count": 12,
+        "meanMs": 212,
+        "p50Ms": 175,
+        "p95Ms": 435,
+        "maxMs": 435
+      }
+    },
+    {
+      "name": "jitter-50-500ms/12-missions/1-loop",
+      "label": "SIMULATED PROVIDER LATENCY: injected delays around scripted fake providers; not real-provider latency, which is Unknown here.",
+      "missions": 12,
+      "loops": 1,
+      "claimLimit": 10,
+      "profile": {
+        "kind": "uniform",
+        "minMs": 50,
+        "maxMs": 500,
+        "seed": 13
+      },
+      "completedMissions": 12,
+      "dispatches": 48,
+      "distinctDispatchedTasks": 48,
+      "serialInjectedMs": 11829,
+      "criticalPathInjectedMs": 1254,
+      "makespanMs": 12354.978,
+      "idealMakespanMs": 11829,
+      "inAdapterMs": 12217.543,
+      "timerOvershootMs": 388.543,
+      "makespanOverSerial": 1.0445,
+      "makespanOverIdeal": 1.0445,
+      "juliusMs": 137.332,
+      "juliusPerDispatchMs": 2.861,
+      "juliusOverInjected": 0.0116,
+      "busyTicks": 6,
+      "idleTicks": 0,
+      "tickWall": {
+        "count": 6,
+        "meanMs": 2059.146,
+        "p50Ms": 2363.694,
+        "p95Ms": 2749.248,
+        "maxMs": 2749.248
+      },
+      "tickJulius": {
+        "count": 6,
+        "meanMs": 22.889,
+        "p50Ms": 22.491,
+        "p95Ms": 40.505,
+        "maxMs": 40.505
+      },
+      "injected": {
+        "count": 48,
+        "meanMs": 246.438,
+        "p50Ms": 219,
+        "p95Ms": 435,
+        "maxMs": 498
+      }
+    },
+    {
+      "name": "jitter-50-500ms/50-missions/1-loop",
+      "label": "SIMULATED PROVIDER LATENCY: injected delays around scripted fake providers; not real-provider latency, which is Unknown here.",
+      "missions": 50,
+      "loops": 1,
+      "claimLimit": 10,
+      "profile": {
+        "kind": "uniform",
+        "minMs": 50,
+        "maxMs": 500,
+        "seed": 13
+      },
+      "completedMissions": 50,
+      "dispatches": 200,
+      "distinctDispatchedTasks": 200,
+      "serialInjectedMs": 52680,
+      "criticalPathInjectedMs": 1618,
+      "makespanMs": 55707.222,
+      "idealMakespanMs": 52680,
+      "inAdapterMs": 54779.805,
+      "timerOvershootMs": 2099.805,
+      "makespanOverSerial": 1.0575,
+      "makespanOverIdeal": 1.0575,
+      "juliusMs": 926.004,
+      "juliusPerDispatchMs": 4.63,
+      "juliusOverInjected": 0.0176,
+      "busyTicks": 20,
+      "idleTicks": 0,
+      "tickWall": {
+        "count": 20,
+        "meanMs": 2785.29,
+        "p50Ms": 2750.226,
+        "p95Ms": 3330.936,
+        "maxMs": 3801.668
+      },
+      "tickJulius": {
+        "count": 20,
+        "meanMs": 46.3,
+        "p50Ms": 39.901,
+        "p95Ms": 80.549,
+        "maxMs": 121.156
+      },
+      "injected": {
+        "count": 200,
+        "meanMs": 263.4,
+        "p50Ms": 266,
+        "p95Ms": 471,
+        "maxMs": 498
+      }
+    },
+    {
+      "name": "jitter-50-500ms/12-missions/4-loops",
+      "label": "SIMULATED PROVIDER LATENCY: injected delays around scripted fake providers; not real-provider latency, which is Unknown here.",
+      "missions": 12,
+      "loops": 4,
+      "claimLimit": 1,
+      "profile": {
+        "kind": "uniform",
+        "minMs": 50,
+        "maxMs": 500,
+        "seed": 13
+      },
+      "completedMissions": 12,
+      "dispatches": 48,
+      "distinctDispatchedTasks": 48,
+      "serialInjectedMs": 11829,
+      "criticalPathInjectedMs": 1254,
+      "makespanMs": 3206.204,
+      "idealMakespanMs": 2957.25,
+      "inAdapterMs": 12208.842,
+      "timerOvershootMs": 379.842,
+      "makespanOverSerial": 0.271,
+      "makespanOverIdeal": 1.0842,
+      "juliusMs": null,
+      "juliusPerDispatchMs": null,
+      "juliusOverInjected": null,
+      "busyTicks": 48,
+      "idleTicks": 36,
+      "tickWall": {
+        "count": 48,
+        "meanMs": 257,
+        "p50Ms": 236.83,
+        "p95Ms": 438.396,
+        "maxMs": 501.755
+      },
+      "tickJulius": null,
+      "injected": {
+        "count": 48,
+        "meanMs": 246.438,
+        "p50Ms": 219,
+        "p95Ms": 435,
+        "maxMs": 498
+      }
+    },
+    {
+      "name": "jitter-50-500ms/50-missions/8-loops",
+      "label": "SIMULATED PROVIDER LATENCY: injected delays around scripted fake providers; not real-provider latency, which is Unknown here.",
+      "missions": 50,
+      "loops": 8,
+      "claimLimit": 1,
+      "profile": {
+        "kind": "uniform",
+        "minMs": 50,
+        "maxMs": 500,
+        "seed": 13
+      },
+      "completedMissions": 50,
+      "dispatches": 200,
+      "distinctDispatchedTasks": 200,
+      "serialInjectedMs": 52680,
+      "criticalPathInjectedMs": 1618,
+      "makespanMs": 7205.884,
+      "idealMakespanMs": 6585,
+      "inAdapterMs": 54317.571,
+      "timerOvershootMs": 1637.571,
+      "makespanOverSerial": 0.1368,
+      "makespanOverIdeal": 1.0943,
+      "juliusMs": null,
+      "juliusPerDispatchMs": null,
+      "juliusOverInjected": null,
+      "busyTicks": 200,
+      "idleTicks": 180,
+      "tickWall": {
+        "count": 200,
+        "meanMs": 275.621,
+        "p50Ms": 281.565,
+        "p95Ms": 484.517,
+        "maxMs": 521.318
+      },
+      "tickJulius": null,
+      "injected": {
+        "count": 200,
+        "meanMs": 263.4,
+        "p50Ms": 266,
+        "p95Ms": 471,
+        "maxMs": 498
+      }
+    }
+  ]
+}
