@@ -102,29 +102,10 @@ describe('the production request body: one builder, golden hashes', () => {
 
   it('the transformed production schema stays inside the documented structured-output limits', () => {
     const { schema } = production();
-    let optional = 0;
-    let unions = 0;
-    const unsupported = new Set(['maxItems', 'minItems', 'maxLength', 'minLength', 'minimum', 'maximum', 'multipleOf', 'pattern', 'uniqueItems', 'oneOf', 'not', 'if', 'then', 'else']);
-    const found: string[] = [];
-    const walk = (node: unknown): void => {
-      if (Array.isArray(node)) { node.forEach(walk); return; }
-      if (node === null || typeof node !== 'object') return;
-      const record = node as Record<string, unknown>;
-      if ('anyOf' in record || Array.isArray(record.type)) unions += 1;
-      if (record.properties !== undefined && typeof record.properties === 'object') {
-        const required = new Set(Array.isArray(record.required) ? record.required as string[] : []);
-        for (const key of Object.keys(record.properties as object)) if (!required.has(key)) optional += 1;
-        expect(record.additionalProperties).toBe(false);
-      }
-      for (const [key, value] of Object.entries(record)) {
-        if (unsupported.has(key)) found.push(key);
-        walk(value);
-      }
-    };
-    walk(schema);
-    expect(found).toEqual([]);
-    expect(optional).toBeLessThanOrEqual(24);
-    expect(unions).toBeLessThanOrEqual(16);
+    const check = anthropicSchemaLimitsCheck(schema);
+    expect(check.problems).toEqual([]);
+    expect(check.optionalProperties).toBeLessThanOrEqual(24);
+    expect(check.unionNodes).toBeLessThanOrEqual(16);
   });
 });
 
