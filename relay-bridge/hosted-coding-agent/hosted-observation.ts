@@ -209,6 +209,13 @@ export interface HostedObservation {
    */
   readonly terminalReason: string | null;
   readonly finalText: string | null;
+  /**
+   * THE RUNTIME'S OWN CLASSIFICATION OF AN API ERROR (bug batch #56): the `error` field of the last top-level
+   * `assistant` message that carried one, as a member of the SDK's `SDKAssistantMessageError` vocabulary, or
+   * `unrecognised`. The CLI sets it on the synthetic message it writes for a failed API call (`rate_limit` for a 429),
+   * so it is the structured signal, not the prose beside it. Absent or null: the runtime reported none.
+   */
+  readonly assistantError?: HostedAssistantError | null;
   /** Hidden reasoning is counted and dropped — never stored, never surfaced. */
   readonly thinkingBlocksOmitted: number;
   readonly unknownMessageCount: number;
@@ -222,6 +229,18 @@ const EMPTY: HostedObservation = {
   turnModels: [], resultModelUsage: null,
   resultSubtype: null, isError: null, terminalReason: null, finalText: null,
   thinkingBlocksOmitted: 0, unknownMessageCount: 0,
+};
+
+/** The SDK's `SDKAssistantMessageError` members, admitted by membership only. */
+export const HOSTED_ASSISTANT_ERRORS = [
+  'authentication_failed', 'oauth_org_not_allowed', 'account_on_hold', 'verification_required', 'billing_error',
+  'rate_limit', 'overloaded', 'invalid_request', 'model_not_found', 'server_error', 'unknown', 'max_output_tokens',
+  'cloud_credential_error',
+] as const;
+export type HostedAssistantError = (typeof HOSTED_ASSISTANT_ERRORS)[number] | 'unrecognised';
+const readAssistantError = (value: unknown): HostedAssistantError | null => {
+  if (value === null || value === undefined) return null;
+  return (HOSTED_ASSISTANT_ERRORS as readonly unknown[]).includes(value) ? value as HostedAssistantError : 'unrecognised';
 };
 
 const PATH_KEYS = ['file_path', 'path', 'notebook_path', 'pattern', 'glob'];
@@ -424,6 +443,8 @@ export function foldHostedMessage(
     let next = m.type === 'assistant' ? foldTurnModel(foldStreamUsage(state, m, inner), m, inner) : state;
     if (m.type === 'assistant' && (m.parent_tool_use_id === null || m.parent_tool_use_id === undefined)) {
       next = foldAnthropicAttribution(next, m, inner);
+      const assistantError = readAssistantError(m.error);
+      if (assistantError !== null) next = { ...next, assistantError };
     }
     if (!Array.isArray(content)) return next;
     for (const raw of content) {

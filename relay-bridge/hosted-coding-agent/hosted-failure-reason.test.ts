@@ -120,11 +120,12 @@ describe('a hosted coder failure is classified, never quoted', () => {
   });
 
   it('is deterministic and specific-first when a sentence matches twice', () => {
-    // "API Error: 429 …" satisfies the rate-limit pattern AND the general
+    // A structured 429 body satisfies the rate-limit pattern AND the general
     // execution-error pattern. Order decides, and the specific answer is the
     // useful one — a repair for a rate limit is not a repair for a crash.
-    expect(classifyHostedFailure('API Error: 429 rate limit — request failed')).toBe('rate_limited');
-    expect(classifyHostedFailure('API Error: 429 rate limit — request failed')).toBe('rate_limited');
+    const structured = 'API Error: 429 {"type":"error","error":{"type":"rate_limit_error","message":"request failed"}}';
+    expect(classifyHostedFailure(structured)).toBe('rate_limited');
+    expect(classifyHostedFailure(structured)).toBe('rate_limited');
     expect(classifyHostedFailure('error: context length exceeded')).toBe('context_length_exceeded');
   });
 });
@@ -199,5 +200,73 @@ describe('F5: the usage-limit sentence is the smoke\'s, recognised by one functi
       expect(source, `${reader} imports the shared recogniser`).toMatch(/import \{ isSubscriptionUsageLimit \} from '[./]+(scripts\/)?julius-usage-limit\.mjs';/u);
       expect(source, `${reader} does not restate the sentence`).not.toMatch(/limit reached/u);
     }
+  });
+});
+
+/**
+ * A RATE LIMIT IS RECOGNISED ONLY FROM A STRUCTURED SIGNAL (bug batch #56, REVIEW ruling).
+ *
+ * `rate_limited` → RATE_LIMIT, and a RATE_LIMIT before the session started is the one handed failure Julius retries,
+ * as the provider's own proof that nothing ran. A sentence that merely mentions a 429 is not that proof.
+ */
+describe('#56: rate_limited requires the structured signal, never prose', () => {
+  it("the Messages API error body's own type is the signal, in every form the runtime writes it", () => {
+    for (const text of [
+      // The full APIError message the CLI holds for a 429 (status, then the JSON body).
+      'API Error: 429 {"type":"error","error":{"type":"rate_limit_error","message":"Number of request tokens has exceeded your per-minute rate limit"},"request_id":"req_011"}',
+      '429 {"type":"error","error":{"type":"rate_limit_error","message":"x"}}',
+      // The rig's shortened form (julius-three-peer.e2e.test.ts).
+      'API Error: 429 {"type":"rate_limit_error"}',
+      // Pretty-printed, and once JSON-string-escaped.
+      'API Error: 429 {\n  "type": "error",\n  "error": { "type" : "rate_limit_error" }\n}',
+      'Error: {"message":"429 {\\"type\\":\\"error\\",\\"error\\":{\\"type\\":\\"rate_limit_error\\"}}"}',
+    ]) expect(classifyHostedFailure(text), text).toBe('rate_limited');
+  });
+
+  it("the runtime's own `error: \"rate_limit\"` is the signal, whatever prose stands beside it", () => {
+    // The installed CLI's real 429 sentence carries no body type; the structured field beside it does.
+    const real = 'API Error: Request rejected (429) · this may be a temporary capacity issue.';
+    expect(classifyHostedFailure(real, { assistantError: 'rate_limit' })).toBe('rate_limited');
+    expect(classifyHostedFailure(null, { assistantError: 'rate_limit' })).toBe('rate_limited');
+    // Without the field the same sentence is not a rate limit.
+    expect(classifyHostedFailure(real)).not.toBe('rate_limited');
+    expect(classifyHostedFailure(real, { assistantError: null })).not.toBe('rate_limited');
+    // Another structured value is not a rate limit either.
+    expect(classifyHostedFailure(real, { assistantError: 'overloaded' })).not.toBe('rate_limited');
+    // The subscription's own limit still wins: the CLI writes it under `rate_limit` too.
+    expect(classifyHostedFailure('Claude AI usage limit reached|1760400000', { assistantError: 'rate_limit' })).toBe('usage_limit_reached');
+  });
+
+  it('free text that mentions a 429, a rate limit or too many requests is NOT rate_limited', () => {
+    for (const text of [
+      'API Error: 429',
+      'Error: 429',
+      'API Error: 429 rate limit — request failed',
+      'HTTP 429 Too Many Requests',
+      'Too many requests, slow down',
+      'rate limit exceeded',
+      'rate_limit reached for this key',
+      'RateLimitError: retry later',
+      'API Error: Request rejected (429) · this may be a temporary capacity issue.',
+      'the tool printed: {"type":"rate_limit"} and 429',
+      'API Error: 429 {"type":"error","error":{"type":"overloaded_error"}}',
+    ]) expect(classifyHostedFailure(text), text).not.toBe('rate_limited');
+    // It lands where its other words put it, and nowhere retryable-before-start: the ambiguous classes.
+    expect(classifyHostedFailure('too many requests')).toBe('unclassified');
+    expect(classifyHostedFailure('API Error: 429 rate limit — request failed')).toBe('execution_error');
+  });
+
+  it('a 529 overloaded_error is an overload, never a rate limit', () => {
+    for (const text of [
+      'API Error: 529 overloaded_error',
+      'API Error: 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}',
+    ]) expect(classifyHostedFailure(text), text).toBe('provider_overloaded');
+    expect(classifyHostedFailure('API Error: 529 {"type":"error","error":{"type":"overloaded_error"}}', { assistantError: 'overloaded' })).toBe('provider_overloaded');
+  });
+
+  it('a free-text 429 before init is not retried as unprocessed: it is not RATE_LIMITED', async () => {
+    const { codingAgentFailureFromHostedReason } = await import('../julius/claude-code-coding-provider');
+    expect(codingAgentFailureFromHostedReason(classifyHostedFailure('HTTP 429 Too Many Requests'))).not.toBe('RATE_LIMITED');
+    expect(codingAgentFailureFromHostedReason(classifyHostedFailure('API Error: 429 {"type":"rate_limit_error"}'))).toBe('RATE_LIMITED');
   });
 });

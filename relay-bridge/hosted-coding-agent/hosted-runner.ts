@@ -322,6 +322,8 @@ export async function runHostedCodingAgent(input: HostedRunInput): Promise<Hoste
      */
     const failureReason = classifyHostedFailure(
       error instanceof Error ? error.message : typeof error === 'string' ? error : null,
+      // The runtime's own structured classification, if its synthetic error message arrived before the throw.
+      { assistantError: observation.assistantError ?? null },
     );
     if (cancelled) {
       return { kind: 'cancelled', safeMessage: 'The hosted Coding Agent was cancelled.', observation, startedAt, completedAt };

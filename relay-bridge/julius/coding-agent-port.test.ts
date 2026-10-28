@@ -310,6 +310,29 @@ describe('C4 — the Claude Code provider translates its runtime into the taxono
     expect(runs[0]!.prompt).toContain('--- ARCHITECTURE CONTEXT (advisory');
   });
 
+  it('#56: before init, only the structured 429 is RATE_LIMIT with runtimeStarted false; a 429 in prose is not', async () => {
+    const REAL = 'API Error: Request rejected (429) · this may be a temporary capacity issue.';
+    const dispatchWith = async (over: Record<string, unknown>) => {
+      const run = async (): Promise<HostedRunOutcome> => ({
+        kind: 'refused', refusalCode: 'coder_provider_error_after_init', safeMessage: 'The hosted run failed.',
+        observation: observed({ initSeen: false, ...over }), envelope: compileHostedEnvelope({ workspacePath: '/workspace/mission' }),
+        startedAt: 't', completedAt: 't',
+      }) as never;
+      const provider = createClaudeCodeCodingAgentProvider({ apiKey: 'FAKETESTNOTREAL', requestedModel: 'claude-opus-5-5', run: run as never, queryLoader: async () => (() => (async function* () { /* none */ })()) as HostedQueryFn });
+      return refusalOf(adapterWith(provider).adapter.dispatch(DISPATCH));
+    };
+    for (const structured of [{ finalText: REAL, assistantError: 'rate_limit' }, { finalText: 'API Error: 429 {"type":"error","error":{"type":"rate_limit_error"}}' }]) {
+      const refusal = await dispatchWith(structured);
+      expect(refusal!.code, JSON.stringify(structured)).toBe('RATE_LIMIT');
+      expect(refusal!.diagnostics).toMatchObject({ failureReason: 'rate_limited', runtimeStarted: false });
+    }
+    for (const prose of [REAL, 'HTTP 429 Too Many Requests', 'rate limit exceeded', 'API Error: 429']) {
+      const refusal = await dispatchWith({ finalText: prose });
+      expect(refusal!.code, prose).not.toBe('RATE_LIMIT');
+      expect(refusal!.diagnostics?.failureReason, prose).not.toBe('rate_limited');
+    }
+  });
+
   it('credit exhaustion needs an operator, and is never retried as if it were transient', async () => {
     const run = async (): Promise<HostedRunOutcome> =>
       refused('coder_result_untrusted', 'API Error: 400 {"message":"Your credit balance is too low to access the Anthropic API."}');
