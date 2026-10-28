@@ -7,6 +7,7 @@ import {
   JULIUS_MISSION_JOB_NAME,
   JULIUS_PAID_WORKFLOW_PATH,
   classifyJuliusPriorRun,
+  juliusArtifactAbsent,
   type JuliusPriorRunObservation,
   type JuliusWorkflowRunBinding,
 } from '../../src/relay/mission/julius/julius-spend-ceiling';
@@ -282,7 +283,7 @@ describe('the live reader fetches the log only when the bundle is absent, and re
   ].join('\n');
   const missionJobId = ((JOBS.jobs as Job[]).find((j) => j.name === JULIUS_MISSION_JOB_NAME) as Job).id as number;
 
-  function github(options: { artifacts?: unknown; logStatus?: number; logBody?: string; jobs?: unknown } = {}): { fetchImpl: typeof fetch; urls: string[]; tokenOffHost: boolean[] } {
+  function github(options: { artifacts?: unknown; artifactsStatus?: number; logStatus?: number; logBody?: string; jobs?: unknown } = {}): { fetchImpl: typeof fetch; urls: string[]; tokenOffHost: boolean[] } {
     const urls: string[] = [];
     const tokenOffHost: boolean[] = [];
     const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
@@ -298,7 +299,7 @@ describe('the live reader fetches the log only when the bundle is absent, and re
         return new Response(JSON.stringify(RUN_BODY), { status: 200 });
       }
       if (url.startsWith(`${API}/actions/runs/${String(RUN)}/attempts/1/jobs`)) return new Response(JSON.stringify(options.jobs ?? JOBS), { status: 200 });
-      if (url.startsWith(`${API}/actions/runs/${String(RUN)}/artifacts`)) return new Response(JSON.stringify(options.artifacts ?? { total_count: 0, artifacts: [] }), { status: 200 });
+      if (url.startsWith(`${API}/actions/runs/${String(RUN)}/artifacts`)) return new Response(JSON.stringify(options.artifacts ?? { total_count: 0, artifacts: [] }), { status: options.artifactsStatus ?? 200 });
       if (url === `${API}/actions/jobs/${String(missionJobId)}/logs`) {
         expect(init?.redirect).toBe('manual');
         return new Response(null, { status: 302, headers: { location: 'https://logs.example.invalid/signed' } });
@@ -333,6 +334,55 @@ describe('the live reader fetches the log only when the bundle is absent, and re
     const { fetchImpl, urls } = github({ artifacts });
     await read(fetchImpl);
     expect(urls.some((url) => url.includes('/logs'))).toBe(false);
+  });
+
+  describe('review fix P2: ABSENCE of the evidence bundle must be proven by the listing, never inferred from a null id', () => {
+    const named = (extra: Record<string, unknown> = {}): Record<string, unknown> => ({ id: 9, name: 'julius-live-evidence', expired: false, workflow_run: { id: RUN, head_sha: HEAD }, ...extra });
+    const other = { id: 3, name: 'unrelated', expired: false, workflow_run: { id: RUN, head_sha: HEAD } };
+    const unknownCases: ReadonlyArray<readonly [string, { artifacts?: unknown; artifactsStatus?: number }]> = [
+      ['the artifacts listing answers 503', { artifacts: { message: 'unavailable' }, artifactsStatus: 503 }],
+      ['the artifacts body is not an object', { artifacts: ['not', 'an', 'object'] }],
+      ['the artifacts body is a string', { artifacts: 'nope' }],
+      ['total_count is not the length of the list (truncated or paged)', { artifacts: { total_count: 101, artifacts: [other] } }],
+      ['artifacts is not an array', { artifacts: { total_count: 0, artifacts: {} } }],
+      ['an entry of the list is not an object', { artifacts: { total_count: 1, artifacts: [null] } }],
+      ['the evidence entry is listed twice', { artifacts: { total_count: 2, artifacts: [named(), named({ id: 10 })] } }],
+      ['the evidence entry is EXPIRED', { artifacts: { total_count: 1, artifacts: [named({ expired: true })] } }],
+      ['the evidence entry belongs to another run', { artifacts: { total_count: 1, artifacts: [named({ workflow_run: { id: RUN + 1, head_sha: HEAD } })] } }],
+      ['the evidence entry belongs to another head', { artifacts: { total_count: 1, artifacts: [named({ workflow_run: { id: RUN, head_sha: 'd'.repeat(40) } })] } }],
+    ];
+    for (const [title, options] of unknownCases) {
+      it(`${title}: UNKNOWN, counted, and the job log is never even fetched`, async () => {
+        const { fetchImpl, urls } = github(options);
+        const result = await read(fetchImpl);
+        expect(result.audit[0]).toMatchObject({ classification: 'UNKNOWN', basis: 'evidence_unreadable', counted: true });
+        expect(urls.some((url) => url.includes('/logs'))).toBe(false);
+      });
+    }
+
+    it('juliusArtifactAbsent is true for a complete listing without the name, and false for every shape that proves nothing', () => {
+      const name = 'julius-live-evidence';
+      expect(juliusArtifactAbsent({ total_count: 0, artifacts: [] }, name)).toBe(true);
+      expect(juliusArtifactAbsent({ total_count: 1, artifacts: [other] }, name)).toBe(true);
+      for (const body of [null, undefined, 'x', 3, [], { total_count: 0 }, { artifacts: [] }, { total_count: 3, artifacts: 'abc' }, { total_count: 2, artifacts: { length: 2 } }, { total_count: 1, artifacts: [] }, { total_count: 1, artifacts: [3] }, { total_count: 1, artifacts: [named()] }, { total_count: 1, artifacts: [named({ expired: true })] }]) {
+        expect(juliusArtifactAbsent(body, name)).toBe(false);
+      }
+    });
+
+    it('the kernel does not trust the flag alone: a flag handed over with an unproven listing stays UNKNOWN', () => {
+      for (const artifacts of [null, 'x', { total_count: 1, artifacts: [named({ expired: true })] }, { total_count: 2, artifacts: [named(), named()] }]) {
+        const proof = classifyJuliusPriorRun(observation({ artifacts, refusedBeforeProvider: true }), WLJ);
+        expect(proof.classification).toBe('UNKNOWN');
+        expect(proof.basis).toBe('evidence_unreadable');
+      }
+    });
+
+    it('the positive case stands: a complete listing with other artifacts but NO evidence entry, and a log that proves the refusal, is NOT_EXECUTED', async () => {
+      const { fetchImpl, urls } = github({ artifacts: { total_count: 1, artifacts: [other] } });
+      const result = await read(fetchImpl);
+      expect(result.audit[0]).toMatchObject({ classification: 'NOT_EXECUTED', basis: 'no_provider_execution_refused_before_provider', counted: false });
+      expect(urls.some((url) => url.includes('/logs'))).toBe(true);
+    });
   });
 
   it('is not fetched when the LIVE step never ran (proof (a) decides first)', async () => {

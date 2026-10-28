@@ -484,6 +484,20 @@ export function juliusBoundArtifactId(
   return typeof artifact.id === 'number' && Number.isSafeInteger(artifact.id) && artifact.id > 0 ? artifact.id : null;
 }
 
+/**
+ * True ONLY when the listing PROVES no artifact of `name` exists on this run: a valid object, `artifacts` an
+ * array, a complete (non-truncated) list, and no entry of that name at all. An unreadable body, a paged or
+ * truncated list, or ANY named entry (expired, duplicate, bound to another run or head) is not absence: it is
+ * a fact this reader could not establish, and the caller must keep the run UNKNOWN.
+ */
+export function juliusArtifactAbsent(artifactsBody: unknown, name: string): boolean {
+  const body = objectOf(artifactsBody);
+  if (body === null || !Array.isArray(body.artifacts) || body.total_count !== body.artifacts.length) return false;
+  const entries = body.artifacts.map(objectOf);
+  if (entries.some((entry) => entry === null)) return false;
+  return !entries.some((entry) => (entry as Record<string, unknown>).name === name);
+}
+
 function keyValues(text: string): Map<string, string> | null {
   const fields = new Map<string, string>();
   for (const raw of text.split('\n')) {
@@ -570,7 +584,8 @@ export function classifyJuliusPriorRun(
     // Proof (c), only where the bundle is ABSENT: the run's own job log shows the entrypoint refused at its
     // spend gate, before any run row or provider could exist. A bundle that exists is always judged on its
     // rows; this never overrides evidence, it only stands in for evidence that could not be uploaded.
-    if (observation.refusedBeforeProvider === true) {
+    // ABSENCE must be PROVEN by a complete listing with no entry of that name, never inferred from a null id.
+    if (observation.refusedBeforeProvider === true && juliusArtifactAbsent(observation.artifacts, JULIUS_LIVE_EVIDENCE_ARTIFACT)) {
       return proof(binding, 'NOT_EXECUTED', 'no_provider_execution_refused_before_provider');
     }
     return proof(binding, 'UNKNOWN', 'evidence_unreadable');

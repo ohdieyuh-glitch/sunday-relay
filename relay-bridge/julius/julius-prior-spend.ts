@@ -16,6 +16,7 @@ import {
   classifyJuliusPriorRun,
   classifyJuliusSpentTags,
   juliusAttemptMarkerBindings,
+  juliusArtifactAbsent,
   juliusBoundArtifactId,
   juliusSpentTagBinding,
   parseJuliusAttemptRecordTag,
@@ -427,8 +428,11 @@ export async function observeJuliusWorkflowRun(input: {
     : await readArtifactFiles(input.repository, verdictId, headers, fetchImpl, [JULIUS_INWORLD_VERDICT_FILE]);
   // PROOF (c) NEEDS THE RUN'S OWN LOG, and only where the evidence bundle is absent (an upload blocked under
   // the billing lock). A bundle that exists is judged on its rows; the log is never read then.
-  const liveLog = evidenceId === null ? await readMissionJobLog(input.repository, jobs, headers, fetchImpl) : null;
-  const refusedBeforeProvider = evidenceId === null && juliusLiveRefusedBeforeProvider({ run, jobs, log: liveLog, binding });
+  // ABSENT means PROVEN absent (a complete listing with no entry of that name), not a null id: an unreadable,
+  // truncated, expired, duplicate or mis-bound listing is unknown, and unknown never enables the log.
+  const evidenceAbsent = juliusArtifactAbsent(artifacts, JULIUS_LIVE_EVIDENCE_ARTIFACT);
+  const liveLog = evidenceAbsent ? await readMissionJobLog(input.repository, jobs, headers, fetchImpl) : null;
+  const refusedBeforeProvider = evidenceAbsent && juliusLiveRefusedBeforeProvider({ run, jobs, log: liveLog, binding });
   return { binding, run, jobs, artifacts, liveEvidence, verdict, refusedBeforeProvider };
 }
 
