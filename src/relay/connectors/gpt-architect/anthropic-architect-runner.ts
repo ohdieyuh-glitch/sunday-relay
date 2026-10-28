@@ -290,6 +290,8 @@ export interface AnthropicRefusalEvidence {
   readonly rateLimit: AnthropicRateLimitEvidence;
   /** The provider message's closed class, its length and SHA-256. Never the text; null when no body could be read. */
   readonly message: AnthropicMessageEvidence | null;
+  /** The structure of the exact body that was sent (sizes, hashes, flags), never its text. */
+  readonly shape?: AnthropicBodyShape | undefined;
 }
 
 /** The closed set a provider message is reduced to. A class names a kind of defect, never carries its words. */
@@ -405,10 +407,182 @@ export function anthropicArchitectRequestBody(
   };
 }
 
-/** The same body for `POST /v1/messages/count_tokens`: that endpoint takes no `max_tokens`. */
+/**
+ * THE STRUCTURE OF THE EXACT BODY SENT, never its text.
+ *
+ * A refused real call carries a mission packet the $0 probe's synthetic input cannot reproduce. These are
+ * counts, sizes, hashes and yes/no facts about the body as serialized, so a failed live call can be compared
+ * with the probe by SHAPE even when the provider's message is unavailable. Every field is an integer, a
+ * safe token or a hash.
+ */
+export interface AnthropicBodyShape {
+  readonly model: string;
+  readonly maxTokens: number | null;
+  readonly effort: string | null;
+  readonly bodyBytes: number;
+  readonly bodySha256: string;
+  readonly systemChars: number;
+  readonly systemBytes: number;
+  readonly inputChars: number;
+  readonly inputBytes: number;
+  readonly messageCount: number;
+  /** `string` for a plain string content, otherwise the part `type` tokens in order. */
+  readonly contentParts: readonly string[];
+  readonly schemaBytes: number;
+  readonly schemaSha256: string;
+  readonly hasNul: boolean;
+  readonly hasLoneSurrogate: boolean;
+  readonly hasControlChars: boolean;
+  readonly emptySystem: boolean;
+  readonly emptyInput: boolean;
+  /** The serialized body parses back to a structurally identical value. */
+  readonly jsonValid: boolean;
+}
+
+const hasControl = (text: string): boolean => /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/u.test(text);
+
+export function anthropicBodyShape(body: Record<string, unknown>, bodyText: string): AnthropicBodyShape {
+  const messages = Array.isArray(body.messages) ? body.messages as Array<{ content?: unknown }> : [];
+  const input = messages.at(-1)?.content;
+  const inputText = typeof input === 'string' ? input : '';
+  const systemText = typeof body.system === 'string' ? body.system : '';
+  const parts = messages.flatMap((message) => (typeof message.content === 'string'
+    ? ['string']
+    : Array.isArray(message.content)
+      ? (message.content as Array<{ type?: unknown }>).map((part) => token(part?.type) ?? 'unknown')
+      : ['unknown']));
+  const outputConfig = (body.output_config ?? {}) as { readonly format?: { readonly schema?: unknown }; readonly effort?: unknown };
+  const schemaText = JSON.stringify(outputConfig.format?.schema ?? null);
+  let jsonValid = false;
+  try { jsonValid = JSON.stringify(JSON.parse(bodyText)) === bodyText; } catch { jsonValid = false; }
+  const joined = `${systemText}${inputText}`;
+  return {
+    model: typeof body.model === 'string' && SAFE_MODEL.test(body.model) ? body.model : 'unsafe',
+    maxTokens: typeof body.max_tokens === 'number' && Number.isSafeInteger(body.max_tokens) ? body.max_tokens : null,
+    effort: token(outputConfig.effort),
+    bodyBytes: Buffer.byteLength(bodyText, 'utf8'),
+    bodySha256: createHash('sha256').update(bodyText, 'utf8').digest('hex'),
+    systemChars: systemText.length,
+    systemBytes: Buffer.byteLength(systemText, 'utf8'),
+    inputChars: inputText.length,
+    inputBytes: Buffer.byteLength(inputText, 'utf8'),
+    messageCount: messages.length,
+    contentParts: parts,
+    schemaBytes: Buffer.byteLength(schemaText, 'utf8'),
+    schemaSha256: createHash('sha256').update(schemaText, 'utf8').digest('hex'),
+    hasNul: joined.includes('\u0000'),
+    hasLoneSurrogate: /\p{Surrogate}/u.test(joined),
+    hasControlChars: hasControl(joined),
+    emptySystem: systemText.trim() === '',
+    emptyInput: inputText.trim() === '',
+    jsonValid,
+  };
+}
+
+/** The shape as ONE printable fragment: integers, 0/1 flags, safe tokens and 16-hex hash prefixes only. */
+export function anthropicBodyShapeFragment(shape: AnthropicBodyShape): string {
+  const flag = (value: boolean): string => (value ? '1' : '0');
+  return `shape=model:${shape.model},max_tokens:${shape.maxTokens ?? 'unknown'},effort:${shape.effort ?? 'none'}`
+    + `,body_bytes:${shape.bodyBytes},body_sha:${shape.bodySha256.slice(0, 16)}`
+    + `,system_chars:${shape.systemChars},system_bytes:${shape.systemBytes},input_chars:${shape.inputChars},input_bytes:${shape.inputBytes}`
+    + `,messages:${shape.messageCount},parts:${shape.contentParts.join('+') || 'none'}`
+    + `,schema_bytes:${shape.schemaBytes},schema_sha:${shape.schemaSha256.slice(0, 16)}`
+    + `,nul:${flag(shape.hasNul)},lone_surrogate:${flag(shape.hasLoneSurrogate)},ctrl:${flag(shape.hasControlChars)}`
+    + `,empty_system:${flag(shape.emptySystem)},empty_input:${flag(shape.emptyInput)},json_valid:${flag(shape.jsonValid)}`;
+}
+
+/**
+ * THE TOKEN-COUNT ADAPTER: the ONE place the production body is turned into a `count_tokens` body.
+ *
+ * `POST /v1/messages/count_tokens` takes no `max_tokens`; that is the only endpoint-specific difference
+ * and it is listed here. Every other field (model, system, messages, output_config) is passed through
+ * untouched, byte for byte, so the probe can never test a different request from the one that is sent.
+ */
+export const COUNT_TOKENS_ENDPOINT_ONLY_FIELDS: readonly string[] = Object.freeze(['max_tokens']);
 export function anthropicCountTokensBody(body: Record<string, unknown>): Record<string, unknown> {
-  const { max_tokens: _maxTokens, ...rest } = body;
-  return rest;
+  const adapted: Record<string, unknown> = { ...body };
+  for (const field of COUNT_TOKENS_ENDPOINT_ONLY_FIELDS) delete adapted[field];
+  return adapted;
+}
+
+/**
+ * FOUR KINDS OF EVIDENCE, NEVER CONFLATED.
+ *   EV1 OFFLINE_SCHEMA_VALID  the transformed schema passes the documented structured-output limits (no network).
+ *   EV2 TOKEN_COUNT_ACCEPTED  `count_tokens` answered 200. NOT proof the Messages API accepts the request:
+ *                             count_tokens does not compile structured-output schemas.
+ *   EV3 MESSAGES_ACCEPTED     a real `POST /v1/messages` was accepted. Observable only in a real call.
+ *   EV4 GENERATION_OK         a real call returned a successful response.
+ * Nothing that holds only EV1 or EV2 may be read as EV3 or EV4.
+ */
+export type AnthropicEvidenceLevel = 'EV1' | 'EV2' | 'EV3' | 'EV4';
+export const ANTHROPIC_EVIDENCE_NAMES: Readonly<Record<AnthropicEvidenceLevel, string>> = Object.freeze({
+  EV1: 'OFFLINE_SCHEMA_VALID', EV2: 'TOKEN_COUNT_ACCEPTED', EV3: 'MESSAGES_ACCEPTED', EV4: 'GENERATION_OK',
+});
+export type AnthropicEvidenceState = 'PASS' | 'FAIL' | 'NOT_OBSERVED';
+export interface AnthropicEvidence {
+  readonly ev1: AnthropicEvidenceState;
+  readonly ev2: AnthropicEvidenceState;
+  readonly ev3: AnthropicEvidenceState;
+  readonly ev4: AnthropicEvidenceState;
+}
+
+export interface AnthropicSchemaLimitsCheck {
+  readonly valid: boolean;
+  readonly problems: readonly string[];
+  readonly optionalProperties: number;
+  readonly unionNodes: number;
+}
+
+/** EV1: the transformed schema against the documented limits (24 optional parameters, 16 anyOf/type-array nodes, no unsupported keyword). */
+const UNSUPPORTED_SCHEMA_KEYWORDS = new Set(['maxItems', 'maxLength', 'minLength', 'minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'multipleOf', 'pattern', 'uniqueItems', 'oneOf', 'not', 'if', 'then', 'else', 'patternProperties', 'propertyNames']);
+export function anthropicSchemaLimitsCheck(schema: Record<string, unknown>): AnthropicSchemaLimitsCheck {
+  const problems: string[] = [];
+  let optional = 0;
+  let unions = 0;
+  const walk = (node: unknown, at: string): void => {
+    if (Array.isArray(node)) { node.forEach((entry, index) => walk(entry, `${at}/${index}`)); return; }
+    if (node === null || typeof node !== 'object') return;
+    const record = node as Record<string, unknown>;
+    if ('anyOf' in record || Array.isArray(record.type)) unions += 1;
+    if (record.properties !== null && typeof record.properties === 'object') {
+      const required = new Set(Array.isArray(record.required) ? record.required as string[] : []);
+      for (const key of Object.keys(record.properties as object)) if (!required.has(key)) optional += 1;
+      if (record.additionalProperties !== false) problems.push(`additionalProperties_not_false:${at}`);
+    }
+    if (record.type === 'array' && (typeof record.minItems === 'number') && record.minItems > 1) problems.push(`minItems_above_1:${at}`);
+    for (const [key, value] of Object.entries(record)) {
+      if (UNSUPPORTED_SCHEMA_KEYWORDS.has(key)) problems.push(`unsupported_keyword:${key}:${at}`);
+      if (key !== 'enum' && key !== 'const') walk(value, `${at}/${key}`);
+    }
+  };
+  walk(schema, '#');
+  if (optional > 24) problems.push(`optional_properties_above_24:${optional}`);
+  if (unions > 16) problems.push(`union_nodes_above_16:${unions}`);
+  return { valid: problems.length === 0, problems, optionalProperties: optional, unionNodes: unions };
+}
+
+/**
+ * THE EVIDENCE LEVELS FROM WHAT WAS ACTUALLY OBSERVED. EV3 and EV4 come only from a real Messages call
+ * (`messages`); a count_tokens pass never sets them, whatever it printed.
+ */
+export function anthropicEvidenceLevels(input: {
+  readonly schemaCheck: AnthropicSchemaLimitsCheck | null;
+  readonly probeResults: readonly AnthropicProbeResult[] | null;
+  readonly messages: 'not_called' | 'accepted' | 'generated' | 'refused';
+}): AnthropicEvidence {
+  const ev1: AnthropicEvidenceState = input.schemaCheck === null ? 'NOT_OBSERVED' : input.schemaCheck.valid ? 'PASS' : 'FAIL';
+  const production = input.probeResults === null ? [] : input.probeResults.filter((entry) => ['P0', 'P1', 'P2', 'P3', 'P4', 'P5'].includes(entry.id));
+  const ev2: AnthropicEvidenceState = production.length === 0 ? 'NOT_OBSERVED' : production.every((entry) => entry.http === 200) ? 'PASS' : 'FAIL';
+  const ev3: AnthropicEvidenceState = input.messages === 'not_called' ? 'NOT_OBSERVED' : input.messages === 'refused' ? 'FAIL' : 'PASS';
+  const ev4: AnthropicEvidenceState = input.messages === 'generated' ? 'PASS' : input.messages === 'refused' ? 'FAIL' : 'NOT_OBSERVED';
+  return { ev1, ev2, ev3, ev4 };
+}
+
+/** The one printable evidence line. A passing EV2 always carries the warning that it proves nothing about the Messages endpoint. */
+export function anthropicEvidenceLine(role: 'architect' | 'coder', evidence: AnthropicEvidence): string {
+  return `request_evidence role=${role} EV1_${ANTHROPIC_EVIDENCE_NAMES.EV1}=${evidence.ev1} EV2_${ANTHROPIC_EVIDENCE_NAMES.EV2}=${evidence.ev2}`
+    + ` EV3_${ANTHROPIC_EVIDENCE_NAMES.EV3}=${evidence.ev3} EV4_${ANTHROPIC_EVIDENCE_NAMES.EV4}=${evidence.ev4}`
+    + `${evidence.ev2 === 'PASS' ? ' token_count_only=not_proof_of_messages_acceptance' : ''}`;
 }
 
 /** The request id from the response header, or why it is unavailable. */
@@ -538,6 +712,8 @@ export async function runAnthropicArchitect(
 
   // THE ONE BUILDER: the $0 acceptance probe sends this same body (minus max_tokens), so what was probed is what is sent.
   const body = anthropicArchitectRequestBody(request, { model: config.model, maxOutputTokens: config.maxOutputTokens, reasoningEffort: config.reasoningEffort }, schema);
+  const bodyText = JSON.stringify(body);
+  const bodyShape = anthropicBodyShape(body, bodyText);
   const effortSent = config.reasoningEffort ?? null;
 
   try {
@@ -550,7 +726,7 @@ export async function runAnthropicArchitect(
           'x-api-key': request.apiKey,
           'anthropic-version': ANTHROPIC_API_VERSION,
         },
-        body: JSON.stringify(body),
+        body: bodyText,
         signal: controller.signal,
       });
     } catch (error) {
@@ -582,6 +758,7 @@ export async function runAnthropicArchitect(
           rateLimit: anthropicRateLimitEvidence(response.headers),
           // The provider's words are reduced to a class, a length and a hash here, and dropped.
           message: errorBody === null ? null : anthropicMessageEvidence(errorBody.message),
+          shape: bodyShape,
         },
       };
     }
@@ -771,6 +948,7 @@ export async function runAnthropicProbes(input: {
     const n = (value: number | null): string => (value === null ? 'unknown' : String(value));
     const line = `request_acceptance role=${input.role} probe=${probe.id} http=${http === null ? 'none' : String(http)} input_tokens=${n(inputTokens)}`
       + ` type=${errorType ?? 'none'} class=${message?.messageClass ?? 'none'} request_id=${requestId ?? 'unavailable'}`
+      + (probe.id.startsWith('P') ? ` ${anthropicBodyShapeFragment(anthropicBodyShape(probe.body, JSON.stringify(probe.body)))}` : '')
       + ` message_len=${n(message?.length ?? null)} message_sha256=${message === null ? 'none' : message.sha256.slice(0, 16)}`
       + `${probeMessage === null || probeMessage === '' ? '' : ` message="${probeMessage.replace(/"/gu, "'")}"`}`;
     results.push({ id: probe.id, http, inputTokens, errorType, requestId, message, probeMessage, line });

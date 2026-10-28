@@ -6,7 +6,13 @@ import { describe, expect, it } from 'vitest';
 import {
   ANTHROPIC_COUNT_TOKENS_URL,
   anthropicArchitectRequestBody,
+  anthropicBodyShape,
+  anthropicBodyShapeFragment,
   anthropicCountTokensBody,
+  anthropicEvidenceLevels,
+  anthropicEvidenceLine,
+  anthropicSchemaLimitsCheck,
+  COUNT_TOKENS_ENDPOINT_ONLY_FIELDS,
   anthropicMessageEvidence,
   anthropicProbeMatrix,
   anthropicStructuredOutputSchema,
@@ -119,6 +125,175 @@ describe('the production request body: one builder, golden hashes', () => {
     expect(found).toEqual([]);
     expect(optional).toBeLessThanOrEqual(24);
     expect(unions).toBeLessThanOrEqual(16);
+  });
+});
+
+describe('the structure of the exact body sent (E4b): metrics, never text', () => {
+  const shapeOf = (system: string, input: unknown, effort: string | undefined = 'high') => {
+    const parts = architectPlanProbeParts();
+    const body = anthropicArchitectRequestBody({ instructions: system, input: input as string }, { model: 'claude-opus-5-5', maxOutputTokens: 20_000, reasoningEffort: effort }, anthropicStructuredOutputSchema(parts.schema));
+    return anthropicBodyShape(body, JSON.stringify(body));
+  };
+
+  it('on the production body the metrics are exact and the hashes are the golden ones', () => {
+    const { parts, body } = production();
+    const shape = anthropicBodyShape(body, JSON.stringify(body));
+    expect(shape).toMatchObject({
+      model: 'claude-opus-5-5', maxTokens: 20_000, effort: 'high', messageCount: 1, contentParts: ['string'],
+      systemChars: parts.instructions.length, inputChars: ARCHITECT_PROBE_SYNTHETIC_INPUT.length,
+      hasNul: false, hasLoneSurrogate: false, hasControlChars: false, emptySystem: false, emptyInput: false, jsonValid: true,
+      bodyBytes: Buffer.byteLength(JSON.stringify(body), 'utf8'), schemaBytes: 3587,
+    });
+    expect(shape.bodySha256).toBe(GOLDEN_BODY_SHA256);
+    expect(shape.schemaSha256).toBe(GOLDEN_SCHEMA_SHA256);
+  });
+
+  it('bytes are bytes, chars are chars: a multi-byte input is counted both ways', () => {
+    const shape = shapeOf('s', 'é漢😀');
+    expect(shape.inputChars).toBe(4);
+    expect(shape.inputBytes).toBe(Buffer.byteLength('é漢😀', 'utf8'));
+    expect(shape.inputBytes).toBeGreaterThan(shape.inputChars);
+  });
+
+  it('flags NUL, a lone surrogate, control characters and empty strings, and a body that does not round-trip', () => {
+    expect(shapeOf('s', 'a\u0000b').hasNul).toBe(true);
+    expect(shapeOf('s', 'a\u0000b').hasControlChars).toBe(true);
+    expect(shapeOf('s', 'a\uD800b').hasLoneSurrogate).toBe(true);
+    expect(shapeOf('s', 'a😀b').hasLoneSurrogate).toBe(false);
+    expect(shapeOf('line\nbreak\ttab', 'x').hasControlChars).toBe(false);
+    expect(shapeOf('s', 'a\u0007b').hasControlChars).toBe(true);
+    expect(shapeOf('  ', 'x').emptySystem).toBe(true);
+    expect(shapeOf('s', '').emptyInput).toBe(true);
+    const parts = architectPlanProbeParts();
+    const body = anthropicArchitectRequestBody({ instructions: 's', input: 'x' }, { model: 'claude-opus-5-5', maxOutputTokens: 1 }, anthropicStructuredOutputSchema(parts.schema));
+    expect(anthropicBodyShape(body, '{not json').jsonValid).toBe(false);
+    expect(anthropicBodyShape(body, JSON.stringify(body, null, 2)).jsonValid).toBe(false);
+    expect(anthropicBodyShape(body, JSON.stringify(body)).effort).toBeNull();
+  });
+
+  it('counts the messages', () => {
+    const body = { model: 'claude-opus-5-5', max_tokens: 5, system: 's', messages: [{ role: 'user', content: 'a' }, { role: 'assistant', content: 'b' }, { role: 'user', content: 'c' }] };
+    expect(anthropicBodyShape(body, JSON.stringify(body))).toMatchObject({ messageCount: 3, contentParts: ['string', 'string', 'string'], inputChars: 1 });
+    const empty = { model: 'claude-opus-5-5', system: 's', messages: [] as unknown[] };
+    expect(anthropicBodyShape(empty, JSON.stringify(empty))).toMatchObject({ messageCount: 0, contentParts: [], emptyInput: true });
+  });
+
+  it('content parts are listed by type token in order', () => {
+    const parts = architectPlanProbeParts();
+    const body = { model: 'claude-opus-5-5', max_tokens: 5, system: 's', messages: [{ role: 'user', content: [{ type: 'text', text: 'a' }, { type: 'image', source: {} }, { type: 'Bad Type!' }] }] };
+    expect(anthropicBodyShape(body, JSON.stringify(body)).contentParts).toEqual(['text', 'image', 'unknown']);
+    expect(parts.schema).toBeTruthy();
+  });
+
+  it('the printable fragment carries no text: canary prompts never appear, only numbers, flags and hash prefixes', () => {
+    const canary = 'SECRET-MISSION-PACKET canary prompt text';
+    const fragment = anthropicBodyShapeFragment(shapeOf(canary, canary));
+    expect(fragment).not.toContain('SECRET');
+    expect(fragment).not.toContain('canary');
+    expect(fragment).toMatch(/^shape=model:claude-opus-5-5,max_tokens:20000,effort:high,body_bytes:[0-9]+,body_sha:[0-9a-f]{16},system_chars:[0-9]+,system_bytes:[0-9]+,input_chars:[0-9]+,input_bytes:[0-9]+,messages:1,parts:string,schema_bytes:[0-9]+,schema_sha:[0-9a-f]{16},nul:0,lone_surrogate:0,ctrl:0,empty_system:0,empty_input:0,json_valid:1$/u);
+  });
+
+  it('a REAL refused call carries the shape in the evidence and the stdout line, and no prompt text anywhere', async () => {
+    const parts = architectPlanProbeParts();
+    const outcome = await runAnthropicArchitect(
+      { apiKey: KEY, config: CONFIG, instructions: 'SYSTEM-CANARY ' + parts.instructions, input: 'MISSION-PACKET-CANARY', schema: { name: 'plan', schema: parts.schema } },
+      { fetch: fetchWith(() => bad('invalid')) },
+    );
+    if (outcome.ok || outcome.refusal === undefined) throw new Error('expected a refusal');
+    expect(outcome.refusal.shape).toMatchObject({ messageCount: 1, inputChars: 'MISSION-PACKET-CANARY'.length, jsonValid: true, maxTokens: 20_000 });
+    const everything = JSON.stringify(outcome) + architectProviderRefusalLine('anthropic', outcome.refusal);
+    expect(everything).not.toContain('MISSION-PACKET-CANARY');
+    expect(everything).not.toContain('SYSTEM-CANARY');
+    expect(architectProviderRefusalLine('anthropic', outcome.refusal)).toContain(' shape=model:claude-opus-5-5,max_tokens:20000');
+  });
+
+  it('the probe lines carry the shape of the PROBE body (production probes only), so a trial can be compared with a live refusal', async () => {
+    const { body } = production();
+    const results = await runAnthropicProbes({ role: 'architect', apiKey: KEY, probes: anthropicProbeMatrix(body), fetch: fetchWith(() => ok()) });
+    const by = Object.fromEntries(results.map((result) => [result.id, result.line]));
+    for (const id of ['P0', 'P1', 'P2', 'P3', 'P4', 'P5']) expect(by[id]).toContain(' shape=model:claude-opus-5-5,max_tokens:unknown');
+    expect(by.C1).not.toContain(' shape=');
+    expect(by.P5).toContain('schema_sha:' + GOLDEN_SCHEMA_SHA256.slice(0, 16));
+  });
+});
+
+describe('the token-count adapter changes ONLY the endpoint-specific fields', () => {
+  it('the adapted body equals the production body minus max_tokens, field by field, byte for byte', () => {
+    const { body } = production();
+    const adapted = anthropicCountTokensBody(body);
+    expect(COUNT_TOKENS_ENDPOINT_ONLY_FIELDS).toEqual(['max_tokens']);
+    expect(Object.keys(adapted)).toEqual(Object.keys(body).filter((key) => !COUNT_TOKENS_ENDPOINT_ONLY_FIELDS.includes(key)));
+    for (const key of Object.keys(adapted)) expect(JSON.stringify(adapted[key])).toBe(JSON.stringify(body[key]));
+    expect(JSON.stringify({ model: adapted.model, max_tokens: body.max_tokens, system: adapted.system, messages: adapted.messages, output_config: adapted.output_config })).toBe(JSON.stringify(body));
+  });
+  it('does not mutate the production body and keeps model, system, messages and output_config identical by value', () => {
+    const { body } = production();
+    const before = JSON.stringify(body);
+    const adapted = anthropicCountTokensBody(body);
+    expect(JSON.stringify(body)).toBe(before);
+    expect(adapted.output_config).toEqual(body.output_config);
+    expect(adapted.messages).toEqual(body.messages);
+    expect(adapted.system).toBe(body.system);
+    expect(adapted.model).toBe(body.model);
+  });
+});
+
+describe('four kinds of evidence, never conflated', () => {
+  it('EV1: the production schema passes the documented limits; each breach is a named problem', () => {
+    const { schema } = production();
+    expect(anthropicSchemaLimitsCheck(schema)).toMatchObject({ valid: true, problems: [], optionalProperties: 0 });
+    expect(anthropicSchemaLimitsCheck({ type: 'object', properties: { a: { type: 'array', maxItems: 3, items: { type: 'string' } } } }).problems)
+      .toEqual(expect.arrayContaining(['additionalProperties_not_false:#', 'unsupported_keyword:maxItems:#/properties/a']));
+    const many = { type: 'object', additionalProperties: false, required: [], properties: Object.fromEntries(Array.from({ length: 25 }, (_v, i) => ['p' + i, { type: 'string' }])) };
+    expect(anthropicSchemaLimitsCheck(many).problems).toContain('optional_properties_above_24:25');
+    const unions = { type: 'object', additionalProperties: false, required: Array.from({ length: 17 }, (_v, i) => 'u' + i), properties: Object.fromEntries(Array.from({ length: 17 }, (_v, i) => ['u' + i, { anyOf: [{ type: 'string' }, { type: 'null' }] }])) };
+    expect(anthropicSchemaLimitsCheck(unions).problems).toContain('union_nodes_above_16:17');
+    expect(anthropicSchemaLimitsCheck({ type: 'object', additionalProperties: false, required: ['x'], properties: { x: { type: 'string', pattern: '^a' } } }).valid).toBe(false);
+    expect(anthropicSchemaLimitsCheck({ type: 'object', additionalProperties: false, required: ['x'], properties: { x: { type: 'array', minItems: 2, items: { type: 'string' } } } }).problems).toContain('minItems_above_1:#/properties/x');
+  });
+
+  it('EV2 passing never sets EV3 or EV4, and always prints the warning', async () => {
+    const { body, schema } = production();
+    const results = await runAnthropicProbes({ role: 'architect', apiKey: KEY, probes: anthropicProbeMatrix(body), fetch: fetchWith(() => ok()) });
+    const evidence = anthropicEvidenceLevels({ schemaCheck: anthropicSchemaLimitsCheck(schema), probeResults: results, messages: 'not_called' });
+    expect(evidence).toEqual({ ev1: 'PASS', ev2: 'PASS', ev3: 'NOT_OBSERVED', ev4: 'NOT_OBSERVED' });
+    expect(anthropicEvidenceLine('architect', evidence)).toBe('request_evidence role=architect EV1_OFFLINE_SCHEMA_VALID=PASS EV2_TOKEN_COUNT_ACCEPTED=PASS EV3_MESSAGES_ACCEPTED=NOT_OBSERVED EV4_GENERATION_OK=NOT_OBSERVED token_count_only=not_proof_of_messages_acceptance');
+  });
+
+  it('EV3 and EV4 come only from a real Messages outcome', () => {
+    expect(anthropicEvidenceLevels({ schemaCheck: null, probeResults: null, messages: 'not_called' })).toEqual({ ev1: 'NOT_OBSERVED', ev2: 'NOT_OBSERVED', ev3: 'NOT_OBSERVED', ev4: 'NOT_OBSERVED' });
+    expect(anthropicEvidenceLevels({ schemaCheck: null, probeResults: null, messages: 'accepted' })).toMatchObject({ ev3: 'PASS', ev4: 'NOT_OBSERVED' });
+    expect(anthropicEvidenceLevels({ schemaCheck: null, probeResults: null, messages: 'generated' })).toMatchObject({ ev3: 'PASS', ev4: 'PASS' });
+    expect(anthropicEvidenceLevels({ schemaCheck: null, probeResults: null, messages: 'refused' })).toMatchObject({ ev3: 'FAIL', ev4: 'FAIL' });
+  });
+
+  it('a failing production probe is EV2 FAIL (no warning); a failing control alone is not', async () => {
+    const { body } = production();
+    const failing = await runAnthropicProbes({ role: 'architect', apiKey: KEY, probes: anthropicProbeMatrix(body), fetch: fetchWith((call) => (String(call.init.body).includes('objectiveSummary') ? bad('x') : ok())) });
+    const evidence = anthropicEvidenceLevels({ schemaCheck: null, probeResults: failing, messages: 'not_called' });
+    expect(evidence.ev2).toBe('FAIL');
+    expect(anthropicEvidenceLine('architect', evidence)).not.toContain('token_count_only');
+    const controlOnly = await runAnthropicProbes({ role: 'architect', apiKey: KEY, probes: anthropicProbeMatrix(body), fetch: fetchWith((call) => (String(call.init.body).includes('"ok"') ? bad('x') : ok())) });
+    expect(anthropicEvidenceLevels({ schemaCheck: null, probeResults: controlOnly, messages: 'not_called' }).ev2).toBe('PASS');
+  });
+
+  it('the printer prints the schema check, the evidence lines and the summary; a REAL refusal prints EV3/EV4 FAIL', async () => {
+    const { printAnthropicAcceptanceProbes } = await import('./live-workers');
+    const lines: string[] = [];
+    await printAnthropicAcceptanceProbes({
+      env: { ANTHROPIC_ARCHITECT_API_KEY: 'A', ANTHROPIC_API_KEY: 'C' }, architectOnAnthropic: true, architectModel: 'claude-opus-5-5', architectEffort: 'high', coderModel: 'claude-opus-5-5',
+      out: (line) => lines.push(line), fetch: fetchWith(() => ok()),
+    });
+    expect(lines).toContain('request_schema_check role=architect EV1=PASS optional=0 unions=1');
+    expect(lines).toContain('request_evidence role=architect EV1_OFFLINE_SCHEMA_VALID=PASS EV2_TOKEN_COUNT_ACCEPTED=PASS EV3_MESSAGES_ACCEPTED=NOT_OBSERVED EV4_GENERATION_OK=NOT_OBSERVED token_count_only=not_proof_of_messages_acceptance');
+    expect(lines).toContain('request_evidence role=coder EV1_OFFLINE_SCHEMA_VALID=NOT_OBSERVED EV2_TOKEN_COUNT_ACCEPTED=PASS EV3_MESSAGES_ACCEPTED=NOT_OBSERVED EV4_GENERATION_OK=NOT_OBSERVED token_count_only=not_proof_of_messages_acceptance');
+    const parts = architectPlanProbeParts();
+    const outcome = await runAnthropicArchitect(
+      { apiKey: KEY, config: CONFIG, instructions: parts.instructions, input: 'x', schema: { name: 'plan', schema: parts.schema } },
+      { fetch: fetchWith(() => bad('invalid')) },
+    );
+    if (outcome.ok || outcome.refusal === undefined) throw new Error('expected a refusal');
+    expect(architectProviderRefusalLine('anthropic', outcome.refusal)).toContain(' messages_accepted=FAIL generation_ok=FAIL ');
   });
 });
 
@@ -300,8 +475,8 @@ describe('the observe-mode printer used by the live entrypoint preflight', () =>
     expect(lines.filter((line) => line.startsWith('request_acceptance role=architect')).length).toBe(8);
     expect(lines.filter((line) => line.startsWith('request_acceptance role=coder')).length).toBe(2);
     expect(lines.filter((line) => line.startsWith('request_acceptance_summary'))).toEqual([
-      'request_acceptance_summary role=architect mode=observe first_failing=none controls=C1:200,C2:200',
-      'request_acceptance_summary role=coder mode=observe first_failing=none controls=C1:none,C2:200',
+      'request_acceptance_summary role=architect mode=observe first_failing=none controls=C1:200,C2:200 token_count_only=not_proof_of_messages_acceptance',
+      'request_acceptance_summary role=coder mode=observe first_failing=none controls=C1:none,C2:200 token_count_only=not_proof_of_messages_acceptance',
     ]);
     expect(seen.slice(0, 8).every((entry) => entry.key === 'ARCH-KEY-NOTREAL')).toBe(true);
     expect(seen.slice(8).every((entry) => entry.key === 'CODER-KEY-NOTREAL')).toBe(true);

@@ -49,7 +49,8 @@ import {
 } from '../../src/relay/connectors/gpt-architect';
 import type { AnthropicRefusalEvidence, ArchitectRunOutcome, ArchitectRunner } from '../../src/relay/connectors/gpt-architect/anthropic-architect-runner';
 import {
-  anthropicArchitectRequestBody, anthropicProbeMatrix, anthropicStructuredOutputSchema, firstFailingAnthropicProbe, runAnthropicProbes,
+  anthropicArchitectRequestBody, anthropicBodyShapeFragment, anthropicEvidenceLevels, anthropicEvidenceLine, anthropicProbeMatrix, anthropicSchemaLimitsCheck,
+  anthropicStructuredOutputSchema, firstFailingAnthropicProbe, runAnthropicProbes,
   type AnthropicProbe, type AnthropicProbeResult,
 } from '../../src/relay/connectors/gpt-architect/anthropic-architect-runner';
 import { validateArchitectPlan, type ArchitectPlanReasonCode } from '../../src/relay/mission/prompt-architect/prompt-architect-plan';
@@ -1044,7 +1045,10 @@ export function architectProviderRefusalLine(provider: 'openai' | 'anthropic', r
     // The provider's words never travel: a class from a fixed set, the length and a short hash (the full hash is in the evidence).
     + (refusal.message === null || refusal.message === undefined
       ? ''
-      : ` message_class=${refusal.message.messageClass} message_len=${refusal.message.length} message_sha256=${refusal.message.sha256.slice(0, 16)}`);
+      : ` message_class=${refusal.message.messageClass} message_len=${refusal.message.length} message_sha256=${refusal.message.sha256.slice(0, 16)}`)
+    // A real Messages call was refused: EV3 (accepted) and EV4 (generation) both FAIL. Neither is ever inferred from a count_tokens pass.
+    + ' messages_accepted=FAIL generation_ok=FAIL'
+    + (refusal.shape === undefined ? '' : ` ${anthropicBodyShapeFragment(refusal.shape)}`);
 }
 
 /**
@@ -1086,10 +1090,12 @@ export async function printAnthropicAcceptanceProbes(input: {
   readonly fetch?: typeof fetch;
 }): Promise<void> {
   const { out } = input;
-  const summary = (role: string, results: readonly AnthropicProbeResult[]): void => {
+  const summary = (role: 'architect' | 'coder', results: readonly AnthropicProbeResult[], schemaCheck: ReturnType<typeof anthropicSchemaLimitsCheck> | null): void => {
     const failing = firstFailingAnthropicProbe(results);
     const control = (id: string): string => String(results.find((entry) => entry.id === id)?.http ?? 'none');
-    out(`request_acceptance_summary role=${role} mode=observe first_failing=${failing ?? 'none'} controls=C1:${control('C1')},C2:${control('C2')}`);
+    // EV3/EV4 are only ever set by a real Messages call: this printer never calls one, so they are NOT_OBSERVED here.
+    out(anthropicEvidenceLine(role, anthropicEvidenceLevels({ schemaCheck, probeResults: results, messages: 'not_called' })));
+    out(`request_acceptance_summary role=${role} mode=observe first_failing=${failing ?? 'none'} controls=C1:${control('C1')},C2:${control('C2')}${failing === null ? ' token_count_only=not_proof_of_messages_acceptance' : ''}`);
   };
   if (input.architectOnAnthropic) {
     try {
@@ -1098,14 +1104,17 @@ export async function printAnthropicAcceptanceProbes(input: {
         out('request_acceptance role=architect probe=none skipped=key_or_model_absent');
       } else {
         const parts = architectPlanProbeParts();
+        const transformed = anthropicStructuredOutputSchema(parts.schema);
+        const schemaCheck = anthropicSchemaLimitsCheck(transformed);
+        out(`request_schema_check role=architect EV1=${schemaCheck.valid ? 'PASS' : 'FAIL'} optional=${schemaCheck.optionalProperties} unions=${schemaCheck.unionNodes}${schemaCheck.problems.length === 0 ? '' : ` problems=${schemaCheck.problems.slice(0, 5).join(',')}`}`);
         const body = anthropicArchitectRequestBody(
           { instructions: parts.instructions, input: ARCHITECT_PROBE_SYNTHETIC_INPUT },
           { model: input.architectModel, maxOutputTokens: 1, reasoningEffort: input.architectEffort },
-          anthropicStructuredOutputSchema(parts.schema),
+          transformed,
         );
         const results = await runAnthropicProbes({ role: 'architect', apiKey: key, probes: anthropicProbeMatrix(body), ...(input.fetch === undefined ? {} : { fetch: input.fetch }) });
         for (const result of results) out(result.line);
-        summary('architect', results);
+        summary('architect', results, schemaCheck);
       }
     } catch {
       out('request_acceptance role=architect probe=none skipped=probe_error');
@@ -1122,7 +1131,7 @@ export async function printAnthropicAcceptanceProbes(input: {
       ];
       const results = await runAnthropicProbes({ role: 'coder', apiKey: key, probes, ...(input.fetch === undefined ? {} : { fetch: input.fetch }) });
       for (const result of results) out(result.line);
-      summary('coder', results);
+      summary('coder', results, null);
     }
   } catch {
     out('request_acceptance role=coder probe=none skipped=probe_error');
