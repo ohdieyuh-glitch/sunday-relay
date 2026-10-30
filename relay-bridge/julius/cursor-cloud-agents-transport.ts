@@ -126,6 +126,46 @@ export function cursorTransportMode(transport: unknown): 'live' | 'fake' {
   return typeof transport === 'object' && transport !== null && LIVE_TRANSPORTS.has(transport) && !TAINTED_TRANSPORTS.has(transport) && cursorGlobalFetchIntact() ? 'live' : 'fake';
 }
 
+/** E2: one scrubbed piece of stream text, or `residue` when key characters survive the scrub (the caller fails closed). */
+export type CursorStreamScrub = { readonly kind: 'clean'; readonly text: string; readonly scrubbed: boolean } | { readonly kind: 'residue' };
+/**
+ * E2: the outcome of opening `GET /v1/agents/{id}/runs/{runId}/stream` once. `opened` hands over the response body and a
+ * scrubber bound to the key that was sent (the key itself never leaves this module); `mode` is the transport's live stamp at
+ * the moment of opening. Every other outcome sent nothing usable.
+ */
+export type CursorStreamOpen =
+  | {
+    readonly kind: 'opened';
+    readonly status: number;
+    /** `X-Cursor-Stream-Retention-Seconds` as sent (digits only), or null when absent or malformed. */
+    readonly retentionSeconds: string | null;
+    readonly contentType: string | null;
+    readonly body: ReadableStream<Uint8Array> | null;
+    readonly mode: 'live' | 'fake';
+    readonly scrub: (text: string) => CursorStreamScrub;
+    /** Ends the request (idempotent). */
+    readonly close: () => void;
+  }
+  | { readonly kind: 'status'; readonly status: number }
+  | { readonly kind: 'not_sent'; readonly cause: 'aborted' | 'key_absent' | 'transport_untrusted' | 'transport_unknown' | 'ref_invalid' | 'last_event_id_invalid' }
+  | { readonly kind: 'failed_in_flight'; readonly cause: 'timeout' | 'network' | 'aborted_in_flight' }
+  | { readonly kind: 'deadline' };
+type CursorStreamOpener = (ref: CodingAgentRunRef, lastEventId: string | null, opts: { readonly deadlineAtMs: number; readonly signal?: AbortSignal }) => Promise<CursorStreamOpen>;
+/** Stream openers of transports THIS module built; a hand-made transport has none, so it can never open a stream. */
+const STREAM_OPENERS = new WeakMap<object, CursorStreamOpener>();
+/**
+ * E2: opens the run's SSE stream through the transport's own auth, 429 backoff, key handling and pinned fetch. A transport
+ * this module did not build answers `not_sent` `transport_unknown`. The caller labels what it captures with `mode`; only a
+ * `live` capture can count for E2, and `live` is still never proof that the bytes came from Cursor (see the N2b note above).
+ */
+export function openCursorRunStream(transport: unknown, ref: CodingAgentRunRef, lastEventId: string | null, opts: { readonly deadlineAtMs: number; readonly signal?: AbortSignal }): Promise<CursorStreamOpen> {
+  const opener = typeof transport === 'object' && transport !== null ? STREAM_OPENERS.get(transport) : undefined;
+  return opener === undefined ? Promise.resolve({ kind: 'not_sent', cause: 'transport_unknown' }) : opener(ref, lastEventId, opts);
+}
+/** A Last-Event-ID we will send back: printable ASCII, no spaces, at most 256 characters (the docs call the id opaque). */
+const LAST_EVENT_ID = /^[\x21-\x7e]{1,256}$/u;
+const RETENTION_SECONDS = /^\d{1,9}$/u;
+
 /**
  * EVERY FORM OF THE KEY A SERVICE MIGHT ECHO BACK (F12): as is, URL-encoded (both component and form encoding), in hex
  * (lower and upper case, bare and percent-escaped), and in
@@ -588,6 +628,81 @@ export function createCursorCloudAgentsTransport(options: CursorCloudAgentsTrans
       return r.status === 409 ? 'not_cancellable' : 'failed';
     },
   };
+  /**
+   * E2: one stream request. Same gate as {@link send} (intact fetch, key read per request, one Authorization header,
+   * redirects refused); the request timeout covers only the wait for response headers; a 429 waits like
+   * {@link getWithBackoff}, never past the deadline. A non-2xx answer's body is read capped and dropped (status only).
+   */
+  const openStream: CursorStreamOpener = async (ref, lastEventId, { deadlineAtMs, signal }) => {
+    if (!SAFE_ID.test(ref.agentId) || !SAFE_ID.test(ref.runId)) return { kind: 'not_sent', cause: 'ref_invalid' };
+    let backoff = firstBackoff;
+    for (;;) {
+      if (isAborted(signal)) return { kind: 'not_sent', cause: 'aborted' };
+      if (options.fetch === cursorGlobalFetch && !cursorGlobalFetchIntact()) {
+        TAINTED_TRANSPORTS.add(transport);
+        return { kind: 'not_sent', cause: 'transport_untrusted' };
+      }
+      const key = readKey();
+      if (key === null) return { kind: 'not_sent', cause: 'key_absent' };
+      if (lastEventId !== null && (!LAST_EVENT_ID.test(lastEventId) || carriesCursorKey(lastEventId, key))) return { kind: 'not_sent', cause: 'last_event_id_invalid' };
+      const mode = cursorTransportMode(transport);
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), requestTimeoutMs);
+      const onAbort = (): void => ctl.abort();
+      signal?.addEventListener('abort', onAbort, { once: true });
+      let closed = false;
+      const close = (): void => {
+        if (closed) return;
+        closed = true;
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', onAbort);
+        ctl.abort();
+      };
+      let res: CursorFetchResponse;
+      try {
+        res = await options.fetch(`${CURSOR_API_ORIGIN}/v1/agents/${encodeURIComponent(ref.agentId)}/runs/${encodeURIComponent(ref.runId)}/stream`, {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${key}`, Accept: 'text/event-stream', ...(lastEventId === null ? {} : { 'Last-Event-ID': lastEventId }) },
+          redirect: 'error',
+          signal: ctl.signal,
+        });
+      } catch {
+        const cause = isAborted(signal) ? 'aborted_in_flight' : ctl.signal.aborted ? 'timeout' : 'network';
+        close();
+        return { kind: 'failed_in_flight', cause };
+      }
+      clearTimeout(timer);
+      if (res.status === 429) {
+        await readCappedBody(res, 64 * 1024);
+        close();
+        const ra = res.headers?.get('retry-after') ?? null;
+        const wait = ra !== null && /^\d{1,6}$/u.test(ra.trim()) ? Math.min(Number(ra.trim()) * 1000, MAX_RETRY_AFTER_MS) : backoff;
+        backoff = Math.min(backoff * 2, MAX_BACKOFF_MS);
+        log(`cursor-transport stream rate-limited wait_ms=${wait}`);
+        if (now() + wait > deadlineAtMs) return { kind: 'deadline' };
+        await sleep(wait, signal);
+        continue;
+      }
+      if (res.status < 200 || res.status >= 300) {
+        await readCappedBody(res, 64 * 1024);
+        close();
+        return { kind: 'status', status: res.status };
+      }
+      const rs = res.headers?.get('x-cursor-stream-retention-seconds') ?? null;
+      const scrub = (text: string): CursorStreamScrub => {
+        let out = text;
+        for (const re of cursorKeyPatterns(key)) out = out.replace(re, REDACTED);
+        return cursorKeyResidue(out, key) ? { kind: 'residue' } : { kind: 'clean', text: out, scrubbed: out !== text };
+      };
+      return {
+        kind: 'opened', status: res.status, mode, scrub, close,
+        retentionSeconds: rs !== null && RETENTION_SECONDS.test(rs.trim()) ? rs.trim() : null,
+        contentType: res.headers?.get('content-type') ?? null,
+        body: res.body ?? null,
+      };
+    }
+  };
+  STREAM_OPENERS.set(transport, openStream);
   // F15: only a transport over the real global fetch, built while it is intact, is "live"; every other instance (a fake
   // fetch, a hand-made object, one built after a replacement) is "fake".
   if (options.fetch === cursorGlobalFetch && cursorGlobalFetchIntact()) LIVE_TRANSPORTS.add(transport);
