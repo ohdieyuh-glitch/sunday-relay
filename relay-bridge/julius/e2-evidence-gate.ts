@@ -31,7 +31,7 @@ export const E2_FAKE_LABEL = 'fake';
 /** What an injected runner may return: raw output (hashed here) or streamed hashes and byte counts. */
 export type VerifierRunResult =
   | { readonly exitCode: number | null; readonly stdout: Uint8Array | string; readonly stderr: Uint8Array | string }
-  | { readonly exitCode: number | null; readonly stdoutSha256: string; readonly stderrSha256: string; readonly stdoutBytes: number; readonly stderrBytes: number; readonly cause?: string };
+  | { readonly exitCode: number | null; readonly stdoutSha256: string; readonly stderrSha256: string; readonly stdoutBytes: number; readonly stderrBytes: number; readonly cause?: string; readonly stdoutTail?: string };
 export type VerifierRunner = (argv: readonly string[], cwd: string, extraEnv?: Readonly<Record<string, string>>) => Promise<VerifierRunResult>;
 
 const TRUSTED_RUNNERS = new WeakSet<VerifierRunner>();
@@ -101,7 +101,8 @@ function verifierShape(argv: readonly string[], workspace: string): { readonly f
   switch (name) {
     case 'node': {
       /* `node <file> [args to the script...]` (the script is pinned; its own arguments are its business) or `node --test <file>...`. */
-      const list = args[0] === '--test' ? args.slice(1) : args.slice(0, 1);
+      /* Round 5 R4-3: the spec inserts `--test-reporter=tap` so the run's summary can be parsed. */
+      const list = args[0] === '--test' ? args.slice(args[1] === '--test-reporter=tap' ? 2 : 1) : args.slice(0, 1);
       if (list.length === 0 || list.some((x) => x.startsWith('-'))) return 'shape_not_allowed';
       const f = files(list); return f === null ? 'path_outside_workspace' : { files: f, configs: true };
     }
@@ -202,6 +203,7 @@ export function spawnVerifierRunner(options: {
       const r = {
         exitCode: !failed && cause === null && s === null && typeof c === 'number' && c >= 0 ? c : null,
         stdoutSha256: out.digest('hex'), stderrSha256: err.digest('hex'), stdoutBytes: outBytes, stderrBytes: errBytes,
+        stdoutTail: tail.toString('utf8'),
       };
       resolve(cause === null ? r : { ...r, cause });
     };
@@ -217,7 +219,12 @@ export function spawnVerifierRunner(options: {
     const timer = setTimeout(() => abandon('timeout'), timeoutMs);
     let grace: ReturnType<typeof setTimeout> | undefined;
     const over = (): void => { if (outBytes + errBytes > maxOutputBytes && cause === null) abandon('output_overrun'); };
-    child.stdout?.on('data', (d: Buffer) => { if (settled) return; outBytes += d.byteLength; out.update(d); over(); });
+    let tail = Buffer.alloc(0);
+    child.stdout?.on('data', (d: Buffer) => {
+      if (settled) return; outBytes += d.byteLength; out.update(d);
+      tail = Buffer.concat([tail, d]); if (tail.byteLength > E2_STDOUT_TAIL_BYTES) tail = tail.subarray(tail.byteLength - E2_STDOUT_TAIL_BYTES);
+      over();
+    });
     child.stderr?.on('data', (d: Buffer) => { if (settled) return; errBytes += d.byteLength; err.update(d); over(); });
     child.on('error', () => { failed = true; finish(null, null); });
     // A leader that exits leaves no reason for its group to keep the pipes open: stragglers are killed (mutant M9).
@@ -247,6 +254,23 @@ export interface E2CommandRecord {
   readonly stderrBytes: number;
   readonly startedAt: string;
   readonly endedAt: string;
+  /** Round 5 R4-3: the trailing node --test TAP summary of the captured stdout tail, or null (absent or not parseable). */
+  readonly testSummary: E2TestSummary | null;
+}
+export interface E2TestSummary { readonly tests: number; readonly pass: number; readonly fail: number }
+/** Bytes of stdout kept (as text) for the summary; the full stream is still only hashed. */
+export const E2_STDOUT_TAIL_BYTES = 64 * 1024;
+/**
+ * Round 5 R4-3: the summary node's TAP (or spec, `ℹ`) reporter prints LAST. It must end the output: anything the test
+ * code prints is escaped by the TAP reporter (`# \# tests 99`) and comes earlier, so it cannot stand in for this block.
+ * Cancelled tests count as failures. HONEST LIMIT: a detached grandchild that keeps writing to the inherited stdout after
+ * the summary makes the summary non-final (refused, never accepted).
+ */
+const SUMMARY = /(?:^|\n)[#ℹ] tests (\d+)\n[#ℹ] suites \d+\n[#ℹ] pass (\d+)\n[#ℹ] fail (\d+)\n[#ℹ] cancelled (\d+)\n[#ℹ] skipped \d+\n[#ℹ] todo \d+\n[#ℹ] duration_ms [0-9.]+\n?$/u;
+export function parseNodeTestSummary(text: string): E2TestSummary | null {
+  const m = SUMMARY.exec(text);
+  if (m === null) return null;
+  return Object.freeze({ tests: Number(m[1]), pass: Number(m[2]), fail: Number(m[3]) + Number(m[4]) });
 }
 export interface E2ReexecEvidence {
   readonly label: typeof E2_JULIUS_LABEL | typeof E2_FAKE_LABEL; readonly cwd: string; readonly commands: readonly E2CommandRecord[];
@@ -274,11 +298,12 @@ export interface E2DiffEvidence {
 const validArgv = (a: unknown): a is readonly string[] =>
   Array.isArray(a) && a.length > 0 && a.every((x) => typeof x === 'string' && !x.includes('\u0000')) && (a[0] as string) !== '';
 
-const normalize = (r: VerifierRunResult): { exitCode: number | 'unknown'; stdoutSha256: string; stderrSha256: string; stdoutBytes: number; stderrBytes: number } => {
+const normalize = (r: VerifierRunResult): { exitCode: number | 'unknown'; stdoutSha256: string; stderrSha256: string; stdoutBytes: number; stderrBytes: number; tail: string } => {
   const exitCode = typeof r.exitCode === 'number' && Number.isInteger(r.exitCode) ? r.exitCode : 'unknown' as const;
-  if ('stdoutSha256' in r) return { exitCode, stdoutSha256: r.stdoutSha256, stderrSha256: r.stderrSha256, stdoutBytes: r.stdoutBytes, stderrBytes: r.stderrBytes };
+  if ('stdoutSha256' in r) return { exitCode, stdoutSha256: r.stdoutSha256, stderrSha256: r.stderrSha256, stdoutBytes: r.stdoutBytes, stderrBytes: r.stderrBytes, tail: typeof r.stdoutTail === 'string' ? r.stdoutTail : '' };
   const len = (b: Uint8Array | string): number => (typeof b === 'string' ? Buffer.byteLength(b) : b.byteLength);
-  return { exitCode, stdoutSha256: sha256(r.stdout), stderrSha256: sha256(r.stderr), stdoutBytes: len(r.stdout), stderrBytes: len(r.stderr) };
+  const buf = typeof r.stdout === 'string' ? Buffer.from(r.stdout) : Buffer.from(r.stdout);
+  return { exitCode, stdoutSha256: sha256(r.stdout), stderrSha256: sha256(r.stderr), stdoutBytes: len(r.stdout), stderrBytes: len(r.stderr), tail: buf.subarray(Math.max(0, buf.byteLength - E2_STDOUT_TAIL_BYTES)).toString('utf8') };
 };
 const run = async (runner: VerifierRunner, argv: readonly string[], cwd: string, env?: Readonly<Record<string, string>>): Promise<ReturnType<typeof normalize>> => {
   try { return normalize(await runner([...argv], cwd, env)); } catch { return normalize({ exitCode: null, stdout: '', stderr: '' }); }
@@ -299,6 +324,8 @@ export interface E2MissionVerifierInput {
   readonly additionalChecks?: readonly string[];
   readonly workspace: string;
   readonly base: string;
+  /** Round 5 R4-3: the mission's minimum passing-test count for `node --test` commands (a non-negative integer). */
+  readonly minTests?: number;
 }
 export interface E2VerifierSpec {
   readonly base: string;
@@ -306,11 +333,18 @@ export interface E2VerifierSpec {
   readonly commands: readonly (readonly string[])[];
   /** workspace-relative path -> sha256 of its content at base, or 'absent'. */
   readonly pins: Readonly<Record<string, string>>;
+  /**
+   * Round 5 R4-3, per command: for `node --test`, the passing-test floor = max(1, mission minTests, count of test()/it()
+   * calls in the base-pinned test files); null for `node <file>`. Never from run-time output or anything the coder wrote.
+   */
+  readonly minTests: readonly (number | null)[];
 }
 export type E2VerifierSpecRefusal =
   | 'spec_invalid' | 'spec_shell_syntax' | 'spec_base_invalid' | 'spec_workspace_invalid'
   | E2VerifierShapeRefusal | 'spec_file_not_at_base';
 const SPECS = new WeakSet<object>();
+/** R4-3: test()/it() calls in a base-pinned test file (a static count; over-counting only raises the floor). */
+const BASE_TEST_CALL = /\b(?:test|it)\s*\(/gu;
 const SHELL_SYNTAX = /[;&|<>$`'"\\(){}[\]*?~!#=%^\r\n\t]/u;
 const gitBlob = (workspace: string, base: string, path: string): Buffer | null => {
   const bin = resolveProgram('git');
@@ -330,21 +364,30 @@ export function pinVerifierSpec(input: E2MissionVerifierInput): E2VerifierSpec |
   if (!isCanonicalDir(input.workspace)) return no('spec_workspace_invalid');
   const strings = [input.testCommand, ...(input.additionalChecks ?? [])];
   if (!strings.every((x) => typeof x === 'string' && x.trim() !== '')) return no('spec_invalid');
+  if (input.minTests !== undefined && !(Number.isSafeInteger(input.minTests) && input.minTests >= 0)) return no('spec_invalid');
   if (strings.some((x) => SHELL_SYNTAX.test(x.trim()))) return no('spec_shell_syntax');
-  const commands = strings.map((x) => Object.freeze(x.trim().split(/ +/u)));
+  const commands = strings.map((x) => {
+    const a = x.trim().split(/ +/u);
+    /* R4-3: node --test always reports TAP so the gate can read the summary. */
+    return Object.freeze(progName(a[0] as string) === 'node' && a[1] === '--test' && a[2] !== '--test-reporter=tap' ? [a[0] as string, '--test', '--test-reporter=tap', ...a.slice(2)] : a);
+  });
   const pins: Record<string, string> = {};
+  const minTests: (number | null)[] = [];
   for (const argv of commands) {
     if ((argv[0] as string).includes('/')) return no('program_not_allowed');
     const shape = verifierShape(argv, input.workspace);
     if (typeof shape === 'string') return no(shape);
+    let atBase = 0;
     for (const f of shape.files) {
       const blob = gitBlob(input.workspace, input.base, f);
       if (blob === null) return no('spec_file_not_at_base');
       pins[f] = sha256(blob);
+      atBase += (blob.toString('utf8').match(BASE_TEST_CALL) ?? []).length;
     }
+    minTests.push(argv[1] === '--test' ? Math.max(1, input.minTests ?? 0, atBase) : null);
     if (shape.configs) for (const f of TOOL_CONFIGS) { const blob = gitBlob(input.workspace, input.base, f); pins[f] = blob === null ? 'absent' : sha256(blob); }
   }
-  const spec: E2VerifierSpec = Object.freeze({ base: input.base, workspace: input.workspace, commands: Object.freeze(commands), pins: Object.freeze(pins) });
+  const spec: E2VerifierSpec = Object.freeze({ base: input.base, workspace: input.workspace, commands: Object.freeze(commands), pins: Object.freeze(pins), minTests: Object.freeze(minTests) });
   SPECS.add(spec);
   return spec;
 }
@@ -391,8 +434,8 @@ export async function recordVerifierReexec(input: {
   const commands: E2CommandRecord[] = [];
   for (const argv of list) {
     const startedAt = new Date(now()).toISOString();
-    const r = await run(input.runner, argv, input.cwd);
-    commands.push(Object.freeze({ argv: Object.freeze([...argv]), ...r, startedAt, endedAt: new Date(now()).toISOString() }));
+    const { tail, ...r } = await run(input.runner, argv, input.cwd);
+    commands.push(Object.freeze({ argv: Object.freeze([...argv]), ...r, startedAt, endedAt: new Date(now()).toISOString(), testSummary: parseNodeTestSummary(tail) }));
   }
   const ev: E2ReexecEvidence = Object.freeze({ label, cwd: input.cwd, commands: Object.freeze(commands), spec, refusal: null });
   RECORDED.add(ev);
@@ -452,7 +495,7 @@ export const E2_GATE_REASONS = Object.freeze([
   'e2_final_record_mismatch', 'e2_no_edit_calls', 'e2_diff_empty', 'e2_stream_mid_run_start', 'e2_model_unbound',
   'e2_diff_not_isolated', 'e2_edit_path_not_in_diff', 'e2_edit_path_unknown',
   'e2_anchor_not_external', 'e2_verifier_spec_absent', 'e2_verifier_not_from_spec', 'e2_verifier_pin_changed',
-  'e2_tool_unknown', 'e2_edit_path_outside_workspace', 'e2_verifier_binary_untrusted',
+  'e2_tool_unknown', 'e2_edit_path_outside_workspace', 'e2_verifier_binary_untrusted', 'e2_verifier_tests_below_minimum',
 ] as const);
 export type E2GateReason = (typeof E2_GATE_REASONS)[number];
 
@@ -668,6 +711,14 @@ export function e2Gate(input: {
     if (reexec.label !== E2_JULIUS_LABEL) reasons.push('e2_reexec_fake');
     if (reexec.commands.some((c) => c.exitCode === 'unknown')) reasons.push('e2_reexec_exit_unknown');
     if (reexec.commands.some((c) => c.exitCode !== 0 && c.exitCode !== 'unknown')) reasons.push('e2_reexec_failed');
+    /* Round 5 R4-3: exit 0 is not enough for node --test; the summary must show the spec's floor passing and none failing. */
+    const floors = verifierSpec.minTests;
+    if (reexec.commands.length !== floors.length || reexec.commands.some((c, i) => {
+      const floor = floors[i];
+      if (floor === null || floor === undefined) return false;
+      const t = c.testSummary;
+      return t === null || t.pass < floor || t.fail > 0;
+    })) reasons.push('e2_verifier_tests_below_minimum');
   }
   const realDiff = diff !== null && diff !== undefined && RECORDED.has(diff);
   if (diff === null || diff === undefined) reasons.push('e2_diff_absent');

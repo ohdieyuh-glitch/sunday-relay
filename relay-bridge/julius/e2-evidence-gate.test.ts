@@ -28,8 +28,8 @@ describe('E2 part B: Julius re-runs the verifier commands', () => {
     expect(ev).toEqual({
       label: E2_JULIUS_LABEL, cwd: JS_DIR, spec: null, refusal: null,
       commands: [
-        { argv: [NODE, js('process.stdout.write("ok")')], exitCode: 0, stdoutSha256: sha('ok'), stderrSha256: sha(''), stdoutBytes: 2, stderrBytes: 0, startedAt: '2026-10-30T18:00:01.000Z', endedAt: '2026-10-30T18:00:02.000Z' },
-        { argv: [NODE, js('process.stderr.write("e");process.exit(3)')], exitCode: 3, stdoutSha256: sha(''), stderrSha256: sha('e'), stdoutBytes: 0, stderrBytes: 1, startedAt: '2026-10-30T18:00:03.000Z', endedAt: '2026-10-30T18:00:04.000Z' },
+        { argv: [NODE, js('process.stdout.write("ok")')], exitCode: 0, stdoutSha256: sha('ok'), stderrSha256: sha(''), stdoutBytes: 2, stderrBytes: 0, startedAt: '2026-10-30T18:00:01.000Z', endedAt: '2026-10-30T18:00:02.000Z', testSummary: null },
+        { argv: [NODE, js('process.stderr.write("e");process.exit(3)')], exitCode: 3, stdoutSha256: sha(''), stderrSha256: sha('e'), stdoutBytes: 0, stderrBytes: 1, startedAt: '2026-10-30T18:00:03.000Z', endedAt: '2026-10-30T18:00:04.000Z', testSummary: null },
       ],
     });
     expect(Object.isFrozen(ev)).toBe(true);
@@ -103,7 +103,7 @@ describe('E2 part C: the diff', () => {
 describe('E2 gate', () => {
   it('publishes every reason once', () => {
     expect(new Set(E2_GATE_REASONS).size).toBe(E2_GATE_REASONS.length);
-    expect(E2_GATE_REASONS.length).toBe(43);
+    expect(E2_GATE_REASONS.length).toBe(44);
   });
   it('refuses when everything is absent, with every reason, never the diff alone', () => {
     const r = e2Gate({ streamLines: null, anchor: null, reexec: null, verifierSpec: null, diff: null, modelId: null, binding: null });

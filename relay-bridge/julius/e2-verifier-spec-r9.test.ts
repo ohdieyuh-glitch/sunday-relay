@@ -53,7 +53,8 @@ describe('R3-2: pinVerifierSpec maps the mission testCommand to argv and pins it
     const s = G.pinVerifierSpec({ testCommand: 'node --test test/a.test.mjs', additionalChecks: ['node ok.mjs'], workspace: repo, base });
     expect('refused' in s).toBe(false);
     const spec = s as G.E2VerifierSpec;
-    expect(spec.commands).toEqual([['node', '--test', 'test/a.test.mjs'], ['node', 'ok.mjs']]);
+    expect(spec.commands).toEqual([['node', '--test', '--test-reporter=tap', 'test/a.test.mjs'], ['node', 'ok.mjs']]);
+    expect(spec.minTests).toEqual([1, null]);
     expect(Object.keys(spec.pins)).toContain('test/a.test.mjs');
     expect(spec.pins['package.json']).toMatch(/^[0-9a-f]{64}$/u);
   });
