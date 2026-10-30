@@ -363,6 +363,9 @@ const FAMILY_ALIASES: Readonly<Record<string, string>> = Object.freeze({
   cursor: 'cursor', composer: 'cursor', 'cursor-composer': 'cursor',
   google: 'google', gemini: 'google', deepmind: 'google',
 });
+/** A router alias or router-token id (Auto, Default, cursor-auto, ...), never a pinned model. Used by the config check and the E2 gate. */
+export const isRouterModelId = (model: string): boolean => ROUTER_ALIASES.has(foldLookalikes(model)) || ROUTER_TOKEN.test(foldLookalikes(model));
+
 export const canonicalModelFamily = (label: string): string => {
   const v = label.trim().toLowerCase();
   return FAMILY_ALIASES[v] ?? v;
@@ -437,7 +440,7 @@ export function grokBotCoderConfigRefusal(config: GrokBotCoderConfig | null | un
   const model = config.pinnedModelId;
   if (typeof model !== 'string' || !MODEL_ID.test(model)) return refuse('coder_grok_config_model_absent', 'No pinned Grok Bot coder model id is configured; nothing was dispatched.');
   if (CLAUDE_LIKE.test(model) || foldVariants(model).some((f) => CLAUDE_LIKE.test(f))) return refuse('coder_grok_model_claude_refused', 'The Grok Bot coder refuses a Claude model; there is no Claude fallback.');
-  if (ROUTER_ALIASES.has(foldLookalikes(model)) || ROUTER_TOKEN.test(foldLookalikes(model))) return refuse('coder_grok_model_router_refused', 'The Grok Bot coder refuses a router alias; the model must be pinned.');
+  if (isRouterModelId(model)) return refuse('coder_grok_model_router_refused', 'The Grok Bot coder refuses a router alias; the model must be pinned.');
   const coderFamily = typeof config.coderModelFamily === 'string' ? canonicalModelFamily(config.coderModelFamily) : '';
   if (coderFamily === '') return refuse('coder_grok_config_family_absent', 'The coder model family is not configured; nothing was dispatched.');
   /* N1: the reviewer is the WIRED pin. The coder config may restate it, and if it does it must agree. */
