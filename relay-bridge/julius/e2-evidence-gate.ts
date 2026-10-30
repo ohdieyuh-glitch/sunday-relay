@@ -323,6 +323,8 @@ export interface E2MissionVerifierInput {
   readonly base: string;
   /** Round 5 R4-3: the mission's minimum passing-test count for `node --test` commands (a non-negative integer). */
   readonly minTests?: number;
+  /** Skywalker M3: tool names the mission/wiring verified as read-only (never from the coder); may not name an edit tool. */
+  readonly extraKnownNonEditTools?: readonly string[];
 }
 export interface E2VerifierSpec {
   readonly base: string;
@@ -335,6 +337,7 @@ export interface E2VerifierSpec {
    * calls in the base-pinned test files); null for `node <file>`. Never from run-time output or anything the coder wrote.
    */
   readonly minTests: readonly (number | null)[];
+  readonly extraKnownNonEditTools: readonly string[];
 }
 export type E2VerifierSpecRefusal =
   | 'spec_invalid' | 'spec_shell_syntax' | 'spec_base_invalid' | 'spec_workspace_invalid'
@@ -375,6 +378,8 @@ export function pinVerifierSpec(input: E2MissionVerifierInput): E2VerifierSpec |
   const strings = [input.testCommand, ...(input.additionalChecks ?? [])];
   if (!strings.every((x) => typeof x === 'string' && x.trim() !== '')) return no('spec_invalid');
   if (input.minTests !== undefined && !(Number.isSafeInteger(input.minTests) && input.minTests >= 0)) return no('spec_invalid');
+  const extra = input.extraKnownNonEditTools;
+  if (extra !== undefined && !(Array.isArray(extra) && extra.every((n) => typeof n === 'string' && n !== '' && !isEditToolName(n)))) return no('spec_invalid');
   if (strings.some((x) => SHELL_SYNTAX.test(x.trim()))) return no('spec_shell_syntax');
   const parsed = strings.map((x) => x.trim().split(/ +/u));
   /* Skywalker 44c062b9 M1/M2: bare `node --test` (node's own discovery) becomes the explicit list of test files TRACKED
@@ -406,7 +411,7 @@ export function pinVerifierSpec(input: E2MissionVerifierInput): E2VerifierSpec |
     minTests.push(argv[1] === '--test' ? Math.max(1, input.minTests ?? 0, atBase) : null);
     if (shape.configs) for (const f of TOOL_CONFIGS) { const blob = gitBlob(input.workspace, input.base, f); pins[f] = blob === null ? 'absent' : sha256(blob); }
   }
-  const spec: E2VerifierSpec = Object.freeze({ base: input.base, workspace: input.workspace, commands: Object.freeze(commands), pins: Object.freeze(pins), minTests: Object.freeze(minTests) });
+  const spec: E2VerifierSpec = Object.freeze({ base: input.base, workspace: input.workspace, commands: Object.freeze(commands), pins: Object.freeze(pins), minTests: Object.freeze(minTests), extraKnownNonEditTools: Object.freeze([...(extra ?? [])]) });
   SPECS.add(spec);
   return spec;
 }
@@ -578,7 +583,7 @@ export const E2_NON_EDIT_TOOL_NAMES: readonly string[] = Object.freeze([
 export const isEditToolName = (name: unknown): boolean => typeof name === 'string' && E2_EDIT_TOOL_NAMES.includes(name);
 const isKnownToolName = (name: unknown): boolean => isEditToolName(name) || (typeof name === 'string' && E2_NON_EDIT_TOOL_NAMES.includes(name));
 
-interface Recount { readonly ok: boolean; readonly toolCallCount: number; readonly unfinished: number; readonly editCalls: number; readonly editPaths: readonly (readonly string[] | null)[]; readonly unknownTools: number; readonly terminalStatus: string | null; readonly done: boolean }
+interface Recount { readonly ok: boolean; readonly toolCallCount: number; readonly unfinished: number; readonly editCalls: number; readonly editPaths: readonly (readonly string[] | null)[]; readonly unknownTools: readonly string[]; readonly terminalStatus: string | null; readonly done: boolean }
 /** PILOT 43b93a4e N-1: everything the gate grades, recounted from the event records. An unparsable event fails closed. */
 function recount(lines: readonly string[]): Recount {
   const calls = new Map<string, { name: unknown; status: unknown; args: unknown }>();
@@ -601,7 +606,7 @@ function recount(lines: readonly string[]): Recount {
   }
   const all = [...calls.values()];
   return { ok, toolCallCount: all.length, unfinished: all.filter((c) => c.status !== 'completed').length, editCalls: all.filter((c) => isEditToolName(c.name)).length,
-    editPaths: all.filter((c) => isEditToolName(c.name)).map((c) => editPaths(c.args)), unknownTools: all.filter((c) => !isKnownToolName(c.name)).length, terminalStatus, done };
+    editPaths: all.filter((c) => isEditToolName(c.name)).map((c) => editPaths(c.args)), unknownTools: [...new Set(all.filter((c) => !isKnownToolName(c.name)).map((c) => (typeof c.name === 'string' ? c.name : String(c.name))))].sort(), terminalStatus, done };
 }
 
 const okPath = (v: unknown): v is string => typeof v === 'string' && v !== '' && !v.includes('\u0000') && v !== '/dev/null';
@@ -670,13 +675,14 @@ export function e2Gate(input: {
   readonly diff: E2DiffEvidence | null | undefined;
   readonly modelId: string | null | undefined;
   readonly binding: E2Binding | null | undefined;
-}): { readonly ok: true } | { readonly ok: false; readonly reasons: readonly E2GateReason[] } {
+}): { readonly ok: true } | { readonly ok: false; readonly reasons: readonly E2GateReason[]; readonly unknownTools?: readonly string[] } {
   const reasons: E2GateReason[] = [];
   const { streamLines, anchor, reexec, diff, modelId, binding, verifierSpec } = input;
   const bound = binding !== null && binding !== undefined && typeof binding === 'object'
     && typeof binding.runId === 'string' && binding.runId !== '' && SHA.test(binding.base) && SHA.test(binding.head) && isCanonicalDir(binding.workspace);
   let header: Record<string, unknown> | null = null;
   let rc: Recount | null = null;
+  let unknownTools: readonly string[] = [];
   if (!Array.isArray(streamLines)) reasons.push('e2_stream_absent');
   else {
     const chain = verifyEvidenceChain(streamLines);
@@ -701,7 +707,13 @@ export function e2Gate(input: {
       if (!rc.ok || rc.toolCallCount !== fin.toolCallCount || rc.unfinished !== fin.unfinishedCalls || rc.terminalStatus !== (finTerminal ?? null)
         || (finTerminal !== null && finTerminal !== undefined && !rc.done)) reasons.push('e2_final_record_mismatch');
       else if (rc.toolCallCount >= 1 && rc.editCalls < 1) reasons.push('e2_no_edit_calls');
-      if (rc.ok && rc.unknownTools > 0) reasons.push('e2_tool_unknown');
+      /* Skywalker 44c062b9 M3: fail closed, one cause, every name listed; names the MISSION declared read-only on the pinned
+         spec (extraKnownNonEditTools) are known. The coder cannot add names: the spec is branded and built from the mission. */
+      if (rc.ok) {
+        const extra = isSpec(verifierSpec) ? verifierSpec.extraKnownNonEditTools : [];
+        unknownTools = rc.unknownTools.filter((n) => !extra.includes(n));
+        if (unknownTools.length > 0) reasons.push('e2_tool_unknown');
+      }
       if (header.start !== 'created_by_this_transport') reasons.push('e2_stream_mid_run_start');
     }
   }
@@ -762,5 +774,5 @@ export function e2Gate(input: {
   if (header !== null && (headerModel === null || headerModel !== modelId)) reasons.push('e2_model_unbound');
   const m = modelReason(modelId);
   if (m !== null) reasons.push(m);
-  return reasons.length === 0 ? { ok: true } : { ok: false, reasons: Object.freeze(reasons) };
+  return reasons.length === 0 ? { ok: true } : { ok: false, reasons: Object.freeze(reasons), ...(unknownTools.length > 0 ? { unknownTools: Object.freeze([...unknownTools]) } : {}) };
 }
