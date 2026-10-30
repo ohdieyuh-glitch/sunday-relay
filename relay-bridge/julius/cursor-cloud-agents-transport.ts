@@ -141,10 +141,11 @@ const reEscape = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'
 export function cursorKeyPatterns(key: string): readonly RegExp[] {
   return Object.freeze(cursorKeyForms(key).map((f) => new RegExp([...f].map(reEscape).join(KEY_SEPARATOR), 'giu')));
 }
+const REDACTED = '[REDACTED]';
 /** Every occurrence of the key, in any form {@link cursorKeyPatterns} matches, replaced by `[REDACTED]`. */
 export function scrubCursorKey(text: string, key: string): string {
   let out = text;
-  for (const re of cursorKeyPatterns(key)) out = out.replace(re, '[REDACTED]');
+  for (const re of cursorKeyPatterns(key)) out = out.replace(re, REDACTED);
   return out;
 }
 /** A fragment this long of any key form, in any case, is treated as the key (a truncated or partial echo). */
@@ -265,7 +266,6 @@ export async function readCappedBody(res: CursorFetchResponse, maxBytes: number 
 }
 const ACTIVE = new Set(['CREATING', 'RUNNING', 'WAITING_FOR_BACKGROUND_WORK']);
 const TERMINAL = new Set<CodingAgentTerminalStatus>(['FINISHED', 'ERROR', 'CANCELLED', 'EXPIRED']);
-const REDACTED = '[REDACTED]';
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/u;
 
 const defaultSleep = (ms: number, signal?: AbortSignal): Promise<void> => new Promise((resolve) => {
