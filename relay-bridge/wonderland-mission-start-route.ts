@@ -47,6 +47,14 @@
  * `clientTriggerId`, on the `dispatching` reservation before
  * `gh workflow run`. The binding opens no gate; a retried Start still replays
  * the recorded claim whatever key it carries. Unset, nothing here changes.
+ *
+ * ACK (JULIUS_WONDERLAND_START_ACK exactly `1`, with V2; A-9). After every
+ * check above, the Start is saved as a durable intent and answered 202
+ * `ack: "accepted"` at once; the same claim then runs in the background
+ * (wonderland-start-intents.ts). The saved intent is a durable acknowledgment
+ * of the request, not of the dispatch: a 202 `accepted` never means
+ * dispatched, and the client polls /status `start.request`. Unset, the v2
+ * Start above answers exactly as before.
  */
 
 import { execFile, spawnSync } from 'node:child_process';
@@ -77,12 +85,15 @@ import {
   type WonderlandAdmissionRouteRequest,
 } from './wonderland-admission-route';
 import { createGhPriorAttemptReader } from './wonderland-prior-attempts';
+import type { WonderlandStartRequests } from './wonderland-start-intents';
 
 const START_PATH = /^\/wonderland\/julius\/missions\/([^/]+)\/start$/u;
 const REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
 export const WONDERLAND_START_FLAG = 'JULIUS_WONDERLAND_START';
 /** The v2 Start: an awaitable `gh` and a recorded Start binding. Off unless exactly `1`. */
 export const WONDERLAND_START_V2_FLAG = 'JULIUS_WONDERLAND_START_V2';
+/** A-9: the durable Start intent and the 202 `accepted` answer. Off unless exactly `1`, and only with V2. */
+export const START_ACK_FLAG = 'JULIUS_WONDERLAND_START_ACK';
 /** A `gh` call from the claim core that takes longer than this is a failure, not waited on. */
 export const GH_CLAIM_TIMEOUT_MS = 120_000;
 
@@ -101,6 +112,8 @@ export interface WonderlandMissionStartDeps {
   readonly claimToolV2?: (storePath: string) => OperatorClaimTool;
   /** V2 only: the Starts this process is running, so /status can say a Start was received. */
   readonly startsInFlight?: WonderlandStartsInFlight;
+  /** ACK only: the durable Start intents and their background claims. Absent, ACK has no effect. */
+  readonly requests?: WonderlandStartRequests;
 }
 
 /** The wlj ids whose Start request this process is still running. In memory only. */
@@ -280,7 +293,14 @@ export async function handleWonderlandMissionStartRoute(
   if (typeof serverRunId !== 'string') return err(404, 'not_found', 'Not found.');
   const storePath = (ports.env.JULIUS_WONDERLAND_ADMISSION_STORE ?? '').trim();
   if (ports.env[WONDERLAND_START_V2_FLAG] === '1') {
-    return startV2(parsed.runId, serverRunId, repo, lane, storePath, rerunConfirmation, startKey, body.clientTriggerId, deps);
+    const clientTriggerId = body.clientTriggerId;
+    const sync = () => startV2(parsed.runId, serverRunId, repo, lane, storePath, rerunConfirmation, startKey, clientTriggerId, deps);
+    if (ports.env[START_ACK_FLAG] === '1' && deps.requests !== undefined) {
+      return deps.requests.accept({
+        wljRunId: parsed.runId, serverRunId, repo, lane, storePath, rerunConfirmation, startKey, clientTriggerId, nowMs: Number.isFinite(request.nowMs) ? request.nowMs : Date.now(), replay: sync,
+      });
+    }
+    return sync();
   }
   let result: ClaimResult;
   try {

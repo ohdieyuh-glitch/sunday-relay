@@ -513,6 +513,7 @@ const wonderlandLive = (wonderlandAdmission: WonderlandAdmissionRoutePorts) => {
  * over one claim core per store. Unset, none of it is built or routed.
  */
 const juliusStartV2 = (): boolean => process.env[WONDERLAND_START_V2_FLAG] === '1';
+let wonderlandStartV2StopWorker: (() => void) | null = null;
 let wonderlandStartV2Cache: { readonly ports: WonderlandAdmissionRoutePorts; readonly wiring: ReturnType<typeof createWonderlandStartV2Wiring> } | null = null;
 const wonderlandStartV2 = (wonderlandAdmission: WonderlandAdmissionRoutePorts): ReturnType<typeof createWonderlandStartV2Wiring> => {
   if (wonderlandStartV2Cache === null || wonderlandStartV2Cache.ports !== wonderlandAdmission) {
@@ -521,6 +522,12 @@ const wonderlandStartV2 = (wonderlandAdmission: WonderlandAdmissionRoutePorts): 
       ports: wonderlandAdmission,
       wiring: createWonderlandStartV2Wiring(wonderlandAdmission, { runReader: reads?.runReader, evidenceReader: reads?.evidenceReader }),
     };
+    // A-9 recovery worker: every pass re-reads the env and does nothing unless
+    // JULIUS_WONDERLAND_START_ACK and JULIUS_WONDERLAND_START_RESUME are `1` and
+    // JULIUS_WONDERLAND_START_RESUME_DISABLED is not. Only this bridge, which
+    // holds `<store>.bridge.lock`, serves the store.
+    if (wonderlandStartV2StopWorker !== null) wonderlandStartV2StopWorker();
+    wonderlandStartV2StopWorker = wonderlandStartV2Cache.wiring.requests.startWorker(() => wonderlandAdmission.env);
   }
   return wonderlandStartV2Cache.wiring;
 };
@@ -1650,7 +1657,13 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
       }
     })();
   });
+  // JULIUS_WONDERLAND_START_V2 only: build the v2 wiring now, so the A-9 recovery worker's first pass runs at boot.
+  if (juliusStartV2()) wonderlandStartV2(wonderlandAdmission);
   server.on('close', () => {
+    if (wonderlandStartV2StopWorker !== null) {
+      wonderlandStartV2StopWorker();
+      wonderlandStartV2StopWorker = null;
+    }
     wonderlandAdmission.close();
   });
   return server;

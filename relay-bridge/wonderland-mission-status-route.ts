@@ -30,6 +30,14 @@
  * - `start.workflowRunIdSource` is `gh_output` (the claim's own spawn),
  *   `reconcile` (written by reconcile from GitHub), `dispatch_key` (found by
  *   the recovery, not written), or null.
+ * - `start.request` (only with JULIUS_WONDERLAND_START_ACK=1; absent
+ *   otherwise): the saved Start intent for this mission, or null.
+ *   `state` is `accepted` (saved, waiting for the recovery worker),
+ *   `claiming` (the claim core is running it in this process), `settled`
+ *   (`outcome` is the answer the Start route would have sent) or
+ *   `interrupted` (no task, and it will not be resumed). The journal wins: an
+ *   outcome that says started with no claim in the journal is `interrupted`.
+ *   `resumed`/`resumedAt` come from the intent's own resume count.
  */
 
 import { isLocalStorePath, readAdmissionDocument, type ClaimEvent } from '../src/relay/integration/wonderland-admission/admission-file';
@@ -68,6 +76,7 @@ import {
   type WonderlandMissionStartBridge,
   type WonderlandStartsInFlight,
 } from './wonderland-mission-start-route';
+import { createWonderlandStartRequests, startAckEnabled, type StartRequestsIo, type WonderlandStartRequests } from './wonderland-start-intents';
 
 export const MISSION_STATUS_SCHEMA = 'wonderland-mission-status.v1';
 const STATUS_PATH = /^\/wonderland\/julius\/missions\/([^/]+)\/status$/u;
@@ -92,6 +101,8 @@ export interface WonderlandMissionStatusDeps {
   readonly result: RouteHandler;
   readonly recovery?: WonderlandDispatchingRecovery;
   readonly startsInFlight?: WonderlandStartsInFlight;
+  /** JULIUS_WONDERLAND_START_ACK only: the saved Start intents, read for `start.request`. */
+  readonly requests?: WonderlandStartRequests;
 }
 
 export interface WonderlandMissionStatusBridge {
@@ -187,6 +198,10 @@ export async function handleWonderlandMissionStatusRoute(
     ? (claim !== null && writtenByReconcile(claim) ? 'reconcile' : 'gh_output')
     : recovery.workflowRunId !== null ? 'dispatch_key' : null;
   const list = bound ? events.events : [];
+  // A-9, ACK only: the saved Start request. Absent (not null) with the flag unset, so the body is unchanged.
+  const ack = deps.requests !== undefined && startAckEnabled(ports.env)
+    ? deps.requests.view(storePath, wlj, text(admission.serverRunId), claim, request.nowMs, ports.env)
+    : null;
 
   return {
     status: 200,
@@ -209,6 +224,7 @@ export async function handleWonderlandMissionStatusRoute(
         recovery: recovery.recovery,
         ...(recovery.reason === null ? {} : { recoveryReason: recovery.reason }),
         ...(recovery.spentTag === null ? {} : { spentTag: recovery.spentTag }),
+        ...(ack === null ? {} : { request: ack.request, ...(ack.unreadable ? { requestUnreadable: true } : {}) }),
       },
       run: bound
         ? {
@@ -354,18 +370,21 @@ export function createWonderlandStartV2Wiring(
   ports: WonderlandAdmissionRoutePorts,
   live: { readonly runReader: JuliusRunJobsReader | undefined; readonly evidenceReader: Parameters<typeof createWonderlandMissionReadBridge>[1] },
   /** Tests only: a fake `gh`, and a claim core over it. Production passes neither. */
-  overrides: { readonly spawn?: AwaitableGhSpawner; readonly claimTool?: (storePath: string) => OperatorClaimTool } = {},
+  overrides: { readonly spawn?: AwaitableGhSpawner; readonly claimTool?: (storePath: string) => OperatorClaimTool; readonly startRequestsIo?: StartRequestsIo } = {},
 ): {
   readonly startBridge: WonderlandMissionStartBridge;
   readonly eventsBridge: WonderlandMissionEventsBridge;
   readonly statusBridge: WonderlandMissionStatusBridge;
   readonly recovery: WonderlandDispatchingRecovery;
+  /** A-9: the durable Start intents, their background claims and the recovery worker (started by server.ts). */
+  readonly requests: WonderlandStartRequests;
 } {
   const spawn = overrides.spawn ?? ghClaimSpawnerAsync;
   const claimToolV2 = overrides.claimTool ?? productionClaimTool(spawn);
   const startsInFlight = createWonderlandStartsInFlight();
   const recovery = createWonderlandDispatchingRecovery({ spawn });
-  const startBridge = createWonderlandMissionStartBridge(ports, { claimTool: claimToolV2, claimToolV2, startsInFlight });
+  const requests = createWonderlandStartRequests({ claimTool: claimToolV2, startsInFlight, ...(overrides.startRequestsIo === undefined ? {} : { io: overrides.startRequestsIo }) });
+  const startBridge = createWonderlandMissionStartBridge(ports, { claimTool: claimToolV2, claimToolV2, startsInFlight, requests });
   const eventsBridge = createWonderlandMissionEventsBridge(ports, live.runReader, { recoveredRunId: (wlj) => recovery.boundRunId(wlj) });
   const readBridge = createWonderlandMissionReadBridge(ports, live.evidenceReader);
   const statusBridge = createWonderlandMissionStatusBridge(ports, {
@@ -373,6 +392,7 @@ export function createWonderlandStartV2Wiring(
     result: (request) => readBridge.handle(request),
     recovery,
     startsInFlight,
+    requests,
   });
-  return { startBridge, eventsBridge, statusBridge, recovery };
+  return { startBridge, eventsBridge, statusBridge, recovery, requests };
 }

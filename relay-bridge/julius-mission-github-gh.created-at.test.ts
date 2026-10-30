@@ -41,6 +41,9 @@ describe('readWorkflowRun created_at, from an attempts payload fixture', () => {
     expect(run).toMatchObject({ workflowRunId: RUN, workflowRunAttempt: '1', headSha: '0123456789abcdef0123456789abcdef01234567', status: 'in_progress', conclusion: null });
     expect(run?.createdAt).toBe('2026-10-23T17:18:03Z');
     expect(run?.createdAt).not.toBe(JSON.parse(PAYLOAD).updated_at);
+    // The fixture's run_started_at differs from created_at, so reading the wrong field fails here.
+    expect(JSON.parse(PAYLOAD).run_started_at).not.toBe(JSON.parse(PAYLOAD).created_at);
+    expect(run?.createdAt).not.toBe(JSON.parse(PAYLOAD).run_started_at);
     expect(gh.calls[0]).toEqual(['api', '-H', 'Accept: application/vnd.github+json', `repos/${REPO}/actions/runs/${RUN}/attempts/1`]);
     for (const args of gh.calls) expect(args).not.toContain('workflow');
   });
