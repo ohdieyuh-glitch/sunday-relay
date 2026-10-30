@@ -518,7 +518,8 @@ const trustedSpecifier = (raw: string): boolean => {
 export function scanPinnedSource(src: string): E2PinnedSourceRefusal | null {
   if (/NODE_TEST_/u.test(src)) return 'spec_pinned_test_context_reference';
   const { code, lits } = lexJs(src);
-  if (/(?<![.\w$])env\s*\[(?!\s*§\d+§\s*\])/u.test(code)) return 'spec_pinned_test_context_reference';
+  /* `process.env[k]` and a destructured `env[k]` alike (mutation run r12 SC2 found the `.env[` form slipped through). */
+  if (/(?<![\w$])env\s*\[(?!\s*§\d+§\s*\])/u.test(code)) return 'spec_pinned_test_context_reference';
   const lit = (m: string | undefined): string => lits[Number(m)] as string;
   for (const m of code.matchAll(/(?<![.\w$])(require|import)\b(\s*\(\s*§(\d+)§\s*\))?/gu)) {
     const after = code.slice((m.index ?? 0) + m[0].length);
