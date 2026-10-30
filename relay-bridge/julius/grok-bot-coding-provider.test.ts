@@ -9,7 +9,7 @@ import {
   createGrokBotCodingAgentProvider, createShellGrokBotWorkspacePort, grokCoderAgentId, grokCoderIdempotencyKey,
   isProtectedRepoPath, isSafeBranchName, isSundayRelayRepo,
   type CodingAgentCreateInput, type CodingAgentCreateOutcome, type CodingAgentPollOutcome, type CodingAgentResultOutcome, type CodingAgentTransport,
-  type GrokBotCoderConfig, type GrokBotWorkspacePort,
+  type GrokBotCoderConfig, type GrokBotReviewerPin, type GrokBotWorkspacePort,
 } from './grok-bot-coding-provider';
 import { grokWorkspaceCommands } from './grok-workspace-commands';
 import { juliusCodingAgentFailureDisposition, type JuliusCodingAgentProviderOutcome, type JuliusCodingAgentRequest } from '../../src/relay/mission/julius/julius-coding-agent';
@@ -79,12 +79,16 @@ function fakeWorkspace(over: Partial<{ changes: { path: string; change: 'MODIFIE
   return { workspace, calls };
 }
 
-const run = async (opts: { cfg?: GrokBotCoderConfig | null; t?: ReturnType<typeof fakeTransport>; w?: ReturnType<typeof fakeWorkspace>; req?: JuliusCodingAgentRequest; pin?: string; signal?: AbortSignal } = {}) => {
+/** The wired reviewer pin a test config describes (the config's own reviewer fields are only a cross-check now, N1). */
+const pinOf = (cfg: GrokBotCoderConfig | null): GrokBotReviewerPin | null =>
+  cfg === null || typeof cfg.reviewerModelId !== 'string' || typeof cfg.reviewerModelFamily !== 'string' ? null : { modelId: cfg.reviewerModelId, modelFamily: cfg.reviewerModelFamily };
+const run = async (opts: { cfg?: GrokBotCoderConfig | null; reviewerPin?: GrokBotReviewerPin | null; t?: ReturnType<typeof fakeTransport>; w?: ReturnType<typeof fakeWorkspace>; req?: JuliusCodingAgentRequest; pin?: string; signal?: AbortSignal } = {}) => {
   const t = opts.t ?? fakeTransport();
   const w = opts.w ?? fakeWorkspace();
   const lines: string[] = [];
+  const cfg = opts.cfg === undefined ? config() : opts.cfg;
   const provider = createGrokBotCodingAgentProvider({
-    config: opts.cfg === undefined ? config() : opts.cfg, transport: t.transport, workspace: w.workspace, now: () => 1_000, log: (l) => lines.push(l),
+    config: cfg, reviewerPin: opts.reviewerPin === undefined ? pinOf(cfg) : opts.reviewerPin, transport: t.transport, workspace: w.workspace, now: () => 1_000, log: (l) => lines.push(l),
     /* A caller that still passes the removed pin is ignored: the factory has no such input. */
     ...(opts.pin === undefined ? {} : ({ founderAuthorizationPin: opts.pin } as never)),
   });
@@ -394,12 +398,36 @@ describe('configuration fails closed, before anything is sent', () => {
     for (const id of [MODEL, MODEL.toUpperCase(), ` ${MODEL} `]) {
       expect(await refusedClass(config({ reviewerModelId: id }))).toBe('coder_grok_same_model_as_reviewer');
     }
-    expect(await refusedClass(config({ reviewerModelId: null }))).toBe('coder_grok_config_reviewer_model_absent');
-    expect(await refusedClass(config({ reviewerModelId: '  ' }))).toBe('coder_grok_config_reviewer_model_absent');
+    expect(await refusedClass(config({ reviewerModelId: null }))).toBe('coder_grok_reviewer_pin_absent');
+    expect(await refusedClass(config({ reviewerModelId: '  ' }))).toBe('coder_grok_reviewer_pin_absent');
     expect(canonicalModelFamily(' X.AI ')).toBe('xai');
     expect(familyFromModelId('grok-code-fast-1')).toBe('xai');
     expect(familyFromModelId('composer-1')).toBe('cursor');
     expect(familyFromModelId('fake-coder-1')).toBeNull();
+  });
+  it('N1: the provider takes the reviewer from its required reviewerPin input; config fields are only a cross-check', async () => {
+    const pinRefused = async (cfg: GrokBotCoderConfig, reviewerPin: GrokBotReviewerPin | null) => {
+      const t = fakeTransport();
+      const f = failed((await run({ cfg, reviewerPin, t })).outcome);
+      expect(f.runtimeStarted).toBe(false);
+      expect(t.calls.create).toHaveLength(0);
+      return f.providerFailureClass;
+    };
+    expect(await pinRefused(config(), null)).toBe('coder_grok_reviewer_pin_absent');
+    expect(await pinRefused(config(), { modelId: ' ', modelFamily: 'openai' })).toBe('coder_grok_reviewer_pin_absent');
+    expect(await pinRefused(config(), { modelId: REVIEWER, modelFamily: '' })).toBe('coder_grok_reviewer_pin_absent');
+    expect(await pinRefused(config(), { modelId: 'grok-build-0.1', modelFamily: 'xai' })).toBe('coder_grok_reviewer_pin_mismatch');
+    expect(await pinRefused(config({ reviewerModelId: 'gpt-5' }), { modelId: 'gpt-5', modelFamily: 'xai' })).toBe('coder_grok_reviewer_pin_mismatch');
+    /* The grok coder beside a self-stated gpt-5/openai reviewer, when the wired reviewer is grok-build-0.1/xAI. */
+    expect(await pinRefused(config({ pinnedModelId: 'grok-code-fast-1', coderModelFamily: 'xai', reviewerModelId: 'gpt-5', reviewerModelFamily: 'openai' }), { modelId: 'grok-build-0.1', modelFamily: 'xai' })).toBe('coder_grok_reviewer_pin_mismatch');
+    /* Config silent on the reviewer: the pin decides, both ways. */
+    const silent = config({ pinnedModelId: 'composer-1', coderModelFamily: 'cursor', reviewerModelId: null, reviewerModelFamily: null });
+    expect(grokBotCoderConfigRefusal(silent, { modelId: 'grok-build-0.1', modelFamily: 'xai' })).toBeNull();
+    expect(grokBotCoderConfigRefusal(silent, { modelId: 'composer-max', modelFamily: 'cursor' })?.providerFailureClass).toBe('coder_grok_same_family_as_reviewer');
+    expect(grokBotCoderConfigRefusal(silent, { modelId: 'Composer_1', modelFamily: 'cursor' })?.providerFailureClass).toBe('coder_grok_same_model_as_reviewer');
+    expect(grokBotCoderConfigRefusal(silent, undefined)?.providerFailureClass).toBe('coder_grok_reviewer_pin_absent');
+    /* A normalised restatement agrees. */
+    expect(grokBotCoderConfigRefusal(config({ pinnedModelId: 'composer-1', coderModelFamily: 'cursor', reviewerModelId: 'GROK BUILD 0.1', reviewerModelFamily: 'X.AI' }), { modelId: 'grok-build-0.1', modelFamily: 'xai' })).toBeNull();
   });
   it('H1 fail-closed (PILOT R1 residuals): an opaque model id is refused whatever family is declared for it', async () => {
     /* PILOT's exact accepted cases at a1795dc0. */
@@ -413,7 +441,7 @@ describe('configuration fails closed, before anything is sent', () => {
     expect(await refusedClass(config({ pinnedModelId: 'fake-composer-1', coderModelFamily: 'cursor', reviewerModelFamily: 'openai', reviewerModelId: 'gemini-x' }))).toBe('coder_grok_family_declaration_mismatch');
     /* The real reviewer (grok-build-0.1, xAI) still refuses an xAI coder, and a recognised non-xAI coder still runs. */
     expect(await refusedClass(config({ pinnedModelId: 'grok-code-fast-1', coderModelFamily: 'cursor', reviewerModelFamily: 'xai', reviewerModelId: 'grok-build-0.1' }))).toBe('coder_grok_same_family_as_reviewer');
-    expect(grokBotCoderConfigRefusal(config({ pinnedModelId: 'composer-1', coderModelFamily: 'cursor', reviewerModelFamily: 'xai', reviewerModelId: 'grok-build-0.1' }))).toBeNull();
+    expect(grokBotCoderConfigRefusal(config({ pinnedModelId: 'composer-1', coderModelFamily: 'cursor', reviewerModelFamily: 'xai', reviewerModelId: 'grok-build-0.1' }), pinOf(config({ pinnedModelId: 'composer-1', coderModelFamily: 'cursor', reviewerModelFamily: 'xai', reviewerModelId: 'grok-build-0.1' })))).toBeNull();
     /* The allowlist is a reviewed constant and ships empty. */
     expect(Object.isFrozen(CODER_MODEL_FAMILY_ALLOWLIST)).toBe(true);
     expect(Object.keys(CODER_MODEL_FAMILY_ALLOWLIST)).toEqual([]);
@@ -437,8 +465,12 @@ describe('configuration fails closed, before anything is sent', () => {
       ['grok-build-0.1', 'grok-build'], ['fake-grok-coder-1', 'FAKE_GROK_CODER@2'],
     ] as const) {
       expect(normaliseModelId(coder), `${coder}/${reviewer}`).toBe(normaliseModelId(reviewer));
-      /* Non-ASCII coder ids never pass the model-id shape; the comparison itself is checked above. */
-      if (/^[\x21-\x7e]+$/u.test(coder)) expect(await refusedClass(config({ pinnedModelId: coder, reviewerModelId: reviewer })), `${coder}/${reviewer}`).toBe('coder_grok_same_model_as_reviewer');
+      /* Ids outside the model-id shape (non-ASCII, spaces, `@`) never pass as a coder or as the reviewer pin; the comparison itself is checked above. */
+      const shaped = (id: string) => /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u.test(id);
+      for (const [c, r] of [[coder, reviewer], [reviewer, coder]]) {
+        if (shaped(c) && shaped(r)) expect(await refusedClass(config({ pinnedModelId: c, reviewerModelId: r })), `${c}/${r}`).toBe('coder_grok_same_model_as_reviewer');
+        else if (shaped(c)) expect(await refusedClass(config({ pinnedModelId: c, reviewerModelId: r })), `${c}/${r}`).toBe('coder_grok_reviewer_pin_absent');
+      }
     }
     expect(normaliseModelId('m-coder-20261001')).toBe('m-coder');
     expect(normaliseModelId('composer-1')).toBe('composer');
@@ -475,7 +507,7 @@ describe('configuration fails closed, before anything is sent', () => {
   it('a deadline is required; a missing transport or workspace refuses; a tiny budget refuses', async () => {
     expect(await refusedClass(config({ runDeadlineMs: null }))).toBe('coder_grok_config_deadline_absent');
     expect(await refusedClass(config({ targetRepoUrl: 'https://gitlab.com/a/b' }))).toBe('coder_grok_config_target_invalid');
-    const p = createGrokBotCodingAgentProvider({ config: config(), transport: null, workspace: fakeWorkspace().workspace });
+    const p = createGrokBotCodingAgentProvider({ config: config(), reviewerPin: pinOf(config()), transport: null, workspace: fakeWorkspace().workspace });
     expect(failed(await p.execute(request())).providerFailureClass).toBe('coder_grok_transport_absent');
     const t = fakeTransport();
     expect(failed((await run({ t, req: request({ budget: 5_000 }) })).outcome).failure).toBe('COST_CEILING_REACHED');

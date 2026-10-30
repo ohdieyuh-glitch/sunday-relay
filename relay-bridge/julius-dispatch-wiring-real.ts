@@ -15,7 +15,7 @@ import { createClaudeCodeCodingAgentProvider } from './julius/claude-code-coding
 import { CURSOR_API_ORIGIN } from './julius/cursor-cloud-agents-transport';
 import {
   GROK_BOT_CODER_PROVIDER_KIND, createGrokBotCodingAgentProvider, grokBotCoderConfigRefusal,
-  type CodingAgentTransport, type GrokBotCoderConfig, type GrokBotWorkspacePort,
+  type CodingAgentTransport, type GrokBotCoderConfig, type GrokBotReviewerPin, type GrokBotWorkspacePort,
 } from './julius/grok-bot-coding-provider';
 
 /**
@@ -75,6 +75,19 @@ export const J1_SHELL_PORT_MISSING: readonly string[] = Object.freeze([
  */
 export type J1CoderOccupant = 'claude-code-hosted' | typeof GROK_BOT_CODER_PROVIDER_KIND;
 
+/**
+ * What the coder hook is given per dispatch. `reviewer` (N1) is the WIRED reviewer pin: the J1 core passes
+ * `{ modelId: reviewerModel, modelFamily: <the reviewer's vendor family> }` from its own `JULIUS_J1_REVIEWER_MODEL`
+ * pin. The Claude occupant ignores it; the Grok Bot occupant REQUIRES it and refuses (`coder_grok_reviewer_pin_absent`)
+ * without it, so the grok occupant cannot run from a core that does not pass it.
+ */
+export interface J1CoderProviderContext {
+  readonly requestedModel: string;
+  readonly reviewer?: GrokBotReviewerPin;
+}
+/** The context the Grok Bot occupant needs: the reviewer pin is not optional. */
+export type J1GrokCoderProviderContext = J1CoderProviderContext & { readonly reviewer: GrokBotReviewerPin };
+
 export function buildJ1CoderProviderFor(options: {
   readonly run?: Parameters<typeof createClaudeCodeCodingAgentProvider>[0]['run'];
   readonly queryLoader?: Parameters<typeof createClaudeCodeCodingAgentProvider>[0]['queryLoader'];
@@ -89,18 +102,19 @@ export function buildJ1CoderProviderFor(options: {
     readonly workspace: GrokBotWorkspacePort;
     readonly log?: (line: string) => void;
   };
-} = {}): (env: Readonly<Record<string, string>>, ctx: { readonly requestedModel: string }) => JuliusCodingAgentProvider {
+} = {}): (env: Readonly<Record<string, string>>, ctx: J1CoderProviderContext) => JuliusCodingAgentProvider {
   if (options.occupant === GROK_BOT_CODER_PROVIDER_KIND) {
     const deps = options.grokBot;
     return (env, ctx) => {
       if (typeof ctx.requestedModel !== 'string' || ctx.requestedModel.trim() === '') throw new Error('coder_requested_model_absent');
       if (Object.keys(env).some((name) => isSecretLikeEnvName(name))) throw new Error('coder_env_contains_secret_name');
       if (deps === undefined) throw new Error('coder_grok_bot_deps_absent');
-      const refusal = grokBotCoderConfigRefusal(deps.config);
+      const reviewer = ctx.reviewer ?? null;
+      const refusal = grokBotCoderConfigRefusal(deps.config, reviewer);
       if (refusal !== null) throw new Error(refusal.providerFailureClass);
       if (deps.config.pinnedModelId !== ctx.requestedModel) throw new Error('coder_requested_model_not_pinned');
       return createGrokBotCodingAgentProvider({
-        config: deps.config, transport: deps.transport, workspace: deps.workspace,
+        config: deps.config, reviewerPin: reviewer, transport: deps.transport, workspace: deps.workspace,
         ...(deps.log === undefined ? {} : { log: deps.log }),
       });
     };

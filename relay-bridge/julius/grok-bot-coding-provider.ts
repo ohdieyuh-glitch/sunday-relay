@@ -273,14 +273,28 @@ export interface GrokBotCoderConfig {
   readonly pinnedModelId: string | null;
   /** The coder model's family (e.g. the vendor), stated by a person. No default. */
   readonly coderModelFamily: string | null;
-  /** The reviewer's model family, stated by a person. No default. */
+  /**
+   * OPTIONAL CROSS-CHECK ONLY (N1). The reviewer the independence check uses is the WIRED reviewer pin
+   * ({@link GrokBotReviewerPin}), never this config. When stated here, each must agree with the pin or the run is refused.
+   */
   readonly reviewerModelFamily: string | null;
-  /** The reviewer's own model id. Required: the coder may never be the reviewer's model, and its family is derived from it. */
+  /** OPTIONAL CROSS-CHECK ONLY (N1): when stated, must name the same model as the wired reviewer pin. */
   readonly reviewerModelId: string | null;
   /** The mission's target repository, `https://github.com/<owner>/<repo>`. Never sunday-relay. No default. */
   readonly targetRepoUrl: string | null;
   /** Wall-clock limit for the run, polled. No default. */
   readonly runDeadlineMs: number | null;
+}
+
+/**
+ * THE REVIEWER THE CODER MUST BE INDEPENDENT OF (N1), as the dispatch wiring pinned it: the model id the review
+ * role will actually call and that model's vendor family. It is supplied by the WIRING from its own reviewer pin
+ * (J1: `JULIUS_J1_REVIEWER_MODEL` and the reviewer's provider), never read from the coder's own config, so a coder
+ * config cannot describe a reviewer that is not the one that runs. Absent or malformed: refused.
+ */
+export interface GrokBotReviewerPin {
+  readonly modelId: string;
+  readonly modelFamily: string;
 }
 
 export const GROK_BOT_CODER_CONFIG_DEFAULTS: GrokBotCoderConfig = Object.freeze({
@@ -368,7 +382,7 @@ export const resolveModelFamily = (id: string, allowlist: Readonly<Record<string
 type Refusal = { readonly failure: JuliusCodingAgentFailure; readonly providerFailureClass: string; readonly safeMessage: string };
 
 /** Validates the configuration. A refusal means nothing is sent. Exported so the wiring can refuse at construction. */
-export function grokBotCoderConfigRefusal(config: GrokBotCoderConfig | null | undefined): Refusal | null {
+export function grokBotCoderConfigRefusal(config: GrokBotCoderConfig | null | undefined, reviewerPin: GrokBotReviewerPin | null | undefined): Refusal | null {
   const refuse = (providerFailureClass: string, safeMessage: string, failure: JuliusCodingAgentFailure = 'LAUNCH_FAILED'): Refusal =>
     ({ failure, providerFailureClass, safeMessage });
   if (config === null || config === undefined) return refuse('coder_grok_config_absent', 'The Grok Bot coder is not configured; nothing was dispatched.');
@@ -377,10 +391,18 @@ export function grokBotCoderConfigRefusal(config: GrokBotCoderConfig | null | un
   if (CLAUDE_LIKE.test(model) || CLAUDE_LIKE.test(foldLookalikes(model))) return refuse('coder_grok_model_claude_refused', 'The Grok Bot coder refuses a Claude model; there is no Claude fallback.');
   if (ROUTER_ALIASES.has(foldLookalikes(model)) || ROUTER_TOKEN.test(foldLookalikes(model))) return refuse('coder_grok_model_router_refused', 'The Grok Bot coder refuses a router alias; the model must be pinned.');
   const coderFamily = typeof config.coderModelFamily === 'string' ? canonicalModelFamily(config.coderModelFamily) : '';
-  const reviewerFamily = typeof config.reviewerModelFamily === 'string' ? canonicalModelFamily(config.reviewerModelFamily) : '';
-  if (coderFamily === '' || reviewerFamily === '') return refuse('coder_grok_config_family_absent', 'The coder and reviewer model families are not both configured; nothing was dispatched.');
-  const reviewerId = typeof config.reviewerModelId === 'string' ? config.reviewerModelId.trim() : '';
-  if (reviewerId === '') return refuse('coder_grok_config_reviewer_model_absent', 'The reviewer\'s model id is not configured; independence cannot be checked, so nothing was dispatched.');
+  if (coderFamily === '') return refuse('coder_grok_config_family_absent', 'The coder model family is not configured; nothing was dispatched.');
+  /* N1: the reviewer is the WIRED pin. The coder config may restate it, and if it does it must agree. */
+  const pinId = reviewerPin !== null && typeof reviewerPin === 'object' && typeof reviewerPin.modelId === 'string' ? reviewerPin.modelId.trim() : '';
+  const pinFamilyRaw = reviewerPin !== null && typeof reviewerPin === 'object' && typeof reviewerPin.modelFamily === 'string' ? reviewerPin.modelFamily.trim() : '';
+  if (!MODEL_ID.test(pinId) || pinFamilyRaw === '') return refuse('coder_grok_reviewer_pin_absent', 'The wiring supplied no reviewer pin (model id and family); independence cannot be checked, so nothing was dispatched.');
+  const reviewerFamily = canonicalModelFamily(pinFamilyRaw);
+  const reviewerId = pinId;
+  const statedId = typeof config.reviewerModelId === 'string' ? config.reviewerModelId.trim() : '';
+  const statedFamily = typeof config.reviewerModelFamily === 'string' ? config.reviewerModelFamily.trim() : '';
+  if ((statedId !== '' && normaliseModelId(statedId) !== normaliseModelId(reviewerId)) || (statedFamily !== '' && canonicalModelFamily(statedFamily) !== reviewerFamily)) {
+    return refuse('coder_grok_reviewer_pin_mismatch', 'The coder config describes a reviewer that is not the wired reviewer pin; nothing was dispatched.');
+  }
   /* Never relaxable: the coder is never the reviewer's own model, compared after normalisation (case, spacing, separators,
    * version and date suffixes), so `m-coder-20261001` is the reviewer's `m-coder`. */
   if (normaliseModelId(reviewerId) === normaliseModelId(model)) return refuse('coder_grok_same_model_as_reviewer', 'The coder model is the reviewer\'s own model; independence is refused.');
@@ -428,6 +450,8 @@ export function grokCoderAgentId(idempotencyKey: string): string {
 
 export function createGrokBotCodingAgentProvider(input: {
   readonly config: GrokBotCoderConfig | null;
+  /** REQUIRED (N1): the reviewer as the wiring pinned it. Never taken from `config`. Null is refused before anything is sent. */
+  readonly reviewerPin: GrokBotReviewerPin | null;
   readonly transport: CodingAgentTransport | null;
   readonly workspace: GrokBotWorkspacePort | null;
   readonly now?: () => number;
@@ -446,7 +470,7 @@ export function createGrokBotCodingAgentProvider(input: {
       const aborted = (): boolean => signal?.aborted === true;
       if (aborted()) return notStarted('CANCELLED', 'coder_cancelled_before_launch', 'The dispatch was cancelled before the Grok Bot coder was created.');
 
-      const refusal = grokBotCoderConfigRefusal(input.config);
+      const refusal = grokBotCoderConfigRefusal(input.config, input.reviewerPin);
       if (refusal !== null) return notStarted(refusal.failure, refusal.providerFailureClass, refusal.safeMessage);
       const config = input.config as GrokBotCoderConfig;
       const transport = input.transport;

@@ -249,7 +249,7 @@ describe('the key never leaves: not in logs, results, evidence or errors', () =>
       requiredEvidence: [], budget: { usdMicros: null }, protocol: { participation: 'A', researchAuthority: 'R' },
     } as unknown as JuliusCodingAgentRequest;
     const provider = createGrokBotCodingAgentProvider({
-      config: { ...GROK_BOT_CODER_CONFIG_DEFAULTS, pinnedModelId: 'fake-grok-coder-1', coderModelFamily: 'xai', reviewerModelFamily: 'openai', reviewerModelId: 'fake-gpt-reviewer-1', targetRepoUrl: 'https://github.com/example-org/example-target', runDeadlineMs: 60_000 },
+      config: { ...GROK_BOT_CODER_CONFIG_DEFAULTS, pinnedModelId: 'fake-grok-coder-1', coderModelFamily: 'xai', reviewerModelFamily: 'openai', reviewerModelId: 'fake-gpt-reviewer-1', targetRepoUrl: 'https://github.com/example-org/example-target', runDeadlineMs: 60_000 }, reviewerPin: { modelId: 'fake-gpt-reviewer-1', modelFamily: 'openai' },
       transport, workspace: { baseRevision: async () => ({ ok: true, sha: BASE }), fetchBranch: async () => ({ ok: false, cause: 'x' }), applyFetched: async () => ({ ok: false, cause: 'x' }) },
       log: (l) => lines.push(l), now: () => 0,
     });
@@ -257,7 +257,7 @@ describe('the key never leaves: not in logs, results, evidence or errors', () =>
     expect(JSON.stringify(outcomes[1])).toContain('[REDACTED]');
     for (const route of [() => 'throw' as const, () => 'hang' as const, () => ({ status: 500, body: { message: SENTINEL } }), () => ({ status: 401, body: { message: SENTINEL } })]) {
       const t = make(route, { log: (l) => lines.push(l) });
-      outcomes.push(await createGrokBotCodingAgentProvider({ config: { ...GROK_BOT_CODER_CONFIG_DEFAULTS, pinnedModelId: 'fake-grok-coder-1', coderModelFamily: 'xai', reviewerModelFamily: 'openai', reviewerModelId: 'fake-gpt-reviewer-1', targetRepoUrl: 'https://github.com/example-org/example-target', runDeadlineMs: 60_000 }, transport: t.transport, workspace: { baseRevision: async () => ({ ok: true, sha: BASE }), fetchBranch: async () => ({ ok: false, cause: 'x' }), applyFetched: async () => ({ ok: false, cause: 'x' }) }, log: (l) => lines.push(l) }).execute(request));
+      outcomes.push(await createGrokBotCodingAgentProvider({ config: { ...GROK_BOT_CODER_CONFIG_DEFAULTS, pinnedModelId: 'fake-grok-coder-1', coderModelFamily: 'xai', reviewerModelFamily: 'openai', reviewerModelId: 'fake-gpt-reviewer-1', targetRepoUrl: 'https://github.com/example-org/example-target', runDeadlineMs: 60_000 }, reviewerPin: { modelId: 'fake-gpt-reviewer-1', modelFamily: 'openai' }, transport: t.transport, workspace: { baseRevision: async () => ({ ok: true, sha: BASE }), fetchBranch: async () => ({ ok: false, cause: 'x' }), applyFetched: async () => ({ ok: false, cause: 'x' }) }, log: (l) => lines.push(l) }).execute(request));
       outcomes.push(await t.transport.pollUntilTerminal({ agentId: AGENT, runId: RUN }, { deadlineAtMs: 100 }) as never);
     }
     const everything = JSON.stringify({ outcomes, lines });
@@ -353,7 +353,7 @@ describe('F15/E8: the mode label and the receipt', () => {
         requiredEvidence: [], budget: { usdMicros: null }, protocol: { participation: 'A', researchAuthority: 'R' },
       } as unknown as JuliusCodingAgentRequest;
       const out = await createGrokBotCodingAgentProvider({
-        config: { ...GROK_BOT_CODER_CONFIG_DEFAULTS, pinnedModelId: 'fake-grok-coder-1', coderModelFamily: 'xai', reviewerModelFamily: 'openai', reviewerModelId: 'fake-gpt-reviewer-1', targetRepoUrl: 'https://github.com/example-org/example-target', runDeadlineMs: 60_000 },
+        config: { ...GROK_BOT_CODER_CONFIG_DEFAULTS, pinnedModelId: 'fake-grok-coder-1', coderModelFamily: 'xai', reviewerModelFamily: 'openai', reviewerModelId: 'fake-gpt-reviewer-1', targetRepoUrl: 'https://github.com/example-org/example-target', runDeadlineMs: 60_000 }, reviewerPin: { modelId: 'fake-gpt-reviewer-1', modelFamily: 'openai' },
         transport: live, workspace: { baseRevision: async () => ({ ok: true, sha: BASE }), fetchBranch: async () => ({ ok: false, cause: 'x' }), applyFetched: async () => ({ ok: false, cause: 'x' }) },
         now: () => 0,
       }).execute(request);
