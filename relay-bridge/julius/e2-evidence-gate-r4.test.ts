@@ -119,7 +119,7 @@ describe('Skywalker 43b93a4e N3: real work', () => {
     const p = await parts();
     const same = await recordGitDiff({ base: head, head, cwd: repo, runner: p.runner });
     expect(same?.bytes).toBe(0);
-    expect(reasons(e2Gate({ streamLines: lines, anchor: { finalHash: evidence.finalHash }, ...p, diff: same, binding: { ...p.binding, base: head }, modelId: MODEL }))).toEqual(['e2_diff_empty']);
+    expect(reasons(e2Gate({ streamLines: lines, anchor: { finalHash: evidence.finalHash }, ...p, diff: same, binding: { ...p.binding, base: head }, modelId: MODEL }))).toEqual(['e2_diff_empty', 'e2_edit_path_not_in_diff']); // r6 rule (b): the edit is not in an empty diff
   });
 });
 

@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { realpathSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join } from 'node:path';
@@ -35,6 +35,8 @@ export type VerifierRunResult =
 export type VerifierRunner = (argv: readonly string[], cwd: string, extraEnv?: Readonly<Record<string, string>>) => Promise<VerifierRunResult>;
 
 const TRUSTED_RUNNERS = new WeakSet<VerifierRunner>();
+/** Module-private: the stdout bytes of an allowlisted git command, for the spawn runner only (no export, no setter). */
+const CAPTURE = new WeakMap<VerifierRunner, (argv: readonly string[], cwd: string, env: Readonly<Record<string, string>>) => Promise<Buffer | null>>();
 const RECORDED = new WeakSet<object>();
 const sha256 = (b: Uint8Array | string): string => createHash('sha256').update(b).digest('hex');
 const EMPTY_SHA = sha256('');
@@ -192,6 +194,13 @@ export function spawnVerifierRunner(options: {
     child.on('close', (c: number | null, s: NodeJS.Signals | null) => finish(code ?? c, sig ?? s));
   });
   TRUSTED_RUNNERS.add(runner);
+  CAPTURE.set(runner, (argv, cwd, extra) => new Promise((resolve) => {
+    if (!isCanonicalDir(cwd) || !isVerifierCommandAllowed(argv, cwd) || progName(argv[0] as string) !== 'git') { resolve(null); return; }
+    const bin = resolveProgram('git');
+    if (bin === null) { resolve(null); return; }
+    execFile(bin, argv.slice(1), { cwd, shell: false, encoding: 'buffer', maxBuffer: 64 * 1024 * 1024, timeout: timeoutMs, killSignal: 'SIGKILL',
+      env: { LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...noPath(extra), PATH: E2_VERIFIER_PATH } }, (e, out) => resolve(e === null ? out : null));
+  }));
   return runner;
 }
 
@@ -217,6 +226,10 @@ export interface E2DiffEvidence {
   readonly bytes: number;
   /** `git merge-base --is-ancestor base head` exited 0. */
   readonly ancestry: boolean;
+  /** `git diff --name-only -z` of the same range (spawn runner only; null otherwise). Rule (b). */
+  readonly paths: readonly string[] | null;
+  /** M-8: the repository's info/attributes is absent or empty (spawn runner only; false otherwise). */
+  readonly isolated: boolean;
 }
 
 const validArgv = (a: unknown): a is readonly string[] =>
@@ -258,22 +271,41 @@ export async function recordVerifierReexec(input: {
 
 const SHA = /^[0-9a-f]{40}$/u;
 /** M-8: git configuration that would change the diff bytes is pinned; global and system config are not read. */
-export const E2_GIT_ENV = Object.freeze({ GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' });
+export const E2_GIT_ENV = Object.freeze({ GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', GIT_ATTR_NOSYSTEM: '1' });
 const GIT_PINS = Object.freeze([
   '-c', 'diff.noprefix=false', '-c', 'diff.renames=false', '-c', 'core.quotepath=false', '-c', 'diff.mnemonicPrefix=false',
   '-c', 'color.ui=never', '-c', 'diff.relative=false', '-c', 'diff.suppressBlankEmpty=false', '-c', 'core.autocrlf=false',
+  /* PILOT 43b93a4e M-8: everything else in the repo's own config that shapes the bytes. */
+  '-c', 'diff.context=3', '-c', 'diff.interHunkContext=0', '-c', 'diff.orderFile=/dev/null', '-c', 'diff.srcPrefix=a/', '-c', 'diff.dstPrefix=b/',
+  '-c', 'diff.algorithm=myers', '-c', 'diff.indentHeuristic=true', '-c', 'core.attributesFile=/dev/null', '-c', 'diff.wsErrorHighlight=none',
 ]);
+/** M-8: the same settings as explicit flags (a flag beats config). */
+const DIFF_FLAGS = Object.freeze(['-U3', '--inter-hunk-context=0', '-O/dev/null', '--src-prefix=a/', '--dst-prefix=b/', '--diff-algorithm=myers', '--indent-heuristic']);
 const GIT_PIN_VALUES: ReadonlySet<string> = new Set(GIT_PINS.filter((_, i) => i % 2 === 1));
 /** (C) The config-pinned diff between two full commit SHAs, and whether head descends from base. Bad SHAs are refused (null). */
 export async function recordGitDiff(input: { readonly base: string; readonly head: string; readonly cwd: string; readonly runner: VerifierRunner }): Promise<E2DiffEvidence | null> {
   if (!SHA.test(input.base) || !SHA.test(input.head)) return null;
   if (typeof input.cwd !== 'string' || !isAbsolute(input.cwd)) return null;
-  const argv = Object.freeze(['git', ...GIT_PINS, 'diff', '--no-ext-diff', '--no-textconv', '--binary', '--no-renames', '--no-color', '--full-index', `${input.base}..${input.head}`]);
+  const range = `${input.base}..${input.head}`;
+  const argv = Object.freeze(['git', ...GIT_PINS, 'diff', '--no-ext-diff', '--no-textconv', '--binary', '--no-renames', '--no-color', '--full-index', ...DIFF_FLAGS, range]);
   const r = await run(input.runner, argv, input.cwd, E2_GIT_ENV);
   const anc = await run(input.runner, ['git', 'merge-base', '--is-ancestor', input.base, input.head], input.cwd, E2_GIT_ENV);
+  /* Rule (b) needs the changed paths; M-8 needs to know whether info/attributes (which no config can switch off) is empty. */
+  const capture = CAPTURE.get(input.runner);
+  let paths: readonly string[] | null = null;
+  let isolated = false;
+  if (capture !== undefined) {
+    const names = await capture(['git', ...GIT_PINS, 'diff', '--no-ext-diff', '--no-renames', '--name-only', '-z', range], input.cwd, E2_GIT_ENV);
+    if (names !== null) paths = Object.freeze(names.toString('utf8').split('\u0000').filter((x) => x !== ''));
+    const attr = await capture(['git', 'rev-parse', '--git-path', 'info/attributes'], input.cwd, E2_GIT_ENV);
+    if (attr !== null) {
+      const f = attr.toString('utf8').replace(/\n$/u, '');
+      try { isolated = statSync(isAbsolute(f) ? f : join(input.cwd, f)).size === 0; } catch (e) { isolated = (e as { code?: string }).code === 'ENOENT'; }
+    }
+  }
   const ev: E2DiffEvidence = Object.freeze({
     label: TRUSTED_RUNNERS.has(input.runner) ? E2_JULIUS_LABEL : E2_FAKE_LABEL, base: input.base, head: input.head, cwd: input.cwd, argv,
-    exitCode: r.exitCode, sha256: r.stdoutSha256, bytes: r.stdoutBytes, ancestry: anc.exitCode === 0,
+    exitCode: r.exitCode, sha256: r.stdoutSha256, bytes: r.stdoutBytes, ancestry: anc.exitCode === 0, paths, isolated,
   });
   RECORDED.add(ev);
   return ev;
@@ -287,6 +319,7 @@ export const E2_GATE_REASONS = Object.freeze([
   'e2_binding_absent', 'e2_binding_run_mismatch', 'e2_binding_diff_mismatch', 'e2_diff_not_descendant', 'e2_binding_cwd_mismatch',
   'e2_model_absent', 'e2_model_router', 'e2_model_claude', 'e2_model_unrecognised',
   'e2_final_record_mismatch', 'e2_no_edit_calls', 'e2_diff_empty', 'e2_stream_mid_run_start', 'e2_model_unbound',
+  'e2_diff_not_isolated', 'e2_edit_path_not_in_diff', 'e2_edit_path_unknown',
 ] as const);
 export type E2GateReason = (typeof E2_GATE_REASONS)[number];
 
@@ -325,10 +358,10 @@ export const E2_CODER_MODEL_IDS: ReadonlySet<string> = Object.freeze(new Set(['c
 const EDIT_TOOL = /(edit|write|apply|create|delete|patch|replace|insert|rename|move)/iu;
 export const isEditToolName = (name: unknown): boolean => typeof name === 'string' && EDIT_TOOL.test(name);
 
-interface Recount { readonly ok: boolean; readonly toolCallCount: number; readonly unfinished: number; readonly editCalls: number; readonly terminalStatus: string | null; readonly done: boolean }
+interface Recount { readonly ok: boolean; readonly toolCallCount: number; readonly unfinished: number; readonly editCalls: number; readonly editPaths: readonly (string | null)[]; readonly terminalStatus: string | null; readonly done: boolean }
 /** PILOT 43b93a4e N-1: everything the gate grades, recounted from the event records. An unparsable event fails closed. */
 function recount(lines: readonly string[]): Recount {
-  const calls = new Map<string, { name: unknown; status: unknown }>();
+  const calls = new Map<string, { name: unknown; status: unknown; args: unknown }>();
   let terminalStatus: string | null = null; let done = false; let ok = true;
   for (const line of lines.slice(1, -1)) {
     const r = JSON.parse(line) as Record<string, unknown>;
@@ -339,7 +372,7 @@ function recount(lines: readonly string[]): Recount {
     if (r.event === 'tool_call') {
       const v = parse();
       if (v === null || typeof v.callId !== 'string') { ok = false; continue; }
-      calls.set(v.callId, { name: v.name ?? calls.get(v.callId)?.name, status: v.status });
+      calls.set(v.callId, { name: v.name ?? calls.get(v.callId)?.name, status: v.status, args: v.args ?? calls.get(v.callId)?.args });
     } else if (r.event === 'result') {
       const v = parse();
       if (v === null || typeof v.status !== 'string') { ok = false; continue; }
@@ -347,7 +380,23 @@ function recount(lines: readonly string[]): Recount {
     } else if (r.event === 'done') done = true;
   }
   const all = [...calls.values()];
-  return { ok, toolCallCount: all.length, unfinished: all.filter((c) => c.status !== 'completed').length, editCalls: all.filter((c) => isEditToolName(c.name)).length, terminalStatus, done };
+  return { ok, toolCallCount: all.length, unfinished: all.filter((c) => c.status !== 'completed').length, editCalls: all.filter((c) => isEditToolName(c.name)).length,
+    editPaths: all.filter((c) => isEditToolName(c.name)).map((c) => editPath(c.args)), terminalStatus, done };
+}
+
+/** Rule (b): the one path an edit-type call names, from the argument shapes seen in Cursor tool calls; null if unrecognised. */
+function editPath(args: unknown): string | null {
+  if (typeof args !== 'object' || args === null) return null;
+  const a = args as Record<string, unknown>;
+  const found = ['path', 'file_path', 'target_file', 'filePath', 'targetFile'].map((k) => a[k]).filter((v) => v !== undefined);
+  return found.length === 1 && typeof found[0] === 'string' && found[0] !== '' && !found[0].includes('\u0000') ? found[0] : null;
+}
+/** Rule (b): a workspace-relative POSIX path, or null when it leaves the workspace. */
+function relToWorkspace(p: string, workspace: string): string | null {
+  const abs = isAbsolute(p) ? p : join(workspace, p);
+  const norm = join(abs);
+  if (!norm.startsWith(`${workspace}/`)) return null;
+  return norm.slice(workspace.length + 1);
 }
 
 function modelReason(modelId: unknown): E2GateReason | null {
@@ -376,6 +425,7 @@ export function e2Gate(input: {
   const bound = binding !== null && binding !== undefined && typeof binding === 'object'
     && typeof binding.runId === 'string' && binding.runId !== '' && SHA.test(binding.base) && SHA.test(binding.head) && isCanonicalDir(binding.workspace);
   let header: Record<string, unknown> | null = null;
+  let rc: Recount | null = null;
   if (!Array.isArray(streamLines)) reasons.push('e2_stream_absent');
   else {
     const chain = verifyEvidenceChain(streamLines);
@@ -393,7 +443,7 @@ export function e2Gate(input: {
       else if (terminal.status !== 'FINISHED') reasons.push('e2_stream_terminal_not_finished');
       if (fin.unfinishedCalls !== 0) reasons.push('e2_stream_call_unfinished');
       if (typeof fin.toolCallCount !== 'number' || fin.toolCallCount < 1) reasons.push('e2_no_tool_calls');
-      const rc = recount(streamLines);
+      rc = recount(streamLines);
       const finTerminal = terminal !== null && terminal !== undefined && typeof terminal === 'object' ? terminal.status : null;
       if (!rc.ok || rc.toolCallCount !== fin.toolCallCount || rc.unfinished !== fin.unfinishedCalls || rc.terminalStatus !== (finTerminal ?? null)
         || (finTerminal !== null && finTerminal !== undefined && !rc.done)) reasons.push('e2_final_record_mismatch');
@@ -417,6 +467,7 @@ export function e2Gate(input: {
     if (diff.label !== E2_JULIUS_LABEL) reasons.push('e2_diff_fake');
     if (diff.exitCode !== 0) reasons.push('e2_diff_failed');
     else if (diff.bytes === 0 || diff.base === diff.head) reasons.push('e2_diff_empty');
+    if (diff.isolated !== true) reasons.push('e2_diff_not_isolated');
   }
   if (!bound) reasons.push('e2_binding_absent');
   else {
@@ -424,6 +475,15 @@ export function e2Gate(input: {
     if (realDiff && (diff.base !== binding.base || diff.head !== binding.head)) reasons.push('e2_binding_diff_mismatch');
     if (realDiff && !diff.ancestry) reasons.push('e2_diff_not_descendant');
     if ((realReexec && reexec.cwd !== binding.workspace) || (realDiff && diff.cwd !== binding.workspace)) reasons.push('e2_binding_cwd_mismatch');
+    /* Skywalker N3 rule (b): every edit-type call names one path, and that path is in the diff. Conservative: an edit call
+       whose path the gate cannot read is refused, not skipped. Paths an edit touched but later reverted are refused too. */
+    if (rc !== null && rc.ok && realDiff && diff.exitCode === 0) {
+      if (rc.editPaths.some((p) => p === null)) reasons.push('e2_edit_path_unknown');
+      else {
+        const inDiff = new Set(diff.paths ?? []);
+        if (diff.paths === null || rc.editPaths.some((p) => { const r = relToWorkspace(p as string, binding.workspace); return r === null || !inDiff.has(r); })) reasons.push('e2_edit_path_not_in_diff');
+      }
+    }
   }
   /* Skywalker N2: the graded model is the one the creating transport requested, recorded in the chained header. */
   const headerModel = header !== null && typeof header.requestedModelId === 'string' ? header.requestedModelId : null;

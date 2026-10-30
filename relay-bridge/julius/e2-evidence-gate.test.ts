@@ -72,13 +72,17 @@ describe('E2 part C: the diff', () => {
       writeFileSync(join(dir, 'a.txt'), 'two\n');
       git('-c', 'commit.gpgsign=false', 'commit', '-qam', 'b');
       const head = git('rev-parse', 'HEAD');
+      /* 43b93a4e M-8: more pins and explicit flags; the bytes are re-derived from the recorded argv itself. */
       const argv = ['git', '-c', 'diff.noprefix=false', '-c', 'diff.renames=false', '-c', 'core.quotepath=false', '-c', 'diff.mnemonicPrefix=false',
         '-c', 'color.ui=never', '-c', 'diff.relative=false', '-c', 'diff.suppressBlankEmpty=false', '-c', 'core.autocrlf=false',
-        'diff', '--no-ext-diff', '--no-textconv', '--binary', '--no-renames', '--no-color', '--full-index', `${base}..${head}`];
-      const expected = execFileSync(argv[0] as string, argv.slice(1), { cwd: dir, env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null' } });
+        '-c', 'diff.context=3', '-c', 'diff.interHunkContext=0', '-c', 'diff.orderFile=/dev/null', '-c', 'diff.srcPrefix=a/', '-c', 'diff.dstPrefix=b/',
+        '-c', 'diff.algorithm=myers', '-c', 'diff.indentHeuristic=true', '-c', 'core.attributesFile=/dev/null', '-c', 'diff.wsErrorHighlight=none',
+        'diff', '--no-ext-diff', '--no-textconv', '--binary', '--no-renames', '--no-color', '--full-index',
+        '-U3', '--inter-hunk-context=0', '-O/dev/null', '--src-prefix=a/', '--dst-prefix=b/', '--diff-algorithm=myers', '--indent-heuristic', `${base}..${head}`];
+      const expected = execFileSync(argv[0] as string, argv.slice(1), { cwd: dir, env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null', GIT_ATTR_NOSYSTEM: '1' } });
       const runner = spawnVerifierRunner();
       const d = await recordGitDiff({ base, head, cwd: dir, runner });
-      expect(d).toEqual({ label: E2_JULIUS_LABEL, base, head, cwd: dir, argv, exitCode: 0, sha256: createHash('sha256').update(expected).digest('hex'), bytes: expected.byteLength, ancestry: true });
+      expect(d).toEqual({ label: E2_JULIUS_LABEL, base, head, cwd: dir, argv, exitCode: 0, sha256: createHash('sha256').update(expected).digest('hex'), bytes: expected.byteLength, ancestry: true, paths: ['a.txt'], isolated: true });
       expect(d?.bytes).toBeGreaterThan(0);
       for (const bad of [base.slice(0, 39), base.toUpperCase(), 'HEAD', `${base}\n`, `--output=${base}`]) {
         expect(await recordGitDiff({ base: bad, head, cwd: dir, runner })).toBeNull();
@@ -99,7 +103,7 @@ describe('E2 part C: the diff', () => {
 describe('E2 gate', () => {
   it('publishes every reason once', () => {
     expect(new Set(E2_GATE_REASONS).size).toBe(E2_GATE_REASONS.length);
-    expect(E2_GATE_REASONS.length).toBe(33);
+    expect(E2_GATE_REASONS.length).toBe(36);
   });
   it('refuses when everything is absent, with every reason, never the diff alone', () => {
     const r = e2Gate({ streamLines: null, anchor: null, reexec: null, diff: null, modelId: null, binding: null });
