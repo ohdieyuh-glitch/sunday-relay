@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { createCursorCloudAgentsTransport, type CursorFetch } from './cursor-cloud-agents-transport';
 import { captureCursorRunStream, createFileEvidenceSink, readEvidenceLines, verifyEvidenceChain } from './cursor-run-stream-evidence';
-import { E2_FAKE_LABEL, e2Gate, pinVerifierSpec, type E2VerifierSpec, recordGitDiff, recordVerifierReexec, spawnVerifierRunner, type E2DiffEvidence, type E2ReexecEvidence } from './e2-evidence-gate';
+import { E2_FAKE_LABEL, e2Gate, pinVerifierSpecWithBaseRun, type E2VerifierSpec, recordGitDiff, recordVerifierReexec, spawnVerifierRunner, type E2DiffEvidence, type E2ReexecEvidence } from './e2-evidence-gate';
 import { anchorOf } from './e2-test-kit';
 
 /*
@@ -104,7 +104,7 @@ function rechain(lines: readonly string[], edit: (r: Record<string, unknown>, i:
 }
 async function parts() {
   const runner = spawnVerifierRunner({ timeoutMs: 30_000 });
-  const verifierSpec = pinVerifierSpec({ testCommand: 'node ok.cjs', minTests: 1, workspace: repo, base }) as E2VerifierSpec;
+  const verifierSpec = (await pinVerifierSpecWithBaseRun({ testCommand: 'node ok.cjs', minTests: 1, workspace: repo, base }, spawnVerifierRunner({ timeoutMs: 30_000 }))) as E2VerifierSpec;
   const reexec = await recordVerifierReexec({ spec: verifierSpec, cwd: repo, runner });
   const diff = await recordGitDiff({ base, head, cwd: repo, runner });
   return { runner, verifierSpec, reexec, diff, binding: { runId: REF.runId, base, head, workspace: repo }, modelId: 'grok-code-fast-1' };

@@ -19,7 +19,7 @@ describe('TAP size cap and base-run runner', () => {
     const T = "const test = require('node:test');\ntest('a', () => { process.stdout.write('x'.repeat(9 * 1024 * 1024) + '\\n'); });\ntest('b', () => {});\ntest('c', () => {});\n";
     const { base, head } = makeRepo(repo, { 'a.txt': '1\n', 't.test.js': T }, { 'a.txt': '2\n' }, W);
     const runner = G.spawnVerifierRunner({ timeoutMs: 60_000 });
-    const verifierSpec = G.pinVerifierSpec({ testCommand: 'node --test t.test.js', workspace: repo, base }) as G.E2VerifierSpec;
+    const verifierSpec = (await G.pinVerifierSpecWithBaseRun({ testCommand: 'node --test t.test.js', workspace: repo, base }, G.spawnVerifierRunner({ timeoutMs: 30_000 }))) as G.E2VerifierSpec;
     const reexec = await G.recordVerifierReexec({ spec: verifierSpec, cwd: repo, runner });
     expect(reexec?.commands[0]?.exitCode).toBe(0);
     expect(reexec?.commands[0]?.tapComplete).toBe(false);

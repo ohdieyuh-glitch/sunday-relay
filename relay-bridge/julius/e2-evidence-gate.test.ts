@@ -76,7 +76,9 @@ describe('E2 part C: the diff', () => {
       const argv = ['git', '--no-replace-objects', '-c', 'diff.noprefix=false', '-c', 'diff.renames=false', '-c', 'core.quotepath=false', '-c', 'diff.mnemonicPrefix=false',
         '-c', 'color.ui=never', '-c', 'diff.relative=false', '-c', 'diff.suppressBlankEmpty=false', '-c', 'core.autocrlf=false',
         '-c', 'diff.context=3', '-c', 'diff.interHunkContext=0', '-c', 'diff.orderFile=/dev/null', '-c', 'diff.srcPrefix=a/', '-c', 'diff.dstPrefix=b/',
-        '-c', 'diff.algorithm=myers', '-c', 'diff.indentHeuristic=true', '-c', 'core.attributesFile=/dev/null', '-c', 'diff.wsErrorHighlight=none', '-c', `safe.directory=${realpathSync(dir)}`,
+        '-c', 'diff.algorithm=myers', '-c', 'diff.indentHeuristic=true', '-c', 'core.attributesFile=/dev/null', '-c', 'diff.wsErrorHighlight=none',
+        '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'core.sshCommand=/bin/false', '-c', 'protocol.allow=never',
+        '-c', 'core.pager=cat', '-c', 'diff.external=', '-c', `safe.directory=${realpathSync(dir)}`,
         'diff', '--no-ext-diff', '--no-textconv', '--binary', '--no-renames', '--no-color', '--full-index',
         '-U3', '--inter-hunk-context=0', '-O/dev/null', '--src-prefix=a/', '--dst-prefix=b/', '--diff-algorithm=myers', '--indent-heuristic', `${base}..${head}`];
       const expected = execFileSync(argv[0] as string, argv.slice(1), { cwd: dir, env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null', GIT_ATTR_NOSYSTEM: '1' } });
@@ -103,7 +105,7 @@ describe('E2 part C: the diff', () => {
 describe('E2 gate', () => {
   it('publishes every reason once', () => {
     expect(new Set(E2_GATE_REASONS).size).toBe(E2_GATE_REASONS.length);
-    expect(E2_GATE_REASONS.length).toBe(46);
+    expect(E2_GATE_REASONS.length).toBe(47);
   });
   it('refuses when everything is absent, with every reason, never the diff alone', () => {
     const r = e2Gate({ streamLines: null, anchor: null, reexec: null, verifierSpec: null, diff: null, modelId: null, binding: null });

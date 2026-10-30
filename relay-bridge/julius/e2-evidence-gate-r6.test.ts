@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { readEvidenceLines } from './cursor-run-stream-evidence';
-import { e2Gate, pinVerifierSpec, type E2VerifierSpec, recordGitDiff, recordVerifierReexec, spawnVerifierRunner } from './e2-evidence-gate';
+import { e2Gate, pinVerifierSpecWithBaseRun, type E2VerifierSpec, recordGitDiff, recordVerifierReexec, spawnVerifierRunner } from './e2-evidence-gate';
 import { anchorOf } from './e2-test-kit';
 
 /* PILOT 43b93a4e M-8 (git diff isolation) and Skywalker 43b93a4e N3 rule (b) (edit paths vs diff paths), failing-first. */
@@ -36,7 +36,7 @@ function makeRepo(name: string): { repo: string; base: string; head: string } {
   git(repo, '-c', 'commit.gpgsign=false', 'commit', '-qam', 'b');
   return { repo, base, head: git(repo, 'rev-parse', 'HEAD') };
 }
-const spec = (r: { repo: string; base: string }): E2VerifierSpec => pinVerifierSpec({ testCommand: 'node ok.cjs', minTests: 1, workspace: r.repo, base: r.base }) as E2VerifierSpec;
+const spec = async (r: { repo: string; base: string }): Promise<E2VerifierSpec> => (await pinVerifierSpecWithBaseRun({ testCommand: 'node ok.cjs', minTests: 1, workspace: r.repo, base: r.base }, spawnVerifierRunner({ timeoutMs: 30_000 }))) as E2VerifierSpec;
 beforeAll(() => { root = realpathSync(mkdtempSync(join(tmpdir(), 'e2r6-'))); writeFileSync(join(root, 'ok.cjs'), "require('node:test')('ok', () => {});\n"); });
 afterAll(() => { rmSync(root, { recursive: true, force: true }); });
 
@@ -62,7 +62,7 @@ describe('PILOT 43b93a4e M-8: the diff bytes do not depend on repository config 
     const d = await recordGitDiff({ ...r, cwd: r.repo, runner });
     expect(d?.isolated).toBe(false);
     const s = await liveCapture('attrs.jsonl', stream({ name: 'edit_file', args: { path: 'a.txt' } }, { name: 'edit_file', args: { path: 'b.txt' } }));
-    const verifierSpec = spec(r);
+    const verifierSpec = await spec(r);
     const reexec = await recordVerifierReexec({ spec: verifierSpec, cwd: r.repo, runner });
     expect(e2Gate({ streamLines: s.lines, anchor: s.anchor, reexec, verifierSpec, diff: d, binding: { runId: RUN, base: r.base, head: r.head, workspace: r.repo }, modelId: MODEL })).toEqual({ ok: false, reasons: ['e2_diff_not_isolated'] });
     const clean = makeRepo('attrs-clean');
@@ -92,7 +92,7 @@ describe('Skywalker N3 rule (b): every edit-call path is in the diff', () => {
   it('passes when the edited paths are in the diff (relative, ./ or absolute under the workspace)', async () => {
     const r = makeRepo('rb-ok');
     const runner = spawnVerifierRunner();
-    const verifierSpec = spec(r);
+    const verifierSpec = await spec(r);
     const p = { verifierSpec, reexec: await recordVerifierReexec({ spec: verifierSpec, cwd: r.repo, runner }), diff: await recordGitDiff({ ...r, cwd: r.repo, runner }), binding: { runId: RUN, base: r.base, head: r.head, workspace: r.repo }, modelId: MODEL };
     expect(p.diff?.paths).toEqual(['a.txt', 'b.txt']);
     const s = await liveCapture('rb-ok.jsonl', stream({ name: 'edit_file', args: { path: 'a.txt' } }, { name: 'write', args: { file_path: './b.txt' } }, { name: 'apply_patch', args: { target_file: join(r.repo, 'a.txt') } }));
@@ -101,7 +101,7 @@ describe('Skywalker N3 rule (b): every edit-call path is in the diff', () => {
   it('an edit to a path the diff does not contain, or an edit call with no recognisable path, is refused', async () => {
     const r = makeRepo('rb-bad');
     const runner = spawnVerifierRunner();
-    const verifierSpec = spec(r);
+    const verifierSpec = await spec(r);
     const p = { verifierSpec, reexec: await recordVerifierReexec({ spec: verifierSpec, cwd: r.repo, runner }), diff: await recordGitDiff({ ...r, cwd: r.repo, runner }), binding: { runId: RUN, base: r.base, head: r.head, workspace: r.repo }, modelId: MODEL };
     const out = await liveCapture('rb-out.jsonl', stream({ name: 'edit_file', args: { path: 'a.txt' } }, { name: 'edit_file', args: { path: 'elsewhere.txt' } }));
     expect(e2Gate({ streamLines: out.lines, anchor: out.anchor, ...p })).toEqual({ ok: false, reasons: ['e2_edit_path_not_in_diff'] });

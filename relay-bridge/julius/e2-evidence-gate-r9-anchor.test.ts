@@ -19,7 +19,7 @@ afterAll(() => { rmSync(root, { recursive: true, force: true }); });
 const reasons = (r: ReturnType<typeof G.e2Gate>): readonly string[] => (r.ok ? [] : r.reasons);
 async function parts() {
   const runner = G.spawnVerifierRunner({ timeoutMs: 30_000 });
-  const verifierSpec = G.pinVerifierSpec({ testCommand: 'node ok.mjs', minTests: 1, workspace: repo, base }) as G.E2VerifierSpec;
+  const verifierSpec = (await G.pinVerifierSpecWithBaseRun({ testCommand: 'node ok.mjs', minTests: 1, workspace: repo, base }, G.spawnVerifierRunner({ timeoutMs: 30_000 }))) as G.E2VerifierSpec;
   return {
     verifierSpec, reexec: await G.recordVerifierReexec({ spec: verifierSpec, cwd: repo, runner }),
     diff: await G.recordGitDiff({ base, head, cwd: repo, runner }),

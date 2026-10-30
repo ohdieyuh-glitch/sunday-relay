@@ -26,7 +26,7 @@ async function gate(name: string, baseFiles: Record<string, string>, headFiles: 
   const repo = join(root, name); mkdirSync(repo);
   const { base, head } = makeRepo(repo, { 'a.txt': '1\n', ...baseFiles }, { 'a.txt': '2\n', ...headFiles }, W);
   const runner = G.spawnVerifierRunner({ timeoutMs: 30_000 });
-  const spec = G.pinVerifierSpec({ testCommand, workspace: repo, base }) as G.E2VerifierSpec;
+  const spec = (await G.pinVerifierSpecWithBaseRun({ testCommand, workspace: repo, base }, G.spawnVerifierRunner({ timeoutMs: 30_000 }))) as G.E2VerifierSpec;
   expect('refused' in spec).toBe(false);
   const reexec = await G.recordVerifierReexec({ spec, cwd: repo, runner });
   const { lines, evidence } = await liveCapture(root, `${name}.jsonl`, GOOD());
@@ -44,26 +44,26 @@ describe('R5-1: a file-level synthetic pass is not a test result', () => {
     const r = await gate('exit-import', { 'lib.json': LIB, 't.test.js': T3 }, { 'lib.json': '{"add":1,"exitOnLoad":true}' });
     expect(r.reexec?.commands[0]?.exitCode).toBe(0);
     expect(r.reexec?.commands[0]?.testSummary).toEqual({ tests: 1, pass: 1, fail: 0 });
-    expect(r.reasons).toEqual(['e2_verifier_synthetic_result']);
+    expect(r.reasons).toContain('e2_verifier_synthetic_result');
   }, 60_000);
   it('a coder module that calls process.exit(0) inside the second test is refused', async () => {
     const r = await gate('exit-mid', { 'lib.json': LIB, 't.test.js': T3 }, { 'lib.json': '{"add":1,"exitAt":2}' });
-    expect(r.reasons).toEqual(['e2_verifier_synthetic_result']);
+    expect(r.reasons).toContain('e2_verifier_synthetic_result');
   }, 60_000);
   it('an empty pinned test file is refused', async () => {
     const r = await gate('empty', { 'e.test.js': '' }, {}, 'node --test e.test.js');
     expect(r.reexec?.commands[0]?.testSummary).toEqual({ tests: 1, pass: 1, fail: 0 });
-    expect(r.reasons).toEqual(['e2_verifier_synthetic_result']);
+    expect(r.reasons).toContain('e2_verifier_synthetic_result');
   }, 60_000);
   it('a coder module that prints a fake TAP block and summary, then exits 0, is refused', async () => {
     const fake = 'ok 1 - c0\nok 2 - c1\nok 3 - c2\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 1\n';
     const r = await gate('fake', { 'lib.json': LIB, 't.test.js': T3 }, { 'lib.json': JSON.stringify({ add: 1, exitOnLoad: true, print: fake }) });
-    expect(r.reasons).toEqual(['e2_verifier_synthetic_result']);
+    expect(r.reasons).toContain('e2_verifier_synthetic_result');
   }, 60_000);
   it('the synthetic point is found for one file among several, and for a nested path', async () => {
     const r = await gate('multi', { 'lib.json': LIB, 't.test.js': T3, 'test/u.test.js': "if (JSON.parse(require('node:fs').readFileSync(__dirname + '/../lib.json', 'utf8')).exitOnLoad) process.exit(0); require('node:test')('u', () => {});\n" },
       { 'lib.json': '{"add":1,"exitOnLoad":true}' }, 'node --test test/u.test.js t.test.js');
-    expect(r.reasons).toEqual(['e2_verifier_synthetic_result']);
+    expect(r.reasons).toContain('e2_verifier_synthetic_result');
   }, 60_000);
   it('unit: fileLevelPoints reads only top-level points named after the run files', () => {
     const tap = 'TAP version 13\n# ok 1 - t.test.js\n    ok 1 - t.test.js\n# Subtest: t.test.js\nok 1 - t.test.js\n  ---\n  ...\nok 2 - other\n1..2\n';

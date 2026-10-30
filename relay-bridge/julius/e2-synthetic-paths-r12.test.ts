@@ -19,7 +19,7 @@ async function gate(testCommand: string): Promise<readonly string[] | string> {
   n += 1; const repo = join(root, `p${n}`); mkdirSync(repo);
   const { base, head } = makeRepo(repo, { 'a.txt': '1\n', 't.test.js': EXIT, 'sub/t.test.js': EXIT }, { 'a.txt': '2\n' }, W);
   const runner = G.spawnVerifierRunner({ timeoutMs: 30_000 });
-  const spec = G.pinVerifierSpec({ testCommand, workspace: repo, base });
+  const spec = (await G.pinVerifierSpecWithBaseRun({ testCommand, workspace: repo, base }, G.spawnVerifierRunner({ timeoutMs: 30_000 })));
   if ('refused' in spec) return spec.refused;
   const reexec = await G.recordVerifierReexec({ spec, cwd: repo, runner });
   const { lines, evidence } = await liveCapture(root, `p${n}.jsonl`, GOOD());

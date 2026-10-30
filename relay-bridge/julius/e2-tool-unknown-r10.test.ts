@@ -20,7 +20,7 @@ afterAll(() => { rmSync(root, { recursive: true, force: true }); });
 
 async function run(names: string[], extra?: readonly string[]) {
   const runner = G.spawnVerifierRunner({ timeoutMs: 30_000 });
-  const spec = G.pinVerifierSpec({ testCommand: 'node ok.mjs', minTests: 1, workspace: repo, base, ...(extra === undefined ? {} : { extraKnownNonEditTools: extra }) }) as G.E2VerifierSpec;
+  const spec = (await G.pinVerifierSpecWithBaseRun({ testCommand: 'node ok.mjs', minTests: 1, workspace: repo, base, ...(extra === undefined ? {} : { extraKnownNonEditTools: extra }) }, G.spawnVerifierRunner({ timeoutMs: 30_000 }))) as G.E2VerifierSpec;
   const sse = START + call('c0', 'edit_file') + names.map((n, i) => call(`u${i}`, n, {})).join('') + tail();
   const { lines, evidence } = await liveCapture(root, `u${Math.random()}.jsonl`, sse);
   return G.e2Gate({ streamLines: lines, anchor: anchorOf('workflow_output', evidence.finalHash), verifierSpec: spec, reexec: await G.recordVerifierReexec({ spec, cwd: repo, runner }),

@@ -35,7 +35,7 @@ describe('R5-9 F2: the floor is at least 1', () => {
   it('an all-skipped base file (static count 0) is refused: pass 0 is below the floor of 1', async () => {
     const { repo, base, head } = repoWith({ 't.test.js': "const test = require('node:test');\ntest.skip('x', () => {});\n" });
     const runner = G.spawnVerifierRunner({ timeoutMs: 30_000 });
-    const verifierSpec = G.pinVerifierSpec({ testCommand: 'node --test t.test.js', workspace: repo, base }) as G.E2VerifierSpec;
+    const verifierSpec = (await G.pinVerifierSpecWithBaseRun({ testCommand: 'node --test t.test.js', workspace: repo, base }, G.spawnVerifierRunner({ timeoutMs: 30_000 }))) as G.E2VerifierSpec;
     expect(verifierSpec.minTests).toEqual([1]);
     const p = { verifierSpec, reexec: await G.recordVerifierReexec({ spec: verifierSpec, cwd: repo, runner }), diff: await G.recordGitDiff({ base, head, cwd: repo, runner }), binding: { runId: RUN, base, head, workspace: repo }, modelId: MODEL };
     const { lines, evidence } = await liveCapture(root, 'f2.jsonl', GOOD());
@@ -51,7 +51,7 @@ describe('R5-9 B3: a recorded diff with unknown paths', () => {
     expect(diff?.paths).toBeNull();
     expect(diff?.exitCode).toBe(0);
     const runner = G.spawnVerifierRunner({ timeoutMs: 30_000 });
-    const verifierSpec = G.pinVerifierSpec({ testCommand: 'node ok.mjs', workspace: repo, base }) as G.E2VerifierSpec;
+    const verifierSpec = (await G.pinVerifierSpecWithBaseRun({ testCommand: 'node ok.mjs', workspace: repo, base }, G.spawnVerifierRunner({ timeoutMs: 30_000 }))) as G.E2VerifierSpec;
     const { lines, evidence } = await liveCapture(root, 'b3.jsonl', GOOD());
     const g = G.e2Gate({ streamLines: lines, anchor: anchorOf('workflow_output', evidence.finalHash), verifierSpec, reexec: await G.recordVerifierReexec({ spec: verifierSpec, cwd: repo, runner }), diff, binding: { runId: RUN, base, head, workspace: repo }, modelId: MODEL } as Parameters<typeof G.e2Gate>[0]);
     expect(g.ok ? [] : g.reasons).toContain('e2_verifier_binary_untrusted');

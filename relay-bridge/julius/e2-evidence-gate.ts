@@ -405,6 +405,8 @@ export type E2VerifierSpecRefusal =
 /** Round 7 R6-1/R6-3: why a pinned test/entry file's base content was refused by {@link scanPinnedSource}. */
 export type E2PinnedSourceRefusal = 'spec_pinned_test_imports_untrusted' | 'spec_pinned_test_dynamic_load' | 'spec_pinned_test_context_reference';
 const SPECS = new WeakSet<object>();
+/** Round 7 PILOT R6-4: specs produced by pinVerifierSpecWithBaseRun (the only ones e2Gate accepts). */
+const BASE_RUN_SPECS = new WeakSet<object>();
 /**
  * R4-3 / Round 6 R5-7: test()/it() calls in a base-pinned test file, a static count. Comments, string and template
  * literals are blanked first by a one-pass lexer (linear), and a member call (`re.test(`, `x.it(`) does not count.
@@ -640,7 +642,6 @@ export async function pinVerifierSpecWithBaseRun(input: E2MissionVerifierInput, 
   const spec = pinVerifierSpec(input);
   if ('refused' in spec) return spec;
   if (!TRUSTED_RUNNERS.has(runner)) return Object.freeze({ refused: 'spec_base_run_untrusted' as const });
-  if (!spec.minTests.some((f) => f !== null)) return spec;
   const dir = materializeBase(spec.workspace, spec.base);
   if (dir === null) return Object.freeze({ refused: 'spec_base_tree_unreadable' as const });
   const registered: (number | null)[] = [];
@@ -653,7 +654,7 @@ export async function pinVerifierSpecWithBaseRun(input: E2MissionVerifierInput, 
     }
   } finally { rmSync(dir, { recursive: true, force: true }); }
   const out: E2VerifierSpec = Object.freeze({ ...spec, minTests: Object.freeze(spec.minTests.map((f, i) => (f === null ? null : Math.max(f, registered[i] ?? 0)))), baseRegistered: Object.freeze(registered) });
-  SPECS.add(out);
+  SPECS.add(out); BASE_RUN_SPECS.add(out);
   return out;
 }
 const isSpec = (x: unknown): x is E2VerifierSpec => typeof x === 'object' && x !== null && SPECS.has(x);
@@ -776,6 +777,7 @@ export const E2_GATE_REASONS = Object.freeze([
   'e2_diff_not_isolated', 'e2_edit_path_not_in_diff', 'e2_edit_path_unknown', 'e2_binding_remote_root_invalid',
   'e2_anchor_not_external', 'e2_verifier_spec_absent', 'e2_verifier_not_from_spec', 'e2_verifier_pin_changed',
   'e2_tool_unknown', 'e2_edit_path_outside_workspace', 'e2_verifier_binary_untrusted', 'e2_verifier_tests_below_minimum', 'e2_verifier_synthetic_result',
+  'e2_verifier_spec_no_base_run',
 ] as const);
 export type E2GateReason = (typeof E2_GATE_REASONS)[number];
 
@@ -982,6 +984,7 @@ export function e2Gate(input: {
   if (reexec === null || reexec === undefined) reasons.push('e2_reexec_absent');
   else if (!realReexec) reasons.push('e2_reexec_forged');
   else if (!isSpec(verifierSpec)) reasons.push('e2_verifier_spec_absent');
+  else if (!BASE_RUN_SPECS.has(verifierSpec)) reasons.push('e2_verifier_spec_no_base_run');
   else if (reexec.spec !== verifierSpec) reasons.push('e2_verifier_not_from_spec');
   else if (reexec.refusal === 'pin_changed') reasons.push('e2_verifier_pin_changed');
   else if (reexec.refusal !== null || reexec.commands.length === 0) reasons.push('e2_reexec_absent');

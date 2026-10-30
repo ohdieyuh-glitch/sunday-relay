@@ -17,7 +17,7 @@ beforeAll(async () => {
   repo = join(root, 'repo'); mkdirSync(repo);
   ({ base, head } = makeRepo(repo, { 'a.txt': 'one\n', 'ok.mjs': "import test from 'node:test'; test('ok', () => {});\n" }, { 'a.txt': 'two\n' }, (p, c) => writeFileSync(p, c)));
   const runner = G.spawnVerifierRunner({ timeoutMs: 30_000 });
-  const verifierSpec = G.pinVerifierSpec({ testCommand: 'node ok.mjs', minTests: 1, workspace: repo, base }) as G.E2VerifierSpec;
+  const verifierSpec = (await G.pinVerifierSpecWithBaseRun({ testCommand: 'node ok.mjs', minTests: 1, workspace: repo, base }, G.spawnVerifierRunner({ timeoutMs: 30_000 }))) as G.E2VerifierSpec;
   P = { verifierSpec, reexec: await G.recordVerifierReexec({ spec: verifierSpec, cwd: repo, runner }), diff: await G.recordGitDiff({ base, head, cwd: repo, runner }), modelId: MODEL };
 });
 afterAll(() => { rmSync(root, { recursive: true, force: true }); });

@@ -24,7 +24,7 @@ async function gate(name: string, headH: string, opts: { minTests?: number; test
   const repo = join(root, name); mkdirSync(repo);
   const { base, head } = makeRepo(repo, { 'a.txt': '1\n', 'h.json': '{"v":1}', 't.test.js': T2 }, { 'a.txt': '2\n', 'h.json': asData(headH) }, W);
   const runner = G.spawnVerifierRunner({ timeoutMs: 30_000 });
-  const spec = G.pinVerifierSpec({ testCommand: opts.testCommand ?? 'node --test t.test.js', workspace: repo, base, ...(opts.minTests === undefined ? {} : { minTests: opts.minTests }) }) as G.E2VerifierSpec;
+  const spec = (await G.pinVerifierSpecWithBaseRun({ testCommand: opts.testCommand ?? 'node --test t.test.js', workspace: repo, base, ...(opts.minTests === undefined ? {} : { minTests: opts.minTests }) }, G.spawnVerifierRunner({ timeoutMs: 30_000 }))) as G.E2VerifierSpec;
   expect('refused' in spec).toBe(false);
   const reexec = await G.recordVerifierReexec({ spec, cwd: repo, runner });
   const { lines, evidence } = await liveCapture(root, `${name}.jsonl`, GOOD());
@@ -72,8 +72,8 @@ describe('R4-3: node --test vacuous passes', () => {
     const repo = join(root, 'loop'); mkdirSync(repo);
     const { base, head } = makeRepo(repo, { 'a.txt': '1\n', 't.test.js': "const test = require('node:test'); for (const n of [1, 2, 3]) test('t' + n, () => { if (n === 3 && JSON.parse(require('node:fs').readFileSync(__dirname + '/f.json', 'utf8'))) throw new Error('x'); });\n", 'f.json': 'false' },
       { 'a.txt': '2\n', 'f.json': 'true' }, W);
-    const spec = G.pinVerifierSpec({ testCommand: 'node --test t.test.js', workspace: repo, base }) as G.E2VerifierSpec;
-    expect(spec.minTests).toEqual([1]);
+    const spec = (await G.pinVerifierSpecWithBaseRun({ testCommand: 'node --test t.test.js', workspace: repo, base }, G.spawnVerifierRunner({ timeoutMs: 30_000 }))) as G.E2VerifierSpec;
+    expect(spec.minTests).toEqual([3]); // base run: 3 passing tests at base (round 7 R6-4 brand)
     const { lines, evidence } = await liveCapture(root, 'loop.jsonl', GOOD());
     const g = async (runner: G.VerifierRunner) => G.e2Gate({ streamLines: lines, anchor: anchorOf('workflow_output', evidence.finalHash), verifierSpec: spec, reexec: await G.recordVerifierReexec({ spec, cwd: repo, runner }),
       diff: await G.recordGitDiff({ base, head, cwd: repo, runner: G.spawnVerifierRunner({ timeoutMs: 30_000 }) }), binding: { runId: RUN, base, head, workspace: repo }, modelId: MODEL });

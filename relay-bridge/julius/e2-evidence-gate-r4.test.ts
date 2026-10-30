@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { readEvidenceLines, verifyEvidenceChain } from './cursor-run-stream-evidence';
-import { e2Gate, pinVerifierSpec, type E2VerifierSpec, recordGitDiff, recordVerifierReexec, spawnVerifierRunner } from './e2-evidence-gate';
+import { e2Gate, pinVerifierSpecWithBaseRun, type E2VerifierSpec, recordGitDiff, recordVerifierReexec, spawnVerifierRunner } from './e2-evidence-gate';
 import { anchorOf } from './e2-test-kit';
 
 /*
@@ -77,7 +77,7 @@ function rechain(lines: readonly string[], edit: (r: Record<string, unknown>) =>
 const chainAnchor = (l: readonly string[]) => anchorOf('ledger_hash', (verifyEvidenceChain(l) as { finalHash: string }).finalHash); // R3-1: simulates a writer who also controls the anchor source (recount tests)
 async function parts() {
   const runner = spawnVerifierRunner({ timeoutMs: 30_000 });
-  const verifierSpec = pinVerifierSpec({ testCommand: 'node ok.mjs', minTests: 1, workspace: repo, base }) as E2VerifierSpec;
+  const verifierSpec = (await pinVerifierSpecWithBaseRun({ testCommand: 'node ok.mjs', minTests: 1, workspace: repo, base }, spawnVerifierRunner({ timeoutMs: 30_000 }))) as E2VerifierSpec;
   return {
     verifierSpec, reexec: await recordVerifierReexec({ spec: verifierSpec, cwd: repo, runner }),
     diff: await recordGitDiff({ base, head, cwd: repo, runner }),
