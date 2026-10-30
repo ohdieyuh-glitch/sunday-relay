@@ -59,6 +59,29 @@ export type CursorFetch = (url: string, init: {
   readonly signal?: AbortSignal;
 }) => Promise<CursorFetchResponse>;
 
+/**
+ * EVERY FORM OF THE KEY A SERVICE MIGHT ECHO BACK (F12): as is, URL-encoded (both component and form encoding), and in
+ * base64 and base64url at each of the three byte alignments a key can sit at inside a longer encoded string (only the
+ * characters that depend on key bytes alone, so a match is the key whatever surrounds it). Longest first; forms shorter
+ * than 8 characters are dropped so a short key cannot erase ordinary text.
+ */
+export function cursorKeyForms(key: string): readonly string[] {
+  if (key === '') return [];
+  const bytes = Buffer.from(key, 'utf8');
+  const forms = new Set<string>([key, encodeURIComponent(key), encodeURIComponent(key).replace(/%20/gu, '+')]);
+  for (let o = 0; o < 3; o += 1) {
+    const b64 = Buffer.concat([Buffer.alloc(o), bytes]).toString('base64');
+    const first = Math.ceil((8 * o) / 6);
+    const end = Math.floor((8 * (o + bytes.length)) / 6);
+    const core = b64.slice(first, end);
+    forms.add(core);
+    forms.add(core.replace(/\+/gu, '-').replace(/\//gu, '_'));
+  }
+  forms.add(bytes.toString('base64'));
+  forms.add(bytes.toString('base64url'));
+  return Object.freeze([...forms].filter((f) => f.length >= 8).sort((x, y) => y.length - x.length));
+}
+
 /** Where, on which record, a served model id would be read. */
 export interface CursorAttestedModelField { readonly record: 'agent' | 'run'; readonly path: readonly string[] }
 
@@ -191,7 +214,12 @@ export function createCursorCloudAgentsTransport(options: CursorCloudAgentsTrans
     return typeof key === 'string' && key.length >= 8 && !/[\s\u0000-\u001f\u007f]/u.test(key) ? key : null;
   };
   /** Removes every occurrence of the key from a string the service returned. */
-  const scrub = (text: string | null, key: string): string | null => (text === null ? null : text.split(key).join(REDACTED));
+  const scrub = (text: string | null, key: string): string | null => {
+    if (text === null) return null;
+    let out = text;
+    for (const form of cursorKeyForms(key)) out = out.split(form).join(REDACTED);
+    return out;
+  };
 
   async function send(method: 'GET' | 'POST', path: string, body: unknown, signal: AbortSignal | undefined): Promise<Sent & { key?: string }> {
     if (signal?.aborted === true) return { kind: 'not_sent', cause: 'aborted' };

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { CURSOR_API_KEY_ENV_NAME, CURSOR_API_ORIGIN, CURSOR_ATTESTED_MODEL_FIELD, createCursorCloudAgentsTransport, isRequestEchoField, readAttestedModelId, readCappedBody, type CursorFetch, type CursorFetchResponse } from './cursor-cloud-agents-transport';
+import { CURSOR_API_KEY_ENV_NAME, CURSOR_API_ORIGIN, CURSOR_ATTESTED_MODEL_FIELD, createCursorCloudAgentsTransport, cursorKeyForms, isRequestEchoField, readAttestedModelId, readCappedBody, type CursorFetch, type CursorFetchResponse } from './cursor-cloud-agents-transport';
 import { GROK_BOT_CODER_CONFIG_DEFAULTS, createGrokBotCodingAgentProvider, type CodingAgentCreateInput } from './grok-bot-coding-provider';
 import type { JuliusCodingAgentRequest } from '../../src/relay/mission/julius/julius-coding-agent';
 
@@ -342,6 +342,27 @@ describe('L4: service strings that reach evidence are bounded', () => {
     return r;
   };
   const branch = (prUrl: unknown) => ({ git: { branches: [{ repoUrl: 'github.com/example-org/example-target', branch: 'cursor/x', prUrl }] } });
+
+  it('F12: the key echoed URL-encoded, or in base64/base64url at any alignment inside a longer string, is scrubbed', async () => {
+    const echoes = [
+      `q=${encodeURIComponent(SENTINEL)}&x=1`,
+      ...[0, 1, 2].flatMap((pad) => {
+        const raw = Buffer.from(`${'p'.repeat(pad)}${SENTINEL}tail`);
+        return [raw.toString('base64'), raw.toString('base64url')];
+      }),
+      Buffer.from(SENTINEL).toString('base64'),
+    ];
+    for (const echo of echoes) {
+      const r = await result({ result: `before ${echo} after` });
+      for (const form of cursorKeyForms(SENTINEL)) expect(r.finalText, echo).not.toContain(form);
+      expect(r.finalText, echo).toContain('[REDACTED]');
+      const decoded = (r.finalText ?? '').split(' ').map((w) => Buffer.from(w, 'base64').toString('latin1')).join(' ');
+      expect(decoded, echo).not.toContain(SENTINEL);
+      expect(decodeURIComponent((r.finalText ?? '').replace(/%(?![0-9A-F]{2})/giu, ''))).not.toContain(SENTINEL);
+    }
+    expect(cursorKeyForms('')).toEqual([]);
+    expect(cursorKeyForms('abc')).toEqual([]);
+  });
 
   it('prUrl survives only as https://github.com/... of at most 300 characters', async () => {
     expect((await result(branch('https://github.com/example-org/example-target/pull/7'))).branches[0]?.prUrl).toBe('https://github.com/example-org/example-target/pull/7');
