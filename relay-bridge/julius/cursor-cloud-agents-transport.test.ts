@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { CURSOR_API_KEY_ENV_NAME, CURSOR_API_ORIGIN, CURSOR_ATTESTED_MODEL_FIELD, createCursorCloudAgentsTransport, cursorGlobalFetch, cursorKeyForms, cursorTransportMode, isRequestEchoField, readAttestedModelId, readCappedBody, type CursorFetch, type CursorFetchResponse } from './cursor-cloud-agents-transport';
+import { CURSOR_API_KEY_ENV_NAME, CURSOR_API_ORIGIN, CURSOR_ATTESTED_MODEL_FIELD, createCursorCloudAgentsTransport, cursorGlobalFetch, cursorGlobalFetchIntact, cursorKeyForms, cursorTransportMode, isRequestEchoField, readAttestedModelId, readCappedBody, type CursorFetch, type CursorFetchResponse } from './cursor-cloud-agents-transport';
 import { GROK_BOT_CODER_CONFIG_DEFAULTS, createGrokBotCodingAgentProvider, type CodingAgentCreateInput } from './grok-bot-coding-provider';
 import type { JuliusCodingAgentRequest } from '../../src/relay/mission/julius/julius-coding-agent';
 
@@ -285,20 +285,91 @@ describe('F14: timeouts, the run deadline and aborts are labelled as such', () =
 
 describe('F15/E8: the mode label and the receipt', () => {
   it('only a transport over the real global fetch is live; constructing one sends nothing; it is frozen', () => {
+    expect(cursorGlobalFetchIntact()).toBe(true);
+    // No key: nothing could be sent even if something tried.
+    const live = createCursorCloudAgentsTransport({ fetch: cursorGlobalFetch, getApiKey: () => null });
+    expect(cursorTransportMode(live)).toBe('live');
+    expect(Object.isFrozen(live)).toBe(true);
+    expect(cursorTransportMode(make(() => created).transport)).toBe('fake');
+    expect(cursorTransportMode({ ...live })).toBe('fake');
+    expect(cursorTransportMode({ transportKind: 'cursor_cloud_agents_v1' })).toBe('fake');
+    expect(cursorTransportMode(null)).toBe('fake');
+  });
+  it('F7 part B (PILOT R5_liveStamp): a fake installed in globalThis.fetch is never called and never yields "live"', async () => {
     const spy: string[] = [];
     const orig = globalThis.fetch;
-    globalThis.fetch = (async (u: string) => { spy.push(String(u)); throw new Error('no network in tests'); }) as never;
+    const live = createCursorCloudAgentsTransport({ fetch: cursorGlobalFetch, getApiKey: () => SENTINEL, now: () => 0, sleep: async () => undefined });
+    expect(cursorTransportMode(live)).toBe('live');
+    const route = (u: string): Response => {
+      spy.push(u);
+      if (u.endsWith('/v1/agents')) return new Response(JSON.stringify(created.body), { status: 201 });
+      if (u.endsWith(`/runs/${RUN}`)) return new Response(JSON.stringify({ id: RUN, status: 'FINISHED', result: 'done' }), { status: 200 });
+      return new Response('{}', { status: 200 });
+    };
+    globalThis.fetch = (async (u: unknown) => route(String(u))) as typeof fetch;
     try {
-      const live = createCursorCloudAgentsTransport({ fetch: cursorGlobalFetch, getApiKey: () => null });
-      expect(cursorTransportMode(live)).toBe('live');
-      expect(Object.isFrozen(live)).toBe(true);
-      expect(cursorTransportMode(make(() => created).transport)).toBe('fake');
-      expect(cursorTransportMode({ ...live })).toBe('fake');
-      expect(cursorTransportMode({ transportKind: 'cursor_cloud_agents_v1' })).toBe('fake');
-      expect(cursorTransportMode(null)).toBe('fake');
+      expect(cursorGlobalFetchIntact()).toBe(false);
+      // Read while replaced: fake.
+      expect(cursorTransportMode(live)).toBe('fake');
+      // A transport built while replaced is never live.
+      const builtAfter = createCursorCloudAgentsTransport({ fetch: cursorGlobalFetch, getApiKey: () => SENTINEL });
+      expect(cursorTransportMode(builtAfter)).toBe('fake');
+      // Every call is refused before anything is sent; the fake is never reached.
+      expect(await live.createRun(input)).toEqual({ kind: 'not_sent', cause: 'transport_untrusted' });
+      expect(await live.pollUntilTerminal({ agentId: AGENT, runId: RUN }, { deadlineAtMs: 1e9 })).toEqual({ kind: 'poll_failed', cause: 'transport_untrusted', polls: 1 });
+      expect(await live.fetchResult({ agentId: AGENT, runId: RUN })).toEqual({ kind: 'unavailable', cause: 'run_unreadable' });
+      expect(await live.cancelRun({ agentId: AGENT, runId: RUN })).toBe('failed');
+      // The adapter itself refuses too, if called directly.
+      await expect(cursorGlobalFetch(`${CURSOR_API_ORIGIN}/v1/agents`, { method: 'GET', headers: {}, redirect: 'error' })).rejects.toThrow('cursor_global_fetch_replaced');
       expect(spy).toEqual([]);
     } finally {
       globalThis.fetch = orig;
+    }
+    // Once a transport has seen its fetch replaced, it stays "fake" even after the original is put back.
+    expect(cursorGlobalFetchIntact()).toBe(true);
+    expect(cursorTransportMode(live)).toBe('fake');
+  });
+  it('F7 part B, end to end: the provider over a replaced global fetch records "fake", sends nothing and starts nothing', async () => {
+    const spy: string[] = [];
+    const orig = globalThis.fetch;
+    const live = createCursorCloudAgentsTransport({ fetch: cursorGlobalFetch, getApiKey: () => SENTINEL, now: () => 0, sleep: async () => undefined });
+    globalThis.fetch = (async (u: unknown) => { spy.push(String(u)); return new Response(JSON.stringify(created.body), { status: 201 }); }) as typeof fetch;
+    try {
+      const request = {
+        version: 'julius-coding-agent.v1', identity: { runId: 'r', missionId: 'm', taskId: 't', taskType: 'build', contextId: 'c' },
+        workspacePath: '/w', contract: null, plan: 'P', sections: { acceptedGuidance: [], architecture: [], findings: [], continuation: [], missionContext: [] },
+        permissions: { mayEditFiles: true, mayRunCommands: false, mayUseNetwork: false, permittedPaths: ['src/'], outOfScope: [], prohibitedActions: [] },
+        requiredEvidence: [], budget: { usdMicros: null }, protocol: { participation: 'A', researchAuthority: 'R' },
+      } as unknown as JuliusCodingAgentRequest;
+      const out = await createGrokBotCodingAgentProvider({
+        config: { ...GROK_BOT_CODER_CONFIG_DEFAULTS, pinnedModelId: 'fake-grok-coder-1', coderModelFamily: 'xai', reviewerModelFamily: 'openai', reviewerModelId: 'fake-gpt-reviewer-1', targetRepoUrl: 'https://github.com/example-org/example-target', runDeadlineMs: 60_000 },
+        transport: live, workspace: { baseRevision: async () => ({ ok: true, sha: BASE }), fetchBranch: async () => ({ ok: false, cause: 'x' }), applyFetched: async () => ({ ok: false, cause: 'x' }) },
+        now: () => 0,
+      }).execute(request);
+      expect(out).toMatchObject({ kind: 'failed', runtimeStarted: false, providerFailureClass: 'coder_grok_transport_untrusted' });
+      expect(JSON.stringify(out)).not.toContain('"live"');
+      expect(spy).toEqual([]);
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+  it('F7 part B, residual limit: a fake installed BEFORE the module loads is captured; one returning plain objects is still refused', async () => {
+    const orig = globalThis.fetch;
+    const spy: string[] = [];
+    try {
+      globalThis.fetch = (async (u: unknown) => { spy.push(String(u)); return { ok: true, status: 200, headers: new Headers(), body: null, text: async () => '{}' }; }) as never;
+      vi.resetModules();
+      const plain = await import('./cursor-cloud-agents-transport');
+      await expect(plain.cursorGlobalFetch(`${CURSOR_API_ORIGIN}/v1/agents`, { method: 'GET', headers: {}, redirect: 'error' })).rejects.toThrow('cursor_global_fetch_response_foreign');
+      expect(spy).toHaveLength(1);
+      /* The documented residual: a pre-import fake that returns real Response objects cannot be told apart in-process. */
+      globalThis.fetch = (async () => new Response('{}', { status: 200 })) as typeof fetch;
+      vi.resetModules();
+      const preImport = await import('./cursor-cloud-agents-transport');
+      expect(preImport.cursorTransportMode(preImport.createCursorCloudAgentsTransport({ fetch: preImport.cursorGlobalFetch, getApiKey: () => null }))).toBe('live');
+    } finally {
+      globalThis.fetch = orig;
+      vi.resetModules();
     }
   });
   it('the result carries run id, createdAt, a request id header and the response body sha256', async () => {

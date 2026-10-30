@@ -72,7 +72,7 @@ export interface CodingAgentCreateInput {
  */
 export type CodingAgentCreateOutcome =
   | { readonly kind: 'created'; readonly ref: CodingAgentRunRef }
-  | { readonly kind: 'not_sent'; readonly cause: 'aborted' | 'key_absent' | 'request_invalid' }
+  | { readonly kind: 'not_sent'; readonly cause: 'aborted' | 'key_absent' | 'request_invalid' | 'transport_untrusted' }
   | { readonly kind: 'rejected'; readonly status: number; readonly cause: 'authentication' | 'forbidden' | 'rate_limited' | 'credit' | 'invalid_request' | 'not_found' }
   | { readonly kind: 'conflict'; readonly status: 409 }
   | { readonly kind: 'outcome_unknown'; readonly cause: 'timeout' | 'network' | 'server_error' | 'malformed_response' | 'aborted_in_flight' };
@@ -83,7 +83,7 @@ export type CodingAgentPollOutcome =
   | { readonly kind: 'terminal'; readonly status: CodingAgentTerminalStatus; readonly polls: number }
   | { readonly kind: 'deadline'; readonly polls: number }
   | { readonly kind: 'aborted'; readonly polls: number }
-  | { readonly kind: 'poll_failed'; readonly cause: 'authentication' | 'not_found' | 'malformed_response' | 'key_absent' | 'unexpected_status' | 'transient_exhausted'; readonly polls: number };
+  | { readonly kind: 'poll_failed'; readonly cause: 'authentication' | 'not_found' | 'malformed_response' | 'key_absent' | 'unexpected_status' | 'transient_exhausted' | 'transport_untrusted'; readonly polls: number };
 
 /** Token counts as the usage endpoint reports them. A zero is "nothing recorded", never "free". */
 export interface CodingAgentUsage {
@@ -493,7 +493,8 @@ export function createGrokBotCodingAgentProvider(input: {
         log(`grok-coder failed agent=${agentId} class=${providerFailureClass}`);
         return {
           kind: 'failed', failure, runtimeStarted: true, costUsdMicros: null, safeMessage, providerFailureClass,
-          diagnostics: { ...evidence, ...costFacts(), runtimeStarted: true, outcome: 'failed', ...extra },
+          // The mode is read again at the end: a transport that saw its fetch replaced mid-run is "fake".
+          diagnostics: { ...evidence, transportMode: cursorTransportMode(transport), ...costFacts(), runtimeStarted: true, outcome: 'failed', ...extra },
         };
       };
       /** Best effort: ask the service to stop a run Julius will not follow any further. Recorded, never retried, never fatal. */
@@ -515,7 +516,9 @@ export function createGrokBotCodingAgentProvider(input: {
             ? notStarted('CANCELLED', 'coder_cancelled_before_launch', 'The dispatch was cancelled before the Grok Bot coder was created.')
             : created.cause === 'key_absent'
               ? notStarted('AUTHENTICATION', 'coder_grok_api_key_absent', 'No Cursor API key is available to the transport; nothing was dispatched.')
-              : notStarted('LAUNCH_FAILED', 'coder_grok_request_invalid', 'The create request could not be formed; nothing was dispatched.');
+              : created.cause === 'transport_untrusted'
+                ? notStarted('LAUNCH_FAILED', 'coder_grok_transport_untrusted', 'The process\'s fetch was replaced after the transport loaded; nothing was sent.')
+                : notStarted('LAUNCH_FAILED', 'coder_grok_request_invalid', 'The create request could not be formed; nothing was dispatched.');
         case 'rejected': {
           const byCause: Record<typeof created.cause, [JuliusCodingAgentFailure, string]> = {
             authentication: ['AUTHENTICATION', 'coder_grok_api_unauthenticated'],
@@ -662,7 +665,7 @@ export function createGrokBotCodingAgentProvider(input: {
           outputTokens: result.usage?.outputTokens ?? null,
           costUsdMicros: null,
           costBasis: 'UNKNOWN',
-          diagnostics: { ...evidence, ...costFacts(), runtimeStarted: true, outcome: 'succeeded' },
+          diagnostics: { ...evidence, transportMode: cursorTransportMode(transport), ...costFacts(), runtimeStarted: true, outcome: 'succeeded' },
         },
       };
     },

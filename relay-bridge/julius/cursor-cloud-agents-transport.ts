@@ -62,15 +62,40 @@ export type CursorFetch = (url: string, init: {
   readonly signal?: AbortSignal;
 }) => Promise<CursorFetchResponse>;
 
-/** The process's global fetch, adapted. A transport built over exactly this function is the only one labelled "live". */
+/**
+ * THE GLOBAL FETCH AND RESPONSE AS THEY WERE WHEN THIS MODULE LOADED (F7 part B). "live" means requests went through
+ * exactly these, not "whatever `globalThis.fetch` is at call time": a replacement installed later (a test double, a
+ * monkey-patch) is never called, and a transport that sees one is stamped "fake" for good.
+ *
+ * RESIDUAL LIMIT, stated rather than hidden: a replacement installed BEFORE this module is imported is what gets captured,
+ * and no in-process check can tell it from the platform's own fetch (Node's fetch is ordinary JavaScript, so there is no
+ * native-code marker to test). The one further check that is feasible is applied: each answer must be an instance of the
+ * `Response` class captured with it, so a stand-in that returns plain objects is refused. Proving that a request reached
+ * api.cursor.com needs a response field only the real service produces; none is verified yet (the request id and
+ * createdAt are "not provided" until a real, authorized response shows them).
+ */
+const GLOBAL_FETCH_AT_LOAD: typeof fetch | null = typeof globalThis.fetch === 'function' ? globalThis.fetch : null;
+const GLOBAL_RESPONSE_AT_LOAD: typeof Response | null = typeof globalThis.Response === 'function' ? globalThis.Response : null;
+/** True while `globalThis.fetch` is still the function captured at module load. */
+export const cursorGlobalFetchIntact = (): boolean => GLOBAL_FETCH_AT_LOAD !== null && globalThis.fetch === GLOBAL_FETCH_AT_LOAD;
+
+/** The process's global fetch (as captured at load), adapted. A transport built over exactly this function is the only one that can be "live". */
 export const cursorGlobalFetch: CursorFetch = async (url, init) => {
-  const res = await globalThis.fetch(url, { method: init.method, headers: init.headers, redirect: 'error', ...(init.body === undefined ? {} : { body: init.body }), ...(init.signal === undefined ? {} : { signal: init.signal }) });
+  // Never a replacement: refuse rather than call whatever is installed now.
+  if (!cursorGlobalFetchIntact() || GLOBAL_FETCH_AT_LOAD === null) throw new Error('cursor_global_fetch_replaced');
+  const res = await GLOBAL_FETCH_AT_LOAD.call(globalThis, url, { method: init.method, headers: init.headers, redirect: 'error', ...(init.body === undefined ? {} : { body: init.body }), ...(init.signal === undefined ? {} : { signal: init.signal }) });
+  if (GLOBAL_RESPONSE_AT_LOAD === null || !(res instanceof GLOBAL_RESPONSE_AT_LOAD)) throw new Error('cursor_global_fetch_response_foreign');
   return { ok: res.ok, status: res.status, headers: res.headers, body: res.body, text: () => res.text() };
 };
 const LIVE_TRANSPORTS = new WeakSet<object>();
-/** F15: "live" only for a transport this module built over {@link cursorGlobalFetch}; anything else, whatever its transportKind, is "fake". */
+/** Transports that once saw the global fetch replaced: "fake" from then on, even after it is put back. */
+const TAINTED_TRANSPORTS = new WeakSet<object>();
+/**
+ * F15: "live" only for a transport this module built over {@link cursorGlobalFetch} while the global fetch was intact,
+ * that has never seen it replaced, and only while it is still intact; anything else, whatever its transportKind, is "fake".
+ */
 export function cursorTransportMode(transport: unknown): 'live' | 'fake' {
-  return typeof transport === 'object' && transport !== null && LIVE_TRANSPORTS.has(transport) ? 'live' : 'fake';
+  return typeof transport === 'object' && transport !== null && LIVE_TRANSPORTS.has(transport) && !TAINTED_TRANSPORTS.has(transport) && cursorGlobalFetchIntact() ? 'live' : 'fake';
 }
 
 /**
@@ -210,7 +235,7 @@ const count = (v: unknown): number | null => (typeof v === 'number' && Number.is
 
 type Sent =
   | { readonly kind: 'response'; readonly status: number; readonly body: unknown; readonly retryAfterMs: number | null; readonly requestId: string | null; readonly responseSha256: string }
-  | { readonly kind: 'not_sent'; readonly cause: 'aborted' | 'key_absent' }
+  | { readonly kind: 'not_sent'; readonly cause: 'aborted' | 'key_absent' | 'transport_untrusted' }
   | { readonly kind: 'failed_in_flight'; readonly cause: 'timeout' | 'network' | 'aborted_in_flight' };
 
 export function createCursorCloudAgentsTransport(options: CursorCloudAgentsTransportOptions): CodingAgentTransport {
@@ -240,6 +265,11 @@ export function createCursorCloudAgentsTransport(options: CursorCloudAgentsTrans
 
   async function send(method: 'GET' | 'POST', path: string, body: unknown, signal: AbortSignal | undefined): Promise<Sent & { key?: string }> {
     if (signal?.aborted === true) return { kind: 'not_sent', cause: 'aborted' };
+    // F7 part B: a "live" transport whose global fetch has been replaced sends nothing, and is never "live" again.
+    if (options.fetch === cursorGlobalFetch && !cursorGlobalFetchIntact()) {
+      TAINTED_TRANSPORTS.add(transport);
+      return { kind: 'not_sent', cause: 'transport_untrusted' };
+    }
     const key = readKey();
     if (key === null) return { kind: 'not_sent', cause: 'key_absent' };
     const timeout = new AbortController();
@@ -345,7 +375,7 @@ export function createCursorCloudAgentsTransport(options: CursorCloudAgentsTrans
         const r = await getWithBackoff(path, deadlineAtMs, signal);
         polls += 1;
         if (r.kind === 'deadline') return { kind: 'deadline', polls };
-        if (r.kind === 'not_sent') return r.cause === 'aborted' ? { kind: 'aborted', polls } : { kind: 'poll_failed', cause: 'key_absent', polls };
+        if (r.kind === 'not_sent') return r.cause === 'aborted' ? { kind: 'aborted', polls } : { kind: 'poll_failed', cause: r.cause, polls };
         if (r.kind === 'failed_in_flight') {
           if (r.cause === 'aborted_in_flight') return { kind: 'aborted', polls };
           transient += 1;
@@ -443,7 +473,8 @@ export function createCursorCloudAgentsTransport(options: CursorCloudAgentsTrans
       return r.status === 409 ? 'not_cancellable' : 'failed';
     },
   };
-  // F15: only a transport over the real global fetch is "live"; every other instance (a fake fetch, a hand-made object) is "fake".
-  if (options.fetch === cursorGlobalFetch) LIVE_TRANSPORTS.add(transport);
+  // F15: only a transport over the real global fetch, built while it is intact, is "live"; every other instance (a fake
+  // fetch, a hand-made object, one built after a replacement) is "fake".
+  if (options.fetch === cursorGlobalFetch && cursorGlobalFetchIntact()) LIVE_TRANSPORTS.add(transport);
   return Object.freeze(transport);
 }
