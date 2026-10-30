@@ -495,6 +495,9 @@ const FILE_RULES = [
   // The Grok Bot coder: a Cursor Cloud Agent as another implementation of the
   // Coding Agent port, behind an injected transport. Opt-in in the J1 wiring.
   ['relay-bridge/julius/grok-bot-coding-provider.ts', 'CODING AGENT'],
+  // Its workspace sync commands and their exact recogniser, which the J1 local
+  // shell port admits only when its cloud-agent sync option is configured.
+  ['relay-bridge/julius/grok-workspace-commands.ts', 'CODING AGENT'],
   // The spend-free organization gate the confirmed-live entrypoint runs
   // before it submits a Coding Agent call. It accepts only the closed line
   // from the path-loaded probe.
