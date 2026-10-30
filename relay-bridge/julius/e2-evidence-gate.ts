@@ -142,7 +142,7 @@ export function isVerifierCommandAllowed(argv: readonly string[], cwd: string): 
 }
 
 /** What the spawn runner reports when it gave up: a refused argv, the hard deadline, or an output overrun. */
-export type VerifierRunCause = 'refused' | 'timeout' | 'output_overrun' | 'spawn_failed';
+export type VerifierRunCause = 'refused' | 'timeout' | 'output_overrun' | 'spawn_failed' | 'pipes_held_after_exit';
 
 /**
  * The only runner whose records are `julius_observed`. No shell; only allowlisted programs, resolved on a fixed PATH;
@@ -161,7 +161,8 @@ export function spawnVerifierRunner(options: {
   const pos = (v: unknown, d: number): number => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : d);
   const timeoutMs = pos(options.timeoutMs, 15 * 60 * 1000);
   const maxOutputBytes = pos(options.maxOutputBytes, 1024 * 1024 * 1024);
-  const exitGraceMs = pos(options.exitGraceMs, 2000);
+  /* R3-9: after the leader exits, held pipes get a short grace (default 500 ms), never past the hard deadline. */
+  const exitGraceMs = pos(options.exitGraceMs, 500);
   const platform = options.platform ?? process.platform;
   const spawnImpl = options.spawnImpl ?? spawn;
   const refused = { exitCode: null, stdoutSha256: EMPTY_SHA, stderrSha256: EMPTY_SHA, stdoutBytes: 0, stderrBytes: 0 } as const;
@@ -217,6 +218,7 @@ export function spawnVerifierRunner(options: {
       child.stderr?.destroy();
       finish(null, null);
     };
+    const started = Date.now();
     const timer = setTimeout(() => abandon('timeout'), timeoutMs);
     let grace: ReturnType<typeof setTimeout> | undefined;
     const over = (): void => { if (outBytes + errBytes > maxOutputBytes && cause === null) abandon('output_overrun'); };
@@ -226,7 +228,7 @@ export function spawnVerifierRunner(options: {
     // A leader that exits leaves no reason for its group to keep the pipes open: stragglers are killed (mutant M9).
     child.on('exit', (c: number | null, s: NodeJS.Signals | null) => {
       code = c; sig = s; killGroup();
-      grace = setTimeout(() => abandon('timeout'), exitGraceMs);
+      grace = setTimeout(() => abandon('pipes_held_after_exit'), Math.max(0, Math.min(exitGraceMs, timeoutMs - (Date.now() - started))));
     });
     child.on('close', (c: number | null, s: NodeJS.Signals | null) => finish(code ?? c, sig ?? s));
   });

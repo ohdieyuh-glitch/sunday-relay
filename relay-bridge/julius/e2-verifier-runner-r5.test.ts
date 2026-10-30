@@ -82,7 +82,7 @@ describe('kill on exit (mutant M9) and the hard deadline', () => {
     try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ }
     expect(Date.now() - t0).toBeLessThan(6000);
     expect(r.exitCode).toBeNull();
-    expect((r as { cause?: string }).cause).toBe('timeout');
+    expect((r as { cause?: string }).cause).toBe('pipes_held_after_exit'); // R3-9: the leader exited; this is the post-exit grace, not the deadline
   }, 15_000);
 });
 
