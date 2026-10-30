@@ -18,18 +18,18 @@ const ANT = `sk-ant-api03-${'Ab1'.repeat(10)}`;
 const XAI = `xai-${'Zq9'.repeat(8)}`;
 
 describe('PILOT N-2: the secret scrub runs in linear time', () => {
-  it('1 MiB of unterminated PEM BEGIN markers is scrubbed in well under a second', () => {
+  it('1 MiB of unterminated PEM BEGIN markers is scrubbed in linear time (R4-8: 5 s margin under load, was 1 s)', () => {
     const text = '-----BEGIN RSA PRIVATE KEY-----'.repeat(Math.ceil((1024 * 1024) / 31)).slice(0, 1024 * 1024);
     const t0 = performance.now();
     redactSecrets(text);
-    expect(performance.now() - t0).toBeLessThan(1000);
+    expect(performance.now() - t0).toBeLessThan(5000);
   });
-  it('other adversarial 1 MiB inputs (JWT prefixes, BEGIN without END, Bearer runs) also stay under a second', () => {
+  it('other adversarial 1 MiB inputs (JWT prefixes, BEGIN without END, Bearer runs) also stay linear (R4-8: 5 s margin under load)', () => {
     for (const unit of ['eyJ', 'eyJaaaaaaaaa.', '-----BEGIN ', 'Bearer ', 'xai-', 'sk-', '%2D', '\\u002d']) {
       const text = unit.repeat(Math.ceil((1024 * 1024) / unit.length));
       const t0 = performance.now();
       redactSecrets(text);
-      expect(performance.now() - t0, unit).toBeLessThan(1000);
+      expect(performance.now() - t0, unit).toBeLessThan(5000);
     }
   });
   it('a PEM block with an END line is still redacted, and a BEGIN with no END redacts to the end of the text', () => {

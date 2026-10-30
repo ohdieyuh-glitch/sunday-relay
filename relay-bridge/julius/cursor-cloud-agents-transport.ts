@@ -206,6 +206,14 @@ const B64_TOKEN = /[A-Za-z0-9+/_-]{20,}={0,2}/gu;
 /** Round 4 M4: a reversed match counts only at a plausible token length (ordinary words ending in `-ks` are not keys). */
 const REVERSED_MIN = 24;
 const HEX_RUN = /\b(?:[0-9a-f]{2}){12,}\b/giu;
+const SPACED_HEX_RUN = /\b[0-9a-f]{2}(?: [0-9a-f]{2}){11,}\b/giu;
+/** R4-7: the Cyrillic/Greek letters that look like Latin ones in key prefixes (a deliberately small map, not full UTS #39). */
+const CONFUSABLE_MAP: Readonly<Record<string, string>> = Object.freeze({
+  '\u0430': 'a', '\u0410': 'A', '\u0435': 'e', '\u0415': 'E', '\u043a': 'k', '\u041a': 'K', '\u043e': 'o', '\u041e': 'O', '\u0440': 'p', '\u0420': 'P',
+  '\u0441': 'c', '\u0421': 'C', '\u0445': 'x', '\u0425': 'X', '\u0443': 'y', '\u0456': 'i', '\u0406': 'I', '\u0458': 'j', '\u0455': 's', '\u0405': 'S',
+  '\u03bf': 'o', '\u039f': 'O', '\u03a7': 'X', '\u0391': 'A', '\u0392': 'B', '\u0395': 'E', '\u039a': 'K', '\u03a1': 'P', '\u03a4': 'T', '\u0131': 'i',
+});
+const foldConfusables = (s: string): string => s.replace(/[\u0370-\u04ff\u0131]/gu, (c) => CONFUSABLE_MAP[c] ?? c);
 function secretSurvives(raw: string): boolean {
   /* Round 4 M4: our own markers are not secrets (a URL `user:[REDACTED:secret]@` must not re-trigger the userinfo pattern). */
   const text = raw.replace(/\[REDACTED:secret\]/gu, ' ');
@@ -223,8 +231,12 @@ function secretSurvives(raw: string): boolean {
   if (nfkc !== joined && anyPattern(nfkc)) return true;
   const reversed = [...joined].reverse().join('');
   if ([...allMatches(reversed)].some((m) => m.length >= REVERSED_MIN)) return true;
-  /* Round 4 R3-8: hex-encoded tokens. */
+  /* PILOT 44c062b9 R4-7: Cyrillic/Greek homoglyphs (`хai-`), folded through a small confusables map. */
+  const folded = foldConfusables(nfkc);
+  if (folded !== nfkc && anyPattern(folded)) return true;
+  /* Round 4 R3-8: hex-encoded tokens; R4-7: also space-separated hex bytes. */
   for (const m of joined.matchAll(HEX_RUN)) if (anyPattern(Buffer.from(m[0], 'hex').toString('latin1'))) return true;
+  for (const m of joined.matchAll(SPACED_HEX_RUN)) if (anyPattern(Buffer.from(m[0].replace(/ /gu, ''), 'hex').toString('latin1'))) return true;
   /* base64, and base64 of base64 (one extra level only). */
   const b64 = (t: string): string => Buffer.from(t.replace(/-/gu, '+').replace(/_/gu, '/'), 'base64').toString('latin1');
   for (const m of joined.matchAll(B64_TOKEN)) {

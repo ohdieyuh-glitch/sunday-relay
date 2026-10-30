@@ -517,7 +517,7 @@ export const E2_GATE_REASONS = Object.freeze([
   'e2_binding_absent', 'e2_binding_run_mismatch', 'e2_binding_diff_mismatch', 'e2_diff_not_descendant', 'e2_binding_cwd_mismatch',
   'e2_model_absent', 'e2_model_router', 'e2_model_claude', 'e2_model_unrecognised',
   'e2_final_record_mismatch', 'e2_no_edit_calls', 'e2_diff_empty', 'e2_stream_mid_run_start', 'e2_model_unbound',
-  'e2_diff_not_isolated', 'e2_edit_path_not_in_diff', 'e2_edit_path_unknown',
+  'e2_diff_not_isolated', 'e2_edit_path_not_in_diff', 'e2_edit_path_unknown', 'e2_binding_remote_root_invalid',
   'e2_anchor_not_external', 'e2_verifier_spec_absent', 'e2_verifier_not_from_spec', 'e2_verifier_pin_changed',
   'e2_tool_unknown', 'e2_edit_path_outside_workspace', 'e2_verifier_binary_untrusted', 'e2_verifier_tests_below_minimum',
 ] as const);
@@ -574,6 +574,9 @@ export const E2_CODER_MODEL_IDS: ReadonlySet<string> = Object.freeze(new Set(['c
  * its path(s); a known non-edit tool (todo_write, reads, searches, terminal) is not an edit; any other name is refused
  * with `e2_tool_unknown` instead of being guessed from a substring. HONEST LIMIT: a terminal command can change files
  * without naming them; those changes are only seen through the diff, not rule (b).
+ * PILOT 44c062b9 R4-4: no names are guessed. BEFORE THE FIRST REAL RUN, Skywalker's wiring must verify this table against
+ * a recorded live Cursor Cloud Agents stream; verified read-only names go in the mission spec's `extraKnownNonEditTools`
+ * (no code change); a verified EDIT name needs a code change here with its argument shape.
  */
 export const E2_EDIT_TOOL_NAMES: readonly string[] = Object.freeze(['edit_file', 'search_replace', 'write', 'apply_patch', 'delete_file', 'MultiEdit', 'Edit', 'Write']);
 export const E2_NON_EDIT_TOOL_NAMES: readonly string[] = Object.freeze([
@@ -613,7 +616,9 @@ const okPath = (v: unknown): v is string => typeof v === 'string' && v !== '' &&
 /** Round 4 M3: paths named in apply_patch text (`*** Update/Add/Delete File:`, `*** Move to:`, `--- a/`, `+++ b/`). Linear. */
 function patchPaths(text: string): string[] {
   const out: string[] = [];
-  for (const line of text.split('\n')) {
+  for (const raw of text.split('\n')) {
+    /* PILOT 44c062b9 R4-6: an indented header is still a header. */
+    const line = raw.replace(/^[ \t]+/u, '');
     const m = /^\*\*\* (?:Update|Add|Delete) File: (.+)$/u.exec(line) ?? /^\*\*\* Move to: (.+)$/u.exec(line) ?? /^(?:---|\+\+\+) [ab]\/(.+)$/u.exec(line);
     if (m !== null) out.push((m[1] as string).replace(/\r$/u, '').trim());
   }
@@ -747,7 +752,11 @@ export function e2Gate(input: {
     if (diff.isolated !== true) reasons.push('e2_diff_not_isolated');
   }
   if (!bound) reasons.push('e2_binding_absent');
-  else {
+  /* Skywalker 44c062b9 L3: a root of `/` would map every absolute path into the workspace; a relative root was ignored. */
+  else if (binding.remoteWorkspaceRoot !== undefined && !(typeof binding.remoteWorkspaceRoot === 'string' && isAbsolute(binding.remoteWorkspaceRoot)
+    && binding.remoteWorkspaceRoot !== '/' && normalizePath(binding.remoteWorkspaceRoot) === binding.remoteWorkspaceRoot && !binding.remoteWorkspaceRoot.endsWith('/'))) {
+    reasons.push('e2_binding_remote_root_invalid');
+  } else {
     if (header !== null && header.runId !== binding.runId) reasons.push('e2_binding_run_mismatch');
     if (realDiff && (diff.base !== binding.base || diff.head !== binding.head)) reasons.push('e2_binding_diff_mismatch');
     if (realDiff && !diff.ancestry) reasons.push('e2_diff_not_descendant');
