@@ -388,7 +388,7 @@ const gitBlob = (workspace: string, base: string, path: string): Buffer | null =
   const bin = resolveProgram('git');
   if (bin === null) return null;
   try {
-    return execFileSync(bin, [...GIT_PINS, 'cat-file', 'blob', `${base}:${path}`], {
+    return execFileSync(bin, [...GIT_PINS, ...safeDir(workspace), 'cat-file', 'blob', `${base}:${path}`], {
       cwd: workspace, shell: false, stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024,
       env: { LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...E2_GIT_ENV, GIT_NO_REPLACE_OBJECTS: '1', PATH: E2_VERIFIER_PATH },
     });
@@ -400,7 +400,7 @@ function baseTestFiles(workspace: string, base: string): string[] | null {
   const bin = resolveProgram('git');
   if (bin === null) return null;
   try {
-    const out = execFileSync(bin, [...GIT_PINS, 'ls-tree', '-r', '-z', '--name-only', base], {
+    const out = execFileSync(bin, [...GIT_PINS, ...safeDir(workspace), 'ls-tree', '-r', '-z', '--name-only', base], {
       cwd: workspace, shell: false, stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024,
       env: { LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...E2_GIT_ENV, GIT_NO_REPLACE_OBJECTS: '1', PATH: E2_VERIFIER_PATH },
     }).toString('utf8');
@@ -558,7 +558,17 @@ export async function recordVerifierReexec(input: {
 }
 
 const SHA = /^[0-9a-f]{40}$/u;
-const safeDir = (_workspace: string): string[] => [];
+/**
+ * Round 6 H1 (Skywalker f4575efc): git refuses a repository owned by another uid (rc 128, "dubious ownership").
+ * Each gate git call trusts exactly the workspace's realpath, never `*`; global/system config stay unread.
+ */
+const safeDir = (workspace: string): string[] => {
+  let w = workspace;
+  try { w = realpathSync(workspace); } catch { /* the caller's path is used as given */ }
+  return ['-c', `safe.directory=${w}`];
+};
+/** Round 6 H1: the full pin list for one workspace (exported so tests and the workflow can check the argv). */
+export const e2GitPins = (workspace: string): readonly string[] => Object.freeze([...GIT_PINS, ...safeDir(workspace)]);
 /** M-8: git configuration that would change the diff bytes is pinned; global and system config are not read. */
 export const E2_GIT_ENV = Object.freeze({ GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', GIT_ATTR_NOSYSTEM: '1' });
 const GIT_PINS = Object.freeze([
@@ -577,17 +587,17 @@ export async function recordGitDiff(input: { readonly base: string; readonly hea
   if (!SHA.test(input.base) || !SHA.test(input.head)) return null;
   if (typeof input.cwd !== 'string' || !isAbsolute(input.cwd)) return null;
   const range = `${input.base}..${input.head}`;
-  const argv = moduleGit(['git', ...GIT_PINS, 'diff', '--no-ext-diff', '--no-textconv', '--binary', '--no-renames', '--no-color', '--full-index', ...DIFF_FLAGS, range]);
+  const argv = moduleGit(['git', ...GIT_PINS, ...safeDir(input.cwd), 'diff', '--no-ext-diff', '--no-textconv', '--binary', '--no-renames', '--no-color', '--full-index', ...DIFF_FLAGS, range]);
   const r = await run(input.runner, argv, input.cwd, E2_GIT_ENV);
-  const anc = await run(input.runner, moduleGit(['git', ...GIT_PINS, 'merge-base', '--is-ancestor', input.base, input.head]), input.cwd, E2_GIT_ENV);
+  const anc = await run(input.runner, moduleGit(['git', ...GIT_PINS, ...safeDir(input.cwd), 'merge-base', '--is-ancestor', input.base, input.head]), input.cwd, E2_GIT_ENV);
   /* Rule (b) needs the changed paths; M-8 needs to know whether info/attributes (which no config can switch off) is empty. */
   const capture = CAPTURE.get(input.runner);
   let paths: readonly string[] | null = null;
   let isolated = false;
   if (capture !== undefined) {
-    const names = await capture(moduleGit(['git', ...GIT_PINS, 'diff', '--no-ext-diff', '--no-renames', '--name-only', '-z', range]), input.cwd, E2_GIT_ENV);
+    const names = await capture(moduleGit(['git', ...GIT_PINS, ...safeDir(input.cwd), 'diff', '--no-ext-diff', '--no-renames', '--name-only', '-z', range]), input.cwd, E2_GIT_ENV);
     if (names !== null) paths = Object.freeze(names.toString('utf8').split('\u0000').filter((x) => x !== ''));
-    const attr = await capture(moduleGit(['git', ...GIT_PINS, 'rev-parse', '--git-path', 'info/attributes']), input.cwd, E2_GIT_ENV);
+    const attr = await capture(moduleGit(['git', ...GIT_PINS, ...safeDir(input.cwd), 'rev-parse', '--git-path', 'info/attributes']), input.cwd, E2_GIT_ENV);
     if (attr !== null) {
       const f = attr.toString('utf8').replace(/\n$/u, '');
       try { isolated = statSync(isAbsolute(f) ? f : join(input.cwd, f)).size === 0; } catch (e) { isolated = (e as { code?: string }).code === 'ENOENT'; }
