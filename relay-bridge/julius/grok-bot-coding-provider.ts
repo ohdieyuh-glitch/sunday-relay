@@ -105,6 +105,8 @@ export type CodingAgentResultOutcome =
   | {
     readonly kind: 'result';
     readonly finalText: string | null;
+    /** True when the transport cut finalText to its cap. Absent from fakes: treated as false. */
+    readonly finalTextTruncated?: boolean;
     readonly durationMs: number | null;
     readonly branches: readonly CodingAgentBranch[];
     readonly usage: CodingAgentUsage | null;
@@ -547,6 +549,7 @@ export function createGrokBotCodingAgentProvider(input: {
       if (pushed.length > 1) return started('MALFORMED_OUTPUT', 'coder_grok_branches_ambiguous', 'The agent reported more than one pushed branch.');
       const untrustedPr = onTarget.find((b) => b.prUrl !== null)?.prUrl ?? null;
       if (untrustedPr !== null) evidence.untrustedPrUrl = untrustedPr;
+      if (result.finalTextTruncated === true) evidence.finalTextTruncated = true;
       const branch = pushed[0]?.branch ?? null;
       if (branch !== null) {
         if (!isSafeBranchName(branch)) return started('MALFORMED_OUTPUT', 'coder_grok_branch_name_unsafe', 'The agent reported a branch name outside the accepted shape.');

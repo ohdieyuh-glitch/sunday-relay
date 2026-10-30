@@ -44,6 +44,9 @@ export interface CursorFetchResponse {
   readonly ok: boolean;
   readonly status: number;
   readonly headers?: { get(name: string): string | null };
+  /** The streamed body (WHATWG fetch). When present it is the ONLY way the body is read, and it is read with a byte cap. */
+  readonly body?: ReadableStream<Uint8Array> | null;
+  /** Fallback only for a response without a stream; its length is still capped before anything is parsed. */
   text(): Promise<string>;
 }
 export type CursorFetch = (url: string, init: {
@@ -77,7 +80,45 @@ export interface CursorCloudAgentsTransportOptions {
 const MIN_POLL_MS = 3_000;
 const MAX_BACKOFF_MS = 60_000;
 const MAX_RETRY_AFTER_MS = 120_000;
-const MAX_BODY_CHARS = 2 * 1024 * 1024;
+const MAX_BODY_BYTES = 2 * 1024 * 1024;
+/** Strings the service returns that reach evidence: bounded here, before the router's own caps. */
+const MAX_FINAL_TEXT_CHARS = 16_000;
+const MAX_PR_URL_CHARS = 300;
+const PR_URL = /^https:\/\/github\.com\/[A-Za-z0-9._~\/%#?=&+-]+$/u;
+const REPORTED_MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
+
+/**
+ * Reads a response body, never past {@link MAX_BODY_BYTES}: a declared Content-Length over the cap is refused unread, and the
+ * stream is counted chunk by chunk and cancelled the moment it passes the cap. Null: oversized or unreadable (never parsed).
+ */
+export async function readCappedBody(res: CursorFetchResponse, maxBytes: number = MAX_BODY_BYTES): Promise<string | null> {
+  const declared = res.headers?.get('content-length') ?? null;
+  if (declared !== null && /^\d+$/u.test(declared.trim()) && Number(declared.trim()) > maxBytes) {
+    try { await res.body?.cancel(); } catch { /* best effort */ }
+    return null;
+  }
+  if (res.body !== undefined && res.body !== null) {
+    const reader = res.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.byteLength;
+        if (total > maxBytes) { try { await reader.cancel(); } catch { /* best effort */ } return null; }
+        chunks.push(value);
+      }
+    } catch { return null; }
+    const all = new Uint8Array(total);
+    let at = 0;
+    for (const c of chunks) { all.set(c, at); at += c.byteLength; }
+    try { return new TextDecoder('utf-8', { fatal: true }).decode(all); } catch { return null; }
+  }
+  let text: string;
+  try { text = await res.text(); } catch { return null; }
+  return Buffer.byteLength(text, 'utf8') > maxBytes ? null : text;
+}
 const ACTIVE = new Set(['CREATING', 'RUNNING', 'WAITING_FOR_BACKGROUND_WORK']);
 const TERMINAL = new Set<CodingAgentTerminalStatus>(['FINISHED', 'ERROR', 'CANCELLED', 'EXPIRED']);
 const REDACTED = '[REDACTED]';
@@ -90,6 +131,8 @@ const defaultSleep = (ms: number, signal?: AbortSignal): Promise<void> => new Pr
   signal?.addEventListener('abort', onAbort, { once: true });
 });
 
+/** An untrusted PR link is kept only as a bounded https://github.com/… URL; anything else is dropped. */
+const safePrUrl = (v: string | null): string | null => (v !== null && v.length <= MAX_PR_URL_CHARS && PR_URL.test(v) ? v : null);
 const isAborted = (signal: AbortSignal | undefined): boolean => signal?.aborted === true;
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const count = (v: unknown): number | null => (typeof v === 'number' && Number.isInteger(v) && v >= 0 ? v : null);
@@ -135,10 +178,9 @@ export function createCursorCloudAgentsTransport(options: CursorCloudAgentsTrans
         redirect: 'error',
         signal: timeout.signal,
       });
-      let text = '';
-      try { text = await res.text(); } catch { text = ''; }
+      const text = await readCappedBody(res);
       let parsed: unknown = null;
-      if (text.length > 0 && text.length <= MAX_BODY_CHARS) { try { parsed = JSON.parse(text); } catch { parsed = null; } }
+      if (text !== null && text.length > 0) { try { parsed = JSON.parse(text); } catch { parsed = null; } }
       const ra = res.headers?.get('retry-after') ?? null;
       const raSeconds = ra !== null && /^\d{1,6}$/u.test(ra.trim()) ? Number(ra.trim()) : null;
       return { kind: 'response', status: res.status, body: parsed, retryAfterMs: raSeconds === null ? null : Math.min(raSeconds * 1000, MAX_RETRY_AFTER_MS), key };
@@ -171,7 +213,9 @@ export function createCursorCloudAgentsTransport(options: CursorCloudAgentsTrans
     if (modelField === null) return null;
     let cur: unknown = record;
     for (const part of modelField.path) cur = isRecord(cur) ? cur[part] : undefined;
-    return typeof cur === 'string' && cur !== '' ? scrub(cur, key) : null;
+    if (typeof cur !== 'string' || cur === '') return null;
+    const scrubbed = scrub(cur, key);
+    return scrubbed !== null && REPORTED_MODEL_ID.test(scrubbed) ? scrubbed : null;
   };
 
   return {
@@ -264,7 +308,9 @@ export function createCursorCloudAgentsTransport(options: CursorCloudAgentsTrans
       const key = run.key;
       const body = run.body;
       if (body.status !== 'FINISHED') return { kind: 'unavailable', cause: 'run_not_finished' };
-      const finalText = typeof body.result === 'string' ? scrub(body.result, key) : null;
+      const fullText = typeof body.result === 'string' ? scrub(body.result, key) : null;
+      const finalTextTruncated = fullText !== null && fullText.length > MAX_FINAL_TEXT_CHARS;
+      const finalText = fullText === null ? null : finalTextTruncated ? fullText.slice(0, MAX_FINAL_TEXT_CHARS) : fullText;
       const durationMs = count(body.durationMs);
       const branches: CodingAgentBranch[] = [];
       const git = isRecord(body.git) ? body.git : null;
@@ -275,7 +321,7 @@ export function createCursorCloudAgentsTransport(options: CursorCloudAgentsTrans
           branches.push(Object.freeze({
             repoUrl: scrub(b.repoUrl, key) as string,
             branch: typeof b.branch === 'string' ? scrub(b.branch, key) : null,
-            prUrl: typeof b.prUrl === 'string' ? scrub(b.prUrl, key) : null,
+            prUrl: safePrUrl(typeof b.prUrl === 'string' ? scrub(b.prUrl, key) : null),
           }));
         }
       }
@@ -302,7 +348,7 @@ export function createCursorCloudAgentsTransport(options: CursorCloudAgentsTrans
         }
       }
       return {
-        kind: 'result', finalText, durationMs, branches: Object.freeze(branches), usage, reportedModelId,
+        kind: 'result', finalText, finalTextTruncated, durationMs, branches: Object.freeze(branches), usage, reportedModelId,
         reportedModelSource: reportedModelId === null || modelField === null ? null : `${modelField.record}.${modelField.path.join('.')}`,
       };
     },

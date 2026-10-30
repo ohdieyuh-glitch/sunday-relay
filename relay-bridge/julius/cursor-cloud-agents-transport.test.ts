@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { CURSOR_API_KEY_ENV_NAME, CURSOR_API_ORIGIN, createCursorCloudAgentsTransport, type CursorFetch } from './cursor-cloud-agents-transport';
+import { CURSOR_API_KEY_ENV_NAME, CURSOR_API_ORIGIN, createCursorCloudAgentsTransport, readCappedBody, type CursorFetch, type CursorFetchResponse } from './cursor-cloud-agents-transport';
 import { GROK_BOT_CODER_CONFIG_DEFAULTS, createGrokBotCodingAgentProvider, type CodingAgentCreateInput } from './grok-bot-coding-provider';
 import type { JuliusCodingAgentRequest } from '../../src/relay/mission/julius/julius-coding-agent';
 
@@ -14,13 +14,13 @@ const AGENT = 'bc-00000000-0000-4000-8000-000000000001';
 const RUN = 'run-abc';
 const BASE = 'c'.repeat(40);
 
-type Call = { url: string; method: string; headers: Readonly<Record<string, string>>; body?: string };
+type Call = { url: string; method: string; headers: Readonly<Record<string, string>>; body?: string; redirect: string };
 type Reply = { status: number; body?: unknown; retryAfter?: string } | 'throw' | 'hang';
 
 function fakeFetch(route: (call: Call, n: number) => Reply) {
   const calls: Call[] = [];
   const fetch: CursorFetch = async (url, init) => {
-    const call: Call = { url, method: init.method, headers: init.headers, ...(init.body === undefined ? {} : { body: init.body }) };
+    const call: Call = { url, method: init.method, headers: init.headers, redirect: init.redirect, ...(init.body === undefined ? {} : { body: init.body }) };
     calls.push(call);
     const r = route(call, calls.length);
     if (r === 'throw') throw new Error(`socket reset while sending ${init.headers.Authorization}`);
@@ -141,6 +141,14 @@ describe('polling: bounded, deadline-respecting, rate-limit aware', () => {
     expect(c.now()).toBeLessThanOrEqual(10_000);
   });
 
+  it('L2: pollIntervalMs:1 still waits at least 3000 ms between polls (only the deadline may cut the last wait)', async () => {
+    const { transport, c, f } = make(() => ({ status: 200, body: { status: 'RUNNING' } }), { pollIntervalMs: 1 });
+    expect(await transport.pollUntilTerminal({ agentId: AGENT, runId: RUN }, { deadlineAtMs: 100_000 })).toMatchObject({ kind: 'deadline' });
+    expect(c.sleeps.length).toBeGreaterThanOrEqual(30);
+    expect(c.sleeps.slice(0, -1).every((s) => s >= 3_000)).toBe(true);
+    expect(f.calls.length).toBeLessThanOrEqual(Math.ceil(100_000 / 3_000) + 1);
+  });
+
   it('a 429 honours Retry-After, else backs off doubling to a cap, and gives up at the deadline', async () => {
     const ra = make((_, n) => (n === 1 ? { status: 429, retryAfter: '7' } : { status: 200, body: { status: 'FINISHED' } }));
     expect(await ra.transport.pollUntilTerminal({ agentId: AGENT, runId: RUN }, { deadlineAtMs: 1_000_000 })).toMatchObject({ kind: 'terminal' });
@@ -230,5 +238,119 @@ describe('the key never leaves: not in logs, results, evidence or errors', () =>
     const everything = JSON.stringify({ outcomes, lines });
     expect(everything).not.toContain(SENTINEL);
     expect(everything).not.toContain(SENTINEL.slice(0, 16));
+  });
+});
+
+describe('L2: no request ever follows a redirect', () => {
+  it('every call in a create, poll, result, usage and cancel cycle is made with redirect:error', async () => {
+    const finished = { status: 200, body: { id: RUN, status: 'FINISHED', result: 'done', git: { branches: [] } } };
+    const { transport, f } = make((call, n) => (n === 1 ? created : call.url.includes('/usage') ? { status: 200, body: { runs: [] } } : finished), { attestedModelField: { record: 'agent', path: ['model', 'id'] } });
+    await transport.createRun(input);
+    await transport.pollUntilTerminal({ agentId: AGENT, runId: RUN }, { deadlineAtMs: 1e6 });
+    await transport.fetchResult({ agentId: AGENT, runId: RUN });
+    await transport.cancelRun({ agentId: AGENT, runId: RUN });
+    expect(f.calls.length).toBeGreaterThanOrEqual(5);
+    for (const call of f.calls) expect(call.redirect).toBe('error');
+  });
+});
+
+describe('M1: the 2 MiB body cap holds while streaming, and an oversized body is never parsed', () => {
+  const CAP = 2 * 1024 * 1024;
+  const CHUNK = 64 * 1024;
+  /** A body that would parse as a FINISHED run if it were read whole. */
+  function streamed(totalBytes: number, opts: { contentLength?: string; throwOnRead?: boolean } = {}) {
+    const stats = { pulled: 0, cancelled: false, textCalled: false };
+    const head = new TextEncoder().encode('{"status":"FINISHED","result":"');
+    const tail = new TextEncoder().encode('"}');
+    let sent = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (opts.throwOnRead === true) throw new Error('the body must not be read');
+        if (sent >= totalBytes) { controller.close(); return; }
+        let chunk: Uint8Array;
+        if (sent === 0) chunk = head;
+        else if (sent + CHUNK >= totalBytes - tail.length) chunk = new Uint8Array([...new Uint8Array(Math.max(0, totalBytes - tail.length - sent)).fill(97), ...tail]);
+        else chunk = new Uint8Array(CHUNK).fill(97);
+        sent += chunk.byteLength;
+        stats.pulled += chunk.byteLength;
+        controller.enqueue(chunk);
+      },
+      cancel() { stats.cancelled = true; },
+    });
+    const res: CursorFetchResponse = {
+      ok: true, status: 200, body,
+      headers: { get: (n: string) => (n.toLowerCase() === 'content-length' ? opts.contentLength ?? null : null) },
+      text: async () => { stats.textCalled = true; throw new Error('text() must not be used when a stream exists'); },
+    };
+    return { res, stats };
+  }
+  const transportFor = (res: CursorFetchResponse) => {
+    const c = clock();
+    return createCursorCloudAgentsTransport({ fetch: async () => res, getApiKey: () => SENTINEL, now: c.now, sleep: c.sleep, requestTimeoutMs: 5_000 });
+  };
+
+  it('a 3 MiB streamed body is cut at the cap, cancelled, and never parsed (the poll sees no status)', async () => {
+    const { res, stats } = streamed(3 * CAP / 2);
+    const out = await transportFor(res).pollUntilTerminal({ agentId: AGENT, runId: RUN }, { deadlineAtMs: 1e6 });
+    expect(out).toMatchObject({ kind: 'poll_failed', cause: 'malformed_response' });
+    expect(stats.cancelled).toBe(true);
+    /* The stream may queue one chunk ahead (highWaterMark 1); nothing beyond that is pulled. */
+    expect(stats.pulled).toBeLessThanOrEqual(CAP + 2 * CHUNK);
+    expect(stats.textCalled).toBe(false);
+  });
+
+  it('a declared Content-Length over the cap is refused without reading a byte', async () => {
+    const { res, stats } = streamed(100, { contentLength: String(CAP + 1), throwOnRead: true });
+    expect(await readCappedBody(res)).toBeNull();
+    expect(stats.pulled).toBe(0);
+    expect(stats.textCalled).toBe(false);
+  });
+
+  it('a body of exactly the cap is read and parsed; one byte more is not', async () => {
+    const ok = streamed(CAP);
+    const atCap = await readCappedBody(ok.res);
+    expect(atCap).not.toBeNull();
+    expect(JSON.parse(atCap as string)).toMatchObject({ status: 'FINISHED' });
+    expect(await readCappedBody(streamed(CAP + 1).res)).toBeNull();
+  });
+
+  it('the text() fallback (no stream) is still capped before parsing', async () => {
+    const big: CursorFetchResponse = { ok: true, status: 200, text: async () => `{"status":"FINISHED","x":"${'a'.repeat(CAP)}"}` };
+    expect(await readCappedBody(big)).toBeNull();
+    const small: CursorFetchResponse = { ok: true, status: 200, text: async () => '{"status":"RUNNING"}' };
+    expect(await readCappedBody(small)).toBe('{"status":"RUNNING"}');
+  });
+});
+
+describe('L4: service strings that reach evidence are bounded', () => {
+  const usage = { status: 200, body: { runs: [] } };
+  const result = async (run: Record<string, unknown>, over: Partial<Parameters<typeof createCursorCloudAgentsTransport>[0]> = {}) => {
+    const r = await make((call) => (call.url.includes('/usage') ? usage : { status: 200, body: { id: RUN, status: 'FINISHED', ...run } }), over).transport.fetchResult({ agentId: AGENT, runId: RUN });
+    if (r.kind !== 'result') throw new Error(`expected result, got ${r.kind}`);
+    return r;
+  };
+  const branch = (prUrl: unknown) => ({ git: { branches: [{ repoUrl: 'github.com/example-org/example-target', branch: 'cursor/x', prUrl }] } });
+
+  it('prUrl survives only as https://github.com/... of at most 300 characters', async () => {
+    expect((await result(branch('https://github.com/example-org/example-target/pull/7'))).branches[0]?.prUrl).toBe('https://github.com/example-org/example-target/pull/7');
+    for (const bad of ['http://github.com/a/b/pull/1', 'https://evil.example/a/b/pull/1', 'https://github.com.evil.example/a', 'https://github.com/a/b/pull/1 inject', `https://github.com/${'a'.repeat(300)}`, 'javascript:alert(1)', 'https://github.com/a\nb']) {
+      expect((await result(branch(bad))).branches[0]?.prUrl, bad).toBeNull();
+    }
+  });
+
+  it('finalText is truncated to its cap, with a flag', async () => {
+    const long = await result({ result: 'x'.repeat(20_000) });
+    expect(long.finalText?.length).toBe(16_000);
+    expect(long.finalTextTruncated).toBe(true);
+    const short = await result({ result: 'done' });
+    expect(short).toMatchObject({ finalText: 'done', finalTextTruncated: false });
+  });
+
+  it('a reported model id must have the model-id shape, or it is not reported', async () => {
+    const field = { attestedModelField: { record: 'run' as const, path: ['model', 'id'] } };
+    expect((await result({ model: { id: 'fake-grok-coder-1' } }, field)).reportedModelId).toBe('fake-grok-coder-1');
+    for (const bad of ['a'.repeat(129), 'model with space', 'model\nnext', '-leading', 'mödel']) {
+      expect((await result({ model: { id: bad } }, field)).reportedModelId, bad).toBeNull();
+    }
   });
 });
