@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { CURSOR_API_KEY_ENV_NAME, CURSOR_API_ORIGIN, CURSOR_ATTESTED_MODEL_FIELD, createCursorCloudAgentsTransport, cursorGlobalFetch, cursorGlobalFetchIntact, cursorKeyForms, cursorTransportMode, isRequestEchoField, readAttestedModelId, readCappedBody, type CursorFetch, type CursorFetchResponse } from './cursor-cloud-agents-transport';
+import { CURSOR_API_KEY_ENV_NAME, CURSOR_API_ORIGIN, CURSOR_ATTESTED_MODEL_FIELD, createCursorCloudAgentsTransport, cursorGlobalFetch, carriesCursorKey, cursorGlobalFetchIntact, cursorKeyForms, cursorTransportMode, isRequestEchoField, readAttestedModelId, readCappedBody, type CursorFetch, type CursorFetchResponse } from './cursor-cloud-agents-transport';
 import { GROK_BOT_CODER_CONFIG_DEFAULTS, createGrokBotCodingAgentProvider, type CodingAgentCreateInput } from './grok-bot-coding-provider';
 import type { JuliusCodingAgentRequest } from '../../src/relay/mission/julius/julius-coding-agent';
 
@@ -263,6 +263,26 @@ describe('the key never leaves: not in logs, results, evidence or errors', () =>
     const everything = JSON.stringify({ outcomes, lines });
     expect(everything).not.toContain(SENTINEL);
     expect(everything).not.toContain(SENTINEL.slice(0, 16));
+  });
+  it('Skywalker N3: a run id that echoes the key (hex fragment) never reaches the provider\'s diagnostics', async () => {
+    const hexFragment = Buffer.from(SENTINEL).toString('hex').slice(0, 32);
+    const lines: string[] = [];
+    const { transport } = make(() => ({ status: 201, body: { agent: { id: AGENT }, run: { id: `run-${hexFragment}`, agentId: AGENT, status: 'CREATING' } } }), { log: (l) => lines.push(l) });
+    const request = {
+      version: 'julius-coding-agent.v1', identity: { runId: 'r', missionId: 'm', taskId: 't', taskType: 'build', contextId: 'c' },
+      workspacePath: '/w', contract: null, plan: 'P', sections: { acceptedGuidance: [], architecture: [], findings: [], continuation: [], missionContext: [] },
+      permissions: { mayEditFiles: true, mayRunCommands: false, mayUseNetwork: false, permittedPaths: [], outOfScope: [], prohibitedActions: [] },
+      requiredEvidence: [], budget: { usdMicros: null }, protocol: { participation: 'A', researchAuthority: 'R' },
+    } as unknown as JuliusCodingAgentRequest;
+    const out = await createGrokBotCodingAgentProvider({
+      config: { ...GROK_BOT_CODER_CONFIG_DEFAULTS, pinnedModelId: 'fake-grok-coder-1', coderModelFamily: 'xai', reviewerModelFamily: 'openai', reviewerModelId: 'fake-gpt-reviewer-1', targetRepoUrl: 'https://github.com/example-org/example-target', runDeadlineMs: 60_000 }, reviewerPin: { modelId: 'fake-gpt-reviewer-1', modelFamily: 'openai' },
+      transport, workspace: { baseRevision: async () => ({ ok: true, sha: BASE }), fetchBranch: async () => ({ ok: false, cause: 'x' }), applyFetched: async () => ({ ok: false, cause: 'x' }) },
+      log: (l) => lines.push(l), now: () => 0,
+    }).execute(request);
+    expect(out).toMatchObject({ kind: 'failed' });
+    const everything = JSON.stringify({ out, lines }).toLowerCase();
+    expect(everything).not.toContain(hexFragment.slice(0, 16));
+    expect(everything).not.toContain(SENTINEL.toLowerCase());
   });
 });
 
@@ -539,6 +559,50 @@ describe('L4: service strings that reach evidence are bounded', () => {
     const runBody = { id: RUN, status: 'FINISHED', result: 'done' };
     const r = await make((call) => (call.url.includes('/usage') ? { status: 404 } : { status: 200, body: runBody, requestId: `req-${hexKey}` })).transport.fetchResult({ agentId: AGENT, runId: RUN });
     expect(r.kind === 'result' && r.receipt?.requestId).toBeNull();
+  });
+  it('Skywalker L3/P5: the key upper-cased, lower-cased, space-separated, and its hex space-, colon- or dash-separated, is scrubbed', async () => {
+    const hex = Buffer.from(SENTINEL).toString('hex');
+    const pairs = hex.match(/../gu) ?? [];
+    const echoes = [
+      SENTINEL.toUpperCase(), SENTINEL.toLowerCase(), SENTINEL.split('').join(' '), SENTINEL.toUpperCase().split('').join(' '),
+      SENTINEL.split('').join('\t'), pairs.join(' '), pairs.join(':'), pairs.join('-'), pairs.join(' ').toUpperCase(), pairs.join(':').toUpperCase(),
+    ];
+    for (const echo of echoes) {
+      const r = await result({ result: `before ${echo} after` });
+      expect(r.finalText, echo).toBe('before [REDACTED] after');
+    }
+    /* never over-broad: ordinary text, and a mere prefix of the key in finalText, are kept */
+    expect((await result({ result: 'SENTINEL plain words 0123456789' })).finalText).toBe('SENTINEL plain words 0123456789');
+  });
+  it('Skywalker L3/P5: a request id carrying a TRUNCATED key echo (base64 or hex prefix, any case) is dropped; an ordinary one is kept', async () => {
+    const b64 = Buffer.from(SENTINEL).toString('base64');
+    const hex = Buffer.from(SENTINEL).toString('hex');
+    for (const rid of [`rq-${b64.slice(0, 20)}`, `rq-${b64.slice(8, 28)}`, `rq-${hex.slice(0, 16)}`, `rq-${hex.slice(10, 30).toUpperCase()}`, `rq-${SENTINEL.slice(0, 16).toLowerCase()}`]) {
+      const r = await make((call) => (call.url.includes('/usage') ? { status: 404 } : { status: 200, body: { id: RUN, status: 'FINISHED', result: 'done' }, requestId: rid })).transport.fetchResult({ agentId: AGENT, runId: RUN });
+      expect(r.kind === 'result' && r.receipt?.requestId, rid).toBeNull();
+    }
+    const ok = await make((call) => (call.url.includes('/usage') ? { status: 404 } : { status: 200, body: { id: RUN, status: 'FINISHED', result: 'done' }, requestId: 'req_01HZX5Q7ABCDEF' })).transport.fetchResult({ agentId: AGENT, runId: RUN });
+    expect(ok.kind === 'result' && ok.receipt?.requestId).toBe('req_01HZX5Q7ABCDEF');
+    expect(carriesCursorKey('req_01HZX5Q7ABCDEF', SENTINEL)).toBe(false);
+    expect(carriesCursorKey('anything', '')).toBe(false);
+  });
+  it('Skywalker N3: a create response whose run or agent id echoes the key (any form, a fragment, any case) is never handed back', async () => {
+    const b64url = Buffer.from(SENTINEL).toString('base64url');
+    const hex = Buffer.from(SENTINEL).toString('hex');
+    const ids = [SENTINEL, SENTINEL.toLowerCase(), `run-${b64url.slice(0, 24)}`, `run-${hex.slice(4, 24)}`, `run-${hex.toUpperCase()}`];
+    for (const bad of ids) {
+      for (const body of [{ agent: { id: AGENT }, run: { id: bad, agentId: AGENT, status: 'CREATING' } }, { agent: { id: bad }, run: { id: RUN, agentId: bad, status: 'CREATING' } }]) {
+        const { transport, lines } = make(() => ({ status: 201, body }));
+        const out = await transport.createRun(input);
+        expect(out, bad).toEqual({ kind: 'outcome_unknown', cause: 'malformed_response' });
+        expect(JSON.stringify(out)).not.toContain(SENTINEL);
+        expect(lines.join('\n')).toContain('cause=id_carries_key');
+        expect(lines.join('\n')).not.toContain(SENTINEL);
+      }
+    }
+    /* and the provider's diagnostics therefore never carry it: the run is outcome-unknown with no run id recorded */
+    const { transport } = make(() => ({ status: 201, body: { agent: { id: AGENT }, run: { id: SENTINEL, agentId: AGENT, status: 'CREATING' } } }));
+    expect(await transport.createRun(input)).not.toHaveProperty('ref');
   });
   it('F12: with a key whose encodings differ from it (reserved characters, + and / in base64), every form is scrubbed', async () => {
     const KEY = 'K3y?>~/&=+\u00fc-sentinel-0123456789';

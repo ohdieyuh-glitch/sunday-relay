@@ -130,6 +130,42 @@ export function cursorKeyForms(key: string): readonly string[] {
   return Object.freeze([...forms].filter((f) => f.length >= 8).sort((x, y) => y.length - x.length));
 }
 
+/** Separators a service (or a log formatter) may put between the characters of an echoed key: `k e y`, `6b:65:79`. */
+const KEY_SEPARATOR = '[\\s:-]?';
+const reEscape = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+/**
+ * Skywalker L3/N3: every form of {@link cursorKeyForms}, matched case-insensitively (an upper- or lower-cased echo of the
+ * key or of its hex) and with at most one whitespace, `:` or `-` between characters (a space-separated or `xx:yy` hex
+ * echo). Over-matching only ever redacts more.
+ */
+export function cursorKeyPatterns(key: string): readonly RegExp[] {
+  return Object.freeze(cursorKeyForms(key).map((f) => new RegExp([...f].map(reEscape).join(KEY_SEPARATOR), 'giu')));
+}
+/** Every occurrence of the key, in any form {@link cursorKeyPatterns} matches, replaced by `[REDACTED]`. */
+export function scrubCursorKey(text: string, key: string): string {
+  let out = text;
+  for (const re of cursorKeyPatterns(key)) out = out.replace(re, '[REDACTED]');
+  return out;
+}
+/** A fragment this long of any key form, in any case, is treated as the key (a truncated or partial echo). */
+const KEY_FRAGMENT = 16;
+/**
+ * True when a short structural value the service returned (a request id, a run or agent id) carries the key: any form
+ * in any case and with separators, or any {@link KEY_FRAGMENT}-character window of any form (a truncated base64 or hex
+ * echo). Such a value is never recorded; it is dropped or the response is not trusted.
+ */
+export function carriesCursorKey(value: string, key: string): boolean {
+  if (key === '') return false;
+  if (cursorKeyPatterns(key).some((re) => { re.lastIndex = 0; return re.test(value); })) return true;
+  const v = value.toLowerCase();
+  for (const form of cursorKeyForms(key)) {
+    const f = form.toLowerCase();
+    const w = Math.min(KEY_FRAGMENT, f.length);
+    for (let i = 0; i + w <= f.length; i += 1) if (v.includes(f.slice(i, i + w))) return true;
+  }
+  return false;
+}
+
 /** Where, on which record, a served model id would be read. */
 export interface CursorAttestedModelField { readonly record: 'agent' | 'run'; readonly path: readonly string[] }
 
@@ -270,9 +306,7 @@ export function createCursorCloudAgentsTransport(options: CursorCloudAgentsTrans
   /** Removes every occurrence of the key from a string the service returned. */
   const scrub = (text: string | null, key: string): string | null => {
     if (text === null) return null;
-    let out = text;
-    for (const form of cursorKeyForms(key)) out = out.split(form).join(REDACTED);
-    return out;
+    return scrubCursorKey(text, key);
   };
 
   async function send(method: 'GET' | 'POST', path: string, body: unknown, signal: AbortSignal | undefined): Promise<Sent & { key?: string }> {
@@ -302,7 +336,7 @@ export function createCursorCloudAgentsTransport(options: CursorCloudAgentsTrans
       const ra = res.headers?.get('retry-after') ?? null;
       const raSeconds = ra !== null && /^\d{1,6}$/u.test(ra.trim()) ? Number(ra.trim()) : null;
       const rid = res.headers?.get('x-request-id') ?? res.headers?.get('x-cursor-request-id') ?? null;
-      const requestId = rid !== null && REQUEST_ID.test(rid.trim()) && !rid.includes(key) && !cursorKeyForms(key).some((f) => rid.includes(f)) ? rid.trim() : null;
+      const requestId = rid !== null && REQUEST_ID.test(rid.trim()) && !carriesCursorKey(rid, key) ? rid.trim() : null;
       const responseSha256 = createHash('sha256').update(text ?? '').digest('hex');
       return { kind: 'response', status: res.status, body: parsed, retryAfterMs: raSeconds === null ? null : Math.min(raSeconds * 1000, MAX_RETRY_AFTER_MS), requestId, responseSha256, key };
     } catch {
@@ -362,6 +396,12 @@ export function createCursorCloudAgentsTransport(options: CursorCloudAgentsTrans
         const agentId = typeof agent?.id === 'string' ? agent.id : null;
         const runId = typeof run?.id === 'string' ? run.id : null;
         if (agentId === null || runId === null || !SAFE_ID.test(agentId) || !SAFE_ID.test(runId)) return { kind: 'outcome_unknown', cause: 'malformed_response' };
+        // Skywalker N3: an id that echoes the key is never handed back (it would reach the provider's diagnostics as
+        // evidence.cursorRunId). The run may exist, so its outcome is unknown, never "not started".
+        if (carriesCursorKey(agentId, r.key ?? '') || carriesCursorKey(runId, r.key ?? '')) {
+          log('cursor-transport create outcome-unknown cause=id_carries_key');
+          return { kind: 'outcome_unknown', cause: 'malformed_response' };
+        }
         return { kind: 'created', ref: { agentId, runId } };
       }
       if (s === 409) return { kind: 'conflict', status: 409 };
