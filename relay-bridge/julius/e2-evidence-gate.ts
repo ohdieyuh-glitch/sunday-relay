@@ -86,18 +86,12 @@ const TOOL_CONFIGS = Object.freeze(['package.json']);
 export type E2VerifierShapeRefusal = 'program_not_allowed' | 'shape_not_allowed' | 'path_outside_workspace' | 'spec_program_untrusted';
 /**
  * The closed verifier shapes, with the workspace files each one reads (to be pinned to base):
- * `node <file>`, `node --test <file>...`, `npm test`, `npm run test`, `npx vitest run [<file>...]`,
- * `npx tsc --noEmit [-p <file>]`, `tsc --noEmit [-p <file>]`. No --version/--help/--prefix/--config, no git (R3-4).
+ * `node <file> [args]` and `node --test [--test-reporter=tap] <file>...` only (round 5 R4-1 dropped npm/npx/tsc). No git (R3-4).
  */
 function verifierShape(argv: readonly string[], workspace: string): { readonly files: readonly string[]; readonly configs: boolean } | E2VerifierShapeRefusal {
   const name = progName(argv[0] as string);
   const args = argv.slice(1);
   const files = (xs: readonly string[]): readonly string[] | null => { const out = xs.map((x) => workspaceFile(x, workspace)); return out.every((x) => x !== null) ? out as string[] : null; };
-  const tscArgs = (xs: readonly string[]): ReturnType<typeof verifierShape> => {
-    if (xs.length === 1 && xs[0] === '--noEmit') return { files: [], configs: true };
-    if (xs.length === 3 && xs[0] === '--noEmit' && xs[1] === '-p') { const f = files([xs[2] as string]); return f === null ? 'path_outside_workspace' : { files: f, configs: true }; }
-    return 'shape_not_allowed';
-  };
   switch (name) {
     case 'node': {
       /* `node <file> [args to the script...]` (the script is pinned; its own arguments are its business) or `node --test <file>...`. */
