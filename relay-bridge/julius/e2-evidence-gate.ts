@@ -353,6 +353,19 @@ const gitBlob = (workspace: string, base: string, path: string): Buffer | null =
     });
   } catch { return null; }
 };
+/** node --test's default discovery patterns (js only; node_modules excluded), applied to the base tree. */
+const NODE_TEST_FILE = /(?:^|\/)(?:[^/]*[.\-_]test|test-[^/]*|test)\.[cm]?js$|(?:^|\/)test\/(?:.*\/)?[^/]+\.[cm]?js$/u;
+function baseTestFiles(workspace: string, base: string): string[] | null {
+  const bin = resolveProgram('git');
+  if (bin === null) return null;
+  try {
+    const out = execFileSync(bin, [...GIT_PINS, 'ls-tree', '-r', '-z', '--name-only', base], {
+      cwd: workspace, shell: false, stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024,
+      env: { LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...E2_GIT_ENV, GIT_NO_REPLACE_OBJECTS: '1', PATH: E2_VERIFIER_PATH },
+    }).toString('utf8');
+    return out.split('\u0000').filter((f) => f !== '' && !f.split('/').includes('node_modules') && !f.startsWith('-') && NODE_TEST_FILE.test(f));
+  } catch { return null; }
+}
 /** Builds the pinned spec, or a named refusal. Call it on the mission record, not on anything the coder wrote. */
 export function pinVerifierSpec(input: E2MissionVerifierInput): E2VerifierSpec | { readonly refused: E2VerifierSpecRefusal } {
   const no = (refused: E2VerifierSpecRefusal) => Object.freeze({ refused });
@@ -363,8 +376,17 @@ export function pinVerifierSpec(input: E2MissionVerifierInput): E2VerifierSpec |
   if (!strings.every((x) => typeof x === 'string' && x.trim() !== '')) return no('spec_invalid');
   if (input.minTests !== undefined && !(Number.isSafeInteger(input.minTests) && input.minTests >= 0)) return no('spec_invalid');
   if (strings.some((x) => SHELL_SYNTAX.test(x.trim()))) return no('spec_shell_syntax');
-  const commands = strings.map((x) => {
-    const a = x.trim().split(/ +/u);
+  const parsed = strings.map((x) => x.trim().split(/ +/u));
+  /* Skywalker 44c062b9 M1/M2: bare `node --test` (node's own discovery) becomes the explicit list of test files TRACKED
+     AT BASE, so each is pinned and nothing the coder adds is run. */
+  for (const a of parsed) {
+    if (a.length === 2 && progName(a[0] as string) === 'node' && a[1] === '--test') {
+      const found = baseTestFiles(input.workspace, input.base);
+      if (found === null || found.length === 0) return no('spec_file_not_at_base');
+      a.push(...found);
+    }
+  }
+  const commands = parsed.map((a) => {
     /* R4-3: node --test always reports TAP so the gate can read the summary. */
     return Object.freeze(progName(a[0] as string) === 'node' && a[1] === '--test' && a[2] !== '--test-reporter=tap' ? [a[0] as string, '--test', '--test-reporter=tap', ...a.slice(2)] : a);
   });
