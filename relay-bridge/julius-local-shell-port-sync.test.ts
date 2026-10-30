@@ -165,6 +165,21 @@ describe('local shell port: cloud-agent sync allowlist', () => {
     expect(s.ranSync().length).toBe(before);
   });
 
+  it('Skywalker M76: a .git suffix (any case) on owner or repo is refused by the generator, the recogniser and the shell port', async () => {
+    for (const [o, r] of [[OWNER, `${REPO}.git`], [`${OWNER}.git`, REPO], [OWNER, `${REPO}.GIT`], [OWNER, `${REPO}.Git`], [OWNER, '.git']] as const) {
+      expect(() => grokWorkspaceCommands.fetchBranch(o, r, BRANCH, BASE), `${o}/${r}`).toThrow('grok_workspace_command_argument_unsafe');
+    }
+    const suffixed = FETCH.replace(`github.com/${OWNER}/${REPO}.git`, `github.com/${OWNER}/${REPO}.git.git`);
+    expect(suffixed).not.toBe(FETCH);
+    expect(matchGrokWorkspaceCommand(suffixed)).toBeNull();
+    const s = await opened();
+    expect(await s.run(suffixed)).toEqual(refused('command_not_allowed'));
+    expect(s.ranSync()).toEqual([]);
+    /* a name merely containing "git" is fine */
+    expect(() => grokWorkspaceCommands.fetchBranch(OWNER, 'gitops', BRANCH, BASE)).not.toThrow();
+    expect(() => grokWorkspaceCommands.fetchBranch(OWNER, 'a.github', BRANCH, BASE)).not.toThrow();
+  });
+
   it('recogniser: accepts only round-trip generator output', () => {
     expect(matchGrokWorkspaceCommand(BASE_REV)).toEqual({ kind: 'baseRevision' });
     expect(matchGrokWorkspaceCommand(grokWorkspaceCommands.workspaceRoot())).toEqual({ kind: 'workspaceRoot' });

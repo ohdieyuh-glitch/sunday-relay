@@ -14,7 +14,7 @@ import {
 } from '../../src/relay/mission/julius/julius-coding-agent';
 import type { ShellEffectPort } from './executor-effects';
 import { cursorTransportMode } from './cursor-cloud-agents-transport';
-import { grokWorkspaceCommands, isSafeBranchName } from './grok-workspace-commands';
+import { grokWorkspaceCommands, isSafeBranchName, isSafeOwnerRepo } from './grok-workspace-commands';
 
 /**
  * THE GROK BOT CODER: a `JuliusCodingAgentProvider` (julius-coding-agent.ts, the one-method port) whose session runs as a
@@ -248,7 +248,7 @@ export function createShellGrokBotWorkspacePort(input: {
     async fetchBranch({ workspacePath, repoUrl, branch, baseRevision }) {
       if (!samePath(workspacePath)) return { ok: false, cause: 'workspace_path_mismatch' };
       const parsed = parseGithubRepoUrl(repoUrl);
-      if (parsed === null || !isSafeBranchName(branch) || !SHA40.test(baseRevision)) return { ok: false, cause: 'fetch_input_unsafe' };
+      if (parsed === null || !isSafeOwnerRepo(parsed.owner) || !isSafeOwnerRepo(parsed.repo) || !isSafeBranchName(branch) || !SHA40.test(baseRevision)) return { ok: false, cause: 'fetch_input_unsafe' };
       if (!(await shellIsAtBound())) return { ok: false, cause: 'workspace_cwd_mismatch' };
       let r;
       try { r = await run('fetch', grokWorkspaceCommands.fetchBranch(parsed.owner, parsed.repo, branch, baseRevision)); } catch { return { ok: false, cause: 'fetch_failed' }; }

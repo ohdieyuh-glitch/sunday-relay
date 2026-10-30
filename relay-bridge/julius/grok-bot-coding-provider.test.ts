@@ -737,6 +737,17 @@ describe('F13: the shell port must be running at workspacePath before any comman
       expect(seen.every((c) => c === grokWorkspaceCommands.workspaceRoot()), out).toBe(true);
     }
   });
+  it('Skywalker M76: a repo URL whose owner or repo still ends in .git after the one optional suffix is refused before any command', async () => {
+    for (const url of ['https://github.com/example-org/example-target.git.git', 'https://github.com/example-org/example-target.GIT.git', 'https://github.com/example-org.git/example-target']) {
+      const seen: string[] = [];
+      const port = createShellGrokBotWorkspacePort({ workspacePath: '/w', ids, shell: reporting('PWD /w\nTOP /w\n', seen) });
+      expect(await port.fetchBranch({ workspacePath: '/w', repoUrl: url, branch: 'cursor/fix-1', baseRevision: BASE }), url).toEqual({ ok: false, cause: 'fetch_input_unsafe' });
+      expect(seen, url).toEqual([]);
+    }
+    const seen: string[] = [];
+    const ok = createShellGrokBotWorkspacePort({ workspacePath: '/w', ids, shell: reporting('PWD /w\nTOP /w\n', seen) });
+    expect(await ok.fetchBranch({ workspacePath: '/w', repoUrl: 'https://github.com/example-org/example-target.git', branch: 'cursor/fix-1', baseRevision: BASE })).toMatchObject({ ok: true });
+  });
   it('a shell at the bound path: the check runs immediately before EACH command', async () => {
     const seen: string[] = [];
     const port = createShellGrokBotWorkspacePort({ workspacePath: '/w', ids, shell: reporting('PWD /w\nTOP /w\n', seen) });

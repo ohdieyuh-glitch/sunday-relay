@@ -16,7 +16,8 @@ export function isSafeBranchName(branch: string): boolean {
   return /^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$/u.test(branch) && !branch.includes('..') && !branch.includes('//')
     && !branch.endsWith('/') && !branch.endsWith('.lock') && !branch.endsWith('.');
 }
-const isSafeOwnerRepo = (v: string): boolean => SAFE_OWNER_REPO.test(v) && v !== '.' && v !== '..' && !v.endsWith('.git');
+/** An owner or repository name: a `.git` suffix (any case) is refused, so the URL is never `<repo>.git.git` or a near-alias. */
+export const isSafeOwnerRepo = (v: string): boolean => SAFE_OWNER_REPO.test(v) && v !== '.' && v !== '..' && !v.toLowerCase().endsWith('.git');
 
 const q = (value: string): string => `'${value.replace(/'/gu, `'\\''`)}'`;
 export const GROK_FETCHED_REF = 'refs/julius/grok-coder/fetched';
