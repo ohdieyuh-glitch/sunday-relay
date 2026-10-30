@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -79,6 +79,12 @@ function fakeWorkspace(over: Partial<{ changes: { path: string; change: 'MODIFIE
   return { workspace, calls };
 }
 
+/** F13: a mock shell that answers the port's cwd check as a shell running at `at`, and passes every other command on. */
+const rooted = (at: string, shell: { run: (i: { command: string }) => Promise<unknown> }) => ({
+  run: async (i: { command: string }) => (i.command === grokWorkspaceCommands.workspaceRoot()
+    ? { status: 'SUCCEEDED', stdout: `PWD ${at}\nTOP ${at}\n`, stderr: '', exitCode: 0 }
+    : shell.run(i)),
+}) as never;
 /** The wired reviewer pin a test config describes (the config's own reviewer fields are only a cross-check now, N1). */
 const pinOf = (cfg: GrokBotCoderConfig | null): GrokBotReviewerPin | null =>
   cfg === null || typeof cfg.reviewerModelId !== 'string' || typeof cfg.reviewerModelFamily !== 'string' ? null : { modelId: cfg.reviewerModelId, modelFamily: cfg.reviewerModelFamily };
@@ -576,7 +582,7 @@ describe('the shell-backed workspace port issues fixed commands: fetch into a pr
     const port = createShellGrokBotWorkspacePort({
       workspacePath: '/w',
       ids: { runId: 'r', projectId: 'p', taskId: 't', workerId: 'w' },
-      shell: { run: async (i: { command: string }) => { cmds.push(i.command); return { status: 'SUCCEEDED', stdout: i.command.includes('fetch') ? `HEAD ${HEAD}\n:100644 100644 1111111111111111111111111111111111111111 2222222222222222222222222222222222222222 M\tsrc/a.ts\n` : i.command.includes('apply') ? 'APPLIED' : BASE, stderr: '', exitCode: 0 }; } } as never,
+      shell: rooted('/w', { run: async (i: { command: string }) => { cmds.push(i.command); return { status: 'SUCCEEDED', stdout: i.command.includes('fetch') ? `HEAD ${HEAD}\n:100644 100644 1111111111111111111111111111111111111111 2222222222222222222222222222222222222222 M\tsrc/a.ts\n` : i.command.includes('apply') ? 'APPLIED' : BASE, stderr: '', exitCode: 0 }; } }),
     });
     expect(await port.baseRevision('/w')).toEqual({ ok: true, sha: BASE });
     expect(await port.fetchBranch({ workspacePath: '/w', repoUrl: TARGET, branch: 'cursor/fix-1', baseRevision: BASE })).toMatchObject({ ok: true, headSha: HEAD });
@@ -595,7 +601,7 @@ describe('M3: the scope check sees modes and type changes (git diff --raw --no-r
   const portWith = (lines: string[]) => createShellGrokBotWorkspacePort({
     workspacePath: '/w',
     ids: { runId: 'r', projectId: 'p', taskId: 't', workerId: 'w' },
-    shell: { run: async (i: { command: string }) => ({ status: 'SUCCEEDED', stdout: i.command.includes('fetch') ? `HEAD ${HEAD}\n${lines.join('\n')}\n` : 'APPLIED', stderr: '', exitCode: 0 }) } as never,
+    shell: rooted('/w', { run: async (i: { command: string }) => ({ status: 'SUCCEEDED', stdout: i.command.includes('fetch') ? `HEAD ${HEAD}\n${lines.join('\n')}\n` : 'APPLIED', stderr: '', exitCode: 0 }) }),
   });
   const fetch = (lines: string[]) => portWith(lines).fetchBranch({ workspacePath: '/w', repoUrl: TARGET, branch: 'cursor/fix-1', baseRevision: BASE });
 
@@ -641,7 +647,7 @@ describe('F5/F6/F13: exec bits, protected paths, an empty permitted list, and th
   const portAt = (bound: string, lines: string[], seen: string[] = []) => createShellGrokBotWorkspacePort({
     workspacePath: bound,
     ids: { runId: 'r', projectId: 'p', taskId: 't', workerId: 'w' },
-    shell: { run: async (i: { command: string }) => { seen.push(i.command); return { status: 'SUCCEEDED', stdout: i.command.includes('fetch') ? `HEAD ${HEAD}\n${lines.join('\n')}\n` : i.command.includes('apply') ? 'APPLIED' : BASE, stderr: '', exitCode: 0 }; } } as never,
+    shell: rooted(bound, { run: async (i: { command: string }) => { seen.push(i.command); return { status: 'SUCCEEDED', stdout: i.command.includes('fetch') ? `HEAD ${HEAD}\n${lines.join('\n')}\n` : i.command.includes('apply') ? 'APPLIED' : BASE, stderr: '', exitCode: 0 }; } }),
   });
 
   it('F5 + PILOT Low 5: an executable-bit flip either way, and a NEW executable file, are unsafe', async () => {
@@ -709,6 +715,58 @@ describe('F5/F6/F13: exec bits, protected paths, an empty permitted list, and th
   });
 });
 
+describe('F13: the shell port must be running at workspacePath before any command runs', () => {
+  const ids = { runId: 'r', projectId: 'p', taskId: 't', workerId: 'w' };
+  const reporting = (stdout: string | 'throw' | 'fail', seen: string[]) => ({
+    run: async (i: { command: string }) => {
+      seen.push(i.command);
+      if (i.command === grokWorkspaceCommands.workspaceRoot()) {
+        if (stdout === 'throw') throw new Error('shell down');
+        return stdout === 'fail' ? { status: 'FAILED', stdout: '', stderr: 'x', exitCode: 1 } : { status: 'SUCCEEDED', stdout, stderr: '', exitCode: 0 };
+      }
+      return { status: 'SUCCEEDED', stdout: i.command.includes('fetch') ? `HEAD ${HEAD}\n` : i.command.includes('apply') ? 'APPLIED' : BASE, stderr: '', exitCode: 0 };
+    },
+  }) as never;
+  it('a shell elsewhere, in a subdirectory, with a different top level, or that cannot answer: every operation is refused and nothing else runs', async () => {
+    for (const out of ['PWD /other\nTOP /other\n', 'PWD /w/src\nTOP /w\n', 'PWD /w\nTOP /other\n', 'PWD /w\nTOP /w', 'PWD /w\nTOP /w\nPWD /w\n', 'PWD /w/\nTOP /w/\n', 'TOP /w\nPWD /w\n', '', 'throw', 'fail'] as const) {
+      const seen: string[] = [];
+      const port = createShellGrokBotWorkspacePort({ workspacePath: '/w', ids, shell: reporting(out, seen) });
+      expect(await port.baseRevision('/w'), out).toEqual({ ok: false, cause: 'workspace_cwd_mismatch' });
+      expect(await port.fetchBranch({ workspacePath: '/w', repoUrl: TARGET, branch: 'cursor/fix-1', baseRevision: BASE }), out).toEqual({ ok: false, cause: 'workspace_cwd_mismatch' });
+      expect(await port.applyFetched({ workspacePath: '/w', baseRevision: BASE, headSha: HEAD }), out).toEqual({ ok: false, cause: 'workspace_cwd_mismatch' });
+      expect(seen.every((c) => c === grokWorkspaceCommands.workspaceRoot()), out).toBe(true);
+    }
+  });
+  it('a shell at the bound path: the check runs immediately before EACH command', async () => {
+    const seen: string[] = [];
+    const port = createShellGrokBotWorkspacePort({ workspacePath: '/w', ids, shell: reporting('PWD /w\nTOP /w\n', seen) });
+    expect(await port.baseRevision('/w')).toEqual({ ok: true, sha: BASE });
+    expect(await port.fetchBranch({ workspacePath: '/w', repoUrl: TARGET, branch: 'cursor/fix-1', baseRevision: BASE })).toMatchObject({ ok: true, headSha: HEAD });
+    expect(await port.applyFetched({ workspacePath: '/w', baseRevision: BASE, headSha: HEAD })).toEqual({ ok: true });
+    const root = grokWorkspaceCommands.workspaceRoot();
+    expect(seen.map((c) => (c === root ? 'root' : c.includes('apply') ? 'apply' : c.includes('fetch') ? 'fetch' : 'base'))).toEqual(['root', 'base', 'root', 'fetch', 'root', 'apply']);
+  });
+  it('the provider stops before create when the shell is elsewhere', async () => {
+    const t = fakeTransport();
+    const port = createShellGrokBotWorkspacePort({ workspacePath: '/tmp/ws', ids, shell: reporting('PWD /tmp/other\nTOP /tmp/other\n', []) });
+    const f = failed((await run({ t, w: { workspace: port, calls: { fetch: 0, apply: 0 } } as never })).outcome);
+    expect(f).toMatchObject({ runtimeStarted: false, providerFailureClass: 'coder_grok_base_revision_unreadable' });
+    expect(t.calls.create).toHaveLength(0);
+  });
+  it('with real bash and git: the generated check reports the repository root, and a subdirectory does not pass', () => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'grok-root-')));
+    try {
+      execFileSync('git', ['init', '-q', dir]);
+      mkdirSync(join(dir, 'src'));
+      const at = (cwd: string) => execFileSync('bash', ['-c', grokWorkspaceCommands.workspaceRoot()], { cwd, encoding: 'utf8', env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: dir } });
+      expect(at(dir)).toBe(`PWD ${dir}\nTOP ${dir}\n`);
+      expect(at(join(dir, 'src'))).toBe(`PWD ${join(dir, 'src')}\nTOP ${dir}\n`);
+      symlinkSync(dir, `${dir}-link`);
+      expect(at(`${dir}-link`)).toBe(`PWD ${dir}\nTOP ${dir}\n`);
+    } finally { rmSync(dir, { recursive: true, force: true }); rmSync(`${dir}-link`, { force: true }); }
+  });
+});
+
 describe('F5: with REAL git (local temp repository, no network), the generated diff command and the port\'s parser agree', () => {
   it('a plain edit, a new plain file and an edit to an existing executable pass; a new executable, an exec-bit flip, a symlink, a type change and a gitlink are unsafe; .github is protected', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'grok-raw-'));
@@ -730,7 +788,7 @@ describe('F5: with REAL git (local temp repository, no network), the generated d
         const out = execFileSync('bash', ['-c', `head=${head}\n${diffLine}`], { cwd: dir, encoding: 'utf8' });
         const port = createShellGrokBotWorkspacePort({
           workspacePath: dir, ids: { runId: 'r', projectId: 'p', taskId: 't', workerId: 'w' },
-          shell: { run: async () => ({ status: 'SUCCEEDED', stdout: `HEAD ${head}\n${out}`, stderr: '', exitCode: 0 }) } as never,
+          shell: rooted(dir, { run: async () => ({ status: 'SUCCEEDED', stdout: `HEAD ${head}\n${out}`, stderr: '', exitCode: 0 }) }),
         });
         return port.fetchBranch({ workspacePath: dir, repoUrl: TARGET, branch: 'cursor/fix-1', baseRevision: base });
       };

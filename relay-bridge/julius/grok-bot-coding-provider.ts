@@ -223,9 +223,22 @@ export function createShellGrokBotWorkspacePort(input: {
   };
   const bound = typeof input.workspacePath === 'string' && input.workspacePath !== '' ? input.workspacePath : null;
   const samePath = (p: string): boolean => bound !== null && p === bound;
+  /**
+   * F13: the request's path naming the bound path is not enough; the SHELL PORT must be running there. Before every
+   * command, read its physical cwd and git's top level; both must equal the bound path exactly (so the bound path must be
+   * the canonical, symlink-free repository root). Anything else, including a port that cannot answer, is refused.
+   */
+  const shellIsAtBound = async (): Promise<boolean> => {
+    try {
+      const r = await run('root', grokWorkspaceCommands.workspaceRoot());
+      if (r.status !== 'SUCCEEDED' || bound === null) return false;
+      return r.stdout === `PWD ${bound}\nTOP ${bound}\n`;
+    } catch { return false; }
+  };
   return {
     async baseRevision(workspacePath) {
       if (!samePath(workspacePath)) return { ok: false, cause: 'workspace_path_mismatch' };
+      if (!(await shellIsAtBound())) return { ok: false, cause: 'workspace_cwd_mismatch' };
       try {
         const r = await run('base', grokWorkspaceCommands.baseRevision());
         const sha = r.stdout.trim();
@@ -236,6 +249,7 @@ export function createShellGrokBotWorkspacePort(input: {
       if (!samePath(workspacePath)) return { ok: false, cause: 'workspace_path_mismatch' };
       const parsed = parseGithubRepoUrl(repoUrl);
       if (parsed === null || !isSafeBranchName(branch) || !SHA40.test(baseRevision)) return { ok: false, cause: 'fetch_input_unsafe' };
+      if (!(await shellIsAtBound())) return { ok: false, cause: 'workspace_cwd_mismatch' };
       let r;
       try { r = await run('fetch', grokWorkspaceCommands.fetchBranch(parsed.owner, parsed.repo, branch, baseRevision)); } catch { return { ok: false, cause: 'fetch_failed' }; }
       if (r.status !== 'SUCCEEDED') return { ok: false, cause: 'fetch_failed' };
@@ -264,6 +278,7 @@ export function createShellGrokBotWorkspacePort(input: {
     async applyFetched({ workspacePath, baseRevision, headSha }) {
       if (!samePath(workspacePath)) return { ok: false, cause: 'workspace_path_mismatch' };
       if (!SHA40.test(baseRevision) || !SHA40.test(headSha)) return { ok: false, cause: 'apply_input_unsafe' };
+      if (!(await shellIsAtBound())) return { ok: false, cause: 'workspace_cwd_mismatch' };
       try {
         const r = await run('apply', grokWorkspaceCommands.applyFetched(baseRevision, headSha));
         return r.status === 'SUCCEEDED' && r.stdout.trim().endsWith('APPLIED') ? { ok: true } : { ok: false, cause: 'apply_failed' };

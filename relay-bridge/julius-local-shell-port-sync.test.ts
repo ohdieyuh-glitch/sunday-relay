@@ -67,6 +67,16 @@ describe('local shell port: cloud-agent sync allowlist', () => {
     expect((await s.run(juliusAttemptCloseCommand({ baseTree: BASE, startTree: START }))).status).toBe('SUCCEEDED');
   });
 
+  it('F13: the read-only cwd check is a sync command too: run inside an open attempt, refused outside one and by default', async () => {
+    const ROOT = grokWorkspaceCommands.workspaceRoot();
+    const s = await opened();
+    expect((await s.run(ROOT)).status).toBe('SUCCEEDED');
+    expect(s.ranSync()).toEqual([ROOT]);
+    expect(await setup().run(ROOT)).toEqual(refused('sync_outside_attempt'));
+    const t = setup(null); await t.run(juliusAttemptStartCommand(null));
+    expect(await t.run(ROOT)).toEqual(refused('command_not_allowed'));
+  });
+
   it('default (no cloudAgentSync): every sync command is refused exactly as before', async () => {
     const t = setup(null); await t.run(juliusAttemptStartCommand(null));
     for (const c of [BASE_REV, FETCH, APPLY]) expect(await t.run(c)).toEqual(refused('command_not_allowed'));
@@ -157,6 +167,10 @@ describe('local shell port: cloud-agent sync allowlist', () => {
 
   it('recogniser: accepts only round-trip generator output', () => {
     expect(matchGrokWorkspaceCommand(BASE_REV)).toEqual({ kind: 'baseRevision' });
+    expect(matchGrokWorkspaceCommand(grokWorkspaceCommands.workspaceRoot())).toEqual({ kind: 'workspaceRoot' });
+    for (const near of [`${grokWorkspaceCommands.workspaceRoot()}\n`, grokWorkspaceCommands.workspaceRoot().replace('pwd -P', 'pwd'), grokWorkspaceCommands.workspaceRoot().replace('--show-toplevel', '--show-toplevel; id'), `cd / && ${grokWorkspaceCommands.workspaceRoot()}`]) {
+      expect(matchGrokWorkspaceCommand(near), near).toBeNull();
+    }
     expect(matchGrokWorkspaceCommand(FETCH)).toEqual({ kind: 'fetchBranch', owner: OWNER, repo: REPO, branch: BRANCH, base: BASE });
     expect(matchGrokWorkspaceCommand(APPLY)).toEqual({ kind: 'applyFetched', base: BASE, head: AGENT_HEAD });
     /* no near-miss parses as a sync command at all: each is refused as command_not_allowed by the recogniser itself */

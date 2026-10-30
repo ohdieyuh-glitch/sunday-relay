@@ -22,8 +22,13 @@ const q = (value: string): string => `'${value.replace(/'/gu, `'\\''`)}'`;
 export const GROK_FETCHED_REF = 'refs/julius/grok-coder/fetched';
 const GIT = 'git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c protocol.allow=never -c protocol.https.allow=always';
 
-/** The three fixed command shapes the workspace port issues. Each generator THROWS on an unvalidated argument. */
+/** The fixed command shapes the workspace port issues. Each generator THROWS on an unvalidated argument. */
 export const grokWorkspaceCommands = Object.freeze({
+  /**
+   * F13: where the shell port really runs, read-only: the physical working directory and git's top level. The port runs
+   * this before every other command and refuses unless BOTH equal its configured `workspacePath` exactly.
+   */
+  workspaceRoot: (): string => ['set -eu', 'printf \'PWD %s\\n\' "$(pwd -P)"', `printf 'TOP %s\\n' "$(${GIT} rev-parse --show-toplevel)"`].join('\n'),
   baseRevision: (): string => `${GIT} rev-parse --verify 'HEAD^{commit}'`,
   fetchBranch: (owner: string, repo: string, branch: string, base: string): string => {
     if (!isSafeOwnerRepo(owner) || !isSafeOwnerRepo(repo) || !isSafeBranchName(branch) || !SHA40.test(base)) throw new Error('grok_workspace_command_argument_unsafe');
@@ -52,6 +57,7 @@ export const grokWorkspaceCommands = Object.freeze({
 });
 
 export type GrokWorkspaceCommandMatch =
+  | { readonly kind: 'workspaceRoot' }
   | { readonly kind: 'baseRevision' }
   | { readonly kind: 'fetchBranch'; readonly owner: string; readonly repo: string; readonly branch: string; readonly base: string }
   | { readonly kind: 'applyFetched'; readonly base: string; readonly head: string };
@@ -80,6 +86,7 @@ const APPLY_RE = templateRe(grokWorkspaceCommands.applyFetched(T_BASE, T_HEAD), 
  */
 export function matchGrokWorkspaceCommand(command: string): GrokWorkspaceCommandMatch | null {
   if (typeof command !== 'string' || command.length > 4096) return null;
+  if (command === grokWorkspaceCommands.workspaceRoot()) return { kind: 'workspaceRoot' };
   if (command === grokWorkspaceCommands.baseRevision()) return { kind: 'baseRevision' };
   const roundTrip = (build: () => string): boolean => { try { return build() === command; } catch { return false; } };
   const f = FETCH_RE.exec(command);
