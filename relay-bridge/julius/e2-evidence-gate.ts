@@ -396,8 +396,29 @@ export type E2VerifierSpecRefusal =
   | 'spec_invalid' | 'spec_shell_syntax' | 'spec_base_invalid' | 'spec_workspace_invalid'
   | E2VerifierShapeRefusal | 'spec_file_not_at_base' | 'spec_base_run_untrusted' | 'spec_base_tree_unreadable';
 const SPECS = new WeakSet<object>();
-/** R4-3: test()/it() calls in a base-pinned test file (a static count; over-counting only raises the floor). */
-const BASE_TEST_CALL = /\b(?:test|it)\s*\(/gu;
+/**
+ * R4-3 / Round 6 R5-7: test()/it() calls in a base-pinned test file, a static count. Comments, string and template
+ * literals are blanked first by a one-pass lexer (linear), and a member call (`re.test(`, `x.it(`) does not count.
+ * Regex literals are not lexed (a `test(` inside one still counts: over-counting only raises the floor). Calls made
+ * through an alias or in a loop are under-counted; the base run (pinVerifierSpecWithBaseRun) covers those.
+ */
+const BASE_TEST_CALL = /(?<![.\w$])(?:test|it)\s*\(/gu;
+export function stripJsNoise(src: string): string {
+  let out = '';
+  let i = 0;
+  while (i < src.length) {
+    const c = src[i] as string; const d = src[i + 1];
+    if (c === '/' && d === '/') { const j = src.indexOf('\n', i); i = j === -1 ? src.length : j; out += ' '; continue; }
+    if (c === '/' && d === '*') { const j = src.indexOf('*/', i + 2); i = j === -1 ? src.length : j + 2; out += ' '; continue; }
+    if (c === "'" || c === '"' || c === '`') {
+      let j = i + 1;
+      while (j < src.length && src[j] !== c && !(c !== '`' && src[j] === '\n')) j += src[j] === '\\' ? 2 : 1;
+      i = j + 1; out += ' 0 '; continue;
+    }
+    out += c; i += 1;
+  }
+  return out;
+}
 const SHELL_SYNTAX = /[;&|<>$`'"\\(){}[\]*?~!#=%^\r\n\t]/u;
 const gitBlob = (workspace: string, base: string, path: string): Buffer | null => {
   const bin = resolveProgram('git');
@@ -459,7 +480,7 @@ export function pinVerifierSpec(input: E2MissionVerifierInput): E2VerifierSpec |
       const blob = gitBlob(input.workspace, input.base, f);
       if (blob === null) return no('spec_file_not_at_base');
       pins[f] = sha256(blob);
-      atBase += (blob.toString('utf8').match(BASE_TEST_CALL) ?? []).length;
+      atBase += (stripJsNoise(blob.toString('utf8')).match(BASE_TEST_CALL) ?? []).length;
     }
     minTests.push(argv[1] === '--test' ? Math.max(1, input.minTests ?? 0, atBase) : null);
     if (shape.configs) for (const f of TOOL_CONFIGS) { const blob = gitBlob(input.workspace, input.base, f); pins[f] = blob === null ? 'absent' : sha256(blob); }
