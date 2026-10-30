@@ -145,6 +145,11 @@ describe('PILOT 0774db05 H-3: the gate verifies the evidence FILE against an anc
     const forged = rechain(lines, (r) => { if (r.kind === 'final') r.cause = 'e2_stream_gap'; });
     const anchor = { finalHash: (verifyEvidenceChain(forged) as { finalHash: string }).finalHash };
     expect(reasons(e2Gate({ ...g, streamLines: forged, anchor }))).toEqual(['e2_stream_failed']);
+    /* Mutation R7/R8: the gate reads unfinishedCalls and toolCallCount from the final record itself. */
+    for (const [edit, want] of [[(r: Record<string, unknown>) => { r.unfinishedCalls = 1; }, 'e2_stream_call_unfinished'], [(r: Record<string, unknown>) => { r.toolCallCount = 0; }, 'e2_no_tool_calls']] as const) {
+      const f = rechain(lines, (r) => { if (r.kind === 'final') edit(r); });
+      expect(reasons(e2Gate({ ...g, streamLines: f, anchor: { finalHash: (verifyEvidenceChain(f) as { finalHash: string }).finalHash } }))).toEqual([want]);
+    }
     expect(evidence.cause).toBeNull();
   });
 });
@@ -236,6 +241,11 @@ describe('PILOT 0774db05 M-8: the diff hash does not depend on local git config'
     try {
       const configured = await recordGitDiff({ base, head, cwd: repo, runner });
       expect(configured?.sha256).toBe(plain?.sha256);
+      /* Mutation R25: a global config handed to the runner's env is not read either. */
+      const gc = join(root, 'global.gitconfig');
+      writeFileSync(gc, '[diff]\n\tnoprefix = true\n\trenames = true\n');
+      const viaGlobal = await recordGitDiff({ base, head, cwd: repo, runner: spawnVerifierRunner({ env: { GIT_CONFIG_GLOBAL: gc, GIT_CONFIG_SYSTEM: gc } }) });
+      expect(viaGlobal?.sha256).toBe(plain?.sha256);
       expect(plain).toMatchObject({ exitCode: 0, ancestry: true, cwd: repo });
       expect(plain?.argv).toEqual(expect.arrayContaining(['diff.noprefix=false', 'diff.renames=false', 'core.quotepath=false', '--no-renames']));
     } finally {

@@ -130,6 +130,23 @@ describe('PILOT 0774db05: capture findings', () => {
       expect(r.evidence.cause).toBe('e2_evidence_write_failed');
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
+  it('L-5 (mutation Q22): a regular file swapped in at the path after the first write is refused, never appended to', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'e2swap-'));
+    try {
+      const path = join(dir, 'ev.jsonl');
+      const file = createFileEvidenceSink(path);
+      let first = true;
+      const sink: E2EvidenceSink = {
+        async append(line) {
+          await file.append(line);
+          if (first) { first = false; renameSync(path, `${path}.moved`); writeFileSync(path, 'other\n'); }
+        },
+      };
+      const r = await capture([{ chunks: [START, call('c1', 'read_file', 'completed', '1713033002000-0'), RESULT, DONE] }], { sink });
+      expect(r.evidence.cause).toBe('e2_evidence_write_failed');
+      expect(readFileSync(path, 'utf8')).toBe('other\n');
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
   it('L-6: the per-event cap counts UTF-8 bytes, not characters', async () => {
     const small = await capture([{ chunks: [START, ev('assistant', { text: '\u00e9'.repeat(400_000) }, '1713033002000-0'), call('c1', 'read_file', 'completed', '1713033003000-0'), RESULT, DONE] }]);
     expect(small.evidence.cause).toBeNull();
