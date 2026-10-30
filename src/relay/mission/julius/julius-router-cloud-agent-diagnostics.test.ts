@@ -32,8 +32,22 @@ describe('router diagnostics: cloud coding agent identifiers', () => {
     expect(safeCloudAgentBranch(`${BRANCH}${'\u200B'.repeat(500)}`)).toBeNull();
   });
 
-  it('control characters are stripped; any line break refuses the whole value (log-line injection)', () => {
-    expect(safeCloudAgentBranch('cursor/fix\u0000-1')).toBe('cursor/fix-1');
+  it('Skywalker N10: a branch with any invisible or control character is refused, never cleaned into another ref name', () => {
+    for (const ch of ['\u0000', '\u0007', '\u001B', '\u007F', '\u0080', '\u009F', '\u00AD', '\u061C', '\u115F', '\u17B4', '\u180E', '\u200B', '\u200C', '\u200D', '\u200E', '\u200F', '\u202A', '\u202E', '\u2060', '\u2066', '\u3164', '\uFE0F', '\uFEFF', '\uFFA0', '\uFFF9']) {
+      for (const b of [`cur${ch}sor/x`, `${ch}cursor/x`, `cursor/x${ch}`]) {
+        expect(safeCloudAgentBranch(b), JSON.stringify(b)).toBeNull();
+        expect(d({ agentBranch: b }).agentBranch, JSON.stringify(b)).toBeNull();
+      }
+    }
+    /* repeated calls are independent (no regex lastIndex state) and a clean branch still passes */
+    expect(safeCloudAgentBranch('cur\u200Bsor/x')).toBeNull();
+    expect(safeCloudAgentBranch('cur\u200Bsor/x')).toBeNull();
+    expect(safeCloudAgentBranch('cursor/x')).toBe('cursor/x');
+    expect(d({ agentBranch: 'cursor/x' }).agentBranch).toBe('cursor/x');
+  });
+
+  it('control characters are stripped from a model id; a branch refuses them (N10); any line break refuses the whole value (log-line injection)', () => {
+    expect(safeCloudAgentBranch('cursor/fix\u0000-1')).toBeNull();
     expect(safeCloudAgentModel('grok\u0007-4\u007F')).toBe('grok-4');
     expect(safeCloudAgentModel('grok\t-4\u001B[31m')).toBeNull(); // ESC stripped leaves `[31m`, which the charset refuses
     for (const hostile of [

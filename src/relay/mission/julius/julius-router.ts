@@ -242,7 +242,11 @@ const safeCloudAgentText=(value:unknown,max:number,shape:RegExp):string|null=>{
 /** Cursor's agent id shape, `bc-` and a UUID. */
 export const safeCloudAgentId=(value:unknown):string|null=>safeCloudAgentText(value,39,CLOUD_AGENT_ID);
 /** A git branch name in a conservative subset of git's ref rules: no `..`, `//`, `@{`, trailing `/`, `.` or `.lock`. */
+/** Skywalker N10: one invisible or control character anywhere refuses a branch, so the logged branch is never a cleaned-up
+ * spelling of a different real ref (`cur\u200Bsor/x` is not `cursor/x`). */
+const CLOUD_AGENT_INVISIBLE_ANY=new RegExp(CLOUD_AGENT_INVISIBLE.source,'u');
 export const safeCloudAgentBranch=(value:unknown):string|null=>{
+ if(typeof value==='string'&&CLOUD_AGENT_INVISIBLE_ANY.test(value))return null;
  const s=safeCloudAgentText(value,200,CLOUD_AGENT_BRANCH);
  return s===null||s.includes('..')||s.includes('//')||s.endsWith('/')||s.endsWith('.')||s.endsWith('.lock')?null:s;
 };
