@@ -314,6 +314,11 @@ const ROUTER_ALIASES = new Set(['auto', 'default', 'auto-smart', 'auto-fast', 'b
 /** Any id with one of these as a dash/dot/underscore-delimited token is a router, not a pinned model (`cursor-auto`, `default-model`). */
 const ROUTER_TOKEN = /(^|[-._:])(auto|default|best|router|latest|balance|balanced|intelligence)($|[-._:])/u;
 /** Digit/letter lookalikes folded before the Claude and alias checks (`c1aude`, `0pus`, `s0nnet`). */
+/**
+ * N7: `1`, `|` and `!` read as `i` as easily as `l` (`ha1ku`), so the vendor-name checks also look at the fold with every
+ * `l` read as `i`. Only ever used to REFUSE (Claude) or to place an id in a family that is then compared; never to admit.
+ */
+const foldVariants = (v: string): readonly string[] => { const f = foldLookalikes(v); return [f, f.replace(/l/gu, 'i')]; };
 const foldLookalikes = (v: string): string => v.toLowerCase().normalize('NFKC').replace(/[1|!]/gu, 'l').replace(/0/gu, 'o').replace(/3/gu, 'e').replace(/5/gu, 's').replace(/4/gu, 'a').replace(/[\u200b-\u200f\ufeff]/gu, '');
 
 /** One canonical family per vendor, whatever a person typed. Unknown labels stay as typed (lower-cased, trimmed). */
@@ -333,7 +338,7 @@ export const familyFromModelId = (id: string): string | null => {
   const v = foldLookalikes(id);
   const raw = id.trim().toLowerCase();
   if (/grok|xai/u.test(v) || /grok|xai/u.test(raw)) return 'xai';
-  if (/claude|anthropic|opus|sonnet|haiku/u.test(v)) return 'anthropic';
+  if (foldVariants(id).some((f) => /claude|anthropic|opus|sonnet|haiku/u.test(f))) return 'anthropic';
   if (/gpt|openai|codex/u.test(v) || /(^|[-._])o[1-9]($|[-._])/u.test(raw)) return 'openai';
   if (/gemini/u.test(v)) return 'google';
   if (/composer|cursor/u.test(v)) return 'cursor';
@@ -388,7 +393,7 @@ export function grokBotCoderConfigRefusal(config: GrokBotCoderConfig | null | un
   if (config === null || config === undefined) return refuse('coder_grok_config_absent', 'The Grok Bot coder is not configured; nothing was dispatched.');
   const model = config.pinnedModelId;
   if (typeof model !== 'string' || !MODEL_ID.test(model)) return refuse('coder_grok_config_model_absent', 'No pinned Grok Bot coder model id is configured; nothing was dispatched.');
-  if (CLAUDE_LIKE.test(model) || CLAUDE_LIKE.test(foldLookalikes(model))) return refuse('coder_grok_model_claude_refused', 'The Grok Bot coder refuses a Claude model; there is no Claude fallback.');
+  if (CLAUDE_LIKE.test(model) || foldVariants(model).some((f) => CLAUDE_LIKE.test(f))) return refuse('coder_grok_model_claude_refused', 'The Grok Bot coder refuses a Claude model; there is no Claude fallback.');
   if (ROUTER_ALIASES.has(foldLookalikes(model)) || ROUTER_TOKEN.test(foldLookalikes(model))) return refuse('coder_grok_model_router_refused', 'The Grok Bot coder refuses a router alias; the model must be pinned.');
   const coderFamily = typeof config.coderModelFamily === 'string' ? canonicalModelFamily(config.coderModelFamily) : '';
   if (coderFamily === '') return refuse('coder_grok_config_family_absent', 'The coder model family is not configured; nothing was dispatched.');

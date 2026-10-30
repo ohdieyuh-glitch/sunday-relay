@@ -477,6 +477,29 @@ describe('configuration fails closed, before anything is sent', () => {
     expect(normaliseModelId('grok-code-fast-1')).toBe('grok-code-fast');
     expect(normaliseModelId('m-coder')).not.toBe(normaliseModelId('m-coderx'));
   });
+  it('N7: spellings that never name a vendor are refused, and the lookalike fold is what places a disguised vendor name', async () => {
+    const grokPin = { modelId: 'grok-build-0.1', modelFamily: 'xai' };
+    /* Never names a vendor the table knows: refused as unrecognised, whatever family is declared beside it. */
+    for (const id of ['g.r.o.k-4', 'g-r-o-k-4', 'code-fast-1', 'gr-ok-4', 'x.a.i-coder']) {
+      expect(familyFromModelId(id), id).toBeNull();
+      for (const fam of ['cursor', 'openai', 'xai']) {
+        expect(grokBotCoderConfigRefusal(config({ pinnedModelId: id, coderModelFamily: fam, reviewerModelId: null, reviewerModelFamily: null }), grokPin)?.providerFailureClass, `${id}/${fam}`)
+          .toMatch(/^coder_grok_(model_family_unrecognised|same_family_as_reviewer)$/u);
+      }
+      expect(grokBotCoderConfigRefusal(config({ pinnedModelId: id, coderModelFamily: 'cursor', reviewerModelId: null, reviewerModelFamily: null }), grokPin)?.providerFailureClass, id).toBe('coder_grok_model_family_unrecognised');
+    }
+    /* Claude lookalikes with digits for letters are Claude. */
+    for (const id of ['ha1ku-4', 'HA1KU', 'h4iku-1', 'c1aude-4', 's0nnet-5', '0pus-4', 's0nn3t', 'anthr0pic-x']) {
+      expect(await refusedClass(config({ pinnedModelId: id })), id).toBe('coder_grok_model_claude_refused');
+    }
+    /* The fold is what derives the family from a disguised id (each would be null without it). */
+    for (const [id, fam] of [['gr0k-4', 'xai'], ['x4i-coder', 'xai'], ['c0dex-mini', 'openai'], ['g3mini-pro', 'google'], ['c0mp0ser-2', 'cursor'], ['cur5or-fast', 'cursor'], ['GR0K-CODE', 'xai']] as const) {
+      expect(familyFromModelId(id), id).toBe(fam);
+      expect(/grok|xai|gpt|openai|codex|gemini|composer|cursor/u.test(id.toLowerCase()), `${id} must need the fold`).toBe(false);
+    }
+    /* So a disguised xAI coder beside the xAI reviewer pin is the same family, not "unrecognised". */
+    expect(grokBotCoderConfigRefusal(config({ pinnedModelId: 'gr0k-code-fast-1', coderModelFamily: 'cursor', reviewerModelId: null, reviewerModelFamily: null }), grokPin)?.providerFailureClass).toBe('coder_grok_same_family_as_reviewer');
+  });
   it('L1: router aliases and Claude lookalikes in any spelling are refused', async () => {
     for (const id of ['auto', 'Auto', 'AUTO', 'cursor-auto', 'auto-smart', 'best', 'default', 'default-model', 'model.default', 'latest', 'router', 'balance', 'Balance', 'BALANCE', 'balanced', 'intelligence', 'Intelligence', 'cursor-balance', 'router.intelligence', 'cheapest', 'fastest']) {
       expect(await refusedClass(config({ pinnedModelId: id })), id).toBe('coder_grok_model_router_refused');
