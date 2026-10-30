@@ -171,6 +171,15 @@ export interface JuliusMissionRoutePorts {
     handle(request: JuliusMissionRouteRequest): Promise<JuliusMissionRouteResult | null>;
   };
   /**
+   * JULIUS_WONDERLAND_START_V2 only: the one-read mission status
+   * (`wonderland-mission-status.v1`), injected the same way. Absent unless
+   * the flag is set. This file does not import it.
+   */
+  readonly wonderlandMissionStatusBridge?: {
+    matches(path: string): boolean;
+    handle(request: JuliusMissionRouteRequest): Promise<JuliusMissionRouteResult | null>;
+  };
+  /**
    * Wonderland companion read, one path shape, injected the same way.
    * This file does not import the companion module.
    */
@@ -229,6 +238,9 @@ export async function handleJuliusMissionRoute(
   }
   if (ports.wonderlandMissionStartBridge !== undefined && ports.wonderlandMissionStartBridge.matches(request.path)) {
     return ports.wonderlandMissionStartBridge.handle(request);
+  }
+  if (ports.wonderlandMissionStatusBridge !== undefined && ports.wonderlandMissionStatusBridge.matches(request.path)) {
+    return ports.wonderlandMissionStatusBridge.handle(request);
   }
   if (ports.wonderlandCompanionBridge !== undefined && ports.wonderlandCompanionBridge.matches(request.path)) {
     return ports.wonderlandCompanionBridge.handle(request);

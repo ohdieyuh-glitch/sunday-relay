@@ -328,8 +328,15 @@ The bridge stays running while the founder claims; the client keeps polling
    exited 0 with no halt, else `dispatch_failed` or `already_spent`, or,
    when the child gave no exit code of its own, the outcome-unknown record
    described below. The
-   lock is never held across a `gh` spawn, so the bridge keeps admitting and
-   answering `/status` during dispatch. The argv is
+   lock is never held across a `gh` spawn. From the CLI (a separate
+   process) the bridge therefore keeps admitting and answering `/status`
+   during dispatch. The in-bridge Start route (`POST .../start`) is
+   different: by default it runs the claim core over `spawnSync`, which
+   holds the bridge's event loop for each `gh` call (up to 120 s each), so
+   `/status`, `/events` and `/result` do not answer until the claim
+   returns. With `JULIUS_WONDERLAND_START_V2=1` the Start route runs the
+   same calls, argv and order over an awaitable `execFile` spawner, and the
+   bridge keeps answering during dispatch (see "Start v2" below). The argv is
    `gh workflow run julius-first-live-mission.yml --repo <owner/name> --ref main -f mission=<slug> -f lane=<lane> -f dispatch_key=<key> -f 'confirm_live=RUN LIVE MISSION' -f run_id=<wlj_>`.
    `confirm_live` is passed only with `--confirm 'RUN LIVE MISSION'`.
    `run_id` is PR #459's input. While the workflow does not declare `run_id`
@@ -676,6 +683,175 @@ meaning, and none will stop being nullable. `state` is a closed set
 breaking change announced here. `role` is the three permanent peers and never a
 `SPECIALIST:*` — a specialist is a bounded child of a slot, and
 `inspectSubagents` is where its record lives.
+
+## Start v2 (`JULIUS_WONDERLAND_START_V2=1`)
+
+Off unless the variable is exactly `1`, and only meaningful with
+`JULIUS_WONDERLAND_START=1`. Unset, every route answers as on main and the
+status path below is not routed. Nothing in v2 changes a spend gate, the
+`gh workflow run` argv, the spent-tag logic, the caps or the order of the
+claim core's `gh` calls. The paid workflow stays the spend authority.
+
+**gh >= 2.87.0.** `gh workflow run` prints the run URL only from 2.87.0
+(2026-02-18). The claim core learns `workflowRunId` from that URL; with an
+older `gh` a `dispatched` claim records `workflowRunId: null`, and before v2
+`/events` stayed `run_unbound` for good. v2 binds that run by dispatch key
+(below), but the founder's machine should run `gh` 2.87.0 or later.
+
+**The Start.** The claim core runs over an awaitable `execFile` spawner (the
+same argv and 120 s timeout as the default `spawnSync` one). Both report a
+child killed at the timeout, killed by a signal, or never started as such,
+so the claim records it as outcome-unknown (`dispatching`, see "A
+`gh workflow run` with no answer" above), never as `gh_workflow_run_failed`. The claim records the Start binding on the `dispatching` reservation,
+before `gh workflow run`: `startKeyHash` (sha256 of
+`x-relay-idempotency-key`) and `clientTriggerId`. Every later event of that
+claim carries them unchanged. They open no gate. A retried Start, with any
+key, replays the recorded claim and never runs `gh workflow run` again;
+two at once are serialized by the claim core and the second replays. A
+journal holding these keys is read as corrupt by code older than this
+change, so do not downgrade the bridge over a journal v2 has written.
+
+**Recovery** (`relay-bridge/wonderland-dispatching-recovery.ts`). It never
+dispatches and never writes: it runs only the three reads it builds, token
+for token (the paid run list, the spent-tag ref GET and the tag object GET),
+refuses any other argv before spawning (an allow-list, so a method or a body
+in any spelling never reaches `gh`), and writes neither the admission
+store nor its journal. It runs in the background when the status route is
+read, at most once per 15 s per run, and the status route never waits for
+it. Reading the status route therefore never moves a record; only the
+founder's `operator-claim-cli reconcile` does.
+
+- G4, a claim left in `dispatching`. A reservation older than 300 s (the
+  bridge stopped between the reservation and the outcome write) is
+  reported as `start.recovery: "operator_reconcile_required"` with
+  `recoveryReason: "dispatching_stuck"`. An outcome-unknown `dispatching`
+  event (its `gh workflow run` timed out, was killed or never started) is
+  reported the same way at once, with its own error as `recoveryReason`
+  and `result.outcomeUnknown: true`. GitHub is not read for either, and
+  nothing is written; the founder runs `operator-claim-cli reconcile`,
+  which writes `dispatched` or `dispatch_failed` only from GitHub evidence.
+- G5, a `dispatched` claim with `workflowRunId: null`. The run is found by
+  dispatch key: exactly one first-attempt `workflow_dispatch` run on `main`
+  whose title ends ` mode=paid key=<the admission's key>`, as reconcile
+  matches them. The id is held in memory, not written (the journal allows
+  one `dispatched` event), and is `workflowRunIdSource: "dispatch_key"`.
+  `/events` binds it only after `runMatchesClaim` checks the run itself.
+- G8, `dispatch_failed` with cause `gh_workflow_run_failed` (`gh` exited
+  non-zero; a network failure after the request was sent exits the same
+  way). Read as OUTCOME-UNKNOWN: the run may exist. It is never dispatched
+  again. It is re-read only through the spent-tag check: a present tag that
+  names a run reads as `RUN_ID_ALREADY_SPENT`, a present tag that does not
+  as `SPENT_TAG_UNVERIFIED`. A run found by dispatch key (and, with a tag,
+  the run the tag names) is bound for `/events`, and `start.recovery` is
+  `operator_reconcile_required`, because the journal keeps `dispatch_failed`.
+  No run for the key and no tag, past reconcile's 15-minute grace on
+  GitHub's clock, is "it did not run". Until GitHub has been read, the
+  status `phase` is `unknown`, never terminal.
+- An unset or invalid `JULIUS_WONDERLAND_GITHUB_REPO` (not owner/name, or a
+  `.`/`..` segment). The recovery is handed no repo, so it builds no GitHub
+  read at all. G4 is unaffected (it never reads GitHub): an outcome-unknown
+  or stuck `dispatching` claim is still `operator_reconcile_required` with
+  `result.outcomeUnknown` from the journal. Where G5 or G8 would read
+  GitHub, `start.recovery` is `reconciling` with
+  `recoveryReason: "repo_unconfigured"` (G8 stays outcome-unknown), so a
+  misconfigured repo is visible, never silent.
+
+**The status read.**
+`GET /relay-api/wonderland/julius/missions/{wljRunId}/status?projectId=<J1>`,
+v2 only, behind the same loopback guard and owner check as `/status`. It
+only reads (it writes neither the admission store nor its journal), and it
+takes no input that fakes or simulates a state:
+
+```json
+{
+  "schema": "wonderland-mission-status.v1",
+  "wljRunId": "wlj_...",
+  "serverRunId": "wlj_...",
+  "phase": "admitted|starting|dispatching|dispatched|queued|executing|grading|completed|failed|did_not_start|interrupted|expired|unknown",
+  "terminal": false,
+  "admission": { "state": "<the /status state word>", "cause": null, "updatedAt": "...Z" },
+  "start": {
+    "requested": true,
+    "startKeyHash": "<sha256 hex>|null",
+    "clientTriggerId": "...|null",
+    "dispatchedAt": "...Z|null",
+    "workflowRunId": "<digits>|null",
+    "workflowRunIdSource": "gh_output|reconcile|dispatch_key|null",
+    "retryStartSafe": true,
+    "recovery": "none|reconciling|operator_reconcile_required",
+    "recoveryReason": "<present only while recovery is pending>",
+    "spentTag": "RUN_ID_ALREADY_SPENT|SPENT_TAG_UNVERIFIED|absent|unreadable (G8 only)"
+  },
+  "run": { "status": "...", "conclusion": null, "live": true, "execution": "starting|executing|finished|interrupted|did_not_start",
+           "executionStartedAt": null, "stoppedAt": null, "stale": false, "fetchedAt": "...Z" },
+  "runReason": "<the /events reason, present only when no run is bound>",
+  "stage": { "role": "...", "taskType": "...", "state": "...", "ordinal": 3, "repairCycle": 0, "at": "...Z", "sampled": true },
+  "progress": { "percent": "100|null", "basis": "verified_completion|none" },
+  "workflowProgress": { "label": "GitHub workflow steps (not mission progress)", "percent": 42,
+                        "basis": "workflow_steps|none", "stepsCompleted": 5, "stepsTotal": 12 },
+  "result": { "checkerVerdict": "NOT_RUN|PASS|FAIL|null", "outcomeUnknown": false },
+  "eventsCursor": "<epoch>.<seq>|null",
+  "nextPollMs": 2000,
+  "serverTime": "...Z"
+}
+```
+
+- `admission.state` is the `/status` word, unchanged and lowercase.
+- `phase`: `completed` only when `/result` is `completed` (a client still
+  shows Completed only on `checkerVerdict: "PASS"`). With a bound run, the
+  run's `execution`: `queued` (run not yet in progress), `starting` (gates
+  running), `executing`, `grading` (the LIVE step succeeded, no verdict
+  yet), `interrupted`, `did_not_start`. Otherwise the journal: `admitted`,
+  `starting` (this bridge is running a Start that has not reserved yet),
+  `dispatching`, `dispatched` (no run read yet), `failed`, `expired`
+  (`AWAITING_OPERATOR_EXPIRED`), `interrupted`, `unknown`. `terminal` is
+  true for `completed`, `failed`, `did_not_start`, `interrupted` and
+  `expired`.
+- `run` is null when no run is bound. `stage` is the latest phase sample, or
+  null.
+- `progress` is MISSION progress and only ever a verified fact:
+  `{ "percent": 100, "basis": "verified_completion" }` when `/result` is
+  `completed` (the evidence reader's completion) AND its `checkerVerdict` is
+  `PASS`, and `{ "percent": null, "basis": "none" }` otherwise. That
+  includes every in-flight run (a phase sample names only the active task,
+  with no total, and repair tasks are added during the run, so no mission
+  percentage is verifiable before the end) and a completed run whose
+  checker did not pass (`FAIL`, `NOT_RUN`). Workflow steps never feed it.
+- `workflowProgress` is GitHub workflow step progress, labelled as such in
+  every body (`label: "GitHub workflow steps (not mission progress)"`). Its
+  `percent` is completed over listed workflow steps, floored, and null with
+  `basis: "none"` whenever that count is not known (no run, no steps, or a
+  job GitHub lists without its steps). A client must not show it as mission
+  progress. Nothing is estimated or interpolated.
+- The schema name stays `wonderland-mission-status.v1` although `progress`
+  changed meaning from the first draft of this read: the read has never been
+  on `main` (it ships with this change), and nothing at `main` reads it or
+  its `progress` (no code, client, script, fixture or document there names
+  the schema, the route or the field). The read already served on `main`,
+  `GET /wonderland/julius/status`, and `/missions/{id}/progress` and
+  `/result` are unchanged, with the v2 flag off and on.
+- `workflowRunIdSource` is `reconcile` when reconcile wrote the run id (a
+  `dispatched` bound through the spent tag, or a `dispatch_failed`
+  `workflow_run_unspent` naming the run that ended unspent), `gh_output`
+  when the claim's own `gh workflow run` printed it, and `dispatch_key`
+  when only the recovery found it (the journal has none).
+- `retryStartSafe` is true when a Start sent now would replay the recorded
+  claim (or join the one running) and cannot dispatch a second time.
+- `nextPollMs` is 2000 while a Start, a dispatch or a run is in progress,
+  10000 otherwise, and null once `terminal`.
+
+Not covered by v2, and still open:
+
+- A verifiable in-flight MISSION percentage, and posting the first phase
+  sample as soon as the LIVE step starts. It needs the live-progress
+  sample to publish counts it does not publish today (a founder-governed
+  change); until then `progress.percent` is null before a PASS completion.
+- A Start that answers before its claim ends. `POST .../start` still waits
+  for the whole claim (its reads and `gh workflow run`, each up to the
+  120 s `gh` timeout); a Start for any admission in the same store waits
+  behind it, as the claim core runs one claim at a time per store. v2 only keeps the event loop free
+  meanwhile. A client that times out polls the status read; a retried
+  Start replays and never dispatches twice.
 
 ## Is Julius executing? (`/events` `execution`)
 

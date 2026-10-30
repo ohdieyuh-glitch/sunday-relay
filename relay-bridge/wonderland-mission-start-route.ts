@@ -38,9 +38,19 @@
  * comes only from this body: never from the environment, a config, a default
  * or a replay. A replay of a started admission never runs `gh` again, so it
  * never re-sends it.
+ *
+ * V2 (JULIUS_WONDERLAND_START_V2 exactly `1`, with JULIUS_WONDERLAND_START).
+ * The claim core runs over {@link ghClaimSpawnerAsync}: the same argv, order
+ * and timeout, in a child the event loop does not wait on, so /status,
+ * /events and /result keep answering while `gh` runs. The claim also records
+ * the Start binding: sha256 of `x-relay-idempotency-key` and the body's
+ * `clientTriggerId`, on the `dispatching` reservation before
+ * `gh workflow run`. The binding opens no gate; a retried Start still replays
+ * the recorded claim whatever key it carries. Unset, nothing here changes.
  */
 
-import { spawnSync } from 'node:child_process';
+import { execFile, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 
 import { CANONICAL_UUID_V4, CLIENT_TRIGGER_ID, J1_IDEMPOTENCY_KEY } from '../src/relay/integration/wonderland-admission';
 import { parseJuliusAdmissionRunId } from '../src/relay/integration/wonderland-admission/admission-run-id';
@@ -50,6 +60,7 @@ import {
   OPERATOR_LANES,
   openOperatorClaimTool,
   RERUN_PAID_MISSION_CONFIRMATION,
+  type AwaitableGhSpawner,
   type ClaimResult,
   type GhResult,
   type GhSpawner,
@@ -70,6 +81,8 @@ import { createGhPriorAttemptReader } from './wonderland-prior-attempts';
 const START_PATH = /^\/wonderland\/julius\/missions\/([^/]+)\/start$/u;
 const REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
 export const WONDERLAND_START_FLAG = 'JULIUS_WONDERLAND_START';
+/** The v2 Start: an awaitable `gh` and a recorded Start binding. Off unless exactly `1`. */
+export const WONDERLAND_START_V2_FLAG = 'JULIUS_WONDERLAND_START_V2';
 /** A `gh` call from the claim core that takes longer than this is a failure, not waited on. */
 export const GH_CLAIM_TIMEOUT_MS = 120_000;
 
@@ -84,6 +97,30 @@ export interface WonderlandMissionStartBridge {
 export interface WonderlandMissionStartDeps {
   /** The claim core for the admission file. Production opens it once, over the founder's own `gh`; tests pass a fake. */
   readonly claimTool: (storePath: string) => OperatorClaimTool;
+  /** V2 only: the claim core over an awaitable `gh`. Absent, v2 uses `claimTool`. */
+  readonly claimToolV2?: (storePath: string) => OperatorClaimTool;
+  /** V2 only: the Starts this process is running, so /status can say a Start was received. */
+  readonly startsInFlight?: WonderlandStartsInFlight;
+}
+
+/** The wlj ids whose Start request this process is still running. In memory only. */
+export interface WonderlandStartsInFlight {
+  has(wljRunId: string): boolean;
+  enter(wljRunId: string): void;
+  leave(wljRunId: string): void;
+}
+
+export function createWonderlandStartsInFlight(): WonderlandStartsInFlight {
+  const counts = new Map<string, number>();
+  return {
+    has: (wlj) => (counts.get(wlj) ?? 0) > 0,
+    enter: (wlj) => { counts.set(wlj, (counts.get(wlj) ?? 0) + 1); },
+    leave: (wlj) => {
+      const next = (counts.get(wlj) ?? 0) - 1;
+      if (next > 0) counts.set(wlj, next);
+      else counts.delete(wlj);
+    },
+  };
 }
 
 /** `gh`, with the claim core's argv as given: no shell, a timeout, the founder's own login. */
@@ -104,13 +141,62 @@ export const ghClaimSpawner: GhSpawner = {
   },
 };
 
+/**
+ * An `execFile` callback's answer as a {@link GhResult}. A numeric `code` is
+ * the child's own exit. A child `execFile` killed (its timeout) is
+ * `timeout`; a child killed by any other signal is `signal`; an error with no
+ * exit and no signal (ENOENT, EACCES) is `spawn_failed`, with code 127 for a
+ * missing `gh`. Those three are outcome-unknown, never an ordinary non-zero
+ * exit (see {@link ghResultFromChildExit} for the `spawnSync` reading).
+ */
+export function ghResultFromExecFile(error: unknown, stdout: unknown, stderr: unknown): GhResult {
+  const out = typeof stdout === 'string' ? stdout : '';
+  const err = typeof stderr === 'string' ? stderr : '';
+  if (error === null || error === undefined) return { code: 0, stdout: out, stderr: err };
+  const failed = error as { code?: unknown; killed?: unknown; signal?: unknown };
+  if (typeof failed.code === 'number') return { code: failed.code, stdout: out, stderr: err };
+  if (failed.killed === true) return { code: 1, stdout: out, stderr: err, failure: 'timeout' };
+  if (typeof failed.signal === 'string' && failed.signal !== '') return { code: 1, stdout: out, stderr: err, failure: 'signal' };
+  return { code: failed.code === 'ENOENT' ? 127 : 1, stdout: out, stderr: err, failure: 'spawn_failed' };
+}
+
+/**
+ * {@link ghClaimSpawner}'s argv and timeout, in a child the event loop does
+ * not wait on. No shell, no stdin, the founder's own login. A timeout, a
+ * signal or a `gh` that never started carries its `failure`
+ * ({@link ghResultFromExecFile}), so the claim records it as outcome-unknown.
+ */
+export const ghClaimSpawnerAsync: AwaitableGhSpawner = {
+  run(args): Promise<GhResult> {
+    return new Promise((resolve) => {
+      try {
+        const child = execFile('gh', [...args], {
+          encoding: 'utf8',
+          timeout: GH_CLAIM_TIMEOUT_MS,
+          windowsHide: true,
+        }, (error, stdout, stderr) => {
+          resolve(ghResultFromExecFile(error, stdout, stderr));
+        });
+        child.stdin?.end();
+      } catch {
+        resolve({ code: 127, stdout: '', stderr: '', failure: 'spawn_failed' });
+      }
+    });
+  },
+};
+
+/** sha256 of the Start's idempotency key, as recorded on the claim. */
+export function startKeyHash(startKey: string): string {
+  return createHash('sha256').update(startKey, 'utf8').digest('hex');
+}
+
 export function isWonderlandMissionStartRoute(path: string): boolean {
   return START_PATH.test(wonderlandAdmissionPathname(path));
 }
 
 export function createWonderlandMissionStartBridge(
   ports: WonderlandAdmissionRoutePorts,
-  deps: WonderlandMissionStartDeps = { claimTool: productionClaimTool() },
+  deps: WonderlandMissionStartDeps = { claimTool: productionClaimTool(), claimToolV2: productionClaimTool(ghClaimSpawnerAsync) },
 ): WonderlandMissionStartBridge {
   return {
     matches: (path) => isWonderlandMissionStartRoute(path),
@@ -119,12 +205,12 @@ export function createWonderlandMissionStartBridge(
 }
 
 /** One claim core per store path for the life of the process, so its claims run one after another. */
-function productionClaimTool(): (storePath: string) => OperatorClaimTool {
+export function productionClaimTool(spawn: GhSpawner | AwaitableGhSpawner = ghClaimSpawner): (storePath: string) => OperatorClaimTool {
   const tools = new Map<string, OperatorClaimTool>();
   return (storePath) => {
     let tool = tools.get(storePath);
     if (tool === undefined) {
-      tool = openOperatorClaimTool(storePath, ghClaimSpawner, undefined, createGhPriorAttemptReader());
+      tool = openOperatorClaimTool(storePath, spawn, undefined, createGhPriorAttemptReader());
       tools.set(storePath, tool);
     }
     return tool;
@@ -193,6 +279,9 @@ export async function handleWonderlandMissionStartRoute(
   const serverRunId = (status.body as { serverRunId?: unknown }).serverRunId;
   if (typeof serverRunId !== 'string') return err(404, 'not_found', 'Not found.');
   const storePath = (ports.env.JULIUS_WONDERLAND_ADMISSION_STORE ?? '').trim();
+  if (ports.env[WONDERLAND_START_V2_FLAG] === '1') {
+    return startV2(parsed.runId, serverRunId, repo, lane, storePath, rerunConfirmation, startKey, body.clientTriggerId, deps);
+  }
   let result: ClaimResult;
   try {
     result = await deps.claimTool(storePath).claim({
@@ -209,6 +298,41 @@ export async function handleWonderlandMissionStartRoute(
     return err(503, 'julius_start_unavailable', 'The claim could not run. Check /status before trying again.');
   }
   return startHttp(parsed.runId, result);
+}
+
+/** The same claim, over the awaitable claim core, carrying the Start binding. */
+async function startV2(
+  wljRunId: string,
+  serverRunId: string,
+  repo: string,
+  lane: string,
+  storePath: string,
+  rerunConfirmation: string | null,
+  startKey: string,
+  clientTriggerId: string,
+  deps: WonderlandMissionStartDeps,
+): Promise<{ status: number; body: unknown }> {
+  const tool = (deps.claimToolV2 ?? deps.claimTool)(storePath);
+  deps.startsInFlight?.enter(wljRunId);
+  let result: ClaimResult;
+  try {
+    result = await tool.claim({
+      wonderlandRunId: wljRunId,
+      serverRunId,
+      repo,
+      lane,
+      workflowSource: '',
+      dispatch: true,
+      confirmation: OPERATOR_DISPATCH_CONFIRMATION,
+      rerunConfirmation,
+      start: { startKeyHash: startKeyHash(startKey), clientTriggerId },
+    });
+  } catch {
+    return err(503, 'julius_start_unavailable', 'The claim could not run. Check /status before trying again.');
+  } finally {
+    deps.startsInFlight?.leave(wljRunId);
+  }
+  return startHttp(wljRunId, result);
 }
 
 function startBody(wljRunId: string, record: OperatorView, replayed: boolean): Record<string, unknown> {

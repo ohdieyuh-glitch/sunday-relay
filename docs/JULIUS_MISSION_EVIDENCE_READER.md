@@ -1,12 +1,10 @@
 # Julius mission evidence reader
 
-**Owned by YUJI. Supplied by YUJI's PR.**
+**Owned by YUJI. Supplied by YUJI's reader on main.**
 
-YUJI owns the server-side reader that matches the `julius-run-spent.v1` tag's `workflow_run_id` to the actual workflow run and returns completion evidence. This branch does not implement that reader. It does not call GitHub, and it does not re-derive completion from a workflow run.
+YUJI owns the server-side reader that matches the `julius-run-spent.v1` tag's `workflow_run_id` to the actual workflow run and returns completion evidence. `createJuliusMissionEvidenceReader` in `relay-bridge/` reads GitHub through the founder's own `gh` and does not re-derive completion from the run alone. It is wired in `relay-bridge/server.ts` through `wonderland-live-wiring.ts` only when `JULIUS_WONDERLAND_GITHUB_REPO` is set. With that variable unset, `GET .../result` and `GET .../progress` report the Wonderland status projection and nothing past it. `dispatched` is the furthest state `GET /wonderland/julius/status` can show on its own (`WONDERLAND_STATUS_STATES`). Neither route reports `completed` from a dispatch, from `{ completed: true }`, or from any value that is not the shape below.
 
-The interface is `JuliusMissionEvidenceReader` in `relay-bridge/julius-mission-evidence.ts`. `createJuliusMissionEvidenceTestDouble` is a test double. It plays back a stored value. It is not YUJI's reader. Production wires no reader: `relay-bridge/server.ts` constructs the result and progress bridge without one.
-
-Until that reader is wired, `GET /relay-api/wonderland/julius/missions/{wljRunId}/result` and `GET .../progress` report the Wonderland status projection and nothing past it. `dispatched` is the furthest state `GET /wonderland/julius/status` can show (`src/relay/integration/wonderland-admission/admission-contract.ts`, `WONDERLAND_STATUS_STATES`). Neither route reports `completed` from a dispatch, from `{ completed: true }`, or from any value that is not the shape below.
+The interface is `JuliusMissionEvidenceReader` in `relay-bridge/julius-mission-evidence.ts`. `createJuliusMissionEvidenceTestDouble` is a test double. It plays back a stored value. It is not YUJI's reader.
 
 ## What the reader returns
 
@@ -17,7 +15,7 @@ Until that reader is wired, `GET /relay-api/wonderland/julius/missions/{wljRunId
 
 ## Bound to the operator dispatch record
 
-The routes read evidence only for a row whose status is `dispatched`, and then bind it to the operator claim record (`bindJuliusEvidenceToDispatch`). Completion survives only when a dispatch time is recorded, the spend tag's `workflowRunId` equals the workflow run id the claim recorded (when it recorded one; `gh workflow run` does not always print it), and the matched run was created no earlier than the recorded dispatch, compared at whole seconds. Otherwise the route stays on the status ceiling with `checkerVerdict: "NOT_RUN"`. `#446` at `041d2599` does not supply `workflowRunCreatedAt`, so its reads are not completion until it does.
+The routes read evidence only for a row whose status is `dispatched`, and then bind it to the operator claim record (`bindJuliusEvidenceToDispatch`). Completion survives only when a dispatch time is recorded, the spend tag's `workflowRunId` equals the workflow run id the claim recorded (when it recorded one; `gh workflow run` does not always print it), and the matched run was created no earlier than the recorded dispatch, compared at whole seconds. Otherwise the route stays on the status ceiling with `checkerVerdict: "NOT_RUN"`. On main the reader supplies `workflowRunCreatedAt`: it reads the matched run's `created_at`, and `/result` checks it against the recorded dispatch time. Without it the read is not completion.
 
 A missing section is null on the completion object. Null is unknown. A missing cost is not zero. `providerMessageId` is not a field: a message id does not make a receipt `CAPTURED`.
 
@@ -73,7 +71,7 @@ The table below is the field inventory those names were read from. `#446` does n
 | `spendTag.workflowRunId` | `workflow_run_id=` | same line. GitHub Actions run id. Not an application trace id. |
 | `spendTag.workflowRunAttempt` | `workflow_run_attempt=` | same line |
 | `spendTag.headSha` | `head_sha=` | same line |
-| `spendTag.workflowRunCreatedAt` | the matched run's `created_at` | the reader's own read of the Actions run. Not in `041d2599`. Required by this bridge. |
+| `spendTag.workflowRunCreatedAt` | the matched run's `created_at` | the reader's own read of the Actions run. Supplied by the reader on main. Required by this bridge. |
 | `spendAccounting.knownUsdMicros` | `priorRuns[].knownUsdMicros` | `#434` `d9b9e04e` `src/relay/mission/julius/julius-spent-tag-contract.test.ts` (verified tag: equals the reserved micros) |
 | `spendAccounting.unknownCostComponents` | `unknownCostComponents` | same test. `0` on a verified tag, `1` on the legacy `server_run_id` body. |
 | `spendAccounting.unverifiableApiSpend` | `unverifiableApiSpend` | same test |
