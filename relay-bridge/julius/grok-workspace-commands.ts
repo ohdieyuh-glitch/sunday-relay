@@ -42,8 +42,10 @@ export const grokWorkspaceCommands = Object.freeze({
     if (!SHA40.test(base) || !SHA40.test(head)) throw new Error('grok_workspace_command_argument_unsafe');
     return [
       'set -euo pipefail',
-      `${GIT} diff --binary --no-renames ${base} ${head} | ${GIT} apply --check --whitespace=nowarn -`,
-      `${GIT} diff --binary --no-renames ${base} ${head} | ${GIT} apply --whitespace=nowarn -`,
+      // --no-ext-diff --no-textconv: the patch is git's own binary diff of the two commits, never the output of a configured
+      // external diff driver or a textconv filter (a hostile .gitattributes or config could otherwise rewrite what is applied).
+      `${GIT} diff --no-ext-diff --no-textconv --binary --no-renames ${base} ${head} | ${GIT} apply --check --whitespace=nowarn -`,
+      `${GIT} diff --no-ext-diff --no-textconv --binary --no-renames ${base} ${head} | ${GIT} apply --whitespace=nowarn -`,
       'echo APPLIED',
     ].join('\n');
   },

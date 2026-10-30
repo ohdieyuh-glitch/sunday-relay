@@ -762,3 +762,35 @@ describe('Grok Bot coder: identifiers reach the router diagnostics', () => {
     expect(safe).toMatchObject({ cursorServedModel: 'some-other-model', servedModel: null });
   });
 });
+
+describe('PILOT Low 6: the apply step ignores external diff drivers and textconv (REAL git, local temp repository, no network)', () => {
+  it('the generated apply command passes --no-ext-diff --no-textconv, and a hostile diff.external / textconv cannot change what is applied', () => {
+    const cmd = grokWorkspaceCommands.applyFetched('a'.repeat(40), 'b'.repeat(40));
+    for (const line of cmd.split('\n').filter((l) => l.includes(' diff '))) expect(line).toContain('diff --no-ext-diff --no-textconv --binary');
+    const dir = mkdtempSync(join(tmpdir(), 'grok-apply-'));
+    try {
+      const git = (...args: string[]) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t.invalid', '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', ...args], { cwd: dir, encoding: 'utf8' }).trim();
+      git('init', '-q');
+      writeFileSync(join(dir, 'a.txt'), 'good\n');
+      writeFileSync(join(dir, '.gitattributes'), '*.txt diff=evil\n');
+      git('add', '-A'); git('commit', '-q', '-m', 'base');
+      const base = git('rev-parse', 'HEAD');
+      writeFileSync(join(dir, 'a.txt'), 'good\nbetter\n');
+      git('commit', '-q', '-am', 'agent');
+      const head = git('rev-parse', 'HEAD');
+      git('checkout', '-q', '--detach', base);
+      /* Hostile repository config: an external diff that prints a forged patch, and a textconv that rewrites content. */
+      const evil = join(dir, 'evil.sh');
+      writeFileSync(evil, '#!/bin/sh\nprintf "diff --git a/a.txt b/a.txt\\n--- a/a.txt\\n+++ b/a.txt\\n@@ -1 +1 @@\\n-good\\n+EVIL\\n"\n');
+      chmodSync(evil, 0o755);
+      git('config', 'diff.external', evil);
+      git('config', 'diff.evil.textconv', 'sed s/good/EVIL/');
+      git('config', 'diff.evil.binary', 'false');
+      const out = execFileSync('bash', ['-c', grokWorkspaceCommands.applyFetched(base, head)], { cwd: dir, encoding: 'utf8' });
+      expect(out.trim().endsWith('APPLIED')).toBe(true);
+      expect(execFileSync('cat', ['a.txt'], { cwd: dir, encoding: 'utf8' })).toBe('good\nbetter\n');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
