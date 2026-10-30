@@ -146,6 +146,8 @@ const safeToken=(value:unknown):string|null=>typeof value==='string'&&/^[a-z][a-
  * rejected" when no plan was validated at all. `true` and `false` still mean
  * exactly themselves, and only a genuinely boolean value produces either.
  */
+/** Why a cloud coding agent's run status could not be read: the transport's own poll-failure vocabulary, closed. */
+export const JULIUS_CODING_AGENT_POLL_FAILURE_CAUSES=Object.freeze(['authentication','not_found','malformed_response','key_absent','unexpected_status','transient_exhausted','transport_untrusted'] as const);
 const safeNullableBool=(value:unknown):boolean|null=>typeof value==='boolean'?value:null;
 const safeCount=(value:unknown):number|null=>typeof value==='number'&&Number.isInteger(value)&&value>=0&&value<=Number.MAX_SAFE_INTEGER?value:null;
 const safePositiveCount=(value:unknown):number|null=>{const n=safeCount(value);return n!==null&&n>0?n:null;};
@@ -509,6 +511,14 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   patchApplied:safeNullableBool(v.patchApplied),
   outcomeUnknown:safeNullableBool(v.outcomeUnknown),
   cancelRequested:safeEnum(v.cancelRequested,['cancelled','not_cancellable','failed'] as const),
+  /* --- WHY A CLOUD CODING AGENT'S PATCH WAS REFUSED, OR WHY ITS RUN COULD NOT BE READ (PILOT Low 7). Without these the
+   * row says `coder_grok_scope_violation` / `coder_grok_poll_failed` and nothing about which rule fired. Counts are
+   * non-negative safe integers, flags are booleans, the cause is a closed vocabulary; anything else is null. --- */
+  scopeViolationCount:safeCount(v.scopeViolationCount),
+  unsafeEntryCount:safeCount(v.unsafeEntryCount),
+  protectedPathTouched:safeNullableBool(v.protectedPathTouched),
+  permittedPathsEmpty:safeNullableBool(v.permittedPathsEmpty),
+  pollFailureCause:safeEnum(v.pollFailureCause,JULIUS_CODING_AGENT_POLL_FAILURE_CAUSES),
   /* --- Coding Agent cost, beside a refusal. Paid run 34037313976 was refused
    * for cost and the amount lived only in a message nothing persisted. --- */
   /** The runtime-reported cost in micro-dollars; null when the runtime reported none. */

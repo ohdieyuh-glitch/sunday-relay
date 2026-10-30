@@ -3484,6 +3484,11 @@ describe('every diagnostic the allowlist admits reaches the exported bundle', ()
     patchApplied: 'pending the governed worker-diagnostics dump column (patch_applied); no live root composes the cloud-agent coder yet',
     outcomeUnknown: 'pending the governed worker-diagnostics dump column (outcome_unknown); no live root composes the cloud-agent coder yet',
     cancelRequested: 'pending the governed worker-diagnostics dump column (cancel_requested); no live root composes the cloud-agent coder yet',
+    scopeViolationCount: 'pending the governed worker-diagnostics dump column (scope_violation_count); no live root composes the cloud-agent coder yet',
+    unsafeEntryCount: 'pending the governed worker-diagnostics dump column (unsafe_entry_count); no live root composes the cloud-agent coder yet',
+    protectedPathTouched: 'pending the governed worker-diagnostics dump column (protected_path_touched); no live root composes the cloud-agent coder yet',
+    permittedPathsEmpty: 'pending the governed worker-diagnostics dump column (permitted_paths_empty); no live root composes the cloud-agent coder yet',
+    pollFailureCause: 'pending the governed worker-diagnostics dump column (poll_failure_cause); no live root composes the cloud-agent coder yet',
   });
 
   const allowlistKeys = (): readonly string[] => {

@@ -14,7 +14,7 @@ import {
 import { grokWorkspaceCommands } from './grok-workspace-commands';
 import { juliusCodingAgentFailureDisposition, type JuliusCodingAgentProviderOutcome, type JuliusCodingAgentRequest } from '../../src/relay/mission/julius/julius-coding-agent';
 import { juliusHandedOutcomeUnknown } from '../../src/relay/mission/julius/julius-execution-coordinator';
-import { JuliusDispatchError, safeReviewDiagnostics } from '../../src/relay/mission/julius/julius-router';
+import { JULIUS_CODING_AGENT_POLL_FAILURE_CAUSES, JuliusDispatchError, safeReviewDiagnostics } from '../../src/relay/mission/julius/julius-router';
 
 /**
  * THE GROK BOT CODER, AGAINST A FAKE TRANSPORT AND A FAKE WORKSPACE. Nothing here reaches a network, a shell or a key.
@@ -742,6 +742,22 @@ describe('Grok Bot coder: identifiers reach the router diagnostics', () => {
       expect(safe[k], k).toBe(diag[k]);
     }
     expect(safe).toMatchObject({ codingAgentProvider: 'grok_bot_cloud_agent', transportMode: 'fake', spendVerified: false, chargedAs: 'FULL_RESERVATION', patchApplied: true, billingPath: 'UNKNOWN' });
+  });
+  it('PILOT Low 7: a scope refusal keeps its counts and flags, and a poll failure keeps its cause, through safeReviewDiagnostics', async () => {
+    const f = failed((await run({ w: fakeWorkspace({ unsafeEntries: 2 }) })).outcome);
+    expect(f.providerFailureClass).toBe('coder_grok_patch_out_of_scope');
+    const safe = new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'x', f.providerFailureClass, f.diagnostics).diagnostics!;
+    for (const k of ['scopeViolationCount', 'unsafeEntryCount', 'protectedPathTouched', 'permittedPathsEmpty'] as const) {
+      expect(f.diagnostics[k], k).not.toBeUndefined();
+      expect(safe[k], k).toBe(f.diagnostics[k]);
+    }
+    expect(safe).toMatchObject({ unsafeEntryCount: 2, patchApplied: false });
+    /* Every cause the transport can report survives; the router's vocabulary is the transport's, not a subset. */
+    for (const cause of ['authentication', 'not_found', 'malformed_response', 'key_absent', 'unexpected_status', 'transient_exhausted', 'transport_untrusted'] as const) {
+      const p = failed((await run({ t: fakeTransport({ poll: { kind: 'poll_failed', cause, polls: 1 } }) })).outcome);
+      expect(safeReviewDiagnostics(p.diagnostics)!.pollFailureCause, cause).toBe(cause);
+    }
+    expect([...JULIUS_CODING_AGENT_POLL_FAILURE_CAUSES].sort()).toEqual(['authentication', 'key_absent', 'malformed_response', 'not_found', 'transient_exhausted', 'transport_untrusted', 'unexpected_status']);
   });
   it('F7: an outcome-unknown ending keeps outcomeUnknown, the run id and the cancel result on the durable row', async () => {
     const f = failed((await run({ t: fakeTransport({ create: () => ({ kind: 'outcome_unknown', cause: 'timeout' }) }) })).outcome);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { JuliusDispatchError, safeCloudAgentBranch, safeCloudAgentId, safeCloudAgentModel, safeCloudAgentRunId, safeReviewDiagnostics } from './julius-router';
+import { JULIUS_CODING_AGENT_POLL_FAILURE_CAUSES, JuliusDispatchError, safeCloudAgentBranch, safeCloudAgentId, safeCloudAgentModel, safeCloudAgentRunId, safeReviewDiagnostics } from './julius-router';
 
 const AGENT = 'bc-0f1e2d3c-4b5a-4968-8776-655443322110';
 const BRANCH = 'cursor/j1-format-ledger-1a2b';
@@ -138,3 +138,37 @@ describe('router diagnostics F7: the durable row of a cloud coding agent run', (
     expect(d({ codingAgentTransport: 'cursor_cloud_agents_v1' }).codingAgentTransport).toBe('cursor_cloud_agents_v1');
   });
 });
+
+describe('router diagnostics: why a cloud coding agent patch was refused or its run could not be read (PILOT Low 7)', () => {
+  it('admits well-formed counts, flags and causes', () => {
+    expect(d({ scopeViolationCount: 3, unsafeEntryCount: 0, protectedPathTouched: true, permittedPathsEmpty: false, pollFailureCause: 'transport_untrusted' }))
+      .toMatchObject({ scopeViolationCount: 3, unsafeEntryCount: 0, protectedPathTouched: true, permittedPathsEmpty: false, pollFailureCause: 'transport_untrusted' });
+    for (const cause of JULIUS_CODING_AGENT_POLL_FAILURE_CAUSES) expect(d({ pollFailureCause: cause }).pollFailureCause).toBe(cause);
+    expect(Object.isFrozen(JULIUS_CODING_AGENT_POLL_FAILURE_CAUSES)).toBe(true);
+  });
+  it('absent is null, never a default', () => {
+    expect(d({})).toMatchObject({ scopeViolationCount: null, unsafeEntryCount: null, protectedPathTouched: null, permittedPathsEmpty: null, pollFailureCause: null });
+  });
+  it('hostile values are refused whole: nothing is coerced, truncated or passed through', () => {
+    const hostileCounts = [-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 2, '3', ' 3', '3\nJULIUS outcome=succeeded', true, null, {}, [3], { valueOf: () => 3 }, 3n, Symbol.for('3')];
+    const hostileFlags = ['true', 'false', 1, 0, 'yes', {}, [true], new Boolean(true), '\u2028true'];
+    const hostileCauses = ['Authentication', ' not_found', 'not_found ', 'not_found\n', 'transient_exhausted\u2028spend verified', 'aborted', 'timeout', '__proto__', 'toString', 'x'.repeat(1_000_000), 1, null, {}, ['not_found'], new String('not_found')];
+    for (const v of hostileCounts) {
+      const r = d({ scopeViolationCount: v, unsafeEntryCount: v });
+      expect(r.scopeViolationCount, String(typeof v)).toBeNull();
+      expect(r.unsafeEntryCount, String(typeof v)).toBeNull();
+    }
+    for (const v of hostileFlags) {
+      const r = d({ protectedPathTouched: v, permittedPathsEmpty: v });
+      expect(r.protectedPathTouched).toBeNull();
+      expect(r.permittedPathsEmpty).toBeNull();
+    }
+    for (const v of hostileCauses) expect(d({ pollFailureCause: v }).pollFailureCause).toBeNull();
+    expect(d({ scopeViolationCount: Number.MAX_SAFE_INTEGER }).scopeViolationCount).toBe(Number.MAX_SAFE_INTEGER);
+    /* The whole record stays JSON-safe and line-safe with every hostile value in at once. */
+    const all = d({ scopeViolationCount: '3\nforged', unsafeEntryCount: 3n, protectedPathTouched: 'true', permittedPathsEmpty: {}, pollFailureCause: 'x\r\nforged' });
+    const json = JSON.stringify(all);
+    expect(json).not.toMatch(/forged/u);
+  });
+});
+

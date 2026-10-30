@@ -564,7 +564,7 @@ export function createGrokBotCodingAgentProvider(input: {
         // The run may still be going: ask it to stop (best effort), and treat the result as unknown either way.
         await cancelBestEffort(ref);
         return polled.cause === 'authentication' || polled.cause === 'key_absent'
-          ? started('AUTHENTICATION', 'coder_grok_poll_unauthenticated', 'The Cursor API stopped accepting the key while the run was active; the outcome is unknown.', { outcomeUnknown: true })
+          ? started('AUTHENTICATION', 'coder_grok_poll_unauthenticated', 'The Cursor API stopped accepting the key while the run was active; the outcome is unknown.', { outcomeUnknown: true, pollFailureCause: polled.cause })
           : started('INTERRUPTED', polled.cause === 'transient_exhausted' ? 'coder_grok_poll_transient_exhausted' : 'coder_grok_poll_failed', 'The run status could not be read; the outcome is unknown.', { outcomeUnknown: true, pollFailureCause: polled.cause });
       }
       evidence.providerStatus = polled.status.toLowerCase();
