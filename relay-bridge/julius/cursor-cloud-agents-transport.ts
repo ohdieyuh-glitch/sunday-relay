@@ -135,28 +135,104 @@ export function cursorTransportMode(transport: unknown): 'live' | 'fake' {
  * JWT, Bearer/Basic, PEM keys) are redacted by the stream scrub, after the Cursor-key patterns and before the residue check. Patterns are the well-known public token shapes; the count of redactions is recorded per event and in total.
  */
 const SECRET_PATTERNS: readonly RegExp[] = [
-  /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/gu,
-  /\bgh[pousr]_[A-Za-z0-9]{20,}/gu,
+  /\bgh[pousr]_[A-Za-z0-9]{8,}/gu,
   /\bgithub_pat_[A-Za-z0-9_]{20,}/gu,
-  /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/gu,
-  /\bsk-[A-Za-z0-9_-]{16,}/gu,
-  /\bxai-[A-Za-z0-9_-]{16,}/gu,
+  /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/giu,
+  /sk-ant-[A-Za-z0-9_-]{8,}/gu,
+  /\bsk-[A-Za-z0-9_-]{10,}/gu,
+  /xai-[A-Za-z0-9_-]{16,}/gu,
   /\bgsk_[A-Za-z0-9]{16,}/gu,
   /\bxox[abprs]-[A-Za-z0-9-]{10,}/gu,
   /\bAIza[0-9A-Za-z_-]{30,}/gu,
   /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/gu,
   /\borg-[A-Za-z0-9]{16,}/gu,
   /\b(?:Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}/giu,
+  // Skywalker L1: an AWS secret access key named as such, and a password inside a URL's userinfo.
+  /aws_secret_access_key["']?\s{0,8}[=:]\s{0,8}["']?[A-Za-z0-9/+=]{40}/giu,
+  /\b([a-z][a-z0-9+.-]{0,31}:\/\/[^\s/:@]{1,256}:)[^\s/@]{1,256}@/giu,
 ];
-export function redactSecrets(text: string): { readonly text: string; readonly count: number } {
+/** Invisible format characters (ZWSP, ZWJ, BOM, soft hyphen...) are dropped before matching, so they cannot split a token. */
+const INVISIBLE = /[\u00ad\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff]/gu;
+const PEM_BEGIN = '-----BEGIN ';
+const PEM_TAG = /^[A-Z ]{0,40}PRIVATE KEY-----/u;
+/**
+ * PILOT N-2: PEM private keys by a linear scan (no backtracking regex). A BEGIN marker with no END line redacts to the end
+ * of the text (a truncated key is still a key).
+ */
+function redactPem(text: string): { text: string; count: number } {
+  let out = '';
   let count = 0;
-  let out = text;
-  for (const re of SECRET_PATTERNS) out = out.replace(re, () => { count += 1; return '[REDACTED:secret]'; });
+  let i = 0;
+  for (;;) {
+    const b = text.indexOf(PEM_BEGIN, i);
+    if (b === -1) break;
+    if (!PEM_TAG.test(text.slice(b + PEM_BEGIN.length, b + PEM_BEGIN.length + 60))) { out += text.slice(i, b + 1); i = b + 1; continue; }
+    out += `${text.slice(i, b)}[REDACTED:secret]`;
+    count += 1;
+    const e = text.indexOf('-----END ', b + PEM_BEGIN.length);
+    if (e === -1) { i = text.length; break; }
+    const close = text.indexOf('-----', e + 9);
+    i = close === -1 ? text.length : close + 5;
+  }
+  return { text: out + text.slice(i), count };
+}
+const applyPatterns = (text: string): { text: string; count: number } => {
+  const pem = redactPem(text);
+  let count = pem.count;
+  let out = pem.text;
+  for (const re of SECRET_PATTERNS) {
+    out = out.replace(re, (...m: unknown[]) => {
+      count += 1;
+      return re.source.startsWith('\\b([a-z]') ? `${m[1] as string}[REDACTED:secret]@` : '[REDACTED:secret]';
+    });
+  }
   return { text: out, count };
+};
+const anyPattern = (text: string): boolean => text.includes(PEM_BEGIN) && redactPem(text).count > 0
+  || SECRET_PATTERNS.some((re) => { re.lastIndex = 0; const hit = re.test(text); re.lastIndex = 0; return hit; });
+const B64_TOKEN = /[A-Za-z0-9+/_-]{20,}={0,2}/gu;
+/**
+ * Skywalker L1, FAIL CLOSED: forms the patterns cannot rewrite in place. After redaction, the text is decoded in copies
+ * (JSON `\uXXXX` and `%XX` escapes, line breaks removed so a token split over two `data:` lines joins up, reversed, and
+ * base64 tokens decoded); a secret pattern matching any copy means a secret is still there in a form we cannot redact,
+ * and the caller must not store the text. Each copy is one linear pass.
+ */
+function secretSurvives(text: string): boolean {
+  const unescaped = text
+    .replace(/\\u([0-9a-f]{4})/giu, (_m, h: string) => codePoint(parseInt(h, 16)))
+    .replace(/%([0-9a-f]{2})/giu, (_m, h: string) => String.fromCharCode(parseInt(h, 16)))
+    .replace(INVISIBLE, '');
+  const joined = unescaped.replace(/[\r\n]+/gu, '');
+  if (anyPattern(unescaped) || anyPattern(joined) || anyPattern([...joined].reverse().join(''))) return true;
+  for (const m of joined.matchAll(B64_TOKEN)) {
+    const decoded = Buffer.from(m[0].replace(/-/gu, '+').replace(/_/gu, '/'), 'base64').toString('latin1');
+    if (anyPattern(decoded)) return true;
+  }
+  return false;
+}
+/** Non-Cursor secrets redacted in place (linear time). `residue` is true when a secret survives in an encoded form. */
+const allMatches = (text: string): Set<string> => {
+  const out = new Set<string>();
+  for (const re of SECRET_PATTERNS) for (const m of text.matchAll(re)) out.add(m[0]);
+  return out;
+};
+/** A token split by a line break (two `data:` lines of one event): a match in the joined text that no line has alone. */
+const splitAcrossLines = (text: string): boolean => {
+  if (!/[\r\n]/u.test(text)) return false;
+  const perLine = allMatches(text);
+  for (const m of allMatches(text.replace(/[\r\n]+/gu, ''))) if (![...perLine].some((p) => p.startsWith(m) || m === p)) return true;
+  return false;
+};
+export function redactSecrets(text: string): { readonly text: string; readonly count: number; readonly residue?: true } {
+  if (splitAcrossLines(text.replace(INVISIBLE, ''))) return { text: '', count: 0, residue: true };
+  const r = applyPatterns(text.replace(INVISIBLE, ''));
+  const out = r.count === 0 && !INVISIBLE.test(text) ? text : r.text;
+  INVISIBLE.lastIndex = 0;
+  return secretSurvives(out) ? { text: out, count: r.count, residue: true } : { text: out, count: r.count };
 }
 
 /** E2: one scrubbed piece of stream text, or `residue` when key characters survive the scrub (the caller fails closed). */
-export type CursorStreamScrub = { readonly kind: 'clean'; readonly text: string; readonly scrubbed: boolean; readonly secrets: number } | { readonly kind: 'residue' };
+export type CursorStreamScrub = { readonly kind: 'clean'; readonly text: string; readonly scrubbed: boolean; readonly secrets: number } | { readonly kind: 'residue' } | { readonly kind: 'secret_residue' };
 /**
  * E2: the outcome of opening `GET /v1/agents/{id}/runs/{runId}/stream` once. `opened` hands over the response body and a
  * scrubber bound to the key that was sent (the key itself never leaves this module); `mode` is the transport's live stamp at
@@ -268,6 +344,22 @@ export function cursorKeyResidue(text: string, key: string): boolean {
   for (const form of [k, [...k].reverse().join('')]) for (let i = 0; i + KEY_RESIDUE_RUN <= form.length; i += 1) runs.add(form.slice(i, i + KEY_RESIDUE_RUN));
   const t = keyMatchNormal(text);
   for (let i = 0; i + KEY_RESIDUE_RUN <= t.length; i += 1) if (runs.has(t.slice(i, i + KEY_RESIDUE_RUN))) return true;
+  return keyHexResidue(text, key);
+}
+/** PILOT M-6/I-1: this many hex digits in a row of the key's UTF-8, UTF-16BE or UTF-16LE hex is the key. */
+const KEY_HEX_RUN = 16;
+/**
+ * PILOT M-6/I-1, FAIL CLOSED: the key written as hex bytes with `0x` or `\x` prefixes and any separators (`0x53, 0x45`),
+ * or as UTF-16 hex (`0053 0045`). The text's hex digits are kept (prefixes and separators dropped) and compared, in
+ * windows of {@link KEY_HEX_RUN}, against the key's hex in the three encodings. Linear in the text.
+ */
+function keyHexResidue(text: string, key: string): boolean {
+  const forms = [Buffer.from(key, 'utf8'), Buffer.from(key, 'utf16le'), Buffer.from(key, 'utf16le').swap16()].map((b) => b.toString('hex'));
+  if (forms[0]!.length < KEY_HEX_RUN) return false;
+  const runs = new Set<string>();
+  for (const f of forms) for (let i = 0; i + KEY_HEX_RUN <= f.length; i += 2) runs.add(f.slice(i, i + KEY_HEX_RUN));
+  const t = text.toLowerCase().replace(/0x|\\x/gu, '').replace(/[^0-9a-f]/gu, '');
+  for (let i = 0; i + KEY_HEX_RUN <= t.length; i += 1) if (runs.has(t.slice(i, i + KEY_HEX_RUN))) return true;
   return false;
 }
 /**
@@ -742,7 +834,8 @@ export function createCursorCloudAgentsTransport(options: CursorCloudAgentsTrans
         for (const re of cursorKeyPatterns(key)) out = out.replace(re, REDACTED);
         const other = redactSecrets(out);
         out = other.text;
-        return cursorKeyResidue(out, key) ? { kind: 'residue' } : { kind: 'clean', text: out, scrubbed: out !== text, secrets: other.count };
+        if (cursorKeyResidue(out, key)) return { kind: 'residue' };
+        return other.residue === true ? { kind: 'secret_residue' } : { kind: 'clean', text: out, scrubbed: out !== text, secrets: other.count };
       };
       return {
         kind: 'opened', status: res.status, mode, scrub, close,

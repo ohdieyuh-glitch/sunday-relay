@@ -356,7 +356,7 @@ describe('E2 capture: a hashed, ordered, chained record of the run stream', () =
       'e2_stream_key_residue', 'e2_stream_malformed_event', 'e2_stream_no_start', 'e2_stream_no_terminal', 'e2_stream_open_failed', 'e2_stream_out_of_order', 'e2_stream_run_mismatch',
       'e2_stream_too_large', 'e2_stream_truncated_key_call',
       'e2_stream_call_unfinished', 'e2_stream_duplicate_event', 'e2_stream_resumed', 'e2_stream_terminal_not_finished',
-      'e2_stream_idle', 'e2_stream_rate_budget', 'e2_stream_reconnect_limit',
+      'e2_stream_idle', 'e2_stream_rate_budget', 'e2_stream_reconnect_limit', 'e2_stream_secret_residue',
     ].sort());
   });
 });

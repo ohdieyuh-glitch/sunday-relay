@@ -35,7 +35,7 @@ export const E2_STREAM_CAUSES = Object.freeze([
   'e2_stream_key_residue', 'e2_stream_malformed_event', 'e2_stream_run_mismatch', 'e2_stream_error_event', 'e2_stream_out_of_order',
   'e2_stream_conflicting_event', 'e2_stream_event_too_large', 'e2_stream_too_large', 'e2_stream_aborted', 'e2_evidence_write_failed',
   'e2_stream_resumed', 'e2_stream_duplicate_event', 'e2_stream_terminal_not_finished', 'e2_stream_call_unfinished',
-  'e2_stream_reconnect_limit', 'e2_stream_rate_budget', 'e2_stream_idle',
+  'e2_stream_reconnect_limit', 'e2_stream_rate_budget', 'e2_stream_idle', 'e2_stream_secret_residue',
 ] as const);
 export type E2StreamCause = (typeof E2_STREAM_CAUSES)[number];
 
@@ -321,6 +321,7 @@ export async function captureCursorRunStream(input: {
           for (const [k, text] of [e.raw, e.id ?? '', e.event, e.data].entries()) {
             const s = open.scrub(text);
             if (s.kind === 'residue') throw new Stop('e2_stream_key_residue');
+            if (s.kind === 'secret_residue') throw new Stop('e2_stream_secret_residue');
             scrubbed = scrubbed || s.scrubbed;
             if (k > 0) fieldSecrets += s.secrets;
             parts.push(s.text);
