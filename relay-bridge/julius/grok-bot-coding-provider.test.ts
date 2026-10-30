@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  GROK_BOT_CODER_CONFIG_DEFAULTS, GROK_BOT_CODER_PROVIDER_KIND, canonicalModelFamily, familyFromModelId, GROK_CODER_FOUNDER_AUTHORIZATION_TOKEN, GROK_CODER_REQUESTED_MODEL_UNATTESTED_EVIDENCE,
+  GROK_BOT_CODER_CONFIG_DEFAULTS, GROK_BOT_CODER_PROVIDER_KIND, canonicalModelFamily, familyFromModelId,
   createGrokBotCodingAgentProvider, createShellGrokBotWorkspacePort, grokBotCoderConfigRefusal, grokCoderAgentId, grokCoderIdempotencyKey,
   isSafeBranchName, isSundayRelayRepo,
   type CodingAgentCreateInput, type CodingAgentCreateOutcome, type CodingAgentPollOutcome, type CodingAgentResultOutcome, type CodingAgentTransport,
@@ -36,6 +36,9 @@ const config = (over: Partial<GrokBotCoderConfig> = {}): GrokBotCoderConfig => (
   pinnedModelId: MODEL, coderModelFamily: 'vendor-a', reviewerModelFamily: 'vendor-b', reviewerModelId: 'fake-reviewer-model', targetRepoUrl: TARGET, runDeadlineMs: 60_000,
   ...over,
 });
+
+/** The removed relaxation fields, smuggled in anyway: they must change nothing. */
+const legacy = (over: Record<string, unknown>): GrokBotCoderConfig => ({ ...config(), ...over }) as never;
 
 const goodResult = (over: Partial<Extract<CodingAgentResultOutcome, { kind: 'result' }>> = {}): CodingAgentResultOutcome => ({
   kind: 'result', finalText: 'done', durationMs: 1234,
@@ -76,7 +79,8 @@ const run = async (opts: { cfg?: GrokBotCoderConfig | null; t?: ReturnType<typeo
   const lines: string[] = [];
   const provider = createGrokBotCodingAgentProvider({
     config: opts.cfg === undefined ? config() : opts.cfg, transport: t.transport, workspace: w.workspace, now: () => 1_000, log: (l) => lines.push(l),
-    ...(opts.pin === undefined ? {} : { founderAuthorizationPin: opts.pin }),
+    /* A caller that still passes the removed pin is ignored: the factory has no such input. */
+    ...(opts.pin === undefined ? {} : ({ founderAuthorizationPin: opts.pin } as never)),
   });
   const outcome = await provider.execute(opts.req ?? request(), opts.signal);
   return { outcome, t, w, lines, provider };
@@ -313,7 +317,7 @@ describe('idempotency', () => {
 describe('served-model attestation matrix', () => {
   const unattested = fakeTransport.bind(null, { result: goodResult({ reportedModelId: null, reportedModelSource: null }) });
   it('reported and equal: MATCH, completes', async () => {
-    expect(completed((await run()).outcome).observation.diagnostics).toMatchObject({ servedModelAttestation: 'reported by provider' });
+    expect(completed((await run()).outcome).observation.diagnostics).toMatchObject({ servedModelAttestation: 'reported_by_provider' });
   });
   it('reported and different: coder_served_model_mismatch', async () => {
     const f = failed((await run({ t: fakeTransport({ result: goodResult({ reportedModelId: 'some-other-model' }) }) })).outcome);
@@ -325,24 +329,20 @@ describe('served-model attestation matrix', () => {
     expect(f).toMatchObject({ failure: 'SERVED_MODEL_UNATTESTED', providerFailureClass: 'coder_served_model_unattested' });
     expect(w.calls).toEqual({ fetch: 0, apply: 0 });
   });
-  it('the flag alone does not relax it, nor the flag with the TODO-FOUNDER constant', async () => {
-    const cfg = config({ acceptRequestedModelUnattested: true, founderAuthorizationToken: GROK_CODER_FOUNDER_AUTHORIZATION_TOKEN });
-    expect(failed((await run({ cfg, t: unattested() })).outcome).providerFailureClass).toBe('coder_served_model_unattested');
-    expect(failed((await run({ cfg: config({ acceptRequestedModelUnattested: true }), t: unattested() })).outcome).providerFailureClass).toBe('coder_served_model_unattested');
-  });
-  it('a matching founder pin without the flag does not relax it', async () => {
+  it('F3: nothing relaxes it: no factory pin, no config flag or token, in any combination (the relaxation is removed)', async () => {
     const pin = 'founder-issued-fake-pin';
-    expect(failed((await run({ cfg: config({ acceptRequestedModelUnattested: false, founderAuthorizationToken: pin }), t: unattested(), pin })).outcome).providerFailureClass).toBe('coder_served_model_unattested');
+    for (const over of [{ acceptRequestedModelUnattested: true }, { acceptRequestedModelUnattested: true, founderAuthorizationToken: pin }, { founderAuthorizationToken: pin }]) {
+      const w = fakeWorkspace();
+      const f = failed((await run({ cfg: legacy(over), t: unattested(), w, pin })).outcome);
+      expect(f.providerFailureClass, JSON.stringify(over)).toBe('coder_served_model_unattested');
+      expect(w.calls.apply).toBe(0);
+    }
+    const mod = await import('./grok-bot-coding-provider');
+    expect(Object.keys(mod).filter((k) => /FOUNDER|RELAX|UNATTESTED/u.test(k))).toEqual([]);
+    expect(Object.keys(GROK_BOT_CODER_CONFIG_DEFAULTS).filter((k) => /founder|allowSame|acceptRequested/iu.test(k))).toEqual([]);
   });
-  it('the flag with a matching founder pin proceeds and says "requested model, unattested by provider"', async () => {
-    const pin = 'founder-issued-fake-pin';
-    const c = completed((await run({ cfg: config({ acceptRequestedModelUnattested: true, founderAuthorizationToken: pin }), t: unattested(), pin })).outcome);
-    expect(c.observation.providerModel).toBeNull();
-    expect(c.observation.diagnostics).toMatchObject({ servedModelAttestation: GROK_CODER_REQUESTED_MODEL_UNATTESTED_EVIDENCE, servedModelVerdict: 'UNATTESTED' });
-  });
-  it('the relaxation never covers a mismatch', async () => {
-    const pin = 'founder-issued-fake-pin';
-    const f = failed((await run({ cfg: config({ acceptRequestedModelUnattested: true, founderAuthorizationToken: pin }), t: fakeTransport({ result: goodResult({ reportedModelId: 'other' }) }), pin })).outcome);
+  it('a mismatch is a mismatch', async () => {
+    const f = failed((await run({ t: fakeTransport({ result: goodResult({ reportedModelId: 'other' }) }) })).outcome);
     expect(f.providerFailureClass).toBe('coder_served_model_mismatch');
   });
 });
@@ -363,14 +363,15 @@ describe('configuration fails closed, before anything is sent', () => {
     expect(await refusedClass(config({ pinnedModelId: 'claude-opus-5-5' }))).toBe('coder_grok_model_claude_refused');
     expect(await refusedClass(config({ pinnedModelId: 'auto' }))).toBe('coder_grok_model_router_refused');
   });
-  it('same family as the reviewer is refused; the allow flag works only with the non-TODO founder pin', async () => {
+  it('same family as the reviewer is refused, and no flag, token or pin changes that', async () => {
     expect(await refusedClass(config({ coderModelFamily: 'xai', reviewerModelFamily: 'XAI ' }))).toBe('coder_grok_same_family_as_reviewer');
     expect(await refusedClass(config({ coderModelFamily: null }))).toBe('coder_grok_config_family_absent');
-    expect(await refusedClass(config({ coderModelFamily: 'xai', reviewerModelFamily: 'xai', allowSameFamilyAsReviewer: true }))).toBe('coder_grok_same_family_as_reviewer');
-    expect(await refusedClass(config({ coderModelFamily: 'xai', reviewerModelFamily: 'xai', allowSameFamilyAsReviewer: true, founderAuthorizationToken: GROK_CODER_FOUNDER_AUTHORIZATION_TOKEN }))).toBe('coder_grok_same_family_as_reviewer');
     const pin = 'founder-pin-test-0001';
-    expect(failed((await run({ cfg: config({ coderModelFamily: 'xai', reviewerModelFamily: 'xai', allowSameFamilyAsReviewer: true, founderAuthorizationToken: `${pin}x` }), pin })).outcome).providerFailureClass).toBe('coder_grok_same_family_as_reviewer');
-    completed((await run({ cfg: config({ coderModelFamily: 'xai', reviewerModelFamily: 'xai', allowSameFamilyAsReviewer: true, founderAuthorizationToken: pin }), pin })).outcome);
+    for (const over of [{ allowSameFamilyAsReviewer: true }, { allowSameFamilyAsReviewer: true, founderAuthorizationToken: pin }]) {
+      const f = failed((await run({ cfg: legacy({ ...over, coderModelFamily: 'xai', reviewerModelFamily: 'xai' }), pin })).outcome);
+      expect(f.providerFailureClass).toBe('coder_grok_same_family_as_reviewer');
+      expect(f.runtimeStarted).toBe(false);
+    }
   });
   it('H1: aliases are one family, the family is also read from the model id, and the reviewer\'s own model is never the coder', async () => {
     for (const [coder, reviewer] of [['xai', 'x.ai'], ['x-ai', 'XAI'], ['grok', 'xai'], ['x_ai', 'Grok '], ['anthropic', 'claude'], ['openai', 'gpt'], ['composer', 'cursor']]) {
@@ -380,10 +381,9 @@ describe('configuration fails closed, before anything is sent', () => {
     expect(await refusedClass(config({ pinnedModelId: 'grok-code-fast-1', coderModelFamily: 'vendor-a', reviewerModelFamily: 'vendor-b', reviewerModelId: 'grok-4' }))).toBe('coder_grok_same_family_as_reviewer');
     expect(await refusedClass(config({ pinnedModelId: 'xai-coder-2', coderModelFamily: 'cursor', reviewerModelFamily: 'xai', reviewerModelId: 'fake-reviewer-model' }))).toBe('coder_grok_same_family_as_reviewer');
     expect(await refusedClass(config({ pinnedModelId: 'fake-coder', coderModelFamily: 'xai', reviewerModelFamily: 'vendor-b', reviewerModelId: 'Grok-4.2' }))).toBe('coder_grok_same_family_as_reviewer');
-    /* The reviewer's own id, in any case: refused even with the founder pin and the allow flag. */
-    const pin = 'founder-pin-test-0002';
+    /* The reviewer's own id, in any case. */
     for (const id of [MODEL, MODEL.toUpperCase(), ` ${MODEL} `]) {
-      expect(failed((await run({ cfg: config({ reviewerModelId: id, allowSameFamilyAsReviewer: true, founderAuthorizationToken: pin }), pin })).outcome).providerFailureClass).toBe('coder_grok_same_model_as_reviewer');
+      expect(await refusedClass(config({ reviewerModelId: id }))).toBe('coder_grok_same_model_as_reviewer');
     }
     expect(await refusedClass(config({ reviewerModelId: null }))).toBe('coder_grok_config_reviewer_model_absent');
     expect(await refusedClass(config({ reviewerModelId: '  ' }))).toBe('coder_grok_config_reviewer_model_absent');
@@ -521,24 +521,6 @@ describe('M3: the scope check sees modes and type changes (git diff --raw --no-r
     const f = failed((await run({ w: silent })).outcome);
     expect(f.providerFailureClass).toBe('coder_grok_patch_out_of_scope');
     expect(silent.calls.apply).toBe(0);
-  });
-});
-
-describe('M4: the founder pin must be equal, exactly', () => {
-  const unattested = () => fakeTransport({ result: goodResult({ reportedModelId: null }) });
-  const P = 'founder-pin-test-0003';
-  it('pin P with token P+"x", P without its last character, a null token, or a differently cased token: unattested', async () => {
-    for (const token of [`${P}x`, P.slice(0, -1), null, P.toUpperCase(), ` ${P}`]) {
-      const f = failed((await run({ cfg: config({ acceptRequestedModelUnattested: true, founderAuthorizationToken: token }), t: unattested(), pin: P })).outcome);
-      expect(f.providerFailureClass, String(token)).toBe('coder_served_model_unattested');
-    }
-  });
-  it('an empty pin never authorizes, even against an empty token', async () => {
-    const f = failed((await run({ cfg: config({ acceptRequestedModelUnattested: true, founderAuthorizationToken: '' }), t: unattested(), pin: '' })).outcome);
-    expect(f.providerFailureClass).toBe('coder_served_model_unattested');
-  });
-  it('the exact pin relaxes (control)', async () => {
-    completed((await run({ cfg: config({ acceptRequestedModelUnattested: true, founderAuthorizationToken: P }), t: unattested(), pin: P })).outcome);
   });
 });
 

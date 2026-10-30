@@ -29,26 +29,17 @@ import { grokWorkspaceCommands, isSafeBranchName } from './grok-workspace-comman
  * WHAT IT REFUSES, AND WHY (each is a fixed `providerFailureClass` token):
  *  - absent or incomplete configuration: fails closed before anything is sent (`coder_grok_config_*`, runtimeStarted false);
  *  - a Claude/Anthropic model id or a router alias as the pinned model: there is NO Claude fallback and no "auto" (`coder_grok_model_*`);
- *  - a coder whose model family equals the reviewer's, unless `allowSameFamilyAsReviewer` (`coder_grok_same_family_as_reviewer`);
+ *  - a coder whose model family (stated, alias-folded, or read from either model id) equals the reviewer's, or the reviewer's own
+ *    model id: never relaxable (`coder_grok_same_family_as_reviewer`, `coder_grok_same_model_as_reviewer`);
  *  - sunday-relay as the target repository, in any spelling (`coder_grok_target_is_sunday_relay`);
- *  - a served model the Cursor API does not itself report: the existing `coder_served_model_unattested` halt.
+ *  - a served model the Cursor API does not itself report: the existing `coder_served_model_unattested` halt. NOTHING relaxes
+ *    it: there is no pin, token or flag, in config or in the factory (review rulings, Oct 30 2026).
  *
  * WHAT IT NEVER DOES: retry a create (the transport is called once per `execute`, whatever happens); merge, check out or
  * trust the agent's branch or PR; apply anything outside the mission's permitted paths; report a cost of $0.
  */
 
 export const GROK_BOT_CODER_PROVIDER_KIND = 'grok-bot-cloud-agent';
-
-/**
- * THE FOUNDER'S AUTHORIZATION FOR `acceptRequestedModelUnattested`. TODO-FOUNDER: while this constant still begins with
- * `TODO-FOUNDER` the relaxation CANNOT take effect, whatever the configuration says; replacing it is a reviewed code change.
- */
-export const GROK_CODER_FOUNDER_AUTHORIZATION_TOKEN =
-  'TODO-FOUNDER: replace with the founder-issued authorization string for accepting a requested-but-unattested Grok Bot coder model';
-const TODO_FOUNDER_PREFIX = 'TODO-FOUNDER';
-
-/** The evidence string the founder asked for when the relaxation applies. */
-export const GROK_CODER_REQUESTED_MODEL_UNATTESTED_EVIDENCE = 'requested model, unattested by provider';
 
 /** sunday-relay itself. A mission's target is never this repository (founder rule: "never sunday-relay main"). */
 const SUNDAY_RELAY_REPO = 'ohdieyuh-glitch/sunday-relay';
@@ -242,11 +233,6 @@ export interface GrokBotCoderConfig {
   readonly reviewerModelFamily: string | null;
   /** The reviewer's own model id. Required: the coder may never be the reviewer's model, and its family is derived from it. */
   readonly reviewerModelId: string | null;
-  /** Default false: a coder of the reviewer's family is refused. Effective ONLY with the non-TODO founder pin (as the unattested relaxation). */
-  readonly allowSameFamilyAsReviewer: boolean;
-  /** Default false. Takes effect only with `founderAuthorizationToken` equal to a non-TODO founder constant. */
-  readonly acceptRequestedModelUnattested: boolean;
-  readonly founderAuthorizationToken: string | null;
   /** The mission's target repository, `https://github.com/<owner>/<repo>`. Never sunday-relay. No default. */
   readonly targetRepoUrl: string | null;
   /** Wall-clock limit for the run, polled. No default. */
@@ -260,9 +246,6 @@ export const GROK_BOT_CODER_CONFIG_DEFAULTS: GrokBotCoderConfig = Object.freeze(
   coderModelFamily: null,
   reviewerModelFamily: null,
   reviewerModelId: null,
-  allowSameFamilyAsReviewer: false,
-  acceptRequestedModelUnattested: false,
-  founderAuthorizationToken: null,
   targetRepoUrl: null,
   runDeadlineMs: null,
   fixedPerAttemptReservationUsdMicros: null,
@@ -304,7 +287,7 @@ export const familyFromModelId = (id: string): string | null => {
 type Refusal = { readonly failure: JuliusCodingAgentFailure; readonly providerFailureClass: string; readonly safeMessage: string };
 
 /** Validates the configuration. A refusal means nothing is sent. Exported so the wiring can refuse at construction. */
-export function grokBotCoderConfigRefusal(config: GrokBotCoderConfig | null | undefined, pin: string = GROK_CODER_FOUNDER_AUTHORIZATION_TOKEN): Refusal | null {
+export function grokBotCoderConfigRefusal(config: GrokBotCoderConfig | null | undefined): Refusal | null {
   const refuse = (providerFailureClass: string, safeMessage: string, failure: JuliusCodingAgentFailure = 'LAUNCH_FAILED'): Refusal =>
     ({ failure, providerFailureClass, safeMessage });
   if (config === null || config === undefined) return refuse('coder_grok_config_absent', 'The Grok Bot coder is not configured; nothing was dispatched.');
@@ -325,8 +308,8 @@ export function grokBotCoderConfigRefusal(config: GrokBotCoderConfig | null | un
   const coderFamilies = new Set([coderFamily, ...(coderDerived === null ? [] : [coderDerived])]);
   const reviewerFamilies = new Set([reviewerFamily, ...(reviewerDerived === null ? [] : [reviewerDerived])]);
   const sameFamily = [...coderFamilies].some((f) => reviewerFamilies.has(f));
-  if (sameFamily && !(config.allowSameFamilyAsReviewer === true && founderPinValid(config, pin))) {
-    return refuse('coder_grok_same_family_as_reviewer', 'The coder model family equals the reviewer\'s; independence is refused unless the founder authorizes it.');
+  if (sameFamily) {
+    return refuse('coder_grok_same_family_as_reviewer', 'The coder model family equals the reviewer\'s; independence is refused.');
   }
   if (typeof config.targetRepoUrl !== 'string' || config.targetRepoUrl.trim() === '') return refuse('coder_grok_config_target_absent', 'No target repository is configured; nothing was dispatched.');
   if (isSundayRelayRepo(config.targetRepoUrl)) return refuse('coder_grok_target_is_sunday_relay', 'The Grok Bot coder never works on sunday-relay; nothing was dispatched.');
@@ -342,17 +325,6 @@ export function grokBotCoderConfigRefusal(config: GrokBotCoderConfig | null | un
   return null;
 }
 
-/** Whether the founder relaxation applies. A TODO-FOUNDER pin can never authorize anything. */
-export function grokCoderUnattestedRelaxationApplies(config: GrokBotCoderConfig, pin: string = GROK_CODER_FOUNDER_AUTHORIZATION_TOKEN): boolean {
-  return config.acceptRequestedModelUnattested === true && founderPinValid(config, pin);
-}
-/** The config carries exactly the founder pin, and the pin is not a TODO placeholder. */
-function founderPinValid(config: GrokBotCoderConfig, pin: string): boolean {
-  return typeof config.founderAuthorizationToken === 'string'
-    && typeof pin === 'string' && pin.length > 0
-    && !pin.startsWith(TODO_FOUNDER_PREFIX)
-    && config.founderAuthorizationToken === pin;
-}
 
 /**
  * THE IDEMPOTENCY KEY of one dispatch, and the client-supplied `agentId` it derives (endpoints.md: "Client-supplied agent
@@ -377,12 +349,9 @@ export function createGrokBotCodingAgentProvider(input: {
   readonly now?: () => number;
   /** Fixed-vocabulary lines only: ids, statuses, classes. Never a header, a body, or provider prose. */
   readonly log?: (line: string) => void;
-  /** The founder pin; the composition root passes nothing, so the TODO-FOUNDER constant applies. */
-  readonly founderAuthorizationPin?: string;
 }): JuliusCodingAgentProvider {
   const now = input.now ?? Date.now;
   const log = input.log ?? ((): void => undefined);
-  const pin = input.founderAuthorizationPin ?? GROK_CODER_FOUNDER_AUTHORIZATION_TOKEN;
   return {
     providerKind: GROK_BOT_CODER_PROVIDER_KIND,
     async execute(request: JuliusCodingAgentRequest, signal?: AbortSignal, session?: JuliusCodingAgentSession): Promise<JuliusCodingAgentProviderOutcome> {
@@ -393,7 +362,7 @@ export function createGrokBotCodingAgentProvider(input: {
       const aborted = (): boolean => signal?.aborted === true;
       if (aborted()) return notStarted('CANCELLED', 'coder_cancelled_before_launch', 'The dispatch was cancelled before the Grok Bot coder was created.');
 
-      const refusal = grokBotCoderConfigRefusal(input.config, pin);
+      const refusal = grokBotCoderConfigRefusal(input.config);
       if (refusal !== null) return notStarted(refusal.failure, refusal.providerFailureClass, refusal.safeMessage);
       const config = input.config as GrokBotCoderConfig;
       const transport = input.transport;
@@ -533,7 +502,7 @@ export function createGrokBotCodingAgentProvider(input: {
       /**
        * THE SERVED MODEL IS WHAT THE CURSOR API REPORTS FOR THE RUN — never what the agent says about itself. The public
        * v1 docs document no model field on the agent, run or usage record, so by default this is UNATTESTED and the
-       * dispatch halts on the existing class. Only the founder relaxation proceeds, and it says so on the record.
+       * dispatch halts on the existing class. Nothing relaxes this halt.
        */
       const verdict = juliusServedModelVerdict(modelId, result.reportedModelId);
       evidence.servedModelVerdict = verdict;
@@ -545,13 +514,9 @@ export function createGrokBotCodingAgentProvider(input: {
         return started('SERVED_MODEL_MISMATCH', 'coder_served_model_mismatch', 'The Cursor API reported a model other than the one pinned; the dispatch stops rather than accept a substitute.');
       }
       if (verdict === 'UNATTESTED') {
-        if (!grokCoderUnattestedRelaxationApplies(config, pin)) {
-          return started('SERVED_MODEL_UNATTESTED', 'coder_served_model_unattested', 'The Cursor API did not report which model served the run; the dispatch stops rather than assume it.');
-        }
-        evidence.servedModelAttestation = GROK_CODER_REQUESTED_MODEL_UNATTESTED_EVIDENCE;
-      } else {
-        evidence.servedModelAttestation = 'reported by provider';
+        return started('SERVED_MODEL_UNATTESTED', 'coder_served_model_unattested', 'The Cursor API did not report which model served the run; the dispatch stops rather than assume it.');
       }
+      evidence.servedModelAttestation = 'reported_by_provider';
 
       /** THE AGENT'S BRANCH IS UNTRUSTED: the one on the target repository is fetched and applied as a patch; its PR is a URL on the record, nothing more. */
       const onTarget = result.branches.filter((b) => {
