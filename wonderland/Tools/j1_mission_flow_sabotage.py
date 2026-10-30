@@ -722,8 +722,8 @@ MUTATIONS = [
     ),
     (
         'c2_reconcile_claim_without_record_offered',
-        "const bool bOpen = bBlocking || Current == R::NotStarted || (Current == R::None && Status.bRequested); // FLOW_RECONCILE_CLAIM_WITHOUT_RECORD",
-        "const bool bOpen = bBlocking || Current == R::NotStarted; // FLOW_RECONCILE_CLAIM_WITHOUT_RECORD",
+        "|| (Current == R::None && Status.bRequested) // FLOW_RECONCILE_CLAIM_WITHOUT_RECORD",
+        "// FLOW_RECONCILE_CLAIM_WITHOUT_RECORD",
     ),
     (
         'c2_reconcile_dispatch_not_started',
@@ -759,6 +759,22 @@ MUTATIONS = [
         'c2_nothing_held_never_releases',
         "Out.Record = R::NotStarted; // FLOW_RECONCILE_NOTHING_HELD_RELEASES",
         "Out.Record = Waiting; // FLOW_RECONCILE_NOTHING_HELD_RELEASES",
+    ),
+    # YUJI M-b 2026-10-30 (bridge restart: only start.request reveals a saved intent).
+    (
+        "mb_request_without_record_ignored",
+        "|| (Current == R::None && !Status.RequestState.empty()); // FLOW_RECONCILE_REQUEST_WITHOUT_RECORD",
+        "; // FLOW_RECONCILE_REQUEST_WITHOUT_RECORD",
+    ),
+    (
+        "mb_retry_start_safe_releases",
+        "else if (Status.RequestState == \"accepted\" || Status.RequestState == \"claiming\")",
+        "else if (Status.bRequested && (Status.RequestState == \"accepted\" || Status.RequestState == \"claiming\"))",
+    ),
+    (
+        "mb_interrupted_not_shown",
+        "Out.Lines.push_back(\"Start request interrupted -- nothing was dispatched; it is never re-sent automatically\"); // FLOW_STATUS_PANEL_INTERRUPTED_IS_EXPLICIT",
+        "// FLOW_STATUS_PANEL_INTERRUPTED_IS_EXPLICIT",
     ),
     # CLIENT LANE C4 (founder rulings + YUJI: percent only verified, workflow steps labelled, completed is not success).
     (
@@ -891,6 +907,16 @@ SUBSYSTEM_MUTATIONS = [
         "c2_status_read_auto_resends_start",
         "SaveStartRecord(); // SUBSYSTEM_STATUS_READ_NEVER_SENDS",
         "SaveStartRecord(); if (StartRecord == 4) { (void)StartPaidMission(TEXT(\"RUN LIVE MISSION\")); } // SUBSYSTEM_STATUS_READ_NEVER_SENDS",
+    ),
+    (
+        "mb_new_key_per_start",
+        "if (StartKey.IsEmpty()) // SUBSYSTEM_START_KEY_REUSED",
+        "if (true) // SUBSYSTEM_START_KEY_REUSED",
+    ),
+    (
+        "mb_new_trigger_per_start",
+        "if (StartTriggerId.IsEmpty()) // SUBSYSTEM_START_TRIGGER_REUSED",
+        "if (true) // SUBSYSTEM_START_TRIGGER_REUSED",
     ),
     (
         "c3_resync_does_not_read_status",

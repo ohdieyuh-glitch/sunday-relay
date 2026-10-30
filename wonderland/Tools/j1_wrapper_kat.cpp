@@ -380,6 +380,37 @@ namespace
 		return bOk;
 	}
 
+	/**
+	 * YUJI M-b 2026-10-30: a new-key Start replaces the earlier intent, so the same logical Start reuses the persisted
+	 * key and clientTriggerId: each is minted only when empty, and the key is dropped only when the run changes.
+	 */
+	bool CheckStartKeyReused()
+	{
+		const std::string Text = SubsystemSource();
+		auto Count = [&Text](const std::string& Needle)
+		{
+			int N = 0;
+			for (std::size_t At = Text.find(Needle); At != std::string::npos; At = Text.find(Needle, At + 1)) { ++N; }
+			return N;
+		};
+		auto GuardedBy = [&Text](const std::string& Assign, const std::string& Guard)
+		{
+			// The assignment sits inside the block the guard opens (before that block closes).
+			const std::size_t If = Text.find(Guard);
+			const std::size_t At = Text.find(Assign);
+			const std::size_t Close = If == std::string::npos ? std::string::npos : Text.find("\n\t}", If);
+			return If != std::string::npos && At != std::string::npos && Close != std::string::npos && At > If && At < Close;
+		};
+		const std::size_t Sync = Text.find("void UWonderlandJuliusMissionSubsystem::SyncStartRecord()");
+		const std::size_t SyncEnd = Sync == std::string::npos ? std::string::npos : Text.find("\n}\n", Sync);
+		const std::size_t Reset = Text.find("StartKey.Reset();");
+		const bool bOk = Count("StartKey = ToF(Minted);") == 1 && GuardedBy("StartKey = ToF(Minted);", "if (StartKey.IsEmpty())")
+			&& Count("StartTriggerId = ToF(Minted);") == 1 && GuardedBy("StartTriggerId = ToF(Minted);", "if (StartTriggerId.IsEmpty())")
+			&& Count("StartKey.Reset();") == 1 && Reset > Sync && Reset < SyncEnd;
+		if (!bOk) { std::printf("START KEY REUSE CHECK FAIL: a Start key or trigger is minted while one is held\n"); }
+		return bOk;
+	}
+
 	bool CheckJuliusModuleRootIncludes()
 	{
 		namespace fs = std::filesystem;
@@ -1302,6 +1333,7 @@ int main()
 	Expect(CheckJuliusModuleRootIncludes(), "julius_no_bare_module_root_include");
 	Expect(CheckNoAutomaticStartResend(), "julius_no_automatic_start_resend");
 	Expect(CheckLiveResyncReadsStatus(), "julius_live_resync_reads_status");
+	Expect(CheckStartKeyReused(), "julius_start_key_and_trigger_reused");
 	Expect(CheckPlatformCryptoTypesInclude(), "platform_crypto_result_includes_types");
 
 	if (Failures == 0)

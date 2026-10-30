@@ -2115,6 +2115,11 @@ namespace WonderlandJuliusMissionFlow
 				Out.Lines.push_back(std::string(WorkflowProgressLabel) + ": " + std::to_string(Status.WorkflowPercent) + "%");
 			}
 		}
+		if (Status.RequestState == "interrupted" && Status.WorkflowRunId.empty() && !Status.bRunPresent)
+		{
+			// YUJI M-b: explicit, non-dispatching, never re-sent automatically.
+			Out.Lines.push_back("Start request interrupted -- nothing was dispatched; it is never re-sent automatically"); // FLOW_STATUS_PANEL_INTERRUPTED_IS_EXPLICIT
+		}
 		if (Status.bRunStale) { Out.Lines.push_back("GitHub run state is STALE (last known, not live)"); }
 		if (!Status.bOutcomeUnknown && !Status.CheckerVerdict.empty() && !Out.bSuccess)
 		{
@@ -2137,7 +2142,11 @@ namespace WonderlandJuliusMissionFlow
 		}
 		// A run with no local record that the bridge already holds a claim for (another client, a lost save) is never
 		// offered: it reconciles like a lost answer.
-		const bool bOpen = bBlocking || Current == R::NotStarted || (Current == R::None && Status.bRequested); // FLOW_RECONCILE_CLAIM_WITHOUT_RECORD
+		// YUJI M-b 2026-10-30: after a bridge restart a saved intent shows start.requested:false and retryStartSafe (the
+		// journal alone); only start.request reveals it. So a request of any state opens the reconcile too, and
+		// requested:false / retryStartSafe are never read as permission to send.
+		const bool bOpen = bBlocking || Current == R::NotStarted || (Current == R::None && Status.bRequested) // FLOW_RECONCILE_CLAIM_WITHOUT_RECORD
+			|| (Current == R::None && !Status.RequestState.empty()); // FLOW_RECONCILE_REQUEST_WITHOUT_RECORD
 		if (!bOpen) { return Out; }
 		const R Waiting = Current == R::Accepted ? R::Accepted : R::Sending;
 		const P Ph = Status.Phase;

@@ -596,14 +596,14 @@ bool UWonderlandJuliusMissionSubsystem::StartPaidMission(const FString& Typed)
 		StartMessage = FString::Printf(TEXT("Not started: %s."), UTF8_TO_TCHAR(Gate.Why));
 		return false;
 	}
-	if (StartKey.IsEmpty())
+	if (StartKey.IsEmpty()) // SUBSYSTEM_START_KEY_REUSED (YUJI M-b: a new key replaces the earlier intent; same logical Start = same key)
 	{
 		std::string Minted;
 		if (!Host->Session.MintStartKey(Minted)) { StartMessage = TEXT("Not started: no secure random source."); return false; }
 		StartKey = ToF(Minted);
 		StartTriggerId.Reset();
 	}
-	if (StartTriggerId.IsEmpty())
+	if (StartTriggerId.IsEmpty()) // SUBSYSTEM_START_TRIGGER_REUSED
 	{
 		// Minted ONCE per key and persisted with it (A-9: the bridge digests it; a new id under the same key is refused).
 		std::string Minted;

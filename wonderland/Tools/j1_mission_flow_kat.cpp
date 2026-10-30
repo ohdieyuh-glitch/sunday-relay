@@ -1749,6 +1749,56 @@ const ABSENT_PHASE = {
 		}
 	}
 
+	// YUJI M-b 2026-10-30: after a bridge restart start.requested is false and retryStartSafe true (journal only); only
+	// start.request reveals the saved intent. Neither is ever permission to send; interrupted is explicit, never resent.
+	int RestartCases = 0;
+	void BridgeRestartFixtures()
+	{
+		using R = EStartRecord;
+		const auto RestartedStart = [](const char* State)
+		{
+			return Swap(StartObj(false, "null", RequestObj(State)), "\"retryStartSafe\":false", "\"retryStartSafe\":true");
+		};
+		for (const char* State : {"accepted", "claiming"})
+		{
+			const FMissionStatusRead Read = ParseMissionStatus(StatusWlj, 200, StatusBody("admitted", false, RestartedStart(State)));
+			Expect(Read.bOk && !Read.bRequested && Read.RequestState == State, State);
+			for (const R Current : {R::None, R::NotStarted, R::Sending, R::Accepted})
+			{
+				const FStartReconcile Out = StartRecordFromStatus(Current, Read);
+				Expect(Out.Record == R::Accepted, "a live request after a restart blocks Start");
+				const FStartGate Gate = StartGateFor("admitted_waiting", true, false, Out.Record, true, "RUN LIVE MISSION");
+				Expect(!Gate.bSend && Gate.Why != nullptr && Gate.Why[0] != '\0', "requested:false + retryStartSafe never lets Start send");
+			}
+		}
+		{
+			const FMissionStatusRead Read = ParseMissionStatus(StatusWlj, 200, StatusBody("admitted", false, RestartedStart("interrupted")));
+			const FStartReconcile Out = StartRecordFromStatus(R::None, Read);
+			Expect(Out.Record == R::Refused && std::strstr(Out.Why, "interrupted") != nullptr, "interrupted without a record is explicit and refused");
+			Expect(!StartGateFor("admitted_waiting", true, false, Out.Record, true, "RUN LIVE MISSION").bSend, "interrupted is never resent");
+			const FStatusPanel Panel = StatusPanelFor(Read);
+			Expect(StatusPanelHas(Panel, "Start request interrupted -- nothing was dispatched") && !Panel.bSuccess, "interrupted is shown as non-dispatching");
+		}
+		{
+			const FMissionStatusRead Read = ParseMissionStatus(StatusWlj, 200, StatusBody("admitted", false, RestartedStart("settled")));
+			// Settled (the operator's reconcile) with nothing held is the founder's release: offered again on a click only,
+			// with the persisted key and trigger (wrapper: julius_start_key_and_trigger_reused).
+			for (const R Current : {R::None, R::NotStarted, R::Sending})
+			{
+				const R Got = StartRecordFromStatus(Current, Read).Record;
+				Expect(Got == R::NotStarted, "settled with nothing held reconciles to not-started");
+				Expect(!StartGateFor("admitted_waiting", true, false, Got, false, "RUN LIVE MISSION").bSend, "settled never sends without a click");
+			}
+		}
+		{
+			// Control: nothing held at all (no request) is the only release, and only from an open record.
+			const FMissionStatusRead Free = ParseMissionStatus(StatusWlj, 200, StatusBody("admitted", false, StartObj(false)));
+			Expect(StartRecordFromStatus(R::Sending, Free).Record == R::NotStarted && StartRecordFromStatus(R::None, Free).Record == R::None, "only nothing held releases");
+			Expect(StartGateFor("admitted_waiting", true, false, R::NotStarted, true, "RUN LIVE MISSION").bSend, "control: the gate itself sends on a click when released");
+		}
+		++RestartCases;
+	}
+
 	// C3 (founder ruling 2026-10-30): a seq gap or reset:true clears the latches and resyncs from /status (never a stale
 	// "running"); live_view_unconfigured is a known reason; one bad event field never drops the whole page.
 	int ResyncCases = 0;
@@ -2073,6 +2123,7 @@ int main()
 	StatusFixtures();
 	ResyncFixtures();
 	StatusPanelFixtures();
+	BridgeRestartFixtures();
 
 	if (Failures != 0)
 	{
@@ -2080,7 +2131,7 @@ int main()
 		return 1;
 	}
 	std::printf(
-		"J1 MISSION FLOW KAT PASS meanings=%d route=%d result=%d flow=%d windows=%d bridge=%d phases=%d live=%d start=%d exec=%d ack=%d status=%d resync=%d panel=%d\n",
-		Meanings, Routes, Results, FlowSteps, Windows, Bridge, PhaseCases, LiveCases, StartCases, ExecCases, AckCases, StatusCases, ResyncCases, PanelCases);
+		"J1 MISSION FLOW KAT PASS meanings=%d route=%d result=%d flow=%d windows=%d bridge=%d phases=%d live=%d start=%d exec=%d ack=%d status=%d resync=%d panel=%d restart=%d\n",
+		Meanings, Routes, Results, FlowSteps, Windows, Bridge, PhaseCases, LiveCases, StartCases, ExecCases, AckCases, StatusCases, ResyncCases, PanelCases, RestartCases);
 	return 0;
 }
