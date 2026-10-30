@@ -59,8 +59,23 @@ describe('R4-3: node --test vacuous passes', () => {
     const tail = (t: number, p: number, f: number): string => `1..${t}\n# tests ${t}\n# suites 0\n# pass ${p}\n# fail ${f}\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 5.1\n`;
     expect(G.parseNodeTestSummary(tail(3, 3, 0))).toEqual({ tests: 3, pass: 3, fail: 0 });
     expect(G.parseNodeTestSummary(tail(3, 2, 1))).toEqual({ tests: 3, pass: 2, fail: 1 });
+    expect(G.parseNodeTestSummary(tail(3, 3, 0).replace('# cancelled 0', '# cancelled 2'))).toEqual({ tests: 3, pass: 3, fail: 2 });
     expect(G.parseNodeTestSummary(`${tail(3, 3, 0)}trailing coder text\n`)).toBeNull();
     expect(G.parseNodeTestSummary('')).toBeNull();
     expect(G.parseNodeTestSummary(tail(3, 3, 0).replaceAll('#', 'ℹ'))).toEqual({ tests: 3, pass: 3, fail: 0 });
   });
+  it('mutation kills: a failure with passes above the floor, and a summary lost to an output overrun, are both refused', async () => {
+    const repo = join(root, 'loop'); mkdirSync(repo);
+    const { base, head } = makeRepo(repo, { 'a.txt': '1\n', 't.test.js': "const test = require('node:test'); for (const n of [1, 2, 3]) test('t' + n, () => { if (n === 3 && require('./f.js')) throw new Error('x'); });\n", 'f.js': 'module.exports = false;\n' },
+      { 'a.txt': '2\n', 'f.js': 'module.exports = true;\n' }, W);
+    const spec = G.pinVerifierSpec({ testCommand: 'node --test t.test.js', workspace: repo, base }) as G.E2VerifierSpec;
+    expect(spec.minTests).toEqual([1]);
+    const { lines, evidence } = await liveCapture(root, 'loop.jsonl', GOOD());
+    const g = async (runner: G.VerifierRunner) => G.e2Gate({ streamLines: lines, anchor: anchorOf('workflow_output', evidence.finalHash), verifierSpec: spec, reexec: await G.recordVerifierReexec({ spec, cwd: repo, runner }),
+      diff: await G.recordGitDiff({ base, head, cwd: repo, runner: G.spawnVerifierRunner({ timeoutMs: 30_000 }) }), binding: { runId: RUN, base, head, workspace: repo }, modelId: MODEL });
+    const failed = await g(G.spawnVerifierRunner({ timeoutMs: 30_000 }));
+    expect(failed.ok ? [] : failed.reasons).toEqual(['e2_reexec_failed', 'e2_verifier_tests_below_minimum']);
+    const cut = await g(G.spawnVerifierRunner({ timeoutMs: 30_000, maxOutputBytes: 40 }));
+    expect(cut.ok ? [] : cut.reasons).toContain('e2_verifier_tests_below_minimum');
+  }, 60_000);
 });
