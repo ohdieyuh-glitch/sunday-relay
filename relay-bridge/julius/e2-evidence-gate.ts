@@ -85,6 +85,21 @@ function workspaceFile(p: string, workspace: string): string | null {
   return abs.slice(workspace.length + 1);
 }
 /** Config files whose content shapes what npm/npx/tsc run; pinned to base whenever one of them is used. */
+/**
+ * Round 6 (Skywalker L1, PILOT R5-6): diff paths that change what `node` loads without being a pinned file: anything under
+ * node_modules (any case; case-insensitive filesystems resolve it) and any NESTED package.json (`imports`, `type`,
+ * `exports` apply to the files below it). The root package.json is pinned (pin_changed). Over-refusal, by choice: a
+ * mission whose real work edits a nested package.json cannot pass this gate.
+ */
+const verifierSurfacePath = (p: string): boolean => {
+  const parts = p.toLowerCase().split('/');
+  return parts.includes('node_modules') || (parts.length > 1 && parts[parts.length - 1] === 'package.json');
+};
+/**
+ * Round 6 (Skywalker L4): a mission-declared non-edit name must not look edit-capable. Names that only Cursor knows are
+ * not guessed: anything containing an edit verb is refused (spec_invalid) and needs a code change with its argument shape.
+ */
+const EDIT_LIKE_NAME = /edit|writ|patch|replac|apply|delet|remov|creat|renam|move|insert|append|save|put|mkdir|touch|update|modif|undo|revert|copy|chmod|format/iu;
 /** Round 5 R4-1: with only node forms left, package.json (module type, `imports` map) is the config that shapes the run. */
 const TOOL_CONFIGS = Object.freeze(['package.json']);
 export type E2VerifierShapeRefusal = 'program_not_allowed' | 'shape_not_allowed' | 'path_outside_workspace' | 'spec_program_untrusted';
@@ -404,7 +419,7 @@ function baseTestFiles(workspace: string, base: string): string[] | null {
       cwd: workspace, shell: false, stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024,
       env: { LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...E2_GIT_ENV, GIT_NO_REPLACE_OBJECTS: '1', PATH: E2_VERIFIER_PATH },
     }).toString('utf8');
-    return out.split('\u0000').filter((f) => f !== '' && !f.split('/').includes('node_modules') && !f.startsWith('-') && NODE_TEST_FILE.test(f));
+    return out.split('\u0000').filter((f) => f !== '' && !f.toLowerCase().split('/').includes('node_modules') && !f.startsWith('-') && NODE_TEST_FILE.test(f));
   } catch { return null; }
 }
 /** Builds the pinned spec, or a named refusal. Call it on the mission record, not on anything the coder wrote. */
@@ -417,7 +432,7 @@ export function pinVerifierSpec(input: E2MissionVerifierInput): E2VerifierSpec |
   if (!strings.every((x) => typeof x === 'string' && x.trim() !== '')) return no('spec_invalid');
   if (input.minTests !== undefined && !(Number.isSafeInteger(input.minTests) && input.minTests >= 0)) return no('spec_invalid');
   const extra = input.extraKnownNonEditTools;
-  if (extra !== undefined && !(Array.isArray(extra) && extra.every((n) => typeof n === 'string' && n !== '' && !isEditToolName(n)))) return no('spec_invalid');
+  if (extra !== undefined && !(Array.isArray(extra) && extra.every((n) => typeof n === 'string' && n !== '' && !isEditToolName(n) && !EDIT_LIKE_NAME.test(n)))) return no('spec_invalid');
   if (strings.some((x) => SHELL_SYNTAX.test(x.trim()))) return no('spec_shell_syntax');
   const parsed = strings.map((x) => x.trim().split(/ +/u));
   /* Skywalker 44c062b9 M1/M2: bare `node --test` (node's own discovery) becomes the explicit list of test files TRACKED
@@ -880,7 +895,7 @@ export function e2Gate(input: {
       }
     }
     /* Round 5 R4-1: a diff that adds or changes anything under node_modules can change what the verifier imports. */
-    if (realDiff && diff.exitCode === 0 && (diff.paths === null || diff.paths.some((p) => p.split('/').includes('node_modules')))) {
+    if (realDiff && diff.exitCode === 0 && (diff.paths === null || diff.paths.some(verifierSurfacePath))) {
       reasons.push('e2_verifier_binary_untrusted');
     }
   }
