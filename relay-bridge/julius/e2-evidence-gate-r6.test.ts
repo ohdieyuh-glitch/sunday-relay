@@ -107,7 +107,7 @@ describe('Skywalker N3 rule (b): every edit-call path is in the diff', () => {
     const unknown = await liveCapture('rb-unk.jsonl', stream({ name: 'edit_file', args: { path: 'a.txt' } }, { name: 'edit_file', args: { files: ['b.txt'] } }));
     expect(e2Gate({ streamLines: unknown.lines, anchor: unknown.anchor, ...p })).toEqual({ ok: false, reasons: ['e2_edit_path_unknown'] });
     const escape = await liveCapture('rb-esc.jsonl', stream({ name: 'edit_file', args: { path: '../a.txt' } }));
-    expect(e2Gate({ streamLines: escape.lines, anchor: escape.anchor, ...p })).toEqual({ ok: false, reasons: ['e2_edit_path_not_in_diff'] });
+    expect(e2Gate({ streamLines: escape.lines, anchor: escape.anchor, ...p })).toEqual({ ok: false, reasons: ['e2_edit_path_outside_workspace'] }); // round 4 M3: named
     expect(createHash('sha256').update('x').digest('hex')).toHaveLength(64);
   });
 });

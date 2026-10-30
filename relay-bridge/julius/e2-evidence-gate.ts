@@ -466,11 +466,12 @@ export const E2_GATE_REASONS = Object.freeze([
   'e2_final_record_mismatch', 'e2_no_edit_calls', 'e2_diff_empty', 'e2_stream_mid_run_start', 'e2_model_unbound',
   'e2_diff_not_isolated', 'e2_edit_path_not_in_diff', 'e2_edit_path_unknown',
   'e2_anchor_not_external', 'e2_verifier_spec_absent', 'e2_verifier_not_from_spec', 'e2_verifier_pin_changed',
+  'e2_tool_unknown', 'e2_edit_path_outside_workspace',
 ] as const);
 export type E2GateReason = (typeof E2_GATE_REASONS)[number];
 
 /** What the gate needs to bind the three parts: the run, the commits and the workspace, all from the caller's own record. */
-export interface E2Binding { readonly runId: string; readonly base: string; readonly head: string; readonly workspace: string }
+export interface E2Binding { readonly runId: string; readonly base: string; readonly head: string; readonly workspace: string; readonly remoteWorkspaceRoot?: string }
 /**
  * The final hash recorded OUTSIDE the capture (workflow output, ledger). The gate never takes it from the file.
  * PILOT 5366ad30 R3-1: ENFORCED by type and by a module-private registry. The gate accepts only an {@link ExternalAnchor}
@@ -528,11 +529,22 @@ const foldConfusables = (s: string): string => [...s].map((c) => CONFUSABLES[c] 
  * no prefix, no family inference). Anything else is e2_model_unrecognised after the router/Claude diagnostics.
  */
 export const E2_CODER_MODEL_IDS: ReadonlySet<string> = Object.freeze(new Set(['composer-1', 'composer-2', 'grok-code-fast-1']));
-/** Tool names that change files. Read-type calls alone are not work (Skywalker N3). */
-const EDIT_TOOL = /(edit|write|apply|create|delete|patch|replace|insert|rename|move)/iu;
-export const isEditToolName = (name: unknown): boolean => typeof name === 'string' && EDIT_TOOL.test(name);
+/**
+ * Round 4 M3/R3-6: a CLOSED table of tool names, exact match. NOT VERIFIED against live Cursor Cloud Agents tool names
+ * (no provider call was made); the names are the ones seen in Cursor/agent tool docs and fixtures. An edit tool must name
+ * its path(s); a known non-edit tool (todo_write, reads, searches, terminal) is not an edit; any other name is refused
+ * with `e2_tool_unknown` instead of being guessed from a substring. HONEST LIMIT: a terminal command can change files
+ * without naming them; those changes are only seen through the diff, not rule (b).
+ */
+export const E2_EDIT_TOOL_NAMES: readonly string[] = Object.freeze(['edit_file', 'search_replace', 'write', 'apply_patch', 'delete_file', 'MultiEdit', 'Edit', 'Write']);
+export const E2_NON_EDIT_TOOL_NAMES: readonly string[] = Object.freeze([
+  'todo_write', 'TodoWrite', 'read_file', 'Read', 'grep', 'Grep', 'glob_file_search', 'Glob', 'codebase_search', 'list_dir', 'LS',
+  'file_search', 'run_terminal_cmd', 'Bash', 'web_search', 'read_lints',
+]);
+export const isEditToolName = (name: unknown): boolean => typeof name === 'string' && E2_EDIT_TOOL_NAMES.includes(name);
+const isKnownToolName = (name: unknown): boolean => isEditToolName(name) || (typeof name === 'string' && E2_NON_EDIT_TOOL_NAMES.includes(name));
 
-interface Recount { readonly ok: boolean; readonly toolCallCount: number; readonly unfinished: number; readonly editCalls: number; readonly editPaths: readonly (string | null)[]; readonly terminalStatus: string | null; readonly done: boolean }
+interface Recount { readonly ok: boolean; readonly toolCallCount: number; readonly unfinished: number; readonly editCalls: number; readonly editPaths: readonly (readonly string[] | null)[]; readonly unknownTools: number; readonly terminalStatus: string | null; readonly done: boolean }
 /** PILOT 43b93a4e N-1: everything the gate grades, recounted from the event records. An unparsable event fails closed. */
 function recount(lines: readonly string[]): Recount {
   const calls = new Map<string, { name: unknown; status: unknown; args: unknown }>();
@@ -555,22 +567,51 @@ function recount(lines: readonly string[]): Recount {
   }
   const all = [...calls.values()];
   return { ok, toolCallCount: all.length, unfinished: all.filter((c) => c.status !== 'completed').length, editCalls: all.filter((c) => isEditToolName(c.name)).length,
-    editPaths: all.filter((c) => isEditToolName(c.name)).map((c) => editPath(c.args)), terminalStatus, done };
+    editPaths: all.filter((c) => isEditToolName(c.name)).map((c) => editPaths(c.args)), unknownTools: all.filter((c) => !isKnownToolName(c.name)).length, terminalStatus, done };
 }
 
-/** Rule (b): the one path an edit-type call names, from the argument shapes seen in Cursor tool calls; null if unrecognised. */
-function editPath(args: unknown): string | null {
+const okPath = (v: unknown): v is string => typeof v === 'string' && v !== '' && !v.includes('\u0000') && v !== '/dev/null';
+/** Round 4 M3: paths named in apply_patch text (`*** Update/Add/Delete File:`, `*** Move to:`, `--- a/`, `+++ b/`). Linear. */
+function patchPaths(text: string): string[] {
+  const out: string[] = [];
+  for (const line of text.split('\n')) {
+    const m = /^\*\*\* (?:Update|Add|Delete) File: (.+)$/u.exec(line) ?? /^\*\*\* Move to: (.+)$/u.exec(line) ?? /^(?:---|\+\+\+) [ab]\/(.+)$/u.exec(line);
+    if (m !== null) out.push((m[1] as string).replace(/\r$/u, '').trim());
+  }
+  return out;
+}
+/**
+ * Rule (b): every path an edit-type call names, from the argument shapes seen in Cursor tool calls; null if unrecognised.
+ * Round 4 M3: exactly one of a single-path key, a `paths` list, or patch text (`patch`/`input`); conservative otherwise.
+ */
+function editPaths(args: unknown): readonly string[] | null {
   if (typeof args !== 'object' || args === null) return null;
   const a = args as Record<string, unknown>;
-  const found = ['path', 'file_path', 'target_file', 'filePath', 'targetFile'].map((k) => a[k]).filter((v) => v !== undefined);
-  return found.length === 1 && typeof found[0] === 'string' && found[0] !== '' && !found[0].includes('\u0000') ? found[0] : null;
+  const single = ['path', 'file_path', 'target_file', 'filePath', 'targetFile'].map((k) => a[k]).filter((v) => v !== undefined);
+  const list = a.paths;
+  const patch = ['patch', 'input'].map((k) => a[k]).filter((v) => v !== undefined);
+  const forms = [single.length > 0, list !== undefined, patch.length > 0].filter(Boolean).length;
+  if (forms !== 1) return null;
+  if (single.length > 0) return single.length === 1 && okPath(single[0]) ? [single[0]] : null;
+  if (list !== undefined) return Array.isArray(list) && list.length > 0 && list.every(okPath) ? [...(list as string[])] : null;
+  if (patch.length !== 1 || typeof patch[0] !== 'string') return null;
+  const ps = patchPaths(patch[0]);
+  return ps.length > 0 && ps.every(okPath) ? ps : null;
 }
-/** Rule (b): a workspace-relative POSIX path, or null when it leaves the workspace. */
-function relToWorkspace(p: string, workspace: string): string | null {
-  const abs = isAbsolute(p) ? p : join(workspace, p);
-  const norm = join(abs);
-  if (!norm.startsWith(`${workspace}/`)) return null;
-  return norm.slice(workspace.length + 1);
+/**
+ * Rule (b): a workspace-relative POSIX path, or null when it leaves the workspace. Round 4 M3: an absolute path under the
+ * caller's explicit `remoteWorkspaceRoot` (the agent's own checkout path) is stripped to relative. NOT VERIFIED which
+ * root live Cursor runs use; the caller must supply it.
+ */
+function relToWorkspace(p: string, workspace: string, remoteRoot?: string): string | null {
+  const norm = normalizePath(p);
+  for (const r of [remoteRoot, workspace]) {
+    if (typeof r === 'string' && isAbsolute(r) && isAbsolute(norm) && norm.startsWith(`${normalizePath(r).replace(/\/+$/u, '')}/`)) {
+      return norm.slice(normalizePath(r).replace(/\/+$/u, '').length + 1);
+    }
+  }
+  if (isAbsolute(norm) || norm === '..' || norm.startsWith('../') || norm === '.') return null;
+  return norm.replace(/^\.\//u, '');
 }
 
 function modelReason(modelId: unknown): E2GateReason | null {
@@ -626,6 +667,7 @@ export function e2Gate(input: {
       if (!rc.ok || rc.toolCallCount !== fin.toolCallCount || rc.unfinished !== fin.unfinishedCalls || rc.terminalStatus !== (finTerminal ?? null)
         || (finTerminal !== null && finTerminal !== undefined && !rc.done)) reasons.push('e2_final_record_mismatch');
       else if (rc.toolCallCount >= 1 && rc.editCalls < 1) reasons.push('e2_no_edit_calls');
+      if (rc.ok && rc.unknownTools > 0) reasons.push('e2_tool_unknown');
       if (header.start !== 'created_by_this_transport') reasons.push('e2_stream_mid_run_start');
     }
   }
@@ -663,7 +705,9 @@ export function e2Gate(input: {
       if (rc.editPaths.some((p) => p === null)) reasons.push('e2_edit_path_unknown');
       else {
         const inDiff = new Set(diff.paths ?? []);
-        if (diff.paths === null || rc.editPaths.some((p) => { const r = relToWorkspace(p as string, binding.workspace); return r === null || !inDiff.has(r); })) reasons.push('e2_edit_path_not_in_diff');
+        const rels = rc.editPaths.flatMap((ps) => (ps as readonly string[]).map((p) => relToWorkspace(p, binding.workspace, binding.remoteWorkspaceRoot)));
+        if (rels.some((r) => r === null)) reasons.push('e2_edit_path_outside_workspace');
+        if (diff.paths === null || rels.some((r) => r !== null && !inDiff.has(r))) reasons.push('e2_edit_path_not_in_diff');
       }
     }
   }
