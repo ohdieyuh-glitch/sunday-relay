@@ -458,6 +458,22 @@ describe('configuration fails closed, before anything is sent', () => {
     expect(familyFromModelId('gpt-5')).toBe('openai');
     expect(grokBotCoderConfigRefusal(config({ pinnedModelId: 'composer-1', coderModelFamily: 'cursor', reviewerModelId: null, reviewerModelFamily: null }), { modelId: 'grok-build-0.1', modelFamily: 'xai' })).toBeNull();
   });
+  it('Skywalker N11: an id that names two vendors is in no family and refused, as coder and as reviewer', () => {
+    const twoVendor = ['grok-gpt-5', 'gpt-5-grok', 'composer-gpt', 'gpt-composer-1', 'cursor-gemini-2', 'gemini-codex', 'xai-composer-1', 'composer-grok', 'openai-cursor-1', 'g.r.o.k-gpt-5'];
+    for (const id of [...twoVendor, 'grok-claude', 'composer-opus']) {
+      expect(familyFromModelId(id), id).toBeNull();
+      expect(resolveModelFamily(id), id).toBeNull();
+    }
+    for (const id of twoVendor) {
+      for (const fam of ['cursor', 'openai', 'xai', 'google']) {
+        const r = grokBotCoderConfigRefusal(config({ pinnedModelId: id, coderModelFamily: fam, reviewerModelId: null, reviewerModelFamily: null }), { modelId: 'claude-opus-4', modelFamily: 'anthropic' });
+        expect(r?.providerFailureClass, `${id}/${fam}`).toMatch(/^coder_grok_(model_family_unrecognised|same_family_as_reviewer)$/u);
+      }
+      expect(grokBotCoderConfigRefusal(config({ pinnedModelId: 'composer-1', coderModelFamily: 'cursor', reviewerModelId: null, reviewerModelFamily: null }), { modelId: id, modelFamily: 'xai' })?.providerFailureClass, id).toBe('coder_grok_reviewer_family_unrecognised');
+    }
+    /* One vendor named (even twice) keeps its family. */
+    for (const [id, fam] of [['grok-4', 'xai'], ['xai-grok-4', 'xai'], ['gpt-5-codex', 'openai'], ['cursor-composer-1', 'cursor'], ['gemini-2.5-pro', 'google'], ['o3', 'openai']] as const) expect(familyFromModelId(id), id).toBe(fam);
+  });
   it('H1 fail-closed (PILOT R1 residuals): an opaque model id is refused whatever family is declared for it', async () => {
     /* PILOT's exact accepted cases at a1795dc0. */
     expect(await refusedClass(config({ pinnedModelId: 'code-supernova-1', coderModelFamily: 'cursor', reviewerModelFamily: 'xai', reviewerModelId: 'grok-4' }))).toBe('coder_grok_model_family_unrecognised');

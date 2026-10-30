@@ -368,17 +368,21 @@ export const canonicalModelFamily = (label: string): string => {
 export const familyFromModelId = (id: string): string | null => {
   const v = foldLookalikes(id);
   const raw = id.trim().toLowerCase();
-  if (/grok|xai/u.test(v) || /grok|xai/u.test(raw)) return 'xai';
+  const squeezed = (s: string): string => s.replace(/[^a-z0-9]/gu, '');
+  const xai = /grok|xai/u.test(v) || /grok|xai/u.test(raw);
   /* PILOT L-3, FAIL CLOSED: an id that names xAI only once its separators are removed (`x.ai-composer`, `x_ai-cursor`,
    * `g.r.o.k-4`) is a split vendor name. It is placed in NO family (unrecognised, so refused beside any reviewer), and in
    * particular never in Cursor because it also says `composer` or `cursor`. Checked before every other vendor. */
-  const squeezed = (s: string): string => s.replace(/[^a-z0-9]/gu, '');
-  if (/grok|xai/u.test(squeezed(v)) || /grok|xai/u.test(squeezed(raw))) return null;
-  if (foldVariants(id).some((f) => /claude|anthropic|opus|sonnet|haiku/u.test(f))) return 'anthropic';
-  if (/gpt|openai|codex/u.test(v) || /(^|[-._])o[1-9]($|[-._])/u.test(raw)) return 'openai';
-  if (/gemini/u.test(v)) return 'google';
-  if (/composer|cursor/u.test(v)) return 'cursor';
-  return null;
+  if (!xai && (/grok|xai/u.test(squeezed(v)) || /grok|xai/u.test(squeezed(raw)))) return null;
+  /* Skywalker N11, FAIL CLOSED: an id that names two vendors (`grok-gpt-5`, `gpt-5-grok`, `composer-gpt`) has no one
+   * family to compare, so it is placed in none (unrecognised) rather than in whichever vendor is checked first. */
+  const named: string[] = [];
+  if (xai) named.push('xai');
+  if (foldVariants(id).some((f) => /claude|anthropic|opus|sonnet|haiku/u.test(f))) named.push('anthropic');
+  if (/gpt|openai|codex/u.test(v) || /(^|[-._])o[1-9]($|[-._])/u.test(raw)) named.push('openai');
+  if (/gemini/u.test(v)) named.push('google');
+  if (/composer|cursor/u.test(v)) named.push('cursor');
+  return named.length === 1 ? named[0]! : null;
 };
 
 /** The vendor families the reviewed table can name. An allowlist entry naming anything else is ignored. */
