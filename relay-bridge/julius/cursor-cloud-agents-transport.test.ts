@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { CURSOR_API_KEY_ENV_NAME, CURSOR_API_ORIGIN, createCursorCloudAgentsTransport, readCappedBody, type CursorFetch, type CursorFetchResponse } from './cursor-cloud-agents-transport';
+import { CURSOR_API_KEY_ENV_NAME, CURSOR_API_ORIGIN, CURSOR_ATTESTED_MODEL_FIELD, createCursorCloudAgentsTransport, isRequestEchoField, readAttestedModelId, readCappedBody, type CursorFetch, type CursorFetchResponse } from './cursor-cloud-agents-transport';
 import { GROK_BOT_CODER_CONFIG_DEFAULTS, createGrokBotCodingAgentProvider, type CodingAgentCreateInput } from './grok-bot-coding-provider';
 import type { JuliusCodingAgentRequest } from '../../src/relay/mission/julius/julius-coding-agent';
 
@@ -188,11 +188,23 @@ describe('result: branches, usage, and a served model only from a configured fie
     if (r.kind === 'result') expect(r.branches[0]).toEqual({ repoUrl: 'github.com/example-org/example-target', branch: 'cursor/fix-1', prUrl: 'https://github.com/example-org/example-target/pull/1' });
   });
 
-  it('a configured field is read and its source named', async () => {
-    const r = await make(route, { attestedModelField: { record: 'run', path: ['model', 'id'] } }).transport.fetchResult({ agentId: AGENT, runId: RUN });
-    expect(r).toMatchObject({ reportedModelId: 'fake-grok-coder-1', reportedModelSource: 'run.model.id' });
+  it('F4: no option can name the field; the reviewed constant is null; a body carrying model.id on the run or agent is never reported', async () => {
+    expect(CURSOR_ATTESTED_MODEL_FIELD).toBeNull();
+    /* A caller passing the removed option is ignored. */
+    const opts = { attestedModelField: { record: 'run', path: ['model', 'id'] } } as never;
+    const r = await make(route, opts).transport.fetchResult({ agentId: AGENT, runId: RUN });
+    expect(r).toMatchObject({ reportedModelId: null, reportedModelSource: null });
   });
 
+  it('F4: request-echo fields never count, even if the constant were changed to name one', () => {
+    for (const path of [['model', 'id'], ['model'], ['modelId'], ['Model_ID'], ['requestedModel'], ['config', 'model', 'name'], []]) {
+      for (const record of ['run', 'agent'] as const) {
+        expect(isRequestEchoField({ record, path }), path.join('.')).toBe(true);
+        expect(readAttestedModelId({ model: { id: 'x1' }, modelId: 'x1', Model_ID: 'x1', requestedModel: 'x1', config: { model: { name: 'x1' } } }, { record, path }, (v) => v)).toBeNull();
+      }
+    }
+    expect(isRequestEchoField({ record: 'run', path: ['servedBy', 'engine'] })).toBe(false);
+  });
   it('missing usage is null, not zero', async () => {
     const r = await make((call) => (call.url.includes('/usage') ? { status: 404 } : finished)).transport.fetchResult({ agentId: AGENT, runId: RUN });
     expect(r).toMatchObject({ kind: 'result', usage: null });
@@ -244,7 +256,7 @@ describe('the key never leaves: not in logs, results, evidence or errors', () =>
 describe('L2: no request ever follows a redirect', () => {
   it('every call in a create, poll, result, usage and cancel cycle is made with redirect:error', async () => {
     const finished = { status: 200, body: { id: RUN, status: 'FINISHED', result: 'done', git: { branches: [] } } };
-    const { transport, f } = make((call, n) => (n === 1 ? created : call.url.includes('/usage') ? { status: 200, body: { runs: [] } } : finished), { attestedModelField: { record: 'agent', path: ['model', 'id'] } });
+    const { transport, f } = make((call, n) => (n === 1 ? created : call.url.includes('/usage') ? { status: 200, body: { runs: [] } } : finished));
     await transport.createRun(input);
     await transport.pollUntilTerminal({ agentId: AGENT, runId: RUN }, { deadlineAtMs: 1e6 });
     await transport.fetchResult({ agentId: AGENT, runId: RUN });
@@ -346,11 +358,12 @@ describe('L4: service strings that reach evidence are bounded', () => {
     expect(short).toMatchObject({ finalText: 'done', finalTextTruncated: false });
   });
 
-  it('a reported model id must have the model-id shape, or it is not reported', async () => {
-    const field = { attestedModelField: { record: 'run' as const, path: ['model', 'id'] } };
-    expect((await result({ model: { id: 'fake-grok-coder-1' } }, field)).reportedModelId).toBe('fake-grok-coder-1');
+  it('a reported model id must have the model-id shape, or it is not reported', () => {
+    const field = { record: 'run' as const, path: ['servedBy', 'engine'] };
+    expect(readAttestedModelId({ servedBy: { engine: 'fake-grok-coder-1' } }, field, (v) => v)).toBe('fake-grok-coder-1');
     for (const bad of ['a'.repeat(129), 'model with space', 'model\nnext', '-leading', 'mödel']) {
-      expect((await result({ model: { id: bad } }, field)).reportedModelId, bad).toBeNull();
+      expect(readAttestedModelId({ servedBy: { engine: bad } }, field, (v) => v), bad).toBeNull();
     }
+    expect(readAttestedModelId({ servedBy: { engine: 'fake-1' } }, field, () => null)).toBeNull();
   });
 });

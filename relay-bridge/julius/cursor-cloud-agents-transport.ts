@@ -25,9 +25,11 @@ import type {
  *  - https://cursor.com/docs/api.md                     (Basic or Bearer auth; default 20 requests/minute; 429 on limit)
  *
  * UNDOCUMENTED, AND THEREFORE FAIL-CLOSED CONFIGURATION, NEVER AN ASSUMPTION:
- *  - No served-model field is documented on the agent, run or usage record. `attestedModelField` is null by default, so
- *    `reportedModelId` is null and the provider halts `coder_served_model_unattested`. A person may name a field once the
- *    API is observed to return one; nothing here guesses its name.
+ *  - No served-model field is documented on the agent, run or usage record. {@link CURSOR_ATTESTED_MODEL_FIELD} is a
+ *    reviewed CODE constant, null today, so `reportedModelId` is always null and the provider halts
+ *    `coder_served_model_unattested`. It is not an option: configuration cannot choose the field. A field that could be the
+ *    service echoing the request's own `model` (any `model`/`modelId` segment on the agent or run record) never counts,
+ *    even if the constant is changed to name one (review ruling, Oct 30 2026).
  *  - `Retry-After` is documented only for the Admin API; it is honoured when present (bounded), otherwise backoff is ours.
  *  - The exact error-body shape for Cloud Agents codes is not pinned down; mapping is by HTTP status only.
  *
@@ -57,8 +59,38 @@ export type CursorFetch = (url: string, init: {
   readonly signal?: AbortSignal;
 }) => Promise<CursorFetchResponse>;
 
-/** Where, on which record, a served model id would be read. Null (the default): nowhere, because none is documented. */
+/** Where, on which record, a served model id would be read. */
 export interface CursorAttestedModelField { readonly record: 'agent' | 'run'; readonly path: readonly string[] }
+
+/**
+ * THE ONLY PLACE A SERVED-MODEL FIELD CAN BE NAMED: a reviewed code change, after a response field is shown to be
+ * independent of the request. Null: none is, so nothing is ever reported.
+ */
+export const CURSOR_ATTESTED_MODEL_FIELD: CursorAttestedModelField | null = null;
+
+/** A segment that could be the service echoing the `model` the create request itself sent. */
+const REQUEST_ECHO_SEGMENT = /^(model|models|model_?id|requested_?model(_?id)?)$/iu;
+
+/** True when reading `field` could return the request's own model back: such a field is never attestation. */
+export function isRequestEchoField(field: CursorAttestedModelField): boolean {
+  return field.path.length === 0 || field.path.some((part) => REQUEST_ECHO_SEGMENT.test(part));
+}
+
+/** Reads `field` from `record`: a request-echo field, a non-string, or anything not shaped like a model id is not reported. */
+export function readAttestedModelId(record: unknown, field: CursorAttestedModelField | null, clean: (v: string) => string | null): string | null {
+  const effective = effectiveAttestedModelField(field);
+  if (effective === null) return null;
+  let cur: unknown = record;
+  for (const part of effective.path) cur = isRecord(cur) ? cur[part] : undefined;
+  if (typeof cur !== 'string' || cur === '') return null;
+  const cleaned = clean(cur);
+  return cleaned !== null && REPORTED_MODEL_ID.test(cleaned) ? cleaned : null;
+}
+
+/** The field the transport reads: the reviewed constant, unless it is a request echo. */
+export function effectiveAttestedModelField(field: CursorAttestedModelField | null): CursorAttestedModelField | null {
+  return field === null || isRequestEchoField(field) ? null : field;
+}
 
 export interface CursorCloudAgentsTransportOptions {
   readonly fetch: CursorFetch;
@@ -73,7 +105,6 @@ export interface CursorCloudAgentsTransportOptions {
   readonly requestTimeoutMs?: number;
   /** First 429 backoff when no Retry-After is given. Default 10000, doubling to 60000. */
   readonly rateLimitBackoffMs?: number;
-  readonly attestedModelField?: CursorAttestedModelField | null;
   readonly log?: (line: string) => void;
 }
 
@@ -150,7 +181,7 @@ export function createCursorCloudAgentsTransport(options: CursorCloudAgentsTrans
   const pollMs = Math.max(MIN_POLL_MS, options.pollIntervalMs ?? 6_000);
   const requestTimeoutMs = options.requestTimeoutMs ?? 30_000;
   const firstBackoff = Math.max(1_000, options.rateLimitBackoffMs ?? 10_000);
-  const modelField = options.attestedModelField ?? null;
+  const modelField = effectiveAttestedModelField(CURSOR_ATTESTED_MODEL_FIELD);
   const log = options.log ?? ((): void => undefined);
 
   /** The key, only for the duration of one request. A malformed key is treated as absent. */
@@ -209,14 +240,7 @@ export function createCursorCloudAgentsTransport(options: CursorCloudAgentsTrans
     }
   }
 
-  const readModel = (record: unknown, key: string): string | null => {
-    if (modelField === null) return null;
-    let cur: unknown = record;
-    for (const part of modelField.path) cur = isRecord(cur) ? cur[part] : undefined;
-    if (typeof cur !== 'string' || cur === '') return null;
-    const scrubbed = scrub(cur, key);
-    return scrubbed !== null && REPORTED_MODEL_ID.test(scrubbed) ? scrubbed : null;
-  };
+  const readModel = (record: unknown, key: string): string | null => readAttestedModelId(record, modelField, (v) => scrub(v, key));
 
   return {
     transportKind: CURSOR_CLOUD_AGENTS_TRANSPORT_KIND,
