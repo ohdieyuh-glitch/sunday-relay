@@ -90,7 +90,7 @@ describe('E2 part C: the diff', () => {
 describe('E2 gate', () => {
   it('publishes every reason once', () => {
     expect(new Set(E2_GATE_REASONS).size).toBe(E2_GATE_REASONS.length);
-    expect(E2_GATE_REASONS.length).toBe(28);
+    expect(E2_GATE_REASONS.length).toBe(33);
   });
   it('refuses when everything is absent, with every reason, never the diff alone', () => {
     const r = e2Gate({ streamLines: null, anchor: null, reexec: null, diff: null, modelId: null, binding: null });

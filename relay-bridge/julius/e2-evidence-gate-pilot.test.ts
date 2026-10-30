@@ -52,13 +52,18 @@ afterAll(() => { rmSync(root, { recursive: true, force: true }); });
 async function liveCapture(name: string) {
   const orig = globalThis.fetch;
   try {
-    globalThis.fetch = (async () => new Response(SSE, { status: 200, headers: { 'content-type': 'text/event-stream' } })) as typeof fetch;
+    /* 43b93a4e M-2: the transport must create the run itself (POST) for the gate to accept the start. */
+    globalThis.fetch = (async (_u: unknown, init?: { method?: string }) => (init?.method === 'POST'
+      ? new Response(JSON.stringify({ agent: { id: REF.agentId }, run: { id: REF.runId } }), { status: 201, headers: { 'content-type': 'application/json' } })
+      : new Response(SSE, { status: 200, headers: { 'content-type': 'text/event-stream' } }))) as typeof fetch;
     vi.resetModules();
     const T = await import('./cursor-cloud-agents-transport');
     const E = await import('./cursor-run-stream-evidence');
     const transport = T.createCursorCloudAgentsTransport({ fetch: T.cursorGlobalFetch, getApiKey: () => KEY });
+    const c = await transport.createRun({ idempotencyKey: 'k', agentId: REF.agentId, name: 'n', promptText: 'p', modelId: 'grok-code-fast-1', repoUrl: 'https://github.com/o/r', startingRef: 'a'.repeat(40) });
+    if (c.kind !== 'created') throw new Error(c.kind);
     const path = join(root, name);
-    const evidence = await E.captureCursorRunStream({ transport, ref: REF, sink: E.createFileEvidenceSink(path), deadlineAtMs: Date.now() + 60_000 });
+    const evidence = await E.captureCursorRunStream({ transport, ref: c.ref, sink: E.createFileEvidenceSink(path), deadlineAtMs: Date.now() + 60_000 });
     return { path, evidence };
   } finally { globalThis.fetch = orig; vi.resetModules(); }
 }
@@ -104,7 +109,7 @@ describe('PILOT 0774db05 H-3: the gate verifies the evidence FILE against an anc
     expect(e2Gate({ streamLines, anchor: { finalHash: evidence.finalHash }, reexec: p.reexec, diff: p.diff, modelId: p.modelId, binding: p.binding })).toEqual({ ok: true });
     /* The same file from a fake transport is refused only for being fake: chain and anchor still verify. */
     const f = await fakeCapture('a-fake.jsonl');
-    expect(reasons(e2Gate({ streamLines: await readEvidenceLines(f.path), anchor: { finalHash: f.evidence.finalHash }, reexec: p.reexec, diff: p.diff, modelId: p.modelId, binding: p.binding }))).toEqual(['e2_stream_not_live']);
+    expect(reasons(e2Gate({ streamLines: await readEvidenceLines(f.path), anchor: { finalHash: f.evidence.finalHash }, reexec: p.reexec, diff: p.diff, modelId: p.modelId, binding: p.binding }))).toEqual(['e2_stream_not_live', 'e2_stream_mid_run_start', 'e2_model_unbound']); // 43b93a4e: the fake capture used a literal ref
   });
   it('(b) one record edited with every hash recomputed verifies as a chain but is refused: anchor mismatch', async () => {
     const { path, evidence } = await liveCapture('b.jsonl');
@@ -112,7 +117,7 @@ describe('PILOT 0774db05 H-3: the gate verifies the evidence FILE against an anc
     const forged = rechain(lines, (r) => { if (r.kind === 'event' && r.event === 'tool_call') r.data = JSON.stringify({ callId: 'c1', name: 'read_file', status: 'completed' }); });
     expect(verifyEvidenceChain(forged).ok).toBe(true);
     const p = await parts();
-    expect(reasons(e2Gate({ streamLines: forged, anchor: { finalHash: evidence.finalHash }, reexec: p.reexec, diff: p.diff, modelId: p.modelId, binding: p.binding }))).toEqual(['e2_anchor_mismatch']);
+    expect(reasons(e2Gate({ streamLines: forged, anchor: { finalHash: evidence.finalHash }, reexec: p.reexec, diff: p.diff, modelId: p.modelId, binding: p.binding }))).toEqual(['e2_anchor_mismatch', 'e2_no_edit_calls']); // 43b93a4e N3: the forgery leaves only a read call
     /* An edit without recomputing breaks the chain. */
     const broken = [...lines]; const at = broken.findIndex((l) => l.includes('edit_file')); broken[at] = (broken[at] as string).replace('edit_file', 'read_file');
     expect(reasons(e2Gate({ streamLines: broken, anchor: { finalHash: evidence.finalHash }, reexec: p.reexec, diff: p.diff, modelId: p.modelId, binding: p.binding }))).toContain('e2_stream_chain_invalid');
@@ -145,10 +150,11 @@ describe('PILOT 0774db05 H-3: the gate verifies the evidence FILE against an anc
     const forged = rechain(lines, (r) => { if (r.kind === 'final') r.cause = 'e2_stream_gap'; });
     const anchor = { finalHash: (verifyEvidenceChain(forged) as { finalHash: string }).finalHash };
     expect(reasons(e2Gate({ ...g, streamLines: forged, anchor }))).toEqual(['e2_stream_failed']);
-    /* Mutation R7/R8: the gate reads unfinishedCalls and toolCallCount from the final record itself. */
+    /* Mutation R7/R8: the gate reads unfinishedCalls and toolCallCount from the final record itself; since 43b93a4e N-1 it
+       also recounts them from the events, so a final record that disagrees is e2_final_record_mismatch as well. */
     for (const [edit, want] of [[(r: Record<string, unknown>) => { r.unfinishedCalls = 1; }, 'e2_stream_call_unfinished'], [(r: Record<string, unknown>) => { r.toolCallCount = 0; }, 'e2_no_tool_calls']] as const) {
       const f = rechain(lines, (r) => { if (r.kind === 'final') edit(r); });
-      expect(reasons(e2Gate({ ...g, streamLines: f, anchor: { finalHash: (verifyEvidenceChain(f) as { finalHash: string }).finalHash } }))).toEqual([want]);
+      expect(reasons(e2Gate({ ...g, streamLines: f, anchor: { finalHash: (verifyEvidenceChain(f) as { finalHash: string }).finalHash } }))).toEqual([want, 'e2_final_record_mismatch']);
     }
     expect(evidence.cause).toBeNull();
   });
@@ -255,21 +261,27 @@ describe('PILOT 0774db05 M-8: the diff hash does not depend on local git config'
 });
 
 describe('PILOT 0774db05 L-4: a model the reviewed table cannot place is refused', () => {
+  /* 43b93a4e Skywalker N2: these ids differ from the requested model in the header, so e2_model_unbound is also reported;
+     these tests are about the id itself, so it is filtered here and asserted in e2-evidence-gate-r4.test.ts. */
+  const idReasons = (r: ReturnType<typeof e2Gate>): readonly string[] => reasons(r).filter((x) => x !== 'e2_model_unbound');
   it('fake-model is unrecognised', async () => {
     const { path, evidence } = await liveCapture('l4.jsonl');
     const p = await parts();
     const g = { streamLines: await readEvidenceLines(path), anchor: { finalHash: evidence.finalHash }, reexec: p.reexec, diff: p.diff, binding: p.binding };
-    expect(reasons(e2Gate({ ...g, modelId: 'fake-model' }))).toEqual(['e2_model_unrecognised']);
-    expect(reasons(e2Gate({ ...g, modelId: 'auto' }))).toEqual(['e2_model_router']);
+    expect(idReasons(e2Gate({ ...g, modelId: 'fake-model' }))).toEqual(['e2_model_unrecognised']);
+    expect(idReasons(e2Gate({ ...g, modelId: 'auto' }))).toEqual(['e2_model_router']);
   });
   it('Skywalker F5b: router lookalikes (trailing space, Cyrillic, full-width, zero-width) are routers; Claude and unknown ids are refused', async () => {
     const { path, evidence } = await liveCapture('f5.jsonl');
     const p = await parts();
     const g = { streamLines: await readEvidenceLines(path), anchor: { finalHash: evidence.finalHash }, reexec: p.reexec, diff: p.diff, binding: p.binding };
-    for (const m of ['AUTO ', ' auto', '\u0410uto', '\u0410UTO ', '\uff41\uff55\uff54\uff4f', 'au\u200bto', 'Auto\t']) expect(reasons(e2Gate({ ...g, modelId: m })), JSON.stringify(m)).toEqual(['e2_model_router']);
-    for (const m of ['claude-opus-5', 'claude-sonnet-4-5', 'anthropic/claude-3']) expect(reasons(e2Gate({ ...g, modelId: m })), m).toEqual(['e2_model_claude']);
-    for (const m of ['claude-opus-5', 'fake-model', 'my-model-1', 'x']) expect(reasons(e2Gate({ ...g, modelId: m })).length, m).toBeGreaterThan(0);
-    for (const m of ['grok-code-fast-1', 'gpt-5', 'composer-1']) expect(reasons(e2Gate({ ...g, modelId: m })), m).toEqual([]);
+    for (const m of ['AUTO ', ' auto', '\u0410uto', '\u0410UTO ', '\uff41\uff55\uff54\uff4f', 'au\u200bto', 'Auto\t']) expect(idReasons(e2Gate({ ...g, modelId: m })), JSON.stringify(m)).toEqual(['e2_model_router']);
+    for (const m of ['claude-opus-5', 'claude-sonnet-4-5', 'anthropic/claude-3']) expect(idReasons(e2Gate({ ...g, modelId: m })), m).toEqual(['e2_model_claude']);
+    for (const m of ['claude-opus-5', 'fake-model', 'my-model-1', 'x']) expect(idReasons(e2Gate({ ...g, modelId: m })).length, m).toBeGreaterThan(0);
+    expect(reasons(e2Gate({ ...g, modelId: 'grok-code-fast-1' }))).toEqual([]);
+    /* 43b93a4e N-6: the list is closed; gpt-5 is no longer accepted, composer-1 is listed but not the run's requested model. */
+    expect(reasons(e2Gate({ ...g, modelId: 'gpt-5' }))).toEqual(['e2_model_unbound', 'e2_model_unrecognised']);
+    expect(reasons(e2Gate({ ...g, modelId: 'composer-1' }))).toEqual(['e2_model_unbound']);
     expect(E2_FAKE_LABEL).toBe('fake');
   });
 });

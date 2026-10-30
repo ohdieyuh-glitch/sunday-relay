@@ -185,12 +185,20 @@ export const E2_GATE_REASONS = Object.freeze([
   'e2_diff_absent', 'e2_diff_forged', 'e2_diff_fake', 'e2_diff_failed',
   'e2_binding_absent', 'e2_binding_run_mismatch', 'e2_binding_diff_mismatch', 'e2_diff_not_descendant', 'e2_binding_cwd_mismatch',
   'e2_model_absent', 'e2_model_router', 'e2_model_claude', 'e2_model_unrecognised',
+  'e2_final_record_mismatch', 'e2_no_edit_calls', 'e2_diff_empty', 'e2_stream_mid_run_start', 'e2_model_unbound',
 ] as const);
 export type E2GateReason = (typeof E2_GATE_REASONS)[number];
 
 /** What the gate needs to bind the three parts: the run, the commits and the workspace, all from the caller's own record. */
 export interface E2Binding { readonly runId: string; readonly base: string; readonly head: string; readonly workspace: string }
-/** The final hash recorded OUTSIDE the capture (workflow output, ledger). The gate never takes it from the file. */
+/**
+ * The final hash recorded OUTSIDE the capture (workflow output, ledger). The gate never takes it from the file.
+ * PILOT 43b93a4e N-1: the anchor MUST come from a separate trust domain (a record the writer of the evidence file cannot
+ * also rewrite). An anchor derived from the file itself, or kept next to it by the same writer, is NOT independent: whoever
+ * can re-chain the file can recompute it. The gate cannot tell where an anchor came from; that is the caller's obligation.
+ * The gate does recount every fact it grades from the events, so a re-chained file whose final record disagrees with its
+ * own events is refused even with a matching anchor; a re-chained file whose events were also rewritten is not detectable.
+ */
 export interface E2Anchor { readonly finalHash: string }
 
 /**
@@ -207,6 +215,40 @@ const CONFUSABLES: Readonly<Record<string, string>> = Object.freeze({
 });
 const foldConfusables = (s: string): string => [...s].map((c) => CONFUSABLES[c] ?? c).join('');
 
+/**
+ * PILOT 43b93a4e N-6 / Skywalker L3: the CLOSED list of coder model ids the gate accepts, exact match only (no folding,
+ * no prefix, no family inference). Anything else is e2_model_unrecognised after the router/Claude diagnostics.
+ */
+export const E2_CODER_MODEL_IDS: ReadonlySet<string> = Object.freeze(new Set(['composer-1', 'composer-2', 'grok-code-fast-1']));
+/** Tool names that change files. Read-type calls alone are not work (Skywalker N3). */
+const EDIT_TOOL = /(edit|write|apply|create|delete|patch|replace|insert|rename|move)/iu;
+export const isEditToolName = (name: unknown): boolean => typeof name === 'string' && EDIT_TOOL.test(name);
+
+interface Recount { readonly ok: boolean; readonly toolCallCount: number; readonly unfinished: number; readonly editCalls: number; readonly terminalStatus: string | null; readonly done: boolean }
+/** PILOT 43b93a4e N-1: everything the gate grades, recounted from the event records. An unparsable event fails closed. */
+function recount(lines: readonly string[]): Recount {
+  const calls = new Map<string, { name: unknown; status: unknown }>();
+  let terminalStatus: string | null = null; let done = false; let ok = true;
+  for (const line of lines.slice(1, -1)) {
+    const r = JSON.parse(line) as Record<string, unknown>;
+    if (r.kind !== 'event' || r.duplicate === true) continue;
+    const parse = (): Record<string, unknown> | null => {
+      try { const v = JSON.parse(String(r.data)) as unknown; return typeof v === 'object' && v !== null ? v as Record<string, unknown> : null; } catch { return null; }
+    };
+    if (r.event === 'tool_call') {
+      const v = parse();
+      if (v === null || typeof v.callId !== 'string') { ok = false; continue; }
+      calls.set(v.callId, { name: v.name ?? calls.get(v.callId)?.name, status: v.status });
+    } else if (r.event === 'result') {
+      const v = parse();
+      if (v === null || typeof v.status !== 'string') { ok = false; continue; }
+      terminalStatus = v.status;
+    } else if (r.event === 'done') done = true;
+  }
+  const all = [...calls.values()];
+  return { ok, toolCallCount: all.length, unfinished: all.filter((c) => c.status !== 'completed').length, editCalls: all.filter((c) => isEditToolName(c.name)).length, terminalStatus, done };
+}
+
 function modelReason(modelId: unknown): E2GateReason | null {
   if (typeof modelId !== 'string') return 'e2_model_absent';
   const m = foldConfusables(modelId.normalize('NFKC').replace(/[\u00ad\u200b-\u200f\u2060-\u2064\ufeff]/gu, '')).trim();
@@ -215,6 +257,7 @@ function modelReason(modelId: unknown): E2GateReason | null {
   const family = familyFromModelId(m);
   if (family === 'anthropic') return 'e2_model_claude';
   if (family === null) return 'e2_model_unrecognised';
+  if (typeof modelId !== 'string' || !E2_CODER_MODEL_IDS.has(modelId)) return 'e2_model_unrecognised';
   return null;
 }
 
@@ -249,6 +292,12 @@ export function e2Gate(input: {
       else if (terminal.status !== 'FINISHED') reasons.push('e2_stream_terminal_not_finished');
       if (fin.unfinishedCalls !== 0) reasons.push('e2_stream_call_unfinished');
       if (typeof fin.toolCallCount !== 'number' || fin.toolCallCount < 1) reasons.push('e2_no_tool_calls');
+      const rc = recount(streamLines);
+      const finTerminal = terminal !== null && terminal !== undefined && typeof terminal === 'object' ? terminal.status : null;
+      if (!rc.ok || rc.toolCallCount !== fin.toolCallCount || rc.unfinished !== fin.unfinishedCalls || rc.terminalStatus !== (finTerminal ?? null)
+        || (finTerminal !== null && finTerminal !== undefined && !rc.done)) reasons.push('e2_final_record_mismatch');
+      else if (rc.toolCallCount >= 1 && rc.editCalls < 1) reasons.push('e2_no_edit_calls');
+      if (header.start !== 'created_by_this_transport') reasons.push('e2_stream_mid_run_start');
     }
   }
   const realReexec = reexec !== null && reexec !== undefined && RECORDED.has(reexec);
@@ -266,6 +315,7 @@ export function e2Gate(input: {
   else {
     if (diff.label !== E2_JULIUS_LABEL) reasons.push('e2_diff_fake');
     if (diff.exitCode !== 0) reasons.push('e2_diff_failed');
+    else if (diff.bytes === 0 || diff.base === diff.head) reasons.push('e2_diff_empty');
   }
   if (!bound) reasons.push('e2_binding_absent');
   else {
@@ -274,6 +324,9 @@ export function e2Gate(input: {
     if (realDiff && !diff.ancestry) reasons.push('e2_diff_not_descendant');
     if ((realReexec && reexec.cwd !== binding.workspace) || (realDiff && diff.cwd !== binding.workspace)) reasons.push('e2_binding_cwd_mismatch');
   }
+  /* Skywalker N2: the graded model is the one the creating transport requested, recorded in the chained header. */
+  const headerModel = header !== null && typeof header.requestedModelId === 'string' ? header.requestedModelId : null;
+  if (header !== null && (headerModel === null || headerModel !== modelId)) reasons.push('e2_model_unbound');
   const m = modelReason(modelId);
   if (m !== null) reasons.push(m);
   return reasons.length === 0 ? { ok: true } : { ok: false, reasons: Object.freeze(reasons) };
