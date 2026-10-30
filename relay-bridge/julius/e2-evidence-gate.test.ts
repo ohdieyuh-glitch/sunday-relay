@@ -15,7 +15,7 @@ const clock = (): (() => number) => { let t = Date.parse('2026-10-30T18:00:00.00
 
 const STREAM: E2StreamEvidence = Object.freeze({
   label: E2_STREAM_LABEL_LIVE, mode: 'live', independentOfCursor: false, agentId: 'bc-1', runId: 'run-1', cause: null, records: 9,
-  finalHash: 'a'.repeat(64), fileSha256: 'b'.repeat(64), retentionSeconds: 'not_provided', connections: 1, duplicatesDropped: 0, partialDiscarded: 0,
+  finalHash: 'a'.repeat(64), fileSha256: 'b'.repeat(64), retentionSeconds: 'not_provided', connections: 1, duplicates: 0, secretsRedacted: 0, partialDiscarded: 0,
   terminal: { status: 'FINISHED', durationMs: 1 },
   toolCalls: [{ callId: 'c', name: 'edit_file', status: 'completed', keyCall: true, truncatedArgs: false, truncatedResult: false, argsSha256: null, resultSha256: null }],
   perEventTimestamps: 'not_provided', exitCodes: 'not_provided',

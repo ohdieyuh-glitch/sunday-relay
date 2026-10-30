@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { appendFile, writeFile } from 'node:fs/promises';
+import { constants as FS } from 'node:fs';
+import { open as openFile } from 'node:fs/promises';
 
 import { cursorTransportMode, openCursorRunStream, type CursorStreamOpen } from './cursor-cloud-agents-transport';
 import type { CodingAgentRunRef } from './grok-bot-coding-provider';
@@ -33,25 +34,77 @@ export const E2_STREAM_CAUSES = Object.freeze([
   'e2_stream_open_failed', 'e2_stream_no_start', 'e2_stream_gap', 'e2_stream_expired', 'e2_stream_no_terminal', 'e2_stream_truncated_key_call',
   'e2_stream_key_residue', 'e2_stream_malformed_event', 'e2_stream_run_mismatch', 'e2_stream_error_event', 'e2_stream_out_of_order',
   'e2_stream_conflicting_event', 'e2_stream_event_too_large', 'e2_stream_too_large', 'e2_stream_aborted', 'e2_evidence_write_failed',
+  'e2_stream_resumed', 'e2_stream_duplicate_event', 'e2_stream_terminal_not_finished', 'e2_stream_call_unfinished',
 ] as const);
 export type E2StreamCause = (typeof E2_STREAM_CAUSES)[number];
 
 /** Where records go, one line at a time, in order. */
-export interface E2EvidenceSink { append(line: string): Promise<void> }
+export interface E2EvidenceSink { append(line: string): Promise<void>; close?(): Promise<void> }
 export function createMemoryEvidenceSink(): E2EvidenceSink & { readonly lines: string[] } {
   const lines: string[] = [];
   return { lines, append: async (line) => { lines.push(line); } };
 }
-/** A file sink: the first line creates the file and refuses one that exists; the rest append. */
+/**
+ * A file sink. The first line creates the file (refusing one that exists, and never following a symlink); every later line
+ * re-opens it with O_NOFOLLOW and requires the same device and inode, so a symlink or another file swapped in at the path
+ * fails the write (L-5) instead of being followed. Each append is fsynced.
+ */
 export function createFileEvidenceSink(path: string): E2EvidenceSink {
-  let first = true;
+  let identity: { dev: number; ino: number } | null = null;
   return {
     async append(line) {
-      if (first) { await writeFile(path, `${line}\n`, { flag: 'wx', mode: 0o600 }); first = false; return; }
-      await appendFile(path, `${line}\n`);
+      const flags = identity === null ? FS.O_WRONLY | FS.O_CREAT | FS.O_EXCL | FS.O_NOFOLLOW : FS.O_WRONLY | FS.O_APPEND | FS.O_NOFOLLOW;
+      const fh = await openFile(path, flags, 0o600);
+      try {
+        const st = await fh.stat();
+        if (!st.isFile()) throw new Error('e2_evidence_not_a_file');
+        if (identity !== null && (st.dev !== identity.dev || st.ino !== identity.ino)) throw new Error('e2_evidence_file_swapped');
+        identity = { dev: st.dev, ino: st.ino };
+        await fh.writeFile(`${line}\n`);
+        await fh.sync();
+      } finally { await fh.close(); }
     },
   };
 }
+
+/** Reads an evidence file for file-only grading; refuses a symlink or a non-file. */
+export async function readEvidenceLines(path: string): Promise<string[]> {
+  const fh = await openFile(path, FS.O_RDONLY | FS.O_NOFOLLOW);
+  try {
+    if (!(await fh.stat()).isFile()) throw new Error('e2_evidence_not_a_file');
+    const text = await fh.readFile('utf8');
+    if (!text.endsWith('\n')) return text === '' ? [] : text.split('\n');
+    return text.slice(0, -1).split('\n');
+  } finally { await fh.close(); }
+}
+
+/*
+ * M-6: secrets that are not the Cursor key are redacted before a record is stored (the Cursor key has its own scrub and
+ * residue check). Patterns are the well-known public token shapes; the count of redactions is recorded per event and in total.
+ */
+const SECRET_PATTERNS: readonly RegExp[] = [
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/gu,
+  /\bgh[pousr]_[A-Za-z0-9]{20,}/gu,
+  /\bgithub_pat_[A-Za-z0-9_]{20,}/gu,
+  /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/gu,
+  /\bsk-[A-Za-z0-9_-]{16,}/gu,
+  /\bxai-[A-Za-z0-9_-]{16,}/gu,
+  /\bgsk_[A-Za-z0-9]{16,}/gu,
+  /\bxox[abprs]-[A-Za-z0-9-]{10,}/gu,
+  /\bAIza[0-9A-Za-z_-]{30,}/gu,
+  /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/gu,
+  /\b(?:Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}/giu,
+];
+export function redactSecrets(text: string): { readonly text: string; readonly count: number } {
+  let count = 0;
+  let out = text;
+  for (const re of SECRET_PATTERNS) out = out.replace(re, () => { count += 1; return '[REDACTED:secret]'; });
+  return { text: out, count };
+}
+
+const CAPTURED = new WeakSet<object>();
+/** True only for an evidence object returned by {@link captureCursorRunStream} in this process (no setter is exported). */
+export const isCapturedStreamEvidence = (x: unknown): boolean => typeof x === 'object' && x !== null && CAPTURED.has(x);
 
 export interface E2ToolCall {
   readonly callId: string;
@@ -77,7 +130,10 @@ export interface E2StreamEvidence {
   readonly fileSha256: string;
   readonly retentionSeconds: string;
   readonly connections: number;
-  readonly duplicatesDropped: number;
+  /** Exact replays seen (same id, event and data). Any replay fails the capture: duplicate_event, or resumed after a reconnect. */
+  readonly duplicates: number;
+  /** M-6: non-Cursor secrets redacted from stored records. */
+  readonly secretsRedacted: number;
   readonly partialDiscarded: number;
   readonly terminal: { readonly status: string; readonly durationMs: number | 'not_provided' } | null;
   readonly toolCalls: readonly E2ToolCall[];
@@ -182,7 +238,9 @@ export async function captureCursorRunStream(input: {
   let retention: string | null = null;
   let lastId: string | null = null;
   let sawUnresumable = false;
-  let duplicatesDropped = 0;
+  let duplicates = 0;
+  let secretsRedacted = 0;
+  let resumed = false;
   let partialDiscarded = 0;
   let totalBytes = 0;
   let resultData: string | null = null;
@@ -197,20 +255,25 @@ export async function captureCursorRunStream(input: {
     let finalHash = '';
     let fileSha256 = '';
     let finalCause = cause;
+    const toolCalls = Object.freeze([...calls.values()]);
     if (writable) {
       fileSha256 = chain.fileDigest();
       try {
         finalHash = await chain.write({
-          kind: 'final', cause, label, mode, records: chain.count + 1, connections, duplicatesDropped, partialDiscarded,
+          kind: 'final', cause, label, mode, records: chain.count + 1, connections, duplicates, partialDiscarded, secretsRedacted,
+          terminal, toolCallCount: toolCalls.length, unfinishedCalls: toolCalls.filter((c) => c.status !== 'completed').length,
           retentionSeconds: retention ?? 'not_provided', fileSha256, endedAt: iso(),
         });
       } catch { finalCause = 'e2_evidence_write_failed'; finalHash = ''; }
     }
-    return Object.freeze({
+    try { await input.sink.close?.(); } catch { finalCause = 'e2_evidence_write_failed'; }
+    const evidence: E2StreamEvidence = Object.freeze({
       label, mode, independentOfCursor: false as const, agentId: ref.agentId, runId: ref.runId, cause: finalCause,
-      records: chain.count, finalHash, fileSha256, retentionSeconds: retention ?? 'not_provided', connections, duplicatesDropped, partialDiscarded,
-      terminal, toolCalls: Object.freeze([...calls.values()]), perEventTimestamps: 'not_provided' as const, exitCodes: 'not_provided' as const,
+      records: chain.count, finalHash, fileSha256, retentionSeconds: retention ?? 'not_provided', connections, duplicates, partialDiscarded, secretsRedacted,
+      terminal, toolCalls, perEventTimestamps: 'not_provided' as const, exitCodes: 'not_provided' as const,
     });
+    CAPTURED.add(evidence);
+    return evidence;
   };
 
   try {
@@ -230,6 +293,7 @@ export async function captureCursorRunStream(input: {
       if (now() >= input.deadlineAtMs) throw new Stop('e2_stream_no_terminal');
       connections += 1;
       const n = connections;
+      if (lastId !== null) resumed = true;
       const open: CursorStreamOpen = await openCursorRunStream(input.transport, ref, lastId, { deadlineAtMs: input.deadlineAtMs, ...(signal === undefined ? {} : { signal }) });
       await chain.write({
         kind: 'connection', n, lastEventId: lastId, at: iso(), outcome: open.kind,
@@ -266,15 +330,32 @@ export async function captureCursorRunStream(input: {
             scrubbed = scrubbed || s.scrubbed;
             parts.push(s.text);
           }
-          const [, sid, sevent, sdata] = parts as [string, string, string, string];
-          if (inConn === 0 && e.event !== 'status') throw new Stop(first ? 'e2_stream_no_start' : 'e2_stream_gap');
+          const [, cid, cevent, cdata] = parts as [string, string, string, string];
+          const rid = redactSecrets(cid);
+          const revent = redactSecrets(cevent);
+          const rdata = redactSecrets(cdata);
+          const redacted = rid.count + revent.count + rdata.count;
+          secretsRedacted += redacted;
+          if (redacted > 0) scrubbed = true;
+          const sid = rid.text;
+          const sevent = revent.text;
+          const sdata = rdata.text;
+          // M-2: every connection starts with an id-less status; a status that carries an id is a mid-run replay, not a start.
+          if (inConn === 0 && (e.event !== 'status' || e.id !== null)) throw new Stop(first ? 'e2_stream_no_start' : 'e2_stream_gap');
           inConn += 1;
           if (e.id !== null) {
             const k = `${e.id}\u0000${e.event}`;
             const prior = seen.get(k);
             const digest = sha256(e.data);
             lastId = e.id;
-            if (prior === digest) { duplicatesDropped += 1; return; }
+            if (prior === digest) {
+              // H-2: a replay is recorded and counted, never silently dropped. On one connection it stops the capture;
+              // after a resume the capture already ends as e2_stream_resumed.
+              duplicates += 1;
+              await writeEvent(true);
+              if (!resumed) throw new Stop('e2_stream_duplicate_event');
+              return;
+            }
             if (prior !== undefined) {
               await writeEvent();
               throw new Stop('e2_stream_conflicting_event');
@@ -285,10 +366,10 @@ export async function captureCursorRunStream(input: {
           }
           await writeEvent();
           await interpret(e.event, sdata);
-          async function writeEvent(): Promise<void> {
+          async function writeEvent(duplicate = false): Promise<void> {
             await chain.write({
               kind: 'event', conn: n, receivedAt: iso(), id: e.id === null ? null : sid, event: sevent, data: sdata,
-              rawSha256: scrubbed ? 'withheld_key_scrubbed' : sha256(e.raw), scrubbed,
+              rawSha256: scrubbed ? 'withheld_key_scrubbed' : sha256(e.raw), scrubbed, secretsRedacted: redacted, duplicate,
             });
           }
         };
@@ -338,9 +419,17 @@ export async function captureCursorRunStream(input: {
         const ended = await readSse(open.body, async (e) => onEvent(e), (bytes) => {
           totalBytes += bytes;
           if (totalBytes > maxStreamBytes) throw new Stop('e2_stream_too_large');
-        }, signal);
+        }, signal, input.deadlineAtMs, now);
         if (ended.partial) partialDiscarded += 1;
-        if (doneSeen) return await finish(null, true);
+        if (doneSeen) {
+          // H-1: SSE ids are opaque, so events a server skipped on resume cannot be detected; any resume fails.
+          if (resumed) throw new Stop('e2_stream_resumed');
+          // M-1: only a FINISHED run is a clean terminal.
+          if ((terminal as E2StreamEvidence['terminal'])?.status !== 'FINISHED') throw new Stop('e2_stream_terminal_not_finished');
+          // M-3: every tool call must have completed.
+          if ([...calls.values()].some((c) => c.status !== 'completed')) throw new Stop('e2_stream_call_unfinished');
+          return await finish(null, true);
+        }
         if (inConn === 0 && first) throw new Stop('e2_stream_no_start');
       } finally {
         open.close();
@@ -363,6 +452,8 @@ async function readSse(
   dispatch: (e: RawEvent) => Promise<void>,
   countBytes: (n: number) => void,
   signal: AbortSignal | undefined,
+  deadlineAtMs: number,
+  now: () => number,
 ): Promise<{ partial: boolean }> {
   if (body === null) return { partial: false };
   const reader = body.getReader();
@@ -383,7 +474,7 @@ async function readSse(
       return;
     }
     if (l.startsWith(':')) return;
-    pendingBytes += l.length + 1;
+    pendingBytes += Buffer.byteLength(l, 'utf8') + 1;
     if (pendingBytes > E2_MAX_EVENT_BYTES) throw new Stop('e2_stream_event_too_large');
     raw.push(l);
     const at = l.indexOf(':');
@@ -403,13 +494,21 @@ async function readSse(
       buf = buf.slice(m.index + m[0].length);
       await line(l);
     }
-    if (buf.length > E2_MAX_EVENT_BYTES) throw new Stop('e2_stream_event_too_large');
+    if (buf.length * 3 > E2_MAX_EVENT_BYTES && Buffer.byteLength(buf, 'utf8') > E2_MAX_EVENT_BYTES) throw new Stop('e2_stream_event_too_large');
   };
   try {
     for (;;) {
       if (isAborted(signal)) throw new Stop('e2_stream_aborted');
       let r: ReadableStreamReadResult<Uint8Array>;
-      try { r = await reader.read(); } catch { if (isAborted(signal)) throw new Stop('e2_stream_aborted'); break; }
+      // M-4: the deadline holds inside an open connection too, not only between connections.
+      const remaining = deadlineAtMs - now();
+      if (remaining <= 0) { void reader.cancel().catch(() => undefined); throw new Stop('e2_stream_no_terminal'); }
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const late = new Promise<'deadline'>((resolve) => { timer = setTimeout(() => resolve('deadline'), Math.min(remaining, 2_000_000_000)); });
+      let got: ReadableStreamReadResult<Uint8Array> | 'deadline';
+      try { got = await Promise.race([reader.read(), late]); } catch { if (isAborted(signal)) throw new Stop('e2_stream_aborted'); break; } finally { clearTimeout(timer); }
+      if (got === 'deadline') { void reader.cancel().catch(() => undefined); throw new Stop('e2_stream_no_terminal'); }
+      r = got;
       if (r.done) break;
       countBytes(r.value.byteLength);
       try { buf += decoder.decode(r.value, { stream: true }); } catch { throw new Stop('e2_stream_malformed_event'); }
