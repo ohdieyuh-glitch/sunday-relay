@@ -9,7 +9,7 @@ import {
 } from './grok-bot-coding-provider';
 import { juliusCodingAgentFailureDisposition, type JuliusCodingAgentProviderOutcome, type JuliusCodingAgentRequest } from '../../src/relay/mission/julius/julius-coding-agent';
 import { juliusHandedOutcomeUnknown } from '../../src/relay/mission/julius/julius-execution-coordinator';
-import { JuliusDispatchError } from '../../src/relay/mission/julius/julius-router';
+import { JuliusDispatchError, safeReviewDiagnostics } from '../../src/relay/mission/julius/julius-router';
 
 /**
  * THE GROK BOT CODER, AGAINST A FAKE TRANSPORT AND A FAKE WORKSPACE. Nothing here reaches a network, a shell or a key.
@@ -372,5 +372,21 @@ describe('the shell-backed workspace port issues fixed commands: fetch into a pr
       expect(c).toContain('core.hooksPath=/dev/null');
       expect(c).not.toMatch(/\bgit\b[^\n]*\s(merge(?! ?-base)|checkout|push|commit|reset)\s/u);
     }
+  });
+});
+
+describe('Grok Bot coder: identifiers reach the router diagnostics', () => {
+  it('a MATCH run: cursorAgentId, agentBranch, cursorServedModel and servedModel all survive safeReviewDiagnostics', async () => {
+    const { outcome, t } = await run();
+    const safe = safeReviewDiagnostics(completed(outcome).observation.diagnostics)!;
+    expect(safe).toMatchObject({ cursorAgentId: t.calls.create[0]?.agentId, agentBranch: 'cursor/fix-1', cursorServedModel: MODEL, servedModel: MODEL });
+    expect(safe.cursorAgentId).toMatch(/^bc-[0-9a-f]{8}-/u);
+  });
+  it('a MISMATCH run reports what the API said in cursorServedModel and never in servedModel', async () => {
+    const f = failed((await run({ t: fakeTransport({ result: goodResult({ reportedModelId: 'some-other-model' }) }) })).outcome);
+    expect(f.diagnostics).toMatchObject({ cursorServedModel: 'some-other-model', servedModelVerdict: 'MISMATCH' });
+    expect(f.diagnostics).not.toHaveProperty('servedModel');
+    const safe = new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'x', f.providerFailureClass, f.diagnostics).diagnostics!;
+    expect(safe).toMatchObject({ cursorServedModel: 'some-other-model', servedModel: null });
   });
 });
