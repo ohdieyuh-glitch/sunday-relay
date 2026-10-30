@@ -25,6 +25,7 @@ import {
 } from '../../src/relay/connectors/gpt-architect/anthropic-architect-runner';
 import type { GptArchitectConfig } from '../../src/relay/connectors/gpt-architect/config';
 import { ARCHITECT_PROBE_SYNTHETIC_INPUT, architectPlanProbeParts, architectProviderRefusalLine } from './live-workers';
+import { juliusAnthropicAcceptanceProbesEnabled, runJuliusAnthropicAcceptanceProbesIfOptedIn } from '../julius-live-mission';
 
 /**
  * THE $0 ACCEPTANCE PROBE AND THE REFUSAL DIAGNOSTICS, on the ACTUAL production request.
@@ -64,6 +65,13 @@ function fetchWith(answer: (call: Call, index: number) => Response | Error, call
     if (result instanceof Error) throw result;
     return result;
   }) as typeof fetch;
+}
+
+function headerNames(headers: HeadersInit | undefined): string[] {
+  if (headers == null) return [];
+  if (headers instanceof Headers) return [...headers.keys()].map((name) => name.toLowerCase());
+  if (Array.isArray(headers)) return headers.map(([name]) => name.toLowerCase());
+  return Object.keys(headers).map((name) => name.toLowerCase());
 }
 
 describe('the production request body: one builder, golden hashes', () => {
@@ -276,6 +284,20 @@ describe('four kinds of evidence, never conflated', () => {
     if (outcome.ok || outcome.refusal === undefined) throw new Error('expected a refusal');
     expect(architectProviderRefusalLine('anthropic', outcome.refusal)).toContain(' messages_accepted=FAIL generation_ok=FAIL ');
   });
+
+  it('F6: messages_accepted is UNKNOWN for a 5xx refusal, not FAIL', async () => {
+    const parts = architectPlanProbeParts();
+    const outcome = await runAnthropicArchitect(
+      { apiKey: KEY, config: CONFIG, instructions: parts.instructions, input: 'x', schema: { name: 'plan', schema: parts.schema } },
+      { fetch: fetchWith(() => bad('overloaded', 503)) },
+    );
+    if (outcome.ok || outcome.refusal === undefined) throw new Error('expected a refusal');
+    const line = architectProviderRefusalLine('anthropic', outcome.refusal);
+    expect(line).toContain('http=503');
+    expect(line).toContain(' messages_accepted=UNKNOWN ');
+    expect(line).not.toContain('messages_accepted=FAIL');
+    expect(line).toContain(' generation_ok=FAIL ');
+  });
 });
 
 describe('the probe matrix', () => {
@@ -319,6 +341,17 @@ describe('the probe matrix', () => {
     }
     expect(results.every((result) => result.http === 200 && result.inputTokens === 123)).toBe(true);
     expect(firstFailingAnthropicProbe(results)).toBeNull();
+  });
+
+  it('F3: count_tokens request header names are exactly the reviewed set (no anthropic-beta)', async () => {
+    const REVIEWED_COUNT_TOKENS_HEADER_NAMES = ['anthropic-version', 'content-type', 'x-api-key'];
+    const { body } = production();
+    const calls: Call[] = [];
+    await runAnthropicProbes({ role: 'architect', apiKey: KEY, probes: anthropicProbeMatrix(body).slice(0, 1), fetch: fetchWith(() => ok(), calls) });
+    expect(calls).toHaveLength(1);
+    const names = headerNames(calls[0]?.init.headers).sort();
+    expect(names).toEqual(REVIEWED_COUNT_TOKENS_HEADER_NAMES);
+    expect(names).not.toContain('anthropic-beta');
   });
 
   it('isolates the first failing production probe and keeps the controls out of that verdict', async () => {
@@ -373,8 +406,29 @@ describe('diagnostics never carry a secret or a prompt', () => {
     expect(line).not.toContain('\n');
     expect(line).toContain('class=schema_or_output_config');
     expect(line).toContain(`message_len=${MESSAGE.length}`);
-    expect(results[0]?.probeMessage?.length ?? 0).toBeLessThanOrEqual(PROBE_MESSAGE_MAX_CHARS);
+    expect(line).toContain('http=400');
+    expect(line).toContain('request_id=req_011CFAKEBAD0001');
+    expect(line).not.toContain('message="');
+    expect(results[0]?.probeMessage).toBeNull();
     expect(sanitizeProbeMessage(MESSAGE)).not.toMatch(/sk-ant|@example|Bearer CANARY/u);
+    expect(sanitizeProbeMessage(MESSAGE).length).toBeLessThanOrEqual(PROBE_MESSAGE_MAX_CHARS);
+  });
+
+  it('F5: a mocked provider error body sentinel never appears in probe output', async () => {
+    const SENTINEL = 'PROVIDER_ERROR_BODY_SENTINEL_DO_NOT_PRINT';
+    const { body } = production();
+    const results = await runAnthropicProbes({
+      role: 'architect', apiKey: KEY, probes: anthropicProbeMatrix(body).slice(0, 1),
+      fetch: fetchWith(() => bad(SENTINEL)),
+    });
+    const printed = results.map((result) => result.line).join('\n');
+    expect(printed).not.toContain(SENTINEL);
+    expect(printed).not.toContain('message="');
+    expect(JSON.stringify(results)).not.toContain(SENTINEL);
+    expect(results[0]?.probeMessage).toBeNull();
+    expect(printed).toContain('class=other');
+    expect(printed).toContain('http=400');
+    expect(printed).toContain('request_id=req_011CFAKEBAD0001');
   });
 
   it('a REAL call keeps class, length and hash only: nothing of the message is in the outcome or the stdout line', async () => {
@@ -496,15 +550,111 @@ describe('the observe-mode printer used by the live entrypoint preflight', () =>
 });
 
 describe('the preflight call site', () => {
-  it('prints the probes in the preflight path only, before the confirm-live branch returns 5', async () => {
+  it('the non-confirm-live branch opts in through the one gate, and the confirm-live path never prints probes', async () => {
     const { readFileSync } = await import('node:fs');
     const source = readFileSync(join(process.cwd(), 'relay-bridge', 'julius-live-mission.ts'), 'utf8');
     const start = source.indexOf("if (!flag('confirm-live')) {");
     const end = source.indexOf('return 5;', start);
     expect(start).toBeGreaterThan(0);
     expect(end).toBeGreaterThan(start);
-    expect(source.slice(start, end)).toContain('await printAnthropicAcceptanceProbes(');
-    // Not on the confirmed live path: the live run is byte-identical until the probe is calibrated.
+    const block = source.slice(start, end);
+    expect(block).toContain('await runJuliusAnthropicAcceptanceProbesIfOptedIn(');
+    expect(block).toContain("confirmLive: flag('confirm-live')");
+    expect(block).not.toContain('printAnthropicAcceptanceProbes(');
+    // Not on the confirmed live path.
     expect(source.slice(end)).not.toContain('printAnthropicAcceptanceProbes(');
+    expect(source.slice(end)).not.toContain('runJuliusAnthropicAcceptanceProbesIfOptedIn(');
+  });
+});
+
+describe('JULIUS_ANTHROPIC_ACCEPTANCE_PROBES is a strict opt-in', () => {
+  const probeArgs = {
+    architectOnAnthropic: true as const,
+    architectModel: 'claude-opus-5-5',
+    architectEffort: 'high',
+    coderModel: 'claude-opus-5-5',
+  };
+
+  it.each([undefined, '', 'true', '01', ' 1', '0'])(
+    'env var %j: zero provider calls and the probe printer is not invoked',
+    async (value) => {
+      const env: Record<string, string | undefined> = {
+        ANTHROPIC_ARCHITECT_API_KEY: 'ARCH-KEY-NOTREAL',
+        ANTHROPIC_API_KEY: 'CODER-KEY-NOTREAL',
+      };
+      if (value !== undefined) env.JULIUS_ANTHROPIC_ACCEPTANCE_PROBES = value;
+      const calls: Call[] = [];
+      const lines: string[] = [];
+      let printerInvoked = 0;
+      await runJuliusAnthropicAcceptanceProbesIfOptedIn({
+        env, confirmLive: false, ...probeArgs, out: (line) => lines.push(line),
+        fetch: () => { throw new Error('provider touched while opted out'); },
+        print: async () => { printerInvoked += 1; throw new Error('printAnthropicAcceptanceProbes invoked while opted out'); },
+      });
+      expect(juliusAnthropicAcceptanceProbesEnabled(env, false)).toBe(false);
+      expect(printerInvoked).toBe(0);
+      expect(calls).toHaveLength(0);
+      expect(lines).toEqual([]);
+    },
+  );
+
+  it('F4: the env gate runs before any probe construction or provider contact', async () => {
+    const env = new Proxy({} as Record<string, string | undefined>, {
+      get: (_target, prop) => {
+        if (prop === 'JULIUS_ANTHROPIC_ACCEPTANCE_PROBES') return '';
+        throw new Error(`env read before/without opt-in: ${String(prop)}`);
+      },
+    });
+    const lines: string[] = [];
+    let printerInvoked = 0;
+    await runJuliusAnthropicAcceptanceProbesIfOptedIn({
+      env, confirmLive: false, ...probeArgs, out: (line) => lines.push(line),
+      fetch: () => { throw new Error('provider touched before the env gate'); },
+      print: async () => { printerInvoked += 1; throw new Error('probe printer invoked before the env gate'); },
+    });
+    expect(printerInvoked).toBe(0);
+    expect(lines).toEqual([]);
+  });
+
+  it('confirm-live with JULIUS_ANTHROPIC_ACCEPTANCE_PROBES=1 makes zero count_tokens calls', async () => {
+    const calls: Call[] = [];
+    const lines: string[] = [];
+    let printerInvoked = 0;
+    await runJuliusAnthropicAcceptanceProbesIfOptedIn({
+      env: {
+        JULIUS_ANTHROPIC_ACCEPTANCE_PROBES: '1',
+        ANTHROPIC_ARCHITECT_API_KEY: 'ARCH-KEY-NOTREAL',
+        ANTHROPIC_API_KEY: 'CODER-KEY-NOTREAL',
+      },
+      confirmLive: true, ...probeArgs, out: (line) => lines.push(line),
+      fetch: fetchWith(() => ok(), calls),
+      print: async (input) => {
+        printerInvoked += 1;
+        const { printAnthropicAcceptanceProbes } = await import('./live-workers');
+        await printAnthropicAcceptanceProbes(input);
+      },
+    });
+    expect(juliusAnthropicAcceptanceProbesEnabled({ JULIUS_ANTHROPIC_ACCEPTANCE_PROBES: '1' }, true)).toBe(false);
+    expect(printerInvoked).toBe(0);
+    expect(calls).toHaveLength(0);
+    expect(lines).toEqual([]);
+  });
+
+  it('opt-in 1 without confirm-live is the only path that constructs probes', async () => {
+    const calls: Call[] = [];
+    const lines: string[] = [];
+    await runJuliusAnthropicAcceptanceProbesIfOptedIn({
+      env: {
+        JULIUS_ANTHROPIC_ACCEPTANCE_PROBES: '1',
+        ANTHROPIC_ARCHITECT_API_KEY: 'ARCH-KEY-NOTREAL',
+        ANTHROPIC_API_KEY: 'CODER-KEY-NOTREAL',
+      },
+      confirmLive: false, ...probeArgs, out: (line) => lines.push(line),
+      fetch: fetchWith(() => ok(), calls),
+    });
+    expect(juliusAnthropicAcceptanceProbesEnabled({ JULIUS_ANTHROPIC_ACCEPTANCE_PROBES: '1' }, false)).toBe(true);
+    expect(calls.length).toBeGreaterThan(0);
+    expect(calls.every((call) => call.url === ANTHROPIC_COUNT_TOKENS_URL)).toBe(true);
+    expect(lines.some((line) => line.startsWith('request_acceptance_summary') && line.includes('mode=observe') && line.includes('token_count_only=not_proof_of_messages_acceptance'))).toBe(true);
   });
 });

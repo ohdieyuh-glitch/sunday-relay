@@ -1046,8 +1046,10 @@ export function architectProviderRefusalLine(provider: 'openai' | 'anthropic', r
     + (refusal.message === null || refusal.message === undefined
       ? ''
       : ` message_class=${refusal.message.messageClass} message_len=${refusal.message.length} message_sha256=${refusal.message.sha256.slice(0, 16)}`)
-    // A real Messages call was refused: EV3 (accepted) and EV4 (generation) both FAIL. Neither is ever inferred from a count_tokens pass.
-    + ' messages_accepted=FAIL generation_ok=FAIL'
+    // A 4xx Messages refusal is an acceptance rejection (EV3 FAIL). 5xx and
+    // other non-4xx statuses are UNKNOWN, not a rejection. A count_tokens pass
+    // never writes this field.
+    + ` messages_accepted=${refusal.httpStatus >= 400 && refusal.httpStatus < 500 ? 'FAIL' : 'UNKNOWN'} generation_ok=FAIL`
     + (refusal.shape === undefined ? '' : ` ${anthropicBodyShapeFragment(refusal.shape)}`);
 }
 
@@ -1075,6 +1077,10 @@ export function architectPlanProbeParts(): { readonly instructions: string; read
  * then does the production-body probe become a gate. The coder is the Claude Agent SDK, which builds its
  * own requests, so its key is probed with the two bodies we can state: a short message, and effort `low`.
  * Nothing here throws; a missing key is a printed skip.
+ *
+ * The live entrypoint calls this only when JULIUS_ANTHROPIC_ACCEPTANCE_PROBES is
+ * the exact token `1`, and never on `--confirm-live`. This printer itself does
+ * not re-check the env var: the gate lives in one place, before construction.
  */
 /** The key variables, as `J1_ROLE_CREDENTIALS` names them (live-composition.ts imports this file, so they are stated here and a test holds the two together). */
 export const ARCHITECT_KEY_ENV = 'ANTHROPIC_ARCHITECT_API_KEY';

@@ -893,9 +893,9 @@ export interface AnthropicProbeResult {
   readonly errorType: string | null;
   readonly requestId: string | null;
   readonly message: AnthropicMessageEvidence | null;
-  /** Redacted and capped; present only for a probe (its payload is the production schema and a synthetic prompt). */
+  /** Always null: probe output never carries provider message text (class, status and request id only). */
   readonly probeMessage: string | null;
-  /** The one printable line, every field a number or a safe token except the redacted probe message. */
+  /** The one printable line: numbers and safe tokens only. Never provider message text. */
   readonly line: string;
 }
 
@@ -916,7 +916,6 @@ export async function runAnthropicProbes(input: {
     let errorType: string | null = null;
     let requestId: string | null = null;
     let message: AnthropicMessageEvidence | null = null;
-    let probeMessage: string | null = null;
     try {
       const response = await anthropicPinnedFetch(fetchImpl, ANTHROPIC_COUNT_TOKENS_URL, {
         method: 'POST',
@@ -936,7 +935,6 @@ export async function runAnthropicProbes(input: {
         errorType = token(errorBody?.type);
         if (errorBody !== null) {
           message = anthropicMessageEvidence(errorBody.message);
-          probeMessage = sanitizeProbeMessage(errorBody.message);
         }
       }
     } catch {
@@ -949,9 +947,8 @@ export async function runAnthropicProbes(input: {
     const line = `request_acceptance role=${input.role} probe=${probe.id} http=${http === null ? 'none' : String(http)} input_tokens=${n(inputTokens)}`
       + ` type=${errorType ?? 'none'} class=${message?.messageClass ?? 'none'} request_id=${requestId ?? 'unavailable'}`
       + (probe.id.startsWith('P') ? ` ${anthropicBodyShapeFragment(anthropicBodyShape(probe.body, JSON.stringify(probe.body)))}` : '')
-      + ` message_len=${n(message?.length ?? null)} message_sha256=${message === null ? 'none' : message.sha256.slice(0, 16)}`
-      + `${probeMessage === null || probeMessage === '' ? '' : ` message="${probeMessage.replace(/"/gu, "'")}"`}`;
-    results.push({ id: probe.id, http, inputTokens, errorType, requestId, message, probeMessage, line });
+      + ` message_len=${n(message?.length ?? null)} message_sha256=${message === null ? 'none' : message.sha256.slice(0, 16)}`;
+    results.push({ id: probe.id, http, inputTokens, errorType, requestId, message, probeMessage: null, line });
   }
   return results;
 }
