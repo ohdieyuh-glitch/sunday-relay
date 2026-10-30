@@ -520,8 +520,8 @@ MUTATIONS = [
     ),
     (
         "exec_success_without_verified_completion",
-        "if (Verdict == ECheckerVerdict::Pass && bHasCompletion) { Out.Phase = EExecutionPhase::Completed; return Out; } // FLOW_EXEC_SUCCESS_ONLY_FROM_RESULT",
-        "if (Verdict == ECheckerVerdict::Pass || Feed.RunConclusion() == \"success\") { Out.Phase = EExecutionPhase::Completed; return Out; } // FLOW_EXEC_SUCCESS_ONLY_FROM_RESULT",
+        "if (Verdict == ECheckerVerdict::Pass && bHasCompletion) { Out.Phase = EExecutionPhase::Completed; Out.CauseSource = \"result\"; Out.CauseSeq = -1; return Out; } // FLOW_EXEC_SUCCESS_ONLY_FROM_RESULT",
+        "if (Verdict == ECheckerVerdict::Pass || Feed.RunConclusion() == \"success\") { Out.Phase = EExecutionPhase::Completed; Out.CauseSource = \"result\"; Out.CauseSeq = -1; return Out; } // FLOW_EXEC_SUCCESS_ONLY_FROM_RESULT",
     ),
     (
         "exec_binds_any_run",
@@ -764,8 +764,8 @@ MUTATIONS = [
     # YUJI M-b 2026-10-30 (bridge restart: only start.request reveals a saved intent).
     (
         "mb_request_without_record_ignored",
-        "|| (Current == R::None && !Status.RequestState.empty()); // FLOW_RECONCILE_REQUEST_WITHOUT_RECORD",
-        "; // FLOW_RECONCILE_REQUEST_WITHOUT_RECORD",
+        "|| (Current == R::None && !Status.RequestState.empty()) // FLOW_RECONCILE_REQUEST_WITHOUT_RECORD",
+        "// FLOW_RECONCILE_REQUEST_WITHOUT_RECORD",
     ),
     (
         "mb_retry_start_safe_releases",
@@ -914,8 +914,8 @@ MUTATIONS = [
     ),
     (
         "c6_beat_log_drops_seq",
-        'Out += ",\\"source_seq\\":" + LogIntOrNull(SourceSeq); // FLOW_LOG_BEAT_CARRIES_SEQ',
-        '(void)SourceSeq; // FLOW_LOG_BEAT_CARRIES_SEQ',
+        'Out += ",\\"source_seq\\":" + LogIntOrNull(Beat.SourceSeq); // FLOW_LOG_BEAT_CARRIES_SEQ',
+        'Out += ""; // FLOW_LOG_BEAT_CARRIES_SEQ',
     ),
     (
         "c6_resync_log_drops_reason",
@@ -926,6 +926,107 @@ MUTATIONS = [
         "c6_log_does_not_escape",
         "if (C == '\"' || C == '\\\\') { Out += '\\\\'; Out += C; } // FLOW_LOG_ESCAPES",
         "if (false) { Out += C; } // FLOW_LOG_ESCAPES",
+    ),
+    # FIX COMMIT 2026-10-30 (YUJI M1/M2/m4/m6, Skywalker F1/F4/F5/F10).
+    (
+        'm1_503_any_body_is_not_started',
+        'Out.Outcome = bNotStarted ? EStartOutcome::Retryable : EStartOutcome::Uncertain; // FLOW_START_503_READS_THE_BODY',
+        'Out.Outcome = EStartOutcome::Retryable; (void)bNotStarted; // FLOW_START_503_READS_THE_BODY',
+    ),
+    (
+        'm1_503_not_read',
+        'if (HttpStatus == 0 || HttpStatus == 401 || HttpStatus == 502 || HttpStatus == 504)',
+        'if (HttpStatus == 0 || HttpStatus == 401 || HttpStatus == 502 || HttpStatus == 503 || HttpStatus == 504)',
+    ),
+    (
+        'm1_503_unavailable_kind_alone',
+        '|| (Kind == "julius_start_unavailable" && bSaysNothingClaimed);',
+        '|| (Kind == "julius_start_unavailable" && (bSaysNothingClaimed || true));',
+    ),
+    (
+        'm2_corrupt_record_parses_as_none',
+        'Bad.Record = EStartRecord::Unreadable; // FLOW_SAVED_RECORD_UNREADABLE_BLOCKS',
+        'Bad.Record = EStartRecord::None; Bad.Read = ESavedStartRead::Absent; // FLOW_SAVED_RECORD_UNREADABLE_BLOCKS',
+    ),
+    (
+        'm2_truncated_record_accepted',
+        "if (!bLoaded || Text.empty() || Text.back() != '\\n') { return Bad; }",
+        'if (!bLoaded || Text.empty()) { return Bad; }',
+    ),
+    (
+        'm2_unreadable_record_offers_start',
+        'if (Record == EStartRecord::Unreadable)\n\t\t{',
+        'if (false)\n\t\t{',
+    ),
+    (
+        'm2_unreadable_record_released',
+        'Out.Record = bDispatchSeen ? R::Started : R::Unreadable; // FLOW_RECONCILE_UNREADABLE_NEVER_RELEASES',
+        'Out.Record = bDispatchSeen ? R::Started : R::NotStarted; // FLOW_RECONCILE_UNREADABLE_NEVER_RELEASES',
+    ),
+    (
+        'f1_no_status_keeps_result_success',
+        'if (Status == nullptr || !Status->bOk) { return EExecutionPhase::Grading; } // FLOW_SUCCESS_FAILS_CLOSED_WITHOUT_STATUS',
+        'if (Status == nullptr || !Status->bOk) { return Phase; } // FLOW_SUCCESS_FAILS_CLOSED_WITHOUT_STATUS',
+    ),
+    (
+        'f5_m08_requested_without_request_releases',
+        'else if (Status.bRequested || Status.bClaimKeyHashPresent || Ph != P::Admitted)',
+        'else if (Ph != P::Admitted)',
+    ),
+    (
+        'f10_settled_releases',
+        '&& Status.RequestState.empty() && !Status.bRequestUnreadable // no saved intent of any state',
+        '&& (Status.RequestState.empty() || Status.RequestState == "settled") && !Status.bRequestUnreadable // no saved intent of any state',
+    ),
+    (
+        'f10_ack_off_releases',
+        'return Status.bOk && Status.bRequestFieldPresent // ACK on and readable',
+        'return Status.bOk // ACK on and readable',
+    ),
+    (
+        'f10_claim_key_hash_ignored',
+        '&& !Status.bRequested && !Status.bClaimKeyHashPresent // no claim, no Start in flight',
+        '&& !Status.bRequested // no claim, no Start in flight',
+    ),
+    (
+        'f10_release_rule_skipped',
+        'else if (bBlocking && !StatusShowsNothingAtAll(Status))',
+        'else if (false)',
+    ),
+    (
+        'f10_request_unreadable_releases',
+        '&& Status.RequestState.empty() && !Status.bRequestUnreadable // no saved intent of any state',
+        '&& Status.RequestState.empty() // no saved intent of any state',
+    ),
+    (
+        'm6_status_terminal_plays_no_ending',
+        'Out.Phase = Ph == P::Interrupted ? E::Failed : E::DidNotStart; // FLOW_STATUS_TERMINAL_PLAYS_FAILURE_ENDING',
+        'Out.Phase = View.Phase; // FLOW_STATUS_TERMINAL_PLAYS_FAILURE_ENDING',
+    ),
+    (
+        'm6_outcome_unknown_plays_ending',
+        'if (Status == nullptr || !Status->bOk || Status->bOutcomeUnknown) { return View; } // unknown plays no ending',
+        'if (Status == nullptr || !Status->bOk) { return View; } // unknown plays no ending',
+    ),
+    (
+        'm6_unknown_view_overridden',
+        '|| View.Phase == E::Cancelled || View.Phase == E::OutcomeUnknown;',
+        '|| View.Phase == E::Cancelled;',
+    ),
+    (
+        'f4_cause_seq_is_newest',
+        'Out.CauseSeq = Feed.TaskPhaseSeen() ? Feed.LastTaskPhase().Seq : Feed.LiveStepSeq() >= 0 ? Feed.LiveStepSeq() : Feed.LastSeenSeq(); // FLOW_EXEC_CAUSE_SEQ',
+        'Out.CauseSeq = Feed.LastSeenSeq(); // FLOW_EXEC_CAUSE_SEQ',
+    ),
+    (
+        'f4_beat_role_always_actor',
+        'Out += ",\\"role\\":"; Out += Beat.bActor ? "\\"actor\\"" : "\\"observer\\""; // FLOW_LOG_BEAT_CARRIES_ROLE',
+        'Out += ",\\"role\\":\\"actor\\""; // FLOW_LOG_BEAT_CARRIES_ROLE',
+    ),
+    (
+        'f4_beat_drops_time',
+        'Out += ",\\"client_utc_ms\\":" + std::to_string(Beat.ClientUtcMs); // FLOW_LOG_BEAT_CARRIES_TIME',
+        'Out += ",\\"client_utc_ms\\":0"; // FLOW_LOG_BEAT_CARRIES_TIME',
     ),
 ]
 
@@ -968,8 +1069,8 @@ SUBSYSTEM = "wonderland/Source/Wonderland/Julius/WonderlandJuliusMissionSubsyste
 SUBSYSTEM_MUTATIONS = [
     (
         "c2_status_read_auto_resends_start",
-        "SaveStartRecord(); // SUBSYSTEM_STATUS_READ_NEVER_SENDS",
-        "SaveStartRecord(); if (StartRecord == 4) { (void)StartPaidMission(TEXT(\"RUN LIVE MISSION\")); } // SUBSYSTEM_STATUS_READ_NEVER_SENDS",
+        "if (!SaveStartRecord()) // SUBSYSTEM_STATUS_READ_NEVER_SENDS",
+        "if (StartRecord == 4) { (void)StartPaidMission(TEXT(\"RUN LIVE MISSION\")); } if (!SaveStartRecord()) // SUBSYSTEM_STATUS_READ_NEVER_SENDS",
     ),
     (
         "mb_new_key_per_start",
@@ -1020,8 +1121,95 @@ SUBSYSTEM_MUTATIONS = [
     ),
     (
         "c6_subsystem_beat_log_without_seq",
-        "UE_LOG(LogJuliusJ1, Display, TEXT(\"%s\"), UTF8_TO_TCHAR(FormatBeatLog(ToStd(Run), Beat.Type, View.Phase, Host->LiveFeed.LastSeenSeq(),",
-        "UE_LOG(LogJuliusJ1, Display, TEXT(\"%s\"), UTF8_TO_TCHAR(FormatBeatLog(ToStd(Run), Beat.Type, View.Phase, -1,",
+        "UE_LOG(LogJuliusJ1, Display, TEXT(\"%s\"), UTF8_TO_TCHAR(FormatBeatLog(Evidence).c_str())); // SUBSYSTEM_LOGS_BEAT",
+        "(void)Evidence; // SUBSYSTEM_LOGS_BEAT",
+    ),
+    # FIX COMMIT 2026-10-30 (YUJI M2/m4/m6, Skywalker F3/F4): source-checked by julius_start_record_saved_before_send,
+    # julius_status_failure_ending and julius_evidence_logs.
+    (
+        'm2_send_when_save_failed',
+        'if (!SaveStartRecord()) // SUBSYSTEM_SAVE_BEFORE_SEND',
+        'if (!SaveStartRecord() && false) // SUBSYSTEM_SAVE_BEFORE_SEND',
+    ),
+    (
+        'm2_y19_no_save_before_send',
+        'if (!SaveStartRecord()) // SUBSYSTEM_SAVE_BEFORE_SEND',
+        'if (false) // SUBSYSTEM_SAVE_BEFORE_SEND',
+    ),
+    (
+        'm2_save_result_ignored_after_answer',
+        '\tif (!SaveStartRecord())\n\t{\n\t\t// The disk still says',
+        '\tSaveStartRecord(); if (false)\n\t{\n\t\t// The disk still says',
+    ),
+    (
+        'm2_record_written_in_place',
+        'if (!FFileHelper::SaveStringToFile(FString(UTF8_TO_TCHAR(Text.c_str())), *Temp)) { return false; } // SUBSYSTEM_START_RECORD_WRITES_TEMP_FIRST',
+        'return FFileHelper::SaveStringToFile(FString(UTF8_TO_TCHAR(Text.c_str())), *Path); // SUBSYSTEM_START_RECORD_WRITES_TEMP_FIRST',
+    ),
+    (
+        'm2_rename_skipped',
+        'return IFileManager::Get().Move(*Path, *Temp, true, true); // SUBSYSTEM_START_RECORD_RENAMED_INTO_PLACE',
+        'return true; // SUBSYSTEM_START_RECORD_RENAMED_INTO_PLACE',
+    ),
+    (
+        'm2_unreadable_record_overwritten',
+        'if (StartRecord == static_cast<uint8>(EStartRecord::Unreadable)) { return false; }',
+        'if (false) { return false; }',
+    ),
+    (
+        'm2_corrupt_record_resets_to_none',
+        'StartRecord = static_cast<uint8>(EStartRecord::Unreadable); // SUBSYSTEM_CORRUPT_RECORD_BLOCKS',
+        'StartRecord = 0; // SUBSYSTEM_CORRUPT_RECORD_BLOCKS',
+    ),
+    (
+        'm2_temp_record_not_recovered',
+        'Files.FileExists(*Path) ? Path : Files.FileExists(*Temp) ? Temp : FString();',
+        'Files.FileExists(*Path) ? Path : FString();',
+    ),
+    (
+        'f3_duplicate_status_read_line',
+        'TEXT("{\\"event\\":\\"status_reconcile\\",',
+        'TEXT("{\\"event\\":\\"status_read\\",',
+    ),
+    (
+        'f4_subsystem_beat_seq_is_newest',
+        'Evidence.SourceSeq = View.CauseSeq; // SUBSYSTEM_BEAT_SEQ_IS_THE_CAUSE',
+        'Evidence.SourceSeq = Host->LiveFeed.LastSeenSeq(); // SUBSYSTEM_BEAT_SEQ_IS_THE_CAUSE',
+    ),
+    (
+        'f4_subsystem_role_always_actor',
+        'Evidence.bActor = bStartAcceptedHere; // SUBSYSTEM_BEAT_ROLE',
+        'Evidence.bActor = true; // SUBSYSTEM_BEAT_ROLE',
+    ),
+    (
+        'f4_subsystem_beat_without_time',
+        'Evidence.ClientUtcMs = Host->Clock.NowUtcMs(); // SUBSYSTEM_BEAT_TIME',
+        '// SUBSYSTEM_BEAT_TIME',
+    ),
+    (
+        'f4_subsystem_beat_without_offset',
+        'Host->Session.ClockOffset(Evidence.bClockOffsetKnown, Evidence.ClockOffsetMs);',
+        '(void)0;',
+    ),
+    (
+        'm6_subsystem_status_ending_dropped',
+        'View = StatusFailureEnding(View, RunStatus); // SUBSYSTEM_STATUS_TERMINAL_PLAYS_FAILURE_ENDING',
+        '// SUBSYSTEM_STATUS_TERMINAL_PLAYS_FAILURE_ENDING',
+    ),
+    (
+        'm6_subsystem_unknown_enters_contract',
+        '&& !RunStatus->bOutcomeUnknown',
+        '&& true',
+    ),
+    (
+        'm6_subsystem_refused_never_enters',
+        '|| (StartRecord == static_cast<uint8>(EStartRecord::Refused) && bStatusFailureEnding); // SUBSYSTEM_STATUS_TERMINAL_ENTERS_CONTRACT',
+        '|| false; // SUBSYSTEM_STATUS_TERMINAL_ENTERS_CONTRACT',
+    ),
+    (
+        'm6_subsystem_status_ending_waits_for_reads',
+        'if (!bStatusFailureEnding && !bStartAcceptedHere &&',
+        'if (!bStartAcceptedHere &&',
     ),
 ]
 

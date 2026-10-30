@@ -174,7 +174,7 @@ private:
 	uint64 LastLiveOkUtcMs = 0;
 	int32 LiveReadFailures = 0;
 	FString LiveRefusedSavedFor;
-	/** The persisted start record (SaveGames/JuliusJ1/start.v1) of StartRunId; record 0..5 = EStartRecord. */
+	/** The persisted start record (SaveGames/JuliusJ1/start.v1) of StartRunId; record 0..6 = EStartRecord (6 = unreadable). */
 	FString StartRunId;
 	FString StartKey;
 	/** A-9: the clientTriggerId minted ONCE with StartKey and persisted beside it; every resend sends this value. */
@@ -192,7 +192,8 @@ private:
 	bool bContractSuspended = false;
 	bool bStartAcceptedHere = false;
 	TUniquePtr<WonderlandJuliusMissionFlow::FContractCursor> ContractCursor;
-	void SaveStartRecord() const;
+	/** YUJI M2: writes the record atomically (temp file + rename); false = not saved (a Start is then never sent). */
+	bool SaveStartRecord() const;
 	bool bLoggedNotConnected = false;
 	int32 LiveLastHttpStatus = 0;
 	uint32 AdoptedTokenCrc = 0;

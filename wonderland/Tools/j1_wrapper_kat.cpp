@@ -465,12 +465,92 @@ namespace
 			&& !Within("void UWonderlandJuliusMissionSubsystem::CompleteLiveRead(", "else if (!Read.SkippedSeqs.empty())", "FormatResyncLog(");
 		const std::size_t Loop = Text.find("for (const FContractBeat& Beat : ContractCursor->Advance(View))");
 		const std::size_t LoopEnd = Loop == std::string::npos ? std::string::npos : Text.find("\n\t}", Loop);
-		const std::size_t BeatLog = Loop == std::string::npos ? std::string::npos : Text.find("FormatBeatLog(ToStd(Run), Beat.Type, View.Phase, Host->LiveFeed.LastSeenSeq()", Loop);
-		const bool bBeat = LoopEnd != std::string::npos && BeatLog != std::string::npos && BeatLog < LoopEnd;
+		const std::size_t BeatLog = Loop == std::string::npos ? std::string::npos : Text.find("FormatBeatLog(Evidence)", Loop);
+		// F4 / YUJI m4: the beat line carries the CAUSING seq, the client's time and its actor/observer role.
+		auto InLoop = [&](const std::string& Needle)
+		{
+			const std::size_t At = Loop == std::string::npos ? std::string::npos : Text.find(Needle, Loop);
+			return At != std::string::npos && LoopEnd != std::string::npos && At < BeatLog && At < LoopEnd;
+		};
+		const bool bBeat = LoopEnd != std::string::npos && BeatLog != std::string::npos && BeatLog < LoopEnd
+			&& InLoop("Evidence.SourceSeq = View.CauseSeq;") && InLoop("Evidence.Source = View.CauseSource;")
+			&& InLoop("Evidence.bActor = bStartAcceptedHere;") && InLoop("Evidence.ClientUtcMs = Host->Clock.NowUtcMs();")
+			&& InLoop("Host->Session.ClockOffset(Evidence.bClockOffsetKnown, Evidence.ClockOffsetMs);")
+			&& Text.find("LiveFeed.LastSeenSeq()", Loop) > LoopEnd;
+		// F3: one status_read line per accepted read (the C6 one); the reconcile line has its own event name.
+		const bool bOneStatusRead = Text.find("\\\"event\\\":\\\"status_read\\\"") == std::string::npos
+			&& Text.find("\\\"event\\\":\\\"status_reconcile\\\"") != std::string::npos;
+		if (!bOneStatusRead) { std::printf("EVIDENCE LOG CHECK FAIL: a second status_read line is written for one read\n"); }
 		if (!bStatus) { std::printf("EVIDENCE LOG CHECK FAIL: no status_read line for an accepted /status read\n"); }
 		if (!bResync) { std::printf("EVIDENCE LOG CHECK FAIL: no resync line in the resync branch\n"); }
 		if (!bBeat) { std::printf("EVIDENCE LOG CHECK FAIL: a beat is applied without its beat line\n"); }
-		return bStatus && bResync && bBeat;
+		return bStatus && bResync && bBeat && bOneStatusRead;
+	}
+
+	std::string FunctionBody(const std::string& Text, const std::string& Signature)
+	{
+		const std::size_t Def = Text.find(Signature);
+		const std::size_t End = Def == std::string::npos ? std::string::npos : Text.find("\n}\n", Def);
+		return Def == std::string::npos || End == std::string::npos ? std::string() : Text.substr(Def, End - Def);
+	}
+
+	/**
+	 * YUJI M2 2026-10-30: save-before-send. StartPaidMission saves "sending" and returns without sending when the save
+	 * fails; the record is written atomically (temp file, then renamed over it); an unreadable record is blocked, never
+	 * reset to none (SyncStartRecord goes through the pure ParseSavedStartRecord) and never overwritten.
+	 */
+	bool CheckStartRecordSavedBeforeSend()
+	{
+		const std::string Text = SubsystemSource();
+		const std::string Start = FunctionBody(Text, "bool UWonderlandJuliusMissionSubsystem::StartPaidMission(");
+		const std::size_t Guard = Start.find("if (!SaveStartRecord()) // SUBSYSTEM_SAVE_BEFORE_SEND");
+		const std::size_t GuardEnd = Guard == std::string::npos ? std::string::npos : Start.find("\n\t}", Guard);
+		const std::size_t Returns = Guard == std::string::npos ? std::string::npos : Start.find("return false;", Guard);
+		const std::size_t Create = Start.find("CreateRequest()");
+		const std::size_t Send = Start.find("ProcessRequest()");
+		const bool bBeforeSend = Guard != std::string::npos && GuardEnd != std::string::npos && Returns < GuardEnd && Create != std::string::npos
+			&& Send != std::string::npos && GuardEnd < Create && Create < Send && Start.find("SaveStartRecord();") == std::string::npos;
+		const std::string Save = FunctionBody(Text, "bool UWonderlandJuliusMissionSubsystem::SaveStartRecord() const");
+		const std::size_t Temp = Save.find("SaveStringToFile(");
+		const std::size_t Move = Save.find("IFileManager::Get().Move(*Path, *Temp, true, true)");
+		const bool bAtomic = Temp != std::string::npos && Move != std::string::npos && Temp < Move && Save.find("*Temp)) { return false; }") != std::string::npos
+			&& Save.find("*Path)") == std::string::npos && Save.find("StartRecordPath())") == std::string::npos
+			&& Save.find("if (StartRecord == static_cast<uint8>(EStartRecord::Unreadable)) { return false; }") != std::string::npos;
+		const std::string Sync = FunctionBody(Text, "void UWonderlandJuliusMissionSubsystem::SyncStartRecord()");
+		const std::size_t Bad = Sync.find("if (Saved.Read == ESavedStartRead::Unreadable)");
+		const std::size_t Blocked = Sync.find("StartRecord = static_cast<uint8>(EStartRecord::Unreadable);");
+		const bool bCorrupt = Sync.find("ParseSavedStartRecord(bExists, bLoaded,") != std::string::npos && Bad != std::string::npos && Blocked != std::string::npos
+			&& Bad < Blocked && Sync.find("LoadFileToStringArray") == std::string::npos && Sync.find("Files.FileExists(*Temp)") != std::string::npos;
+		auto Count = [&Text](const std::string& Needle)
+		{
+			int N = 0;
+			for (std::size_t At = Text.find(Needle); At != std::string::npos; At = Text.find(Needle, At + 1)) { ++N; }
+			return N;
+		};
+		const bool bResultsRead = Count("SaveStartRecord();") == 0 && Count("if (!SaveStartRecord())") == 3;
+		if (!bBeforeSend) { std::printf("START RECORD CHECK FAIL: a Start can be sent without its record saved\n"); }
+		if (!bAtomic) { std::printf("START RECORD CHECK FAIL: the record is not written atomically (temp + rename)\n"); }
+		if (!bCorrupt) { std::printf("START RECORD CHECK FAIL: an unreadable record is not blocked\n"); }
+		if (!bResultsRead) { std::printf("START RECORD CHECK FAIL: a save result is ignored\n"); }
+		return bBeforeSend && bAtomic && bCorrupt && bResultsRead;
+	}
+
+	/**
+	 * YUJI m6 2026-10-30: a readable /status failure terminal (did_not_start / interrupted / expired / failed) enters the
+	 * contract and plays the failure ending through the cursor, after the success gate and before the cursor advances.
+	 */
+	bool CheckStatusFailureEnding()
+	{
+		const std::string Body = FunctionBody(SubsystemSource(), "void UWonderlandJuliusMissionSubsystem::SyncMissionContract()");
+		const std::size_t Gated = Body.find("View.Phase = SuccessGatedByStatus(View.Phase,");
+		const std::size_t Ending = Body.find("View = StatusFailureEnding(View, RunStatus);");
+		const std::size_t Advance = Body.find("ContractCursor->Advance(View)");
+		const bool bOk = Gated != std::string::npos && Ending != std::string::npos && Advance != std::string::npos && Gated < Ending && Ending < Advance
+			&& Body.find("&& !RunStatus->bOutcomeUnknown") != std::string::npos
+			&& Body.find("(StartRecord == static_cast<uint8>(EStartRecord::Refused) && bStatusFailureEnding); // SUBSYSTEM_STATUS_TERMINAL_ENTERS_CONTRACT") != std::string::npos
+			&& Body.find("if (!bStatusFailureEnding && !bStartAcceptedHere &&") != std::string::npos;
+		if (!bOk) { std::printf("STATUS ENDING CHECK FAIL: a /status failure terminal does not play the failure ending\n"); }
+		return bOk;
 	}
 
 	bool CheckJuliusModuleRootIncludes()
@@ -1398,6 +1478,8 @@ int main()
 	Expect(CheckStartKeyReused(), "julius_start_key_and_trigger_reused");
 	Expect(CheckEndingsFollowBackendState(), "julius_endings_follow_backend_state");
 	Expect(CheckEvidenceLogs(), "julius_evidence_logs");
+	Expect(CheckStartRecordSavedBeforeSend(), "julius_start_record_saved_before_send");
+	Expect(CheckStatusFailureEnding(), "julius_status_failure_ending");
 	Expect(CheckPlatformCryptoTypesInclude(), "platform_crypto_result_includes_types");
 
 	if (Failures == 0)

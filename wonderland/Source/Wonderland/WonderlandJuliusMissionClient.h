@@ -236,6 +236,8 @@ namespace WonderlandJuliusMissionClient
 		void SetNativeSessionToken(std::string_view Token);
 		/** `Source` is "ntp" or "system". Pass Known false when no offset exists. */
 		void SetClockOffset(bool bKnown, std::int64_t OffsetMs, std::string_view Source);
+		/** F4: the recorded clock offset (for the beat evidence line); never measured here. */
+		void ClockOffset(bool& bOutKnown, std::int64_t& OutMs) const { bOutKnown = bClockOffsetKnown; OutMs = ClockOffsetMs; }
 
 		/** False when the save is missing, empty, or corrupt. A corrupt save leaves the session idle and mints nothing. */
 		bool Load();

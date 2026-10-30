@@ -699,7 +699,7 @@ const ABSENT_PHASE = {
 		Expect(ParseStartAnswer(W, 409, "{\"error\":{\"kind\":\"already_spent\",\"message\":\"x\"},\"retry\":false}").Outcome == EStartOutcome::Refused, "409 claim refused");
 		Expect(ParseStartAnswer(W, 400, "{\"error\":{\"kind\":\"julius_start_confirmation_required\",\"message\":\"x\"}}").Outcome == EStartOutcome::Refused, "400 refused");
 		Expect(ParseStartAnswer(W, 404, "{\"error\":{\"kind\":\"not_found\",\"message\":\"x\"}}").Outcome == EStartOutcome::Refused, "404 refused");
-		Expect(ParseStartAnswer(W, 503, "{\"error\":{\"kind\":\"julius_start_unavailable\"}}").Outcome == EStartOutcome::Retryable, "503 nothing dispatched");
+		Expect(ParseStartAnswer(W, 503, "{\"error\":{\"kind\":\"julius_start_unavailable\"}}").Outcome == EStartOutcome::Uncertain, "M1: a 503 that does not SAY nothing was claimed is outcome-unknown");
 		Expect(ParseStartAnswer(W, 0, "").Outcome == EStartOutcome::Retryable, "transport nothing dispatched");
 		Expect(ParseStartAnswer(W, 401, "").Outcome == EStartOutcome::Retryable, "401 re-pair");
 		Expect(ParseStartAnswer(W, 409, "{}").Outcome == EStartOutcome::Malformed, "a refusal without a kind is not understood");
@@ -1571,6 +1571,12 @@ const ABSENT_PHASE = {
 	}
 	const char* const BoundRun = "{\"status\":\"in_progress\",\"conclusion\":null,\"live\":true,\"execution\":\"executing\",\"executionStartedAt\":null,\"stoppedAt\":null,\"stale\":false,\"fetchedAt\":null}";
 
+	FMissionStatusRead& Read503()
+	{
+		static FMissionStatusRead Read = ParseMissionStatus(StatusWlj, 503, "");
+		return Read;
+	}
+
 	int StatusCases = 0;
 	void StatusFixtures()
 	{
@@ -1641,11 +1647,15 @@ const ABSENT_PHASE = {
 
 		// Operator reconcile reflected as settled.
 		const FMissionStatusRead Settled = ParseMissionStatus(W, 200, StatusBody("admitted", false, StartObj(false, "null", RequestObj("settled"))));
-		const FStartReconcile Released = StartRecordFromStatus(R::Sending, Settled);
-		Expect(Released.Record == R::NotStarted && Released.bChanged, "settled with nothing held releases Start");
+		// F10: settled is NOT nothing-at-all (an intent exists): blocked until an operator clears it.
+		Expect(StartRecordFromStatus(R::Sending, Settled).Record == R::Sending, "F10: settled keeps a Sending record blocked");
+		Expect(StartRecordFromStatus(R::Accepted, Settled).Record == R::Accepted, "F10: settled keeps an Accepted record blocked");
+		const FMissionStatusRead AckNothing = ParseMissionStatus(W, 200, StatusBody("admitted", false, StartObj(false, "null", "null")));
+		const FStartReconcile Released = StartRecordFromStatus(R::Sending, AckNothing);
+		Expect(AckNothing.bRequestFieldPresent && Released.Record == R::NotStarted && Released.bChanged, "F10: ACK on and nothing at all releases Start");
 		Expect(!StartGateFor("admitted_waiting", true, false, Released.Record, false, Ok).bSend && StartGateFor("admitted_waiting", true, false, Released.Record, true, Ok).bSend,
 			"a released Start sends only on the founder's click");
-		Expect(StartRecordFromStatus(R::Sending, ParseMissionStatus(W, 200, StatusBody("admitted", false, StartObj(false)))).Record == R::NotStarted, "nothing held (V2) releases Start");
+		Expect(StartRecordFromStatus(R::Sending, ParseMissionStatus(W, 200, StatusBody("admitted", false, StartObj(false)))).Record == R::Sending, "F10: ACK off (no start.request) never releases");
 		Expect(StartRecordFromStatus(R::Sending, ParseMissionStatus(W, 200, StatusBody("admitted", false, StartObj(false, "null", RequestObj("accepted"))))).Record == R::Accepted, "a live accepted request blocks");
 		Expect(StartRecordFromStatus(R::NotStarted, ParseMissionStatus(W, 200, StatusBody("admitted", false, StartObj(false, "null", RequestObj("claiming"))))).Record == R::Accepted, "a claiming request blocks");
 		Expect(StartRecordFromStatus(R::Sending, ParseMissionStatus(W, 200, StatusBody("starting", false, StartObj(true)))).Record == R::Sending, "a Start running on the bridge blocks");
@@ -1759,9 +1769,12 @@ const ABSENT_PHASE = {
 	{
 		const FMissionStatusRead VerifiedPass = ParseMissionStatus(StatusWlj, 200, Completed("PASS", true));
 		Expect(SuccessGatedByStatus(EExecutionPhase::Completed, &VerifiedPass) == EExecutionPhase::Completed, "verified PASS keeps success");
-		Expect(SuccessGatedByStatus(EExecutionPhase::Completed, nullptr) == EExecutionPhase::Completed, "no /status read: the /result rule stands");
+		// F1 / M3: fail closed. No readable /status = no success.
+		Expect(SuccessGatedByStatus(EExecutionPhase::Completed, nullptr) == EExecutionPhase::Grading, "F1: no /status read: no success (fail closed)");
 		const FMissionStatusRead Unreadable = ParseMissionStatus(StatusWlj, 500, "{}");
-		Expect(SuccessGatedByStatus(EExecutionPhase::Completed, &Unreadable) == EExecutionPhase::Completed, "an unreadable /status is not a verdict");
+		Expect(SuccessGatedByStatus(EExecutionPhase::Completed, &Unreadable) == EExecutionPhase::Grading, "F1: an unreadable /status: no success (fail closed)");
+		Expect(SuccessGatedByStatus(EExecutionPhase::Failed, nullptr) == EExecutionPhase::Failed
+			&& SuccessGatedByStatus(EExecutionPhase::OutcomeUnknown, nullptr) == EExecutionPhase::OutcomeUnknown, "F1: failing closed never touches other phases");
 		for (const char* Verdict : {"FAIL", "NOT_RUN"})
 		{
 			// YUJI steering 1, beat side: completed FAIL/NOT_RUN never plays the success beat.
@@ -1822,13 +1835,23 @@ const ABSENT_PHASE = {
 		Expect(FormatResyncLog("wlj_x", "seq_gap", 2, 41) == "{\"event\":\"resync\",\"wlj_run_id\":\"wlj_x\",\"reason\":\"seq_gap\",\"events_skipped\":2,\"last_seq\":41,\"next\":\"status_read\"}", "resync line, exact");
 		Expect(FormatResyncLog("wlj_x", "reset", 0, -1).find("\"last_seq\":null") != std::string::npos, "resync with no seq: null");
 		++LogCases;
-		const std::string Beat = FormatBeatLog("wlj_x", "run.completed", EExecutionPhase::Completed, 57, &Pass, true, "COMPLETE / VERIFIED");
-		Expect(Beat == "{\"event\":\"beat\",\"wlj_run_id\":\"wlj_x\",\"type\":\"run.completed\",\"phase\":\"" + std::string(ExecutionPhaseWord(EExecutionPhase::Completed))
-			+ "\",\"source_seq\":57,\"status_phase\":\"completed\",\"verified_success\":true,\"applied\":true,\"stage\":\"COMPLETE / VERIFIED\"}", "beat line, exact");
-		const std::string NoStatus = FormatBeatLog("wlj_x", "run.failed", EExecutionPhase::DidNotStart, -1, nullptr, false, "");
+		auto MakeBeat = [](std::string_view Wlj, std::string_view Type, EExecutionPhase Phase, std::int64_t Seq, const FMissionStatusRead* St,
+			bool bApplied, std::string_view Stage)
+		{
+			FBeatEvidence B; B.WljRunId = Wlj; B.BeatType = Type; B.Phase = Phase; B.SourceSeq = Seq; B.Status = St; B.bApplied = bApplied; B.StageLabel = Stage;
+			return B;
+		};
+		FBeatEvidence Actor = MakeBeat("wlj_x", "run.completed", EExecutionPhase::Completed, 57, &Pass, true, "COMPLETE / VERIFIED");
+		Actor.bActor = true; Actor.ClientUtcMs = 1793400000123ULL; Actor.bClockOffsetKnown = true; Actor.ClockOffsetMs = -42; Actor.Source = "result";
+		const std::string Beat = FormatBeatLog(Actor);
+		Expect(Beat == "{\"event\":\"beat\",\"wlj_run_id\":\"wlj_x\",\"type\":\"run.completed\",\"role\":\"actor\",\"client_utc_ms\":1793400000123,\"clock_offset_ms\":-42,\"phase\":\""
+			+ std::string(ExecutionPhaseWord(EExecutionPhase::Completed))
+			+ "\",\"source\":\"result\",\"source_seq\":57,\"status_phase\":\"completed\",\"verified_success\":true,\"applied\":true,\"stage\":\"COMPLETE / VERIFIED\"}", "F4: beat line, exact (time, role, source)");
+		const std::string NoStatus = FormatBeatLog(MakeBeat("wlj_x", "run.failed", EExecutionPhase::DidNotStart, -1, nullptr, false, ""));
 		Expect(NoStatus.find("\"source_seq\":null,\"status_phase\":null,\"verified_success\":false,\"applied\":false,\"stage\":null}") != std::string::npos, "beat without status or seq: nulls, never success");
-		Expect(FormatBeatLog("wlj_\"q\\", "x", EExecutionPhase::Grading, 1, &Fail, true, "a\nb").find("wlj_\\\"q\\\\") != std::string::npos
-			&& FormatBeatLog("w", "x", EExecutionPhase::Grading, 1, &Fail, true, "a\nb").find("a\\u000ab") != std::string::npos, "log strings are escaped");
+		Expect(NoStatus.find("\"role\":\"observer\"") != std::string::npos && NoStatus.find("\"clock_offset_ms\":null") != std::string::npos, "F4: observer role, unknown offset is null");
+		Expect(FormatBeatLog(MakeBeat("wlj_\"q\\", "x", EExecutionPhase::Grading, 1, &Fail, true, "a\nb")).find("wlj_\\\"q\\\\") != std::string::npos
+			&& FormatBeatLog(MakeBeat("w", "x", EExecutionPhase::Grading, 1, &Fail, true, "a\nb")).find("a\\u000ab") != std::string::npos, "log strings are escaped");
 		++LogCases;
 	}
 
@@ -1864,22 +1887,220 @@ const ABSENT_PHASE = {
 		}
 		{
 			const FMissionStatusRead Read = ParseMissionStatus(StatusWlj, 200, StatusBody("admitted", false, RestartedStart("settled")));
-			// Settled (the operator's reconcile) with nothing held is the founder's release: offered again on a click only,
-			// with the persisted key and trigger (wrapper: julius_start_key_and_trigger_reused).
-			for (const R Current : {R::None, R::NotStarted, R::Sending})
+			// F10 (2026-10-30): settled is an intent, not "nothing at all": a Sending / Accepted / unrecorded Start stays
+			// blocked until an operator clears it. A record that already said not-started stays offered on a click only.
+			for (const R Current : {R::None, R::Sending, R::Accepted})
 			{
 				const R Got = StartRecordFromStatus(Current, Read).Record;
-				Expect(Got == R::NotStarted, "settled with nothing held reconciles to not-started");
-				Expect(!StartGateFor("admitted_waiting", true, false, Got, false, "RUN LIVE MISSION").bSend, "settled never sends without a click");
+				Expect(Got != R::NotStarted && !StartGateFor("admitted_waiting", true, false, Got, true, "RUN LIVE MISSION").bSend, "F10: settled keeps Start blocked");
 			}
+			const R Kept = StartRecordFromStatus(R::NotStarted, Read).Record;
+			Expect(Kept == R::NotStarted && !StartGateFor("admitted_waiting", true, false, Kept, false, "RUN LIVE MISSION").bSend, "settled never sends without a click");
 		}
 		{
-			// Control: nothing held at all (no request) is the only release, and only from an open record.
-			const FMissionStatusRead Free = ParseMissionStatus(StatusWlj, 200, StatusBody("admitted", false, StartObj(false)));
+			// Control: nothing held at all (ACK on, request null) is the only release, and only from an open record.
+			const FMissionStatusRead Free = ParseMissionStatus(StatusWlj, 200, StatusBody("admitted", false, StartObj(false, "null", "null")));
 			Expect(StartRecordFromStatus(R::Sending, Free).Record == R::NotStarted && StartRecordFromStatus(R::None, Free).Record == R::None, "only nothing held releases");
 			Expect(StartGateFor("admitted_waiting", true, false, R::NotStarted, true, "RUN LIVE MISSION").bSend, "control: the gate itself sends on a click when released");
 		}
 		++RestartCases;
+	}
+
+
+	// FIX COMMIT (YUJI M1/M2/m4/m6, Skywalker F1/F3/F4/F5/F10, 2026-10-30).
+	int M1Cases = 0, M2Cases = 0, F4Cases = 0, F5Cases = 0, M6Cases = 0, F10Cases = 0;
+	void FixCommitFixtures()
+	{
+		using R = EStartRecord;
+		const char* const Ok = "RUN LIVE MISSION";
+		{
+			// M1: a 503 is "nothing dispatched" only when its body SAYS so.
+			const std::string W = StatusWlj;
+			auto Err = [](const char* Kind, const char* Message)
+			{
+				return std::string("{\"error\":{\"kind\":\"") + Kind + "\",\"message\":\"" + Message + "\"},\"retry\":true}";
+			};
+			const std::string Safe[] = {
+				Err("julius_start_disabled", "Julius Start is switched off. Nothing was dispatched."),
+				Err("julius_start_not_configured", "Julius Start is not configured."),
+				Err("julius_start_unavailable", "The Start could not be saved. Nothing was claimed or dispatched."),
+				Err("julius_start_unavailable", "The saved Start requests could not be read. Nothing was claimed or dispatched."),
+			};
+			for (const std::string& Body : Safe)
+			{
+				const FStartAnswer A = ParseStartAnswer(W, 503, Body);
+				Expect(A.Outcome == EStartOutcome::Retryable && StartRecordAfterAnswer(A.Outcome, 503) == R::NotStarted, "M1: a 503 that says nothing was claimed is not started");
+			}
+			const std::string Unsafe[] = {
+				Err("julius_start_unavailable", "The claim could not run. Check /status before trying again."),
+				Err("julius_start_unavailable", "Nothing was claimed or dispatched. Or was it"),
+				Err("service_unavailable", "Nothing was claimed or dispatched."),
+				"",
+				"<html>503</html>",
+				"{\"error\":{\"kind\":\"julius_start_unavailable\"}}",
+			};
+			for (const std::string& Body : Unsafe)
+			{
+				const FStartAnswer A = ParseStartAnswer(W, 503, Body);
+				const R Record = StartRecordAfterAnswer(A.Outcome, 503);
+				Expect(A.Outcome != EStartOutcome::Retryable && Record == R::Sending, "M1: any other 503 is outcome-unknown (Sending)");
+				Expect(!StartGateFor("admitted_waiting", true, false, Record, true, Ok).bSend, "M1: any other 503 blocks Start until /status resolves");
+			}
+			++M1Cases;
+			Expect(StartRecordAfterAnswer(ParseStartAnswer(W, 401, "").Outcome, 401) == R::NotStarted, "M1 control: 401 is still not started");
+			for (const int Http : {0, 502, 504}) { Expect(StartRecordAfterAnswer(ParseStartAnswer(W, Http, "").Outcome, Http) == R::Sending, "M1 control: a lost answer stays blocked"); }
+			++M1Cases;
+		}
+		{
+			// M2: the saved record round-trips; anything unreadable is BLOCKED, never reset to None.
+			const std::string Run = StatusWlj;
+			const std::string Good = FormatSavedStartRecord(Run, "jstart_k", R::Sending, "", "jtrig_t");
+			Expect(Good == "WJ1START 1\nrun " + Run + "\nkey jstart_k\nstate sending\nworkflow \ntrigger jtrig_t\n", "M2: saved record format, exact");
+			const FSavedStartRecord Back = ParseSavedStartRecord(true, true, Good, Run);
+			Expect(Back.Read == ESavedStartRead::Ok && Back.Record == R::Sending && Back.Key == "jstart_k" && Back.TriggerId == "jtrig_t", "M2: round trip");
+			for (const R Each : {R::None, R::Sending, R::Started, R::Refused, R::NotStarted, R::Accepted})
+			{
+				Expect(ParseSavedStartRecord(true, true, FormatSavedStartRecord(Run, "k", Each, "40242149156", "t"), Run).Record == Each, "M2: every state round-trips");
+			}
+			Expect(ParseSavedStartRecord(false, false, "", Run).Read == ESavedStartRead::Absent && ParseSavedStartRecord(false, false, "", Run).Record == R::None, "M2: no file is None");
+			const FSavedStartRecord Other = ParseSavedStartRecord(true, true, FormatSavedStartRecord("wlj_other", "k", R::Sending, "", "t"), Run);
+			Expect(Other.Read == ESavedStartRead::OtherRun && Other.Record == R::None, "M2: another run's readable record is None here");
+			Expect(ParseSavedStartRecord(true, true, "WJ1START 1\nrun " + Run + "\nkey k\nstate sending\nworkflow \n", Run).Read == ESavedStartRead::Ok, "M2: a pre-C1 record without a trigger still reads");
+			const std::string Corrupt[] = {
+				"",
+				Good.substr(0, Good.size() - 1),
+				Good.substr(0, Good.size() / 2),
+				"WJ1START 2\nrun " + Run + "\nkey k\nstate sending\nworkflow \ntrigger t\n",
+				"WJ1START 1\nrun " + Run + "\nkey k\nstate sending\nstate none\nworkflow \ntrigger t\n",
+				"WJ1START 1\nrun " + Run + "\nkey k\nstate maybe\nworkflow \ntrigger t\n",
+				"WJ1START 1\nrun " + Run + "\nstate sending\nworkflow \ntrigger t\n",
+				"WJ1START 1\nrun " + Run + "\nkey k\nstate sending\nworkflow \ntrigger t\ngarbage\n",
+				"WJ1START 1\nrun " + Run + "\nkey k\nstate unreadable\nworkflow \ntrigger t\n",
+			};
+			for (const std::string& Text : Corrupt)
+			{
+				const FSavedStartRecord Got = ParseSavedStartRecord(true, true, Text, Run);
+				Expect(Got.Read == ESavedStartRead::Unreadable && Got.Record == R::Unreadable, "M2: a corrupt record is unreadable, not None");
+			}
+			Expect(ParseSavedStartRecord(true, false, Good, Run).Record == R::Unreadable, "M2: a file that exists but cannot be read is unreadable");
+			++M2Cases;
+			for (const bool bClick : {false, true})
+			{
+				const FStartGate Gate = StartGateFor("admitted_waiting", true, false, R::Unreadable, bClick, Ok);
+				Expect(!Gate.bSend && !Gate.bOffer && Gate.Why != nullptr && std::strstr(Gate.Why, "unreadable") != nullptr, "M2: an unreadable record blocks Start, even on a click");
+			}
+			const FMissionStatusRead Nothing = ParseMissionStatus(StatusWlj, 200, StatusBody("admitted", false, StartObj(false, "null", "null")));
+			Expect(StartRecordFromStatus(R::Unreadable, Nothing).Record == R::Unreadable, "M2: nothing at all on the bridge never releases an unreadable record");
+			Expect(StartRecordFromStatus(R::Unreadable, ParseMissionStatus(StatusWlj, 200, StatusBody("dispatched", false, StartObj(true, "\"40242149156\"")))).Record == R::Started, "M2: a dispatch makes it Started (still blocked)");
+			Expect(std::string(SavedStartStateWord(R::Unreadable)) == "unreadable" && std::string(SavedStartStateWord(R::NotStarted)) == "not_started", "M2: words");
+			++M2Cases;
+		}
+		{
+			// F5: phase admitted + start.requested:true + no request state: Start stays blocked (M08).
+			const std::string Hash = std::string("\"") + std::string(64, 'b') + "\"";
+			const std::string Bodies[] = {
+				StatusBody("admitted", false, StartObj(true)),
+				StatusBody("admitted", false, StartObj(true, "null", "null")),
+				StatusBody("admitted", false, Swap(StartObj(false, "null", "null"), "\"startKeyHash\":null", "\"startKeyHash\":" + Hash)),
+			};
+			for (const std::string& Body : Bodies)
+			{
+				const FMissionStatusRead Read = ParseMissionStatus(StatusWlj, 200, Body);
+				Expect(Read.bOk && Read.RequestState.empty() && Read.Phase == EMissionStatusPhase::Admitted, "F5 fixture reads");
+				Expect(!StatusShowsNothingAtAll(Read), "F5: a claim is not nothing at all");
+				for (const R Current : {R::None, R::Sending, R::Accepted, R::NotStarted})
+				{
+					const R Got = StartRecordFromStatus(Current, Read).Record;
+					Expect(Got != R::NotStarted && !StartGateFor("admitted_waiting", true, false, Got, true, Ok).bSend, "F5: admitted + requested + no request keeps Start blocked");
+				}
+			}
+			++F5Cases;
+		}
+		{
+			// F10: release ONLY when ACK on, readable, and no intent or claim at all.
+			const FMissionStatusRead Nothing = ParseMissionStatus(StatusWlj, 200, StatusBody("admitted", false, StartObj(false, "null", "null")));
+			Expect(StatusShowsNothingAtAll(Nothing), "F10: the one releasing shape");
+			for (const R Current : {R::Sending, R::Accepted})
+			{
+				const FStartReconcile Rec = StartRecordFromStatus(Current, Nothing);
+				Expect(Rec.Record == R::NotStarted && !StartGateFor("admitted_waiting", true, false, Rec.Record, false, Ok).bSend
+					&& StartGateFor("admitted_waiting", true, false, Rec.Record, true, Ok).bSend, "F10: released only to a click");
+			}
+			struct FCase { std::string Body; const char* Why; };
+			const FCase Held[] = {
+				{StatusBody("admitted", false, StartObj(false)), "ACK off"},
+				{StatusBody("admitted", false, StartObj(false, "null", RequestObj("settled"))), "settled"},
+				{StatusBody("admitted", false, StartObj(false, "null", RequestObj("accepted"))), "accepted"},
+				{StatusBody("admitted", false, StartObj(false, "null", RequestObj("claiming"))), "claiming"},
+				{Swap(StatusBody("admitted", false, StartObj(false, "null", "null")), "\"recovery\":\"none\"", "\"recovery\":\"none\",\"requestUnreadable\":true"), "request unreadable"},
+				{StatusBody("admitted", false, StartObj(false, "null", "null"), "null", "{\"checkerVerdict\":null,\"outcomeUnknown\":true}"), "outcome unknown"},
+				{StatusBody("dispatching", false, StartObj(true, "null", "null")), "dispatching"},
+				{StatusBody("unknown", false, StartObj(false, "null", "null")), "unknown"},
+			};
+			for (const FCase& Case : Held)
+			{
+				const FMissionStatusRead Read = ParseMissionStatus(StatusWlj, 200, Case.Body);
+				Expect(Read.bOk && !StatusShowsNothingAtAll(Read), Case.Why);
+				for (const R Current : {R::Sending, R::Accepted})
+				{
+					const R Got = StartRecordFromStatus(Current, Read).Record;
+					Expect(Got != R::NotStarted && !StartGateFor("admitted_waiting", true, false, Got, true, Ok).bSend, Case.Why);
+				}
+			}
+			Expect(StartRecordFromStatus(R::Sending, ParseMissionStatus(StatusWlj, 503, "")).Record == R::Sending, "F10: no readable /status never releases");
+			++F10Cases;
+		}
+		{
+			// m6: /status did_not_start / interrupted / expired / failed play the failure ending once; unknown plays none.
+			FExecutionView Waiting; Waiting.Phase = EExecutionPhase::Starting;
+			const char* const Plain = "{\"checkerVerdict\":null,\"outcomeUnknown\":false}";
+			for (const char* Ph : {"did_not_start", "interrupted", "expired", "failed"})
+			{
+				const FMissionStatusRead Read = ParseMissionStatus(StatusWlj, 200, StatusBody(Ph, true, StartObj(false, "null", "null"), "null", Plain, "null"));
+				Expect(Read.bOk, Ph);
+				const FExecutionView V = StatusFailureEnding(Waiting, &Read);
+				Expect(V.Phase == EExecutionPhase::DidNotStart || V.Phase == EExecutionPhase::Failed, Ph);
+				Expect(std::string(V.CauseSource) == "status" && V.Detail.find(Ph) != std::string::npos, "m6: the ending names the /status phase");
+				FContractCursor Cursor;
+				FExecutionView Exec; Exec.Phase = EExecutionPhase::Executing; Exec.Role = "coder"; Exec.TaskType = "build";
+				(void)Cursor.Advance(Exec);
+				int Failed = 0;
+				for (int Poll = 0; Poll < 4; ++Poll)
+				{
+					for (const FContractBeat& Beat : Cursor.Advance(StatusFailureEnding(Exec, &Read))) { Failed += Beat.Type == "run.failed" ? 1 : 0; Expect(Beat.Type != "run.completed", "m6: never success"); }
+				}
+				Expect(Failed == 1 && Cursor.Ended(), "m6: the failure ending plays exactly once");
+			}
+			const FMissionStatusRead Interrupted = ParseMissionStatus(StatusWlj, 200, StatusBody("interrupted", true, StartObj(false, "null", "null"), "null", Plain, "null"));
+			Expect(StatusFailureEnding(Waiting, &Interrupted).Phase == EExecutionPhase::Failed, "m6: interrupted is a failure");
+			++M6Cases;
+			const FMissionStatusRead Unknown = ParseMissionStatus(StatusWlj, 200, StatusBody("failed", true, StartObj(false, "null", "null"), "null", "{\"checkerVerdict\":null,\"outcomeUnknown\":true}", "null"));
+			Expect(StatusFailureEnding(Waiting, &Unknown).Phase == EExecutionPhase::Starting, "m6: outcome unknown plays no ending");
+			FExecutionView Lost; Lost.Phase = EExecutionPhase::OutcomeUnknown;
+			Expect(StatusFailureEnding(Lost, &Interrupted).Phase == EExecutionPhase::OutcomeUnknown, "m6: an outcome-unknown view is never turned into a failure");
+			FExecutionView Done; Done.Phase = EExecutionPhase::Failed; Done.Detail = "Checker: FAIL";
+			Expect(StatusFailureEnding(Done, &Interrupted).Detail == "Checker: FAIL", "m6: an ending already chosen is kept");
+			Expect(StatusFailureEnding(Waiting, nullptr).Phase == EExecutionPhase::Starting && StatusFailureEnding(Waiting, &Read503()).Phase == EExecutionPhase::Starting, "m6: no readable /status changes nothing");
+			const FMissionStatusRead Live = ParseMissionStatus(StatusWlj, 200, StatusBody("executing", false, StartObj(true), BoundRun));
+			Expect(StatusFailureEnding(Waiting, &Live).Phase == EExecutionPhase::Starting, "m6: a live phase is not an ending");
+			++M6Cases;
+		}
+		{
+			// F4: the beat's source_seq is the seq that CAUSED it.
+			const char* const PJ = "Preflight, then the live mission";
+			const char* const LS = "LIVE: run the first real Julius mission";
+			const std::string Gates = Job(1, "spend-tag", "completed", "success") + "," + Job(2, "paid-slot", "in_progress", nullptr);
+			FExecutionView V = ViewOf(LiveBody(Top("in_progress", nullptr, true), Gates + "," + Phase(5, "coder", "build", 0) + "," + Job(9, "paid-slot", "completed", "success")));
+			Expect(V.Phase == EExecutionPhase::Executing && V.CauseSeq == 5 && std::string(V.CauseSource) == "events", "F4: a task sample's beat carries ITS seq, not the newest");
+			V = ViewOf(LiveBody(Top("in_progress", nullptr, true), Gates + "," + Step(4, PJ, LS, "in_progress", nullptr) + "," + Job(7, "paid-slot", "completed", "success")));
+			Expect(V.Phase == EExecutionPhase::Executing && V.CauseSeq == 4, "F4: the LIVE step's seq");
+			V = ViewOf(LiveBody(Top("in_progress", nullptr, true), Gates + "," + Step(4, PJ, LS, "in_progress", nullptr) + "," + Step(6, PJ, LS, "completed", "failure") + "," + Job(8, "paid-slot", "completed", "success")));
+			Expect(V.Phase == EExecutionPhase::Failed && V.CauseSeq == 6, "F4: a LIVE failure carries the failing step's seq");
+			const std::string Ran = Gates + "," + Step(4, PJ, LS, "completed", "success");
+			V = ViewOf(LiveBody(Top("completed", "success", false), Ran), ECheckerVerdict::Pass, true);
+			Expect(V.Phase == EExecutionPhase::Completed && V.CauseSeq == -1 && std::string(V.CauseSource) == "result", "F4: a /result-decided ending says result, no seq");
+			++F4Cases;
+		}
 	}
 
 	// C3 (founder ruling 2026-10-30): a seq gap or reset:true clears the latches and resyncs from /status (never a stale
@@ -2209,6 +2430,7 @@ int main()
 	BridgeRestartFixtures();
 	EndingFixtures();
 	LogFixtures();
+	FixCommitFixtures();
 
 	if (Failures != 0)
 	{
@@ -2216,7 +2438,8 @@ int main()
 		return 1;
 	}
 	std::printf(
-		"J1 MISSION FLOW KAT PASS meanings=%d route=%d result=%d flow=%d windows=%d bridge=%d phases=%d live=%d start=%d exec=%d ack=%d status=%d resync=%d panel=%d restart=%d ending=%d log=%d\n",
-		Meanings, Routes, Results, FlowSteps, Windows, Bridge, PhaseCases, LiveCases, StartCases, ExecCases, AckCases, StatusCases, ResyncCases, PanelCases, RestartCases, EndingCases, LogCases);
+		"J1 MISSION FLOW KAT PASS meanings=%d route=%d result=%d flow=%d windows=%d bridge=%d phases=%d live=%d start=%d exec=%d ack=%d status=%d resync=%d panel=%d restart=%d ending=%d log=%d m1=%d m2=%d f4=%d f5=%d m6=%d f10=%d\n",
+		Meanings, Routes, Results, FlowSteps, Windows, Bridge, PhaseCases, LiveCases, StartCases, ExecCases, AckCases, StatusCases, ResyncCases, PanelCases, RestartCases, EndingCases, LogCases, M1Cases, M2Cases, F4Cases,
+		F5Cases, M6Cases, F10Cases);
 	return 0;
 }

@@ -502,6 +502,8 @@ namespace WonderlandJuliusMissionFlow
 		std::size_t SkippedEvents() const { return SkippedCount; }
 		/** The newest seq this feed holds (-1 = none), for the evidence logs. */
 		std::int64_t LastSeenSeq() const { return LastSeq; }
+		/** F4: the seq of the newest LIVE-step event (start or completion), -1 = none. */
+		std::int64_t LiveStepSeq() const { return LiveStepEventSeq; }
 
 	private:
 		bool bHasRead = false;
@@ -526,6 +528,7 @@ namespace WonderlandJuliusMissionFlow
 		bool bGradeJobFinished = false;
 		std::string FirstFailureName;
 		FLiveEvent LastTaskPhaseEvent;
+		std::int64_t LiveStepEventSeq = -1;
 		bool bResyncing = false;
 		const char* ResyncWhy = nullptr;
 		std::size_t SkippedCount = 0;
@@ -565,7 +568,10 @@ namespace WonderlandJuliusMissionFlow
 		Accepted,
 		/** 400 / 409 / 403 / 404: shown as is; never resent. */
 		Refused,
-		/** 401 / 503 / transport: nothing dispatched; a resend (same key) is allowed only on the founder's click. */
+		/** 401, or a 503 whose body SAYS nothing was claimed (julius_start_disabled, julius_start_not_configured, or
+		 *  julius_start_unavailable "... Nothing was claimed or dispatched."), or transport 0 / 502 / 504 (a lost answer,
+		 *  which StartRecordAfterAnswer keeps blocked). YUJI M1 2026-10-30: any OTHER 503 (no body, another kind, or
+		 *  julius_start_unavailable "The claim could not run. Check /status") is Uncertain, never Retryable. */
 		Retryable,
 		/** A-9 (ACK): 202 ack:"accepted" -- the bridge durably RECEIVED the request. NOT a dispatch: /status decides. */
 		Acknowledged,
@@ -595,11 +601,33 @@ namespace WonderlandJuliusMissionFlow
 	 * offered, never resent, until /status reconciles it. Accepted = the bridge acknowledged the request (A-9), which is
 	 * NOT a dispatch.
 	 */
-	enum class EStartRecord : std::uint8_t { None, Sending, Started, Refused, NotStarted, Accepted };
+	enum class EStartRecord : std::uint8_t { None, Sending, Started, Refused, NotStarted, Accepted, Unreadable };
+
+	/**
+	 * YUJI M2 2026-10-30: the saved Start record (SaveGames/JuliusJ1/start.v1). A missing file is None; a file that
+	 * exists but cannot be read, is truncated (no final newline), has a wrong header, a duplicate or missing required
+	 * line, or an unknown state word is UNREADABLE: Start stays blocked (never silently reset to None, which would mint
+	 * a NEW key and trigger). A readable record for another run is None for this run.
+	 */
+	enum class ESavedStartRead : std::uint8_t { Absent, OtherRun, Ok, Unreadable };
+	struct FSavedStartRecord
+	{
+		ESavedStartRead Read = ESavedStartRead::Absent;
+		EStartRecord Record = EStartRecord::None;
+		std::string RunId;
+		std::string Key;
+		std::string WorkflowRunId;
+		std::string TriggerId;
+	};
+	FSavedStartRecord ParseSavedStartRecord(bool bFileExists, bool bLoaded, std::string_view Text, std::string_view RunId);
+	/** The persisted words ("none", "sending", ...). Unreadable is never written (the unreadable file is kept as is). */
+	const char* SavedStartStateWord(EStartRecord Record);
+	std::string FormatSavedStartRecord(std::string_view RunId, std::string_view Key, EStartRecord Record, std::string_view WorkflowRunId,
+		std::string_view TriggerId);
 
 	/**
 	 * The record an answer leaves (founder ruling 2026-10-30: after a crash, timeout or outcome-unknown Start, Start stays
-	 * ineligible until /status reconciles it). Only an answer the bridge GAVE that says nothing was dispatched (401, 503)
+	 * ineligible until /status reconciles it). Only an answer the bridge GAVE that says nothing was dispatched (401, or a 503 whose body says nothing was claimed -- M1)
 	 * is NotStarted; a lost answer (transport 0, 502, 504) is Sending.
 	 */
 	EStartRecord StartRecordAfterAnswer(EStartOutcome Outcome, int HttpStatus);
@@ -658,6 +686,10 @@ namespace WonderlandJuliusMissionFlow
 		/** start.request.state (ACK only): "", "accepted", "claiming", "settled" or "interrupted". */
 		std::string RequestState;
 		bool bRequestUnreadable = false;
+		/** start.request is PRESENT (null or an object): the bridge runs with JULIUS_WONDERLAND_START_ACK=1. Absent = ACK off. */
+		bool bRequestFieldPresent = false;
+		/** start.startKeyHash is a string: the journal holds a claim under some key. */
+		bool bClaimKeyHashPresent = false;
 		/** run: present when the bridge bound a GitHub Actions run. */
 		bool bRunPresent = false;
 		bool bRunLive = false;
@@ -694,11 +726,18 @@ namespace WonderlandJuliusMissionFlow
 	/**
 	 * Founder ruling 2026-10-30: a Start that crashed, timed out or is outcome-unknown (Sending), or was only
 	 * acknowledged (Accepted), stays blocked until /status says what happened. Started only on dispatch evidence;
-	 * Refused when the bridge settled it terminal without a dispatch or interrupted the request; NotStarted (offered
-	 * again, on a click only, same key and trigger) only when the bridge holds no claim, runs no Start, and keeps no
-	 * live request. phase "unknown" / outcomeUnknown / an unreadable request change nothing. Never sends anything.
+	 * Refused when the bridge settled it terminal without a dispatch or interrupted the request.
+	 * F10 (room ruling + YUJI tightening, 2026-10-30): a Sending or Accepted record is RELEASED to NotStarted only when
+	 * StatusShowsNothingAtAll: ACK is on (start.request present), /status is readable, and it shows NO intent and NO
+	 * claim at all (request null, requested false, no startKeyHash, no workflow run, phase admitted, nothing unknown).
+	 * Every other state -- a settled / accepted / claiming / interrupted request, dispatching, gh_workflow_run_failed,
+	 * an unreadable or ambiguous answer, ACK off -- keeps Start blocked until an operator clears it. A release only
+	 * re-OFFERS Start: the founder must click, and the click re-sends the SAVED key and trigger. Never sends anything.
+	 * Unreadable (a corrupt saved record) is never released; only a dispatch promotes it (to Started, still blocked).
 	 */
 	FStartReconcile StartRecordFromStatus(EStartRecord Current, const FMissionStatusRead& Status);
+	/** F10: ACK on, readable, and no intent or claim of any kind for this run (see StartRecordFromStatus). */
+	bool StatusShowsNothingAtAll(const FMissionStatusRead& Status);
 
 	/**
 	 * YUJI / founder 2026-10-30: phase "completed" also covers a completed FAIL or NOT_RUN run, so it is NEVER success
@@ -775,6 +814,10 @@ namespace WonderlandJuliusMissionFlow
 		std::string Role;
 		std::string TaskType;
 		std::int64_t RepairCycle = 0;
+		/** F4 / YUJI m4: the stream seq of the event that put the view in this phase (-1 = not a stream event), and
+		 *  where the phase came from: "events", "result" or "status". */
+		std::int64_t CauseSeq = -1;
+		const char* CauseSource = "events";
 	};
 
 	/**
@@ -869,10 +912,20 @@ namespace WonderlandJuliusMissionFlow
 
 	/**
 	 * SUCCESS NEEDS THE BRIDGE'S VERIFIED COMPLETION (founder 2026-10-30 + YUJI): a view that /result reads as Completed
-	 * stays a neutral Grading wait while this run's readable /status does not say StatusIsVerifiedSuccess. With no
-	 * readable /status the /result rule stands (PASS + its completion record). Never turns anything into success.
+	 * stays a neutral Grading wait unless this run's readable /status says StatusIsVerifiedSuccess (completed AND checker
+	 * PASS AND verified_completion). F1 / M3 (Skywalker ruling 2026-10-30): FAIL CLOSED -- with no readable /status there
+	 * is no success (Grading). Never turns anything into success.
 	 */
 	EExecutionPhase SuccessGatedByStatus(EExecutionPhase Phase, const FMissionStatusRead* Status);
+
+	/**
+	 * YUJI m6 (2026-10-30): a readable /status that says did_not_start, interrupted, expired or failed (and NOT outcome
+	 * unknown) drives the FAILURE ending (once, through the cursor), not only the panel header. did_not_start, expired
+	 * and failed -> DidNotStart / Failed; interrupted -> Failed. A view that is already a terminal ending, or
+	 * outcome-unknown, is never changed (outcome-unknown plays no ending). Completed is never turned into a failure here
+	 * unless /status says so. CauseSource becomes "status".
+	 */
+	FExecutionView StatusFailureEnding(const FExecutionView& View, const FMissionStatusRead* Status);
 
 	/** R1 $0 seam (Skywalker 2026-10-30): a recorded replay is read-only; Start is hard-refused while it is set. */
 	FStartGate RecordedReplayGate(const FStartGate& Gate, bool bRecordedReplay);
@@ -886,7 +939,26 @@ namespace WonderlandJuliusMissionFlow
 	std::string FormatStatusReadLog(std::string_view WljRunId, const FMissionStatusRead& Status);
 	/** {"event":"resync",...}: a seq gap or reset:true cleared the latches; /status is read next. */
 	std::string FormatResyncLog(std::string_view WljRunId, std::string_view Why, std::size_t SkippedEvents, std::int64_t LastSeq);
-	/** {"event":"beat",...}: a contract beat, with the backend state that caused it (phase, stream seq, /status phase). */
-	std::string FormatBeatLog(std::string_view WljRunId, std::string_view BeatType, EExecutionPhase Phase, std::int64_t SourceSeq,
-		const FMissionStatusRead* Status, bool bApplied, std::string_view StageLabel);
+	/**
+	 * {"event":"beat",...}: a contract beat, with the backend state that caused it. F4 / YUJI m4: the line carries the
+	 * client's own UTC ms and its recorded clock offset, the client's role ("actor" = this client's Start was accepted
+	 * in this session, otherwise "observer"), and source_seq = the stream seq that CAUSED the beat (not the newest seq),
+	 * so actor and observer lines pair by (wlj_run_id, type, source_seq) for the E6 400 ms measurement.
+	 */
+	struct FBeatEvidence
+	{
+		std::string_view WljRunId;
+		std::string_view BeatType;
+		EExecutionPhase Phase = EExecutionPhase::None;
+		std::int64_t SourceSeq = -1;
+		const char* Source = "events";
+		const FMissionStatusRead* Status = nullptr;
+		bool bApplied = false;
+		std::string_view StageLabel;
+		bool bActor = false;
+		std::uint64_t ClientUtcMs = 0;
+		bool bClockOffsetKnown = false;
+		std::int64_t ClockOffsetMs = 0;
+	};
+	std::string FormatBeatLog(const FBeatEvidence& Beat);
 }

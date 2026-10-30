@@ -16,6 +16,7 @@
 #include "Http.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Misc/FileHelper.h"
+#include "HAL/FileManager.h"
 #include "Misc/Paths.h"
 
 #include <string>
@@ -330,6 +331,7 @@ namespace
 		case 3: return TEXT("refused");
 		case 4: return TEXT("not_started");
 		case 5: return TEXT("accepted");
+		case 6: return TEXT("unreadable");
 		default: return TEXT("none");
 		}
 	}
@@ -346,34 +348,53 @@ void UWonderlandJuliusMissionSubsystem::SyncStartRecord()
 	StartWorkflowRunId.Reset();
 	StartMessage.Reset();
 	StartRecord = 0;
-	TArray<FString> Lines;
-	if (RunId.IsEmpty() || !FFileHelper::LoadFileToStringArray(Lines, *StartRecordPath()) || Lines.Num() < 5 || Lines[0] != TEXT("WJ1START 1")) { return; }
-	FString Run, Key, State, Workflow, Trigger;
-	for (const FString& Line : Lines)
+	if (RunId.IsEmpty()) { return; }
+	using namespace WonderlandJuliusMissionFlow;
+	// YUJI M2: SaveStartRecord replaces the record by renaming a complete temp file over it. UE's replacing Move deletes
+	// the old file first, so a crash between the two leaves only the temp file: that is then the last complete write.
+	const FString Path = StartRecordPath();
+	const FString Temp = Path + TEXT(".tmp");
+	IFileManager& Files = IFileManager::Get();
+	const FString ReadFrom = Files.FileExists(*Path) ? Path : Files.FileExists(*Temp) ? Temp : FString();
+	FString Text;
+	const bool bExists = !ReadFrom.IsEmpty();
+	const bool bLoaded = bExists && FFileHelper::LoadFileToString(Text, *ReadFrom);
+	const FSavedStartRecord Saved = ParseSavedStartRecord(bExists, bLoaded, ToStd(Text), ToStd(RunId));
+	if (Saved.Read == ESavedStartRead::Unreadable)
 	{
-		if (Line.StartsWith(TEXT("run "))) { Run = Line.Mid(4); }
-		else if (Line.StartsWith(TEXT("key "))) { Key = Line.Mid(4); }
-		else if (Line.StartsWith(TEXT("state "))) { State = Line.Mid(6); }
-		else if (Line.StartsWith(TEXT("workflow "))) { Workflow = Line.Mid(9); }
-		else if (Line.StartsWith(TEXT("trigger "))) { Trigger = Line.Mid(8); }
+		// M2: an unreadable, truncated or corrupt record is BLOCKED, never silently reset to "none" (which would mint a new
+		// key and trigger and could start a second run). Its run is unknown, so every run stays blocked until an operator
+		// removes the file. It is never written over (SaveStartRecord refuses).
+		StartRecord = static_cast<uint8>(EStartRecord::Unreadable); // SUBSYSTEM_CORRUPT_RECORD_BLOCKS
+		StartMessage = FString::Printf(TEXT("Start blocked: the saved Start record (%s) is unreadable. An operator must check it; nothing is sent."), *ReadFrom);
+		UE_LOG(LogJuliusJ1, Warning, TEXT("{\"event\":\"start_record_unreadable\",\"wlj_run_id\":\"%s\",\"loaded\":%s}"), *RunId, bLoaded ? TEXT("true") : TEXT("false"));
+		return;
 	}
-	if (Run != RunId) { return; }
-	StartKey = Key;
-	StartTriggerId = Trigger;
-	StartWorkflowRunId = Workflow;
+	if (Saved.Read != ESavedStartRead::Ok) { return; } // no record, or another run's
+	StartKey = ToF(Saved.Key);
+	StartTriggerId = ToF(Saved.TriggerId);
+	StartWorkflowRunId = ToF(Saved.WorkflowRunId);
 	// A start that was in flight when the client stopped is NOT assumed sent or unsent: it stays "sending" (never
 	// re-offered); /status and /events say what happened.
-	StartRecord = State == TEXT("sending") ? 1 : State == TEXT("started") ? 2 : State == TEXT("refused") ? 3 : State == TEXT("not_started") ? 4 : State == TEXT("accepted") ? 5 : 0;
+	StartRecord = static_cast<uint8>(Saved.Record);
 	if (StartRecord == 2) { StartMessage = FString::Printf(TEXT("Started: GitHub Actions run %s."), *StartWorkflowRunId); }
 	if (StartRecord == 1) { StartMessage = TEXT("Start blocked: the last Start was not reconciled (crash, timeout or unknown outcome). Waiting for the bridge's /status; nothing is resent."); }
 	if (StartRecord == 5) { StartMessage = TEXT("Start request accepted by the bridge (not yet dispatched). Waiting for /status."); }
 }
 
-void UWonderlandJuliusMissionSubsystem::SaveStartRecord() const
+bool UWonderlandJuliusMissionSubsystem::SaveStartRecord() const
 {
-	const FString Text = FString::Printf(TEXT("WJ1START 1\nrun %s\nkey %s\nstate %s\nworkflow %s\ntrigger %s\n"),
-		*StartRunId, *StartKey, StartRecordWord(StartRecord), *StartWorkflowRunId, *StartTriggerId);
-	FFileHelper::SaveStringToFile(Text, *StartRecordPath());
+	using namespace WonderlandJuliusMissionFlow;
+	// An unreadable record is kept as it is for the operator: never overwritten with a guess.
+	if (StartRecord == static_cast<uint8>(EStartRecord::Unreadable)) { return false; }
+	const FString Path = StartRecordPath();
+	const FString Temp = Path + TEXT(".tmp");
+	const std::string Text = FormatSavedStartRecord(ToStd(StartRunId), ToStd(StartKey), static_cast<EStartRecord>(StartRecord),
+		ToStd(StartWorkflowRunId), ToStd(StartTriggerId));
+	// YUJI M2: the whole record goes to a temp file first, then is renamed over the record, so a crash mid-write never
+	// leaves a half record where the real one was (SyncStartRecord reads the temp file if the rename was cut short).
+	if (!FFileHelper::SaveStringToFile(FString(UTF8_TO_TCHAR(Text.c_str())), *Temp)) { return false; } // SUBSYSTEM_START_RECORD_WRITES_TEMP_FIRST
+	return IFileManager::Get().Move(*Path, *Temp, true, true); // SUBSYSTEM_START_RECORD_RENAMED_INTO_PLACE
 }
 
 namespace
@@ -409,11 +430,20 @@ void UWonderlandJuliusMissionSubsystem::SyncMissionContract()
 	const FString Run = ClientRunId();
 	// ONLY A RUN THE FOUNDER STARTED: the start record says "started" for this exact wlj_. Admission alone, a refused
 	// or unanswered start, or a restored run with no start never touches the contract.
-	if (Run.IsEmpty() || StartRecord != 2 || StartRunId != Run) { return; }
+	// YUJI m6: ...or one this client tried to start that the bridge's readable /status says ended did_not_start,
+	// interrupted, expired or failed (not outcome-unknown): that plays the failure ending once (StatusFailureEnding).
+	const FMissionStatusRead* RunStatus = StatusRunId == Run && Host->LastStatus.bOk ? &Host->LastStatus : nullptr;
+	const bool bStatusFailureEnding = RunStatus != nullptr && !RunStatus->bOutcomeUnknown
+		&& (RunStatus->Phase == EMissionStatusPhase::DidNotStart || RunStatus->Phase == EMissionStatusPhase::Interrupted
+			|| RunStatus->Phase == EMissionStatusPhase::Expired || RunStatus->Phase == EMissionStatusPhase::Failed);
+	const bool bContractRun = StartRecord == static_cast<uint8>(EStartRecord::Started)
+		|| (StartRecord == static_cast<uint8>(EStartRecord::Refused) && bStatusFailureEnding); // SUBSYSTEM_STATUS_TERMINAL_ENTERS_CONTRACT
+	if (Run.IsEmpty() || !bContractRun || StartRunId != Run) { return; }
 	// A RUN RESTORED FROM THE SAVE waits for its first /events read: it never replays the activation of a run that may
 	// already have ended. A start accepted in this session shows STARTING at once (that is what just happened).
 	// ...and for its first /result read: a restored run must never read "no verdict" off a /result it has not fetched yet.
-	if (!bStartAcceptedHere && (!Host->LiveFeed.HasRead() || ResultRead.Status == 0)) { return; }
+	// A readable failure terminal from /status needs neither: it IS the outcome (m6).
+	if (!bStatusFailureEnding && !bStartAcceptedHere && (!Host->LiveFeed.HasRead() || ResultRead.Status == 0)) { return; }
 	if (Run != ContractRunId)
 	{
 		ContractRunId = Run;
@@ -450,7 +480,9 @@ void UWonderlandJuliusMissionSubsystem::SyncMissionContract()
 	FExecutionView View = ExecutionViewFor(Host->LiveFeed, true, ToStd(StartWorkflowRunId), Read);
 	// SUCCESS NEEDS THE VERIFIED COMPLETION (founder + YUJI 2026-10-30): this run's /status must say completed + PASS +
 	// verified_completion before the success beat; until then the view stays a neutral grading wait.
+	// F1 / M3: fail closed -- no readable /status for this run means no success beat.
 	View.Phase = SuccessGatedByStatus(View.Phase, StatusRunId == Run && Host->LastStatus.bOk ? &Host->LastStatus : nullptr); // SUBSYSTEM_SUCCESS_GATED_BY_STATUS
+	View = StatusFailureEnding(View, RunStatus); // SUBSYSTEM_STATUS_TERMINAL_PLAYS_FAILURE_ENDING (m6; outcome-unknown plays none)
 	// Keep reading /result past the wrapper's final read while the run is over and no verdict has come.
 	bAwaitingVerdict = RunCompletedSeenUtcMs != 0 && View.Phase == EExecutionPhase::Grading;
 	// ...and after a stop that followed confirmed execution (#75): outcomeUnknown reaches /result only once the whole run
@@ -550,9 +582,24 @@ void UWonderlandJuliusMissionSubsystem::SyncMissionContract()
 		if (Beat.Type == "run.completed" || Beat.Type == "run.failed") { Contract->ReleaseRealRunBeat(); } // SUBSYSTEM_ENDING_ON_CLEARED_STAGE
 		const bool bApplied = Contract->OfferRealJuliusEvent(FName(*ToF(Beat.Type)), FName(*MissionId), FName(*Run),
 			ContractRole(Beat.Role), static_cast<int32>(Beat.RepairRound));
-		// C6 evidence (E6): every beat with the backend state that caused it.
-		UE_LOG(LogJuliusJ1, Display, TEXT("%s"), UTF8_TO_TCHAR(FormatBeatLog(ToStd(Run), Beat.Type, View.Phase, Host->LiveFeed.LastSeenSeq(),
-			StatusRunId == Run && Host->LastStatus.bOk ? &Host->LastStatus : nullptr, bApplied, ToStd(Contract->GetBeatLabel())).c_str())); // SUBSYSTEM_LOGS_BEAT
+		// C6 evidence (E6): every beat with the backend state that caused it. F4 / YUJI m4: the client's UTC ms and clock
+		// offset, its role (actor = its Start was accepted in this session; otherwise observer) and the seq that CAUSED
+		// the beat (View.CauseSeq), so an actor and an observer line pair by (wlj_run_id, type, source_seq).
+		const std::string RunStd = ToStd(Run);
+		const std::string Stage = ToStd(Contract->GetBeatLabel());
+		FBeatEvidence Evidence;
+		Evidence.WljRunId = RunStd;
+		Evidence.BeatType = Beat.Type;
+		Evidence.Phase = View.Phase;
+		Evidence.SourceSeq = View.CauseSeq; // SUBSYSTEM_BEAT_SEQ_IS_THE_CAUSE
+		Evidence.Source = View.CauseSource;
+		Evidence.Status = RunStatus;
+		Evidence.bApplied = bApplied;
+		Evidence.StageLabel = Stage;
+		Evidence.bActor = bStartAcceptedHere; // SUBSYSTEM_BEAT_ROLE
+		Evidence.ClientUtcMs = Host->Clock.NowUtcMs(); // SUBSYSTEM_BEAT_TIME
+		Host->Session.ClockOffset(Evidence.bClockOffsetKnown, Evidence.ClockOffsetMs);
+		UE_LOG(LogJuliusJ1, Display, TEXT("%s"), UTF8_TO_TCHAR(FormatBeatLog(Evidence).c_str())); // SUBSYSTEM_LOGS_BEAT
 	}
 	// GRADING IS NEVER A BLANK BEAT (Skywalker 2026-10-30): the task row shows VERIFICATION (ContractTaskStateFor) and
 	// the stage keeps what the backend last reported; nothing is released here.
@@ -620,8 +667,16 @@ bool UWonderlandJuliusMissionSubsystem::StartPaidMission(const FString& Typed)
 		return false;
 	}
 	// Recorded BEFORE it leaves: a crash after this line can never lead to a second, different start.
-	StartRecord = 1;
-	SaveStartRecord();
+	// YUJI M2: and only if it WAS recorded -- a Start whose record could not be saved is never sent.
+	const uint8 RecordBeforeSend = StartRecord;
+	StartRecord = static_cast<uint8>(EStartRecord::Sending);
+	if (!SaveStartRecord()) // SUBSYSTEM_SAVE_BEFORE_SEND
+	{
+		StartRecord = RecordBeforeSend;
+		StartMessage = TEXT("Not started: the Start record could not be saved, so nothing was sent. Check the disk and press Start again.");
+		UE_LOG(LogJuliusJ1, Warning, TEXT("{\"event\":\"start_record_save_failed\",\"wlj_run_id\":\"%s\",\"when\":\"before_send\",\"sent\":false}"), *StartRunId);
+		return false;
+	}
 	StartMessage = TEXT("Sending the Start request to the bridge... (its acknowledgement is not a dispatch; /status decides)");
 	UE_LOG(LogJuliusJ1, Display, TEXT("{\"event\":\"start_requested\",\"wlj_run_id\":\"%s\"}"), *StartRunId);
 	ClampHttpLogging();
@@ -707,7 +762,12 @@ void UWonderlandJuliusMissionSubsystem::CompleteStart(
 		StartMessage = FString::Printf(TEXT("The bridge's answer was not understood (HTTP %d). Watching the run's status instead."), Status);
 		break;
 	}
-	SaveStartRecord();
+	if (!SaveStartRecord())
+	{
+		// The disk still says "sending" (saved before the send), which keeps Start blocked after a restart: safe.
+		UE_LOG(LogJuliusJ1, Warning, TEXT("{\"event\":\"start_record_save_failed\",\"wlj_run_id\":\"%s\",\"when\":\"after_answer\",\"record\":\"%s\"}"),
+			*ForRunId, StartRecordWord(StartRecord));
+	}
 	UE_LOG(LogJuliusJ1, Display, TEXT("{\"event\":\"start_answer\",\"wlj_run_id\":\"%s\",\"http_status\":%d,\"record\":\"%s\",\"workflow_run_id\":\"%s\",\"error_kind\":\"%s\"}"),
 		*ForRunId, Status, StartRecordWord(StartRecord), *StartWorkflowRunId, *ToF(Answer.ErrorKind));
 }
@@ -1216,16 +1276,22 @@ void UWonderlandJuliusMissionSubsystem::CompleteStatusRead(
 			StartRecord = static_cast<uint8>(Reconciled.Record);
 			if (Reconciled.Record == EStartRecord::Started && StartWorkflowRunId.IsEmpty()) { StartWorkflowRunId = ToF(Read.WorkflowRunId); }
 			StartMessage = FString::Printf(TEXT("Start reconciled from /status: %s."), UTF8_TO_TCHAR(Reconciled.Why));
-			SaveStartRecord(); // SUBSYSTEM_STATUS_READ_NEVER_SENDS
+			if (!SaveStartRecord()) // SUBSYSTEM_STATUS_READ_NEVER_SENDS
+			{
+				UE_LOG(LogJuliusJ1, Warning, TEXT("{\"event\":\"start_record_save_failed\",\"wlj_run_id\":\"%s\",\"when\":\"reconcile\",\"record\":\"%s\"}"),
+					*ForRunId, StartRecordWord(StartRecord));
+			}
 			UE_LOG(LogJuliusJ1, Display, TEXT("{\"event\":\"start_reconciled\",\"wlj_run_id\":\"%s\",\"record\":\"%s\",\"phase\":\"%s\",\"workflow_run_id\":\"%s\"}"),
 				*ForRunId, StartRecordWord(StartRecord), *ToF(Read.PhaseWord), *StartWorkflowRunId);
 		}
-		else if (*Reconciled.Why != 0 && (Reconciled.Record == EStartRecord::Sending || Reconciled.Record == EStartRecord::Accepted))
+		else if (*Reconciled.Why != 0 && (Reconciled.Record == EStartRecord::Sending || Reconciled.Record == EStartRecord::Accepted
+			|| Reconciled.Record == EStartRecord::Unreadable))
 		{
 			StartMessage = FString::Printf(TEXT("Start blocked: %s."), UTF8_TO_TCHAR(Reconciled.Why));
 		}
 	}
-	UE_LOG(LogJuliusJ1, Display, TEXT("{\"event\":\"status_read\",\"wlj_run_id\":\"%s\",\"phase\":\"%s\",\"terminal\":%s,\"requested\":%s,\"request_state\":\"%s\",\"record\":\"%s\",\"next_poll_ms\":%d,\"skipped\":%d}"),
+	// F3: the C6 status_read line above is the one status_read; this line is the reconcile's own (what the record became).
+	UE_LOG(LogJuliusJ1, Display, TEXT("{\"event\":\"status_reconcile\",\"wlj_run_id\":\"%s\",\"phase\":\"%s\",\"terminal\":%s,\"requested\":%s,\"request_state\":\"%s\",\"record\":\"%s\",\"next_poll_ms\":%d,\"skipped\":%d}"),
 		*ForRunId, *ToF(Read.PhaseWord), Read.bTerminal ? TEXT("true") : TEXT("false"), Read.bRequested ? TEXT("true") : TEXT("false"),
 		*ToF(Read.RequestState), StartRecordWord(StartRecord), Read.NextPollMs, static_cast<int32>(Read.Skipped.size()));
 }

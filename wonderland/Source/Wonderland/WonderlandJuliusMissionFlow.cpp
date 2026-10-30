@@ -404,13 +404,14 @@ namespace WonderlandJuliusMissionFlow
 			return Out;
 		}
 
-		bool BoolIsTrue(const FJson* Object, const char* Name)
+		// Used only by the sabotage mutants (constexpr-disabled branches): [[maybe_unused]] keeps clang -Werror quiet.
+		[[maybe_unused]] bool BoolIsTrue(const FJson* Object, const char* Name)
 		{
 			const FReportedBool Flag = ReadBool(Object, Name);
 			return Flag.bKnown && Flag.bValue;
 		}
 
-		FReportedString ReadFileSha(const FJson* Archive)
+		[[maybe_unused]] FReportedString ReadFileSha(const FJson* Archive)
 		{
 			FReportedString Out;
 			if (Archive == nullptr || Archive->Kind != EJsonKind::Object) { return Out; }
@@ -429,7 +430,7 @@ namespace WonderlandJuliusMissionFlow
 				Out.ArtifactName = ReadString(Archive, "artifactName");
 				Out.ArtifactDigest = ReadString(Archive, "artifactDigest");
 				constexpr bool bInferDigestFromFile = false;
-				if (bInferDigestFromFile && !Out.ArtifactDigest.bKnown) { Out.ArtifactDigest = ReadFileSha(Archive); } // FLOW_DIGEST_NOT_INFERRED
+				if constexpr (bInferDigestFromFile) { if (!Out.ArtifactDigest.bKnown) { Out.ArtifactDigest = ReadFileSha(Archive); } } // FLOW_DIGEST_NOT_INFERRED (if constexpr: MSVC C4127-clean)
 			}
 			const FJson* Refs = Field(*Completion, "workArtifactRefs");
 			if (Refs != nullptr && Refs->Kind == EJsonKind::Array)
@@ -868,9 +869,9 @@ namespace WonderlandJuliusMissionFlow
 		{
 			Out.Lines.push_back(std::string("traceparent: ") + Read.CompletionTraceparent.Text);
 		}
-		else if (bSynthesizeTraceparent && Read.TraceId.bKnown)
+		else if constexpr (bSynthesizeTraceparent) // if constexpr: MSVC C4127-clean, same behaviour
 		{
-			Out.Lines.push_back(std::string("traceparent: 00-") + Read.TraceId.Text + "-0000000000000001-01");
+			if (Read.TraceId.bKnown) { Out.Lines.push_back(std::string("traceparent: 00-") + Read.TraceId.Text + "-0000000000000001-01"); }
 		}
 		AppendInt(Out.Lines, "spendTag.reservedUsdMicros", Read.ReservedUsdMicros, Read.bSpendTagPresent);
 		AppendInt(Out.Lines, "spendAccounting.knownUsdMicros", Read.SpendAccountingKnownUsdMicros, Read.bSpendAccountingPresent);
@@ -988,13 +989,13 @@ namespace WonderlandJuliusMissionFlow
 		constexpr bool bAcceptNullAccountingAsSettled = false; // FLOW_NULL_SPEND_ACCOUNTING_NOT_COMPLETION
 
 		bool bVerified = EvidenceVerifies(Root, bCompletionObject ? Completion : nullptr, WljRunId);
-		if (bAcceptNullAccountingAsSettled && Out.bSpendAccountingNull) { bVerified = true; }
+		if constexpr (bAcceptNullAccountingAsSettled) { if (Out.bSpendAccountingNull) { bVerified = true; } }
 		if (Completion == nullptr || Completion->Kind == EJsonKind::Null)
 		{
 			bVerified = false; // FLOW_NULL_COMPLETION_NOT_VERIFIED
 		}
 		constexpr bool bAcceptBareCompleted = false; // FLOW_BARE_COMPLETED_IS_NOT_EVIDENCE
-		if (bAcceptBareCompleted && BoolIsTrue(&Root, "completed")) { bVerified = true; }
+		if constexpr (bAcceptBareCompleted) { if (BoolIsTrue(&Root, "completed")) { bVerified = true; } }
 
 		bool bPhasesPresent = false;
 		bool bProgressParsed = false;
@@ -1032,9 +1033,9 @@ namespace WonderlandJuliusMissionFlow
 			}
 		}
 		constexpr bool bAcceptPhasesAsCompletion = false; // FLOW_PHASES_ARE_NOT_COMPLETION
-		if (bAcceptPhasesAsCompletion && bPhasesPresent) { bVerified = true; }
+		if constexpr (bAcceptPhasesAsCompletion) { if (bPhasesPresent) { bVerified = true; } }
 		constexpr bool bAcceptProgressStateCompleted = false; // FLOW_PROGRESS_STATE_IS_NOT_EVIDENCE
-		if (bAcceptProgressStateCompleted && ProgressState == "completed") { bVerified = true; }
+		if constexpr (bAcceptProgressStateCompleted) { if (ProgressState == "completed") { bVerified = true; } }
 		if (bProgressParsed && ProgressState != Out.State) { bVerified = false; } // FLOW_SPLIT_STATE_NOT_VERIFIED
 
 		const bool bUnknown = !State.bKnown || State.Text == "unknown";
@@ -1578,6 +1579,7 @@ namespace WonderlandJuliusMissionFlow
 		}
 		if (Event.Kind == "step" && Event.Job == LiveJob && Event.Name == LiveStep)
 		{
+			LiveStepEventSeq = Event.Seq; // F4: the seq that moves the LIVE step
 			if (Event.Status == "in_progress" || Event.Status == "completed") { bLiveStepStarted = Event.Status == "in_progress" || Event.Conclusion != "skipped"; } // FLOW_EXEC_LIVE_STEP_IS_EXECUTION
 			if (Event.Status == "completed" && Event.Conclusion != "skipped") { bLiveStepFinished = true; } // a skipped LIVE step never ran
 			if (Event.Status == "completed")
@@ -1739,9 +1741,10 @@ namespace WonderlandJuliusMissionFlow
 	{
 		// Contract (MAIN JULIUS, 2026-10-25): 202 = this request made the one dispatch; 200 + replayed:true = the admission
 		// was already dispatching/dispatched (any key, any repeat); 409 = claim refused (retry:false); 400 = request
-		// refused; 401 = session (re-pair, nothing dispatched); 503 / transport = nothing dispatched, a resend is allowed.
+		// refused; 401 = session (re-pair, nothing dispatched); transport = lost answer. YUJI M1 2026-10-30: a 503 is read
+		// (below) -- only the bodies that SAY nothing was claimed are "not started".
 		FStartAnswer Out;
-		if (HttpStatus == 0 || HttpStatus == 401 || HttpStatus == 502 || HttpStatus == 503 || HttpStatus == 504)
+		if (HttpStatus == 0 || HttpStatus == 401 || HttpStatus == 502 || HttpStatus == 504)
 		{
 			Out.Outcome = EStartOutcome::Retryable; // FLOW_START_RETRY_ONLY_TRANSIENT
 			return Out;
@@ -1812,6 +1815,22 @@ namespace WonderlandJuliusMissionFlow
 		}
 		if (Kind.empty()) { return Out; }
 		Out.ErrorKind = Kind;
+		if (HttpStatus == 503)
+		{
+			// YUJI M1 2026-10-30 (#493 start-route.ts / start-intents.ts): julius_start_disabled and julius_start_not_configured
+			// are refused before any claim; julius_start_unavailable is "nothing claimed" ONLY with the bridge's
+			// "... Nothing was claimed or dispatched." wording (the intent could not be saved / read). The same kind with
+			// "The claim could not run. Check /status before trying again." is raised after the claim may have reserved:
+			// outcome unknown, blocked until /status. So is any other 503 (no body, an unknown kind).
+			const FJson* Message = Field(*Error, "message");
+			const std::string_view NothingClaimed = "Nothing was claimed or dispatched.";
+			const bool bSaysNothingClaimed = Message != nullptr && Message->Kind == EJsonKind::String && Message->Text.size() >= NothingClaimed.size()
+				&& std::string_view(Message->Text).substr(Message->Text.size() - NothingClaimed.size()) == NothingClaimed;
+			const bool bNotStarted = Kind == "julius_start_disabled" || Kind == "julius_start_not_configured"
+				|| (Kind == "julius_start_unavailable" && bSaysNothingClaimed);
+			Out.Outcome = bNotStarted ? EStartOutcome::Retryable : EStartOutcome::Uncertain; // FLOW_START_503_READS_THE_BODY
+			return Out;
+		}
 		if (HttpStatus == 409 && Kind == "julius_start_in_progress") { Out.Outcome = EStartOutcome::InProgress; return Out; } // FLOW_START_IN_PROGRESS_POLLS_STATUS
 		// The same key with a different body: an earlier Start under this key may be claiming. Not a refusal of THIS run.
 		if (HttpStatus == 409 && Kind == "julius_start_key_reused") { Out.Outcome = EStartOutcome::Uncertain; return Out; } // FLOW_START_KEY_REUSED_IS_UNCERTAIN
@@ -1836,6 +1855,95 @@ namespace WonderlandJuliusMissionFlow
 		}
 	}
 
+	const char* SavedStartStateWord(EStartRecord Record)
+	{
+		switch (Record)
+		{
+		case EStartRecord::Sending: return "sending";
+		case EStartRecord::Started: return "started";
+		case EStartRecord::Refused: return "refused";
+		case EStartRecord::NotStarted: return "not_started";
+		case EStartRecord::Accepted: return "accepted";
+		case EStartRecord::Unreadable: return "unreadable";
+		default: return "none";
+		}
+	}
+
+	std::string FormatSavedStartRecord(std::string_view RunId, std::string_view Key, EStartRecord Record, std::string_view WorkflowRunId,
+		std::string_view TriggerId)
+	{
+		std::string Out = "WJ1START 1\nrun ";
+		Out += RunId;
+		Out += "\nkey ";
+		Out += Key;
+		Out += "\nstate ";
+		Out += SavedStartStateWord(Record);
+		Out += "\nworkflow ";
+		Out += WorkflowRunId;
+		Out += "\ntrigger ";
+		Out += TriggerId;
+		Out += "\n";
+		return Out;
+	}
+
+	FSavedStartRecord ParseSavedStartRecord(bool bFileExists, bool bLoaded, std::string_view Text, std::string_view RunId)
+	{
+		FSavedStartRecord Out;
+		if (!bFileExists) { return Out; } // Absent: no Start was ever saved here
+		FSavedStartRecord Bad;
+		Bad.Read = ESavedStartRead::Unreadable;
+		Bad.Record = EStartRecord::Unreadable; // FLOW_SAVED_RECORD_UNREADABLE_BLOCKS (never silently None)
+		// A complete write always ends with a newline; a truncated one (or an empty file) does not.
+		if (!bLoaded || Text.empty() || Text.back() != '\n') { return Bad; }
+		std::vector<std::string_view> Lines;
+		for (std::size_t At = 0; At < Text.size();)
+		{
+			const std::size_t Nl = Text.find('\n', At);
+			std::string_view Line = Nl == std::string_view::npos ? Text.substr(At) : Text.substr(At, Nl - At);
+			if (!Line.empty() && Line.back() == '\r') { Line.remove_suffix(1); }
+			Lines.push_back(Line);
+			At = Nl == std::string_view::npos ? Text.size() : Nl + 1;
+		}
+		if (Lines.empty() || Lines[0] != "WJ1START 1") { return Bad; }
+		bool bRun = false, bKey = false, bState = false, bWorkflow = false, bTrigger = false;
+		std::string State;
+		auto Take = [](std::string_view Line, std::string_view Prefix, bool& bSeen, std::string& Into)
+		{
+			if (Line.substr(0, Prefix.size()) != Prefix) { return 0; }
+			if (bSeen) { return -1; } // a duplicate line: which one is true is unknowable
+			bSeen = true;
+			Into.assign(Line.substr(Prefix.size()));
+			return 1;
+		};
+		for (std::size_t I = 1; I < Lines.size(); ++I)
+		{
+			const std::string_view Line = Lines[I];
+			int Hit = Take(Line, "run ", bRun, Out.RunId);
+			if (Hit == 0) { Hit = Take(Line, "key ", bKey, Out.Key); }
+			if (Hit == 0) { Hit = Take(Line, "state ", bState, State); }
+			if (Hit == 0) { Hit = Take(Line, "workflow ", bWorkflow, Out.WorkflowRunId); }
+			if (Hit == 0) { Hit = Take(Line, "trigger ", bTrigger, Out.TriggerId); } // absent in a pre-C1 record (allowed)
+			if (Hit < 0 || (Hit == 0 && !Line.empty())) { return Bad; }
+		}
+		if (!bRun || !bKey || !bState || !bWorkflow) { return Bad; }
+		bool bKnownWord = false;
+		for (const EStartRecord R : {EStartRecord::None, EStartRecord::Sending, EStartRecord::Started, EStartRecord::Refused,
+			EStartRecord::NotStarted, EStartRecord::Accepted})
+		{
+			if (State == SavedStartStateWord(R)) { Out.Record = R; bKnownWord = true; }
+		}
+		if (!bKnownWord) { return Bad; }
+		if (Out.RunId != RunId)
+		{
+			// Another run's readable record says nothing about this run.
+			FSavedStartRecord Other;
+			Other.Read = ESavedStartRead::OtherRun;
+			return Other;
+		}
+		Out.Read = ESavedStartRead::Ok;
+		return Out;
+	}
+
 	bool ClientTriggerIdOk(std::string_view Id)
 	{
 		return LowerHex(std::string(Id), ClientTriggerIdChars);
@@ -1858,6 +1966,13 @@ namespace WonderlandJuliusMissionFlow
 		{
 			Out.Why = "the bridge accepted the Start request; waiting for /status to report the dispatch";
 			return Out; // FLOW_START_ACCEPTED_NOT_REOFFERED
+		}
+		if (Record == EStartRecord::Unreadable)
+		{
+			// YUJI M2: the saved Start record could not be read; its key and trigger are unknown. Never offered (a new key
+			// could start a second run) until an operator clears it.
+			Out.Why = "the saved Start record is unreadable; an operator must clear it (nothing is sent)";
+			return Out; // FLOW_START_UNREADABLE_RECORD_BLOCKS
 		}
 		if (Record == EStartRecord::Started || Record == EStartRecord::Refused)
 		{
@@ -1970,6 +2085,10 @@ namespace WonderlandJuliusMissionFlow
 		}
 		if (Workflow->Kind == EJsonKind::String) { Out.WorkflowRunId = Workflow->Text; }
 		const FJson* Request = Field(*Start, "request");
+		Out.bRequestFieldPresent = Request != nullptr; // ACK on: present (null = no saved intent); ACK off: absent
+		const FJson* ClaimHash = Field(*Start, "startKeyHash");
+		if (ClaimHash != nullptr && ClaimHash->Kind != EJsonKind::Null && ClaimHash->Kind != EJsonKind::String) { return StatusRefused(Out, "start.startKeyHash"); }
+		Out.bClaimKeyHashPresent = ClaimHash != nullptr && ClaimHash->Kind == EJsonKind::String;
 		if (Request != nullptr && Request->Kind != EJsonKind::Null)
 		{
 			const FJson* RequestState = Request->Kind == EJsonKind::Object ? Field(*Request, "state") : nullptr;
@@ -2146,8 +2265,18 @@ namespace WonderlandJuliusMissionFlow
 		// journal alone); only start.request reveals it. So a request of any state opens the reconcile too, and
 		// requested:false / retryStartSafe are never read as permission to send.
 		const bool bOpen = bBlocking || Current == R::NotStarted || (Current == R::None && Status.bRequested) // FLOW_RECONCILE_CLAIM_WITHOUT_RECORD
-			|| (Current == R::None && !Status.RequestState.empty()); // FLOW_RECONCILE_REQUEST_WITHOUT_RECORD
+			|| (Current == R::None && !Status.RequestState.empty()) // FLOW_RECONCILE_REQUEST_WITHOUT_RECORD
+			|| (Current == R::None && Status.bClaimKeyHashPresent) || Current == R::Unreadable;
 		if (!bOpen) { return Out; }
+		if (Current == R::Unreadable)
+		{
+			// M2: a corrupt saved record is never released; a reported dispatch only makes it Started (still blocked).
+			const bool bDispatchSeen = Status.bRunPresent || !Status.WorkflowRunId.empty();
+			Out.Record = bDispatchSeen ? R::Started : R::Unreadable; // FLOW_RECONCILE_UNREADABLE_NEVER_RELEASES
+			Out.Why = bDispatchSeen ? "the bridge reports the dispatch" : "the saved Start record is unreadable; an operator must clear it";
+			Out.bChanged = Out.Record != Current;
+			return Out;
+		}
 		const R Waiting = Current == R::Accepted ? R::Accepted : R::Sending;
 		const P Ph = Status.Phase;
 		const bool bDispatched = Status.bRunPresent || !Status.WorkflowRunId.empty() || Ph == P::Dispatched || Ph == P::Queued
@@ -2177,19 +2306,44 @@ namespace WonderlandJuliusMissionFlow
 			Out.Record = R::Accepted; // FLOW_RECONCILE_LIVE_REQUEST_BLOCKS
 			Out.Why = "the bridge accepted the Start request; waiting for /status to report the dispatch";
 		}
-		else if (Status.bRequested || Ph != P::Admitted)
+		else if (Status.bRequested || Status.bClaimKeyHashPresent || Ph != P::Admitted)
 		{
+			// F5 / M08: admitted + start.requested:true (or a claim key) with no request state is a claim: blocked.
 			Out.Record = Waiting; // FLOW_RECONCILE_CLAIM_BLOCKS
 			Out.Why = "the bridge is still starting this run; waiting for /status";
 		}
+		else if (bBlocking && !StatusShowsNothingAtAll(Status))
+		{
+			// F10 (room ruling + YUJI 2026-10-30): a Sending / Accepted record is released ONLY when ACK is on and /status
+			// shows no intent and no claim at all. A settled request, a claim key, ACK off (no start.request to read) or
+			// anything else ambiguous keeps Start blocked until an operator clears it.
+			Out.Record = Waiting; // FLOW_RECONCILE_RELEASE_NEEDS_NOTHING_AT_ALL
+			Out.Why = "the bridge does not show that nothing is held for this Start (needs ACK on and no intent or claim); an operator must clear it";
+		}
+		else if (Current == R::None && !Status.RequestState.empty())
+		{
+			Out.Record = R::Sending; // a request this client has no record of: never offered
+			Out.Why = "the bridge holds a Start request this client has no record of; an operator must clear it";
+		}
 		else
 		{
-			// Admitted, no claim, no Start running, no live request: nothing was dispatched. Offered again on a click only.
+			// F10: nothing at all is held (or the record already said not started and the bridge holds nothing). Start is
+			// only OFFERED again: it is sent on the founder's click alone, and the click re-sends the SAVED key and trigger
+			// (SUBSYSTEM_START_KEY_REUSED / _TRIGGER_REUSED). Never sent automatically.
 			Out.Record = R::NotStarted; // FLOW_RECONCILE_NOTHING_HELD_RELEASES
 			Out.Why = "the bridge holds no Start for this run; Start may be pressed again (it re-sends the same authorisation)";
 		}
 		Out.bChanged = Out.Record != Current;
 		return Out;
+	}
+
+	bool StatusShowsNothingAtAll(const FMissionStatusRead& Status)
+	{
+		return Status.bOk && Status.bRequestFieldPresent // ACK on and readable
+			&& Status.RequestState.empty() && !Status.bRequestUnreadable // no saved intent of any state
+			&& !Status.bRequested && !Status.bClaimKeyHashPresent // no claim, no Start in flight
+			&& Status.WorkflowRunId.empty() && !Status.bRunPresent // no dispatch
+			&& Status.Phase == EMissionStatusPhase::Admitted && !Status.bOutcomeUnknown; // FLOW_NOTHING_AT_ALL_IS_STRICT
 	}
 
 	const char* ExecutionPhaseWord(EExecutionPhase Phase)
@@ -2224,6 +2378,9 @@ namespace WonderlandJuliusMissionFlow
 		Out.WorkflowRunId = Feed.WorkflowRunId();
 		Out.bStale = Feed.IsStale();
 		Out.bRecorded = Feed.Source() == ELiveSource::GithubActionsRecorded;
+		// F4: which stream event put the view here. A task sample causes the role beats; otherwise the LIVE step's event;
+		// otherwise the newest seq (the run envelope moved with that page). /result-decided phases say "result".
+		Out.CauseSeq = Feed.TaskPhaseSeen() ? Feed.LastTaskPhase().Seq : Feed.LiveStepSeq() >= 0 ? Feed.LiveStepSeq() : Feed.LastSeenSeq(); // FLOW_EXEC_CAUSE_SEQ
 		const bool bExecutionSeen = Feed.LiveStepStarted() || Feed.TaskPhaseSeen();
 		if (Feed.TaskPhaseSeen())
 		{
@@ -2236,12 +2393,15 @@ namespace WonderlandJuliusMissionFlow
 			// #478: a provider call's outcome is unknown; Julius stopped that step and did not retry it. Interrupt, never success.
 			Out.Phase = EExecutionPhase::OutcomeUnknown; // FLOW_EXEC_OUTCOME_UNKNOWN_INTERRUPTS
 			Out.Detail = Read.OutcomeUnknownCause;
+			Out.CauseSource = "result";
+			Out.CauseSeq = -1;
 			return Out;
 		}
 		if (Feed.LiveStepInterrupted())
 		{
 			// Reported immediately, even while the workflow is still running: never wait for the run to wrap up.
 			Out.Phase = Feed.LiveStepConclusion() == "cancelled" ? EExecutionPhase::Cancelled : EExecutionPhase::Failed;
+			Out.CauseSeq = Feed.LiveStepSeq();
 			Out.Detail = std::string(LiveJob) + " / " + LiveStep + " (" + Feed.LiveStepConclusion() + ")";
 			return Out;
 		}
@@ -2262,11 +2422,12 @@ namespace WonderlandJuliusMissionFlow
 				Out.Detail = !Feed.FirstFailure().empty() ? Feed.FirstFailure() : std::string(LiveJob) + " / " + LiveStep + " (did not complete)";
 				return Out;
 			}
-			if (Verdict == ECheckerVerdict::Pass && bHasCompletion) { Out.Phase = EExecutionPhase::Completed; return Out; } // FLOW_EXEC_SUCCESS_ONLY_FROM_RESULT
-			if (Verdict == ECheckerVerdict::Fail) { Out.Phase = EExecutionPhase::Failed; Out.Detail = "Checker: FAIL"; return Out; }
+			if (Verdict == ECheckerVerdict::Pass && bHasCompletion) { Out.Phase = EExecutionPhase::Completed; Out.CauseSource = "result"; Out.CauseSeq = -1; return Out; } // FLOW_EXEC_SUCCESS_ONLY_FROM_RESULT
+			if (Verdict == ECheckerVerdict::Fail) { Out.Phase = EExecutionPhase::Failed; Out.Detail = "Checker: FAIL"; Out.CauseSource = "result"; Out.CauseSeq = -1; return Out; }
 			// NO VERDICT YET IS NOT A FAILURE: /result trails the run's completion. A neutral wait until a read made after the
 			// completion still says NOT_RUN and the grace has passed; only then unverified, treated as failed -- never success.
 			Out.Phase = Read.bNoVerdictIsFinal ? EExecutionPhase::FailedUnverified : EExecutionPhase::Grading; // FLOW_EXEC_NO_VERDICT_YET_IS_GRADING
+			if (Read.bNoVerdictIsFinal) { Out.CauseSource = "result"; Out.CauseSeq = -1; }
 			return Out;
 		}
 		if (Feed.LiveStepSucceeded()) { Out.Phase = EExecutionPhase::Grading; return Out; }
@@ -2408,8 +2569,31 @@ namespace WonderlandJuliusMissionFlow
 
 	EExecutionPhase SuccessGatedByStatus(EExecutionPhase Phase, const FMissionStatusRead* Status)
 	{
-		if (Phase != EExecutionPhase::Completed || Status == nullptr || !Status->bOk) { return Phase; }
+		if (Phase != EExecutionPhase::Completed) { return Phase; }
+		// F1 / M3 (Skywalker ruling 2026-10-30): fail closed. No readable /status for this run = no success; /result alone
+		// (PASS + completion record) is never enough. Success needs completed AND checker PASS AND verified_completion.
+		if (Status == nullptr || !Status->bOk) { return EExecutionPhase::Grading; } // FLOW_SUCCESS_FAILS_CLOSED_WITHOUT_STATUS
 		return StatusIsVerifiedSuccess(*Status) ? Phase : EExecutionPhase::Grading; // FLOW_SUCCESS_GATED_BY_STATUS
+	}
+
+	FExecutionView StatusFailureEnding(const FExecutionView& View, const FMissionStatusRead* Status)
+	{
+		using E = EExecutionPhase;
+		using P = EMissionStatusPhase;
+		if (Status == nullptr || !Status->bOk || Status->bOutcomeUnknown) { return View; } // unknown plays no ending
+		const bool bAlreadyEnding = View.Phase == E::Failed || View.Phase == E::FailedUnverified || View.Phase == E::DidNotStart
+			|| View.Phase == E::Cancelled || View.Phase == E::OutcomeUnknown;
+		if (bAlreadyEnding) { return View; }
+		const P Ph = Status->Phase;
+		if (Ph != P::DidNotStart && Ph != P::Interrupted && Ph != P::Expired && Ph != P::Failed) { return View; }
+		FExecutionView Out = View;
+		Out.bStale = false; // /status is a fresh, readable answer
+		Out.Phase = Ph == P::Interrupted ? E::Failed : E::DidNotStart; // FLOW_STATUS_TERMINAL_PLAYS_FAILURE_ENDING
+		if (Ph == P::Failed && (Status->bRunPresent || !Status->WorkflowRunId.empty())) { Out.Phase = E::Failed; }
+		Out.Detail = std::string("bridge /status: ") + MissionStatusPhaseWord(Ph);
+		Out.CauseSource = "status";
+		Out.CauseSeq = -1;
+		return Out;
 	}
 
 	FStartGate RecordedReplayGate(const FStartGate& Gate, bool bRecordedReplay)
@@ -2467,16 +2651,20 @@ namespace WonderlandJuliusMissionFlow
 			+ ",\"events_skipped\":" + std::to_string(SkippedEvents) + ",\"last_seq\":" + LogIntOrNull(LastSeq) + ",\"next\":\"status_read\"}";
 	}
 
-	std::string FormatBeatLog(std::string_view WljRunId, std::string_view BeatType, EExecutionPhase Phase, std::int64_t SourceSeq,
-		const FMissionStatusRead* Status, bool bApplied, std::string_view StageLabel)
+	std::string FormatBeatLog(const FBeatEvidence& Beat)
 	{
+		const FMissionStatusRead* Status = Beat.Status;
 		const bool bStatus = Status != nullptr && Status->bOk;
-		std::string Out = "{\"event\":\"beat\",\"wlj_run_id\":" + LogString(WljRunId) + ",\"type\":" + LogString(BeatType);
-		Out += ",\"phase\":" + LogString(ExecutionPhaseWord(Phase));
-		Out += ",\"source_seq\":" + LogIntOrNull(SourceSeq); // FLOW_LOG_BEAT_CARRIES_SEQ
+		std::string Out = "{\"event\":\"beat\",\"wlj_run_id\":" + LogString(Beat.WljRunId) + ",\"type\":" + LogString(Beat.BeatType);
+		Out += ",\"role\":"; Out += Beat.bActor ? "\"actor\"" : "\"observer\""; // FLOW_LOG_BEAT_CARRIES_ROLE
+		Out += ",\"client_utc_ms\":" + std::to_string(Beat.ClientUtcMs); // FLOW_LOG_BEAT_CARRIES_TIME
+		Out += ",\"clock_offset_ms\":" + (Beat.bClockOffsetKnown ? std::to_string(Beat.ClockOffsetMs) : std::string("null"));
+		Out += ",\"phase\":" + LogString(ExecutionPhaseWord(Beat.Phase));
+		Out += ",\"source\":" + LogString(Beat.Source != nullptr ? Beat.Source : "");
+		Out += ",\"source_seq\":" + LogIntOrNull(Beat.SourceSeq); // FLOW_LOG_BEAT_CARRIES_SEQ
 		Out += ",\"status_phase\":" + (bStatus ? LogStringOrNull(Status->PhaseWord) : std::string("null"));
 		Out += ",\"verified_success\":"; Out += LogBool(bStatus && StatusIsVerifiedSuccess(*Status));
-		Out += ",\"applied\":"; Out += LogBool(bApplied);
-		return Out + ",\"stage\":" + LogStringOrNull(StageLabel) + "}";
+		Out += ",\"applied\":"; Out += LogBool(Beat.bApplied);
+		return Out + ",\"stage\":" + LogStringOrNull(Beat.StageLabel) + "}";
 	}
 }
