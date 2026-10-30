@@ -449,6 +449,7 @@ describe('the agent branch is untrusted', () => {
     const f = failed((await run({ w })).outcome);
     expect(f).toMatchObject({ failure: 'ENVELOPE_NOT_HONOURED', providerFailureClass: 'coder_grok_patch_out_of_scope' });
     expect(w.calls.apply).toBe(0);
+    expect(f.diagnostics).toMatchObject({ patchApplied: false }); // F7: the durable row says nothing was applied
   });
   it('a push to another repository, two branches, or an unsafe name are refused', async () => {
     const other = goodResult({ branches: [{ repoUrl: 'github.com/evil/repo', branch: 'x', prUrl: null }] });

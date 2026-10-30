@@ -434,6 +434,29 @@ describe('L4: service strings that reach evidence are bounded', () => {
     expect(cursorKeyForms('abc')).toEqual([]);
   });
 
+  it('F12: with a key whose encodings differ from it (reserved characters, + and / in base64), every form is scrubbed', async () => {
+    const KEY = 'K3y?>~/&=+\u00fc-sentinel-0123456789';
+    for (const pad of [0, 1, 2]) expect(/[+/]/u.test(Buffer.concat([Buffer.alloc(pad), Buffer.from(KEY)]).toString('base64')), `pad ${pad}`).toBe(true);
+    expect(encodeURIComponent(KEY)).not.toBe(KEY);
+    const echoes = [
+      { echo: `q=${encodeURIComponent(KEY)}&x=1`, decode: (w: string) => { try { return decodeURIComponent(w); } catch { return w; } } },
+      { echo: `q=${encodeURIComponent(KEY).replace(/%20/gu, '+')}&x=1`, decode: (w: string) => { try { return decodeURIComponent(w.replace(/\+/gu, ' ')); } catch { return w; } } },
+      ...[0, 1, 2].flatMap((pad) => {
+        const raw = Buffer.from(`${'p'.repeat(pad)}${KEY}tail`);
+        return [
+          { echo: raw.toString('base64'), decode: (w: string) => Buffer.from(w, 'base64').toString('utf8') },
+          { echo: raw.toString('base64url'), decode: (w: string) => Buffer.from(w, 'base64url').toString('utf8') },
+        ];
+      }),
+    ];
+    for (const { echo, decode } of echoes) {
+      const r = await result({ result: `before ${echo} after` }, { getApiKey: () => KEY });
+      const text = r.finalText ?? '';
+      expect(text, echo).toContain('[REDACTED]');
+      for (const word of text.split(' ')) expect(decode(word), echo).not.toContain(KEY);
+    }
+  });
+
   it('prUrl survives only as https://github.com/... of at most 300 characters', async () => {
     expect((await result(branch('https://github.com/example-org/example-target/pull/7'))).branches[0]?.prUrl).toBe('https://github.com/example-org/example-target/pull/7');
     for (const bad of ['http://github.com/a/b/pull/1', 'https://evil.example/a/b/pull/1', 'https://github.com.evil.example/a', 'https://github.com/a/b/pull/1 inject', `https://github.com/${'a'.repeat(300)}`, 'javascript:alert(1)', 'https://github.com/a\nb']) {
