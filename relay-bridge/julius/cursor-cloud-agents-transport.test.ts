@@ -338,12 +338,13 @@ describe('F15/E8: the mode label and the receipt', () => {
       return new Response('{}', { status: 200 });
     };
     globalThis.fetch = (async (u: unknown) => route(String(u))) as typeof fetch;
+    let builtAfter: ReturnType<typeof createCursorCloudAgentsTransport> | undefined;
     try {
       expect(cursorGlobalFetchIntact()).toBe(false);
       // Read while replaced: fake.
       expect(cursorTransportMode(live)).toBe('fake');
       // A transport built while replaced is never live.
-      const builtAfter = createCursorCloudAgentsTransport({ fetch: cursorGlobalFetch, getApiKey: () => SENTINEL });
+      builtAfter = createCursorCloudAgentsTransport({ fetch: cursorGlobalFetch, getApiKey: () => SENTINEL });
       expect(cursorTransportMode(builtAfter)).toBe('fake');
       // Every call is refused before anything is sent; the fake is never reached.
       expect(await live.createRun(input)).toEqual({ kind: 'not_sent', cause: 'transport_untrusted' });
@@ -359,6 +360,8 @@ describe('F15/E8: the mode label and the receipt', () => {
     // Once a transport has seen its fetch replaced, it stays "fake" even after the original is put back.
     expect(cursorGlobalFetchIntact()).toBe(true);
     expect(cursorTransportMode(live)).toBe('fake');
+    // A transport BUILT while the global was replaced stays "fake" after the original is put back, even if it never sent.
+    expect(cursorTransportMode(builtAfter)).toBe('fake');
   });
   it('F7 part B, end to end: the provider over a replaced global fetch records "fake", sends nothing and starts nothing', async () => {
     const spy: string[] = [];
