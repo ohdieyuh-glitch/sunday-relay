@@ -226,7 +226,7 @@ const safeDigest=(value:unknown):string|null=>typeof value==='string'&&/^sha256:
 const CLOUD_AGENT_INVISIBLE=/[\u0000-\u001F\u007F-\u009F\u00AD\u061C\u115F\u1160\u17B4\u17B5\u180B-\u180F\u200B-\u200F\u2028-\u202E\u2060-\u206F\u3164\uFE00-\uFE0F\uFEFF\uFFA0\uFFF9-\uFFFB]/gu;
 /** A line break is an attempt to forge a log line, not noise: the whole value is refused rather than stripped. */
 const CLOUD_AGENT_LINE_BREAK=/[\n\r\u000B\u000C\u0085\u2028\u2029]/u;
-const CLOUD_AGENT_KEY_SEGMENT=/(^|[/._-])(sk|xai|ghp|gho|ghu|ghs|ghr|github_pat|glpat|crsr|cursor_key|api_?key)[-_]/i;
+const CLOUD_AGENT_KEY_SEGMENT=/(^|[/._-])(sk|ghp|gho|ghu|ghs|ghr|github_pat|glpat|crsr|cursor_key|api_?key)[-_]/i;
 const CLOUD_AGENT_ID=/^bc-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const CLOUD_AGENT_BRANCH=/^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$/;
 const CLOUD_AGENT_MODEL=/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
