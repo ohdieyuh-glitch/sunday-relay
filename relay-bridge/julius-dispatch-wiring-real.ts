@@ -12,6 +12,11 @@ import type { J1WiringDeps } from './julius-dispatch-wiring';
 import { J1_ANTHROPIC_ORIGIN, J1_OPENAI_ORIGIN, J1_XAI_ORIGIN, pinnedProviderUrl } from './julius-xai-direct-reviewer';
 import type { JuliusCodingAgentProvider } from '../src/relay/mission/julius/julius-coding-agent';
 import { createClaudeCodeCodingAgentProvider } from './julius/claude-code-coding-provider';
+import { CURSOR_API_ORIGIN } from './julius/cursor-cloud-agents-transport';
+import {
+  GROK_BOT_CODER_PROVIDER_KIND, createGrokBotCodingAgentProvider, grokBotCoderConfigRefusal,
+  type CodingAgentTransport, type GrokBotCoderConfig, type GrokBotWorkspacePort,
+} from './julius/grok-bot-coding-provider';
 
 /**
  * The REAL effects for `createJ1LiveDispatchFromEnv`: file reads, one child process, global fetch, the file ledger, a temp file.
@@ -32,10 +37,17 @@ export const J1_CODER_AUTH_MODE = 'ANTHROPIC_API' as const;
 
 const PINNED_FETCH_ORIGINS = [J1_XAI_ORIGIN, J1_OPENAI_ORIGIN, J1_ANTHROPIC_ORIGIN] as const;
 
-/** The real transport accepts only the three pinned provider origins and never follows a redirect. */
-export function j1PinnedFetchUrl(raw: string): string {
+/** The Cursor Cloud Agents API origin. OFF unless a caller passes `allowCursorCloudAgents: true`; `realJ1WiringDeps` never does. */
+export const J1_CURSOR_API_ORIGIN = CURSOR_API_ORIGIN;
+
+/**
+ * The real transport accepts only the three pinned provider origins and never follows a redirect. The Cursor origin is a fourth,
+ * explicit opt-in (default off, so the default is unchanged); it is the Grok Bot coder's transport host, never a fallback.
+ */
+export function j1PinnedFetchUrl(raw: string, options: { readonly allowCursorCloudAgents?: boolean } = {}): string {
   let matched: string | null = null;
-  for (const origin of PINNED_FETCH_ORIGINS) {
+  const origins: readonly string[] = options.allowCursorCloudAgents === true ? [...PINNED_FETCH_ORIGINS, J1_CURSOR_API_ORIGIN] : PINNED_FETCH_ORIGINS;
+  for (const origin of origins) {
     try { matched = pinnedProviderUrl(origin, raw); break; } catch { matched = null; }
   }
   if (matched === null) throw new Error('provider_base_url_unpinned');
@@ -61,10 +73,41 @@ export const J1_SHELL_PORT_MISSING: readonly string[] = Object.freeze([
  * environment, so the allow-listed env the adapter hands here cannot be applied to the child; it is only CHECKED (a key-like name is
  * refused). The key argument is empty: this builder does not hold a provider key.
  */
+export type J1CoderOccupant = 'claude-code-hosted' | typeof GROK_BOT_CODER_PROVIDER_KIND;
+
 export function buildJ1CoderProviderFor(options: {
   readonly run?: Parameters<typeof createClaudeCodeCodingAgentProvider>[0]['run'];
   readonly queryLoader?: Parameters<typeof createClaudeCodeCodingAgentProvider>[0]['queryLoader'];
+  /**
+   * Who occupies the coder slot. Default (absent): the hosted Claude coder, exactly as before. `grok-bot-cloud-agent` builds the
+   * Grok Bot coder from `grokBot` and NOTHING else: absent or refused deps throw at build time; there is no Claude fallback.
+   */
+  readonly occupant?: J1CoderOccupant;
+  readonly grokBot?: {
+    readonly config: GrokBotCoderConfig;
+    readonly transport: CodingAgentTransport;
+    readonly workspace: GrokBotWorkspacePort;
+    readonly log?: (line: string) => void;
+  };
 } = {}): (env: Readonly<Record<string, string>>, ctx: { readonly requestedModel: string }) => JuliusCodingAgentProvider {
+  if (options.occupant === GROK_BOT_CODER_PROVIDER_KIND) {
+    const deps = options.grokBot;
+    return (env, ctx) => {
+      if (typeof ctx.requestedModel !== 'string' || ctx.requestedModel.trim() === '') throw new Error('coder_requested_model_absent');
+      if (Object.keys(env).some((name) => isSecretLikeEnvName(name))) throw new Error('coder_env_contains_secret_name');
+      if (deps === undefined) throw new Error('coder_grok_bot_deps_absent');
+      const refusal = grokBotCoderConfigRefusal(deps.config);
+      if (refusal !== null) throw new Error(refusal.providerFailureClass);
+      if (deps.config.pinnedModelId !== ctx.requestedModel) throw new Error('coder_requested_model_not_pinned');
+      return createGrokBotCodingAgentProvider({
+        config: deps.config, transport: deps.transport, workspace: deps.workspace,
+        ...(deps.log === undefined ? {} : { log: deps.log }),
+      });
+    };
+  }
+  if (options.occupant !== undefined && options.occupant !== 'claude-code-hosted') {
+    return () => { throw new Error('coder_occupant_unknown'); };
+  }
   return (env, ctx) => {
     if (typeof ctx.requestedModel !== 'string' || ctx.requestedModel.trim() === '') throw new Error('coder_requested_model_absent');
     if (Object.keys(env).some((name) => isSecretLikeEnvName(name))) throw new Error('coder_env_contains_secret_name');
