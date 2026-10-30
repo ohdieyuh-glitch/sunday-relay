@@ -344,18 +344,22 @@ export function createCursorCloudAgentsTransport(options: CursorCloudAgentsTrans
           return { kind: 'poll_failed', cause: 'unexpected_status', polls };
         }
         // Repeated transient read failures end the poll: the run's outcome is then unknown, which the provider says.
-        if (transient >= 5) return { kind: 'poll_failed', cause: 'unexpected_status', polls };
+        if (transient >= 5) return { kind: 'poll_failed', cause: 'transient_exhausted', polls };
         const wait = Math.min(pollMs, Math.max(0, deadlineAtMs - now()));
         if (wait <= 0) return { kind: 'deadline', polls };
         await sleep(wait, signal);
       }
     },
 
-    async fetchResult(ref: CodingAgentRunRef, signal?: AbortSignal): Promise<CodingAgentResultOutcome> {
+    async fetchResult(ref: CodingAgentRunRef, signal?: AbortSignal, fetchOptions?: { readonly deadlineAtMs?: number }): Promise<CodingAgentResultOutcome> {
       if (!SAFE_ID.test(ref.agentId) || !SAFE_ID.test(ref.runId)) return { kind: 'unavailable', cause: 'ref_invalid' };
       const agentPath = `/v1/agents/${encodeURIComponent(ref.agentId)}`;
-      const deadline = now() + 5 * 60_000;
+      // F14: never past the run's own deadline, nor past five minutes.
+      const runDeadline = fetchOptions?.deadlineAtMs;
+      const deadline = Math.min(now() + 5 * 60_000, typeof runDeadline === 'number' && Number.isFinite(runDeadline) ? runDeadline : Number.POSITIVE_INFINITY);
       const run = await getWithBackoff(`${agentPath}/runs/${encodeURIComponent(ref.runId)}`, deadline, signal);
+      if (isAborted(signal) || (run.kind === 'not_sent' && run.cause === 'aborted') || (run.kind === 'failed_in_flight' && run.cause === 'aborted_in_flight')) return { kind: 'unavailable', cause: 'aborted' };
+      if (run.kind === 'deadline') return { kind: 'unavailable', cause: 'deadline' };
       if (run.kind !== 'response' || run.status < 200 || run.status >= 300 || !isRecord(run.body) || run.key === undefined) return { kind: 'unavailable', cause: 'run_unreadable' };
       const key = run.key;
       const body = run.body;

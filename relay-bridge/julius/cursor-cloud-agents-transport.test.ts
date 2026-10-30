@@ -253,6 +253,34 @@ describe('the key never leaves: not in logs, results, evidence or errors', () =>
   });
 });
 
+describe('F14: timeouts, the run deadline and aborts are labelled as such', () => {
+  it('five in-flight timeouts (or 5xx) end the poll as transient_exhausted, not unexpected_status', async () => {
+    for (const reply of ['hang' as const, 'throw' as const, { status: 503 }]) {
+      const r = await make(() => reply).transport.pollUntilTerminal({ agentId: AGENT, runId: RUN }, { deadlineAtMs: 1e9 });
+      expect(r, JSON.stringify(reply)).toEqual({ kind: 'poll_failed', cause: 'transient_exhausted', polls: 5 });
+    }
+    expect(await make(() => ({ status: 418 })).transport.pollUntilTerminal({ agentId: AGENT, runId: RUN }, { deadlineAtMs: 1e9 })).toMatchObject({ cause: 'unexpected_status' });
+  });
+  it('fetchResult never waits past the run deadline it is given', async () => {
+    const { transport, c } = make(() => ({ status: 429, retryAfter: '60' }));
+    expect(await transport.fetchResult({ agentId: AGENT, runId: RUN }, undefined, { deadlineAtMs: 30_000 })).toEqual({ kind: 'unavailable', cause: 'deadline' });
+    expect(c.now()).toBeLessThanOrEqual(30_000);
+    /* Without a run deadline the five-minute cap still holds. */
+    const capped = make(() => ({ status: 429, retryAfter: '120' }));
+    expect(await capped.transport.fetchResult({ agentId: AGENT, runId: RUN })).toEqual({ kind: 'unavailable', cause: 'deadline' });
+    expect(capped.c.now()).toBeLessThanOrEqual(5 * 60_000);
+  });
+  it('an abort before or during fetchResult reads as aborted', async () => {
+    const ac = new AbortController();
+    ac.abort();
+    expect(await make(() => ({ status: 200, body: {} })).transport.fetchResult({ agentId: AGENT, runId: RUN }, ac.signal)).toEqual({ kind: 'unavailable', cause: 'aborted' });
+    const mid = new AbortController();
+    const p = make(() => 'hang', { requestTimeoutMs: 60_000 }).transport.fetchResult({ agentId: AGENT, runId: RUN }, mid.signal);
+    setTimeout(() => mid.abort(), 5);
+    expect(await p).toEqual({ kind: 'unavailable', cause: 'aborted' });
+  });
+});
+
 describe('L2: no request ever follows a redirect', () => {
   it('every call in a create, poll, result, usage and cancel cycle is made with redirect:error', async () => {
     const finished = { status: 200, body: { id: RUN, status: 'FINISHED', result: 'done', git: { branches: [] } } };

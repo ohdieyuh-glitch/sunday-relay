@@ -82,7 +82,7 @@ export type CodingAgentPollOutcome =
   | { readonly kind: 'terminal'; readonly status: CodingAgentTerminalStatus; readonly polls: number }
   | { readonly kind: 'deadline'; readonly polls: number }
   | { readonly kind: 'aborted'; readonly polls: number }
-  | { readonly kind: 'poll_failed'; readonly cause: 'authentication' | 'not_found' | 'malformed_response' | 'key_absent' | 'unexpected_status'; readonly polls: number };
+  | { readonly kind: 'poll_failed'; readonly cause: 'authentication' | 'not_found' | 'malformed_response' | 'key_absent' | 'unexpected_status' | 'transient_exhausted'; readonly polls: number };
 
 /** Token counts as the usage endpoint reports them. A zero is "nothing recorded", never "free". */
 export interface CodingAgentUsage {
@@ -114,7 +114,8 @@ export interface CodingAgentTransport {
   readonly transportKind: string;
   createRun(input: CodingAgentCreateInput, signal?: AbortSignal): Promise<CodingAgentCreateOutcome>;
   pollUntilTerminal(ref: CodingAgentRunRef, options: { readonly deadlineAtMs: number; readonly signal?: AbortSignal }): Promise<CodingAgentPollOutcome>;
-  fetchResult(ref: CodingAgentRunRef, signal?: AbortSignal): Promise<CodingAgentResultOutcome>;
+  /** `deadlineAtMs`: the run's own deadline; the transport never waits past it (nor past its own cap). */
+  fetchResult(ref: CodingAgentRunRef, signal?: AbortSignal, options?: { readonly deadlineAtMs?: number }): Promise<CodingAgentResultOutcome>;
   /** Best effort, to stop work Julius has abandoned. Never a reason to retry anything. */
   cancelRun(ref: CodingAgentRunRef): Promise<'cancelled' | 'not_cancellable' | 'failed'>;
 }
@@ -481,7 +482,8 @@ export function createGrokBotCodingAgentProvider(input: {
         return started('MALFORMED_OUTPUT', 'coder_grok_agent_id_mismatch', 'The Cursor API answered with an agent id other than the one requested.', { outcomeUnknown: true });
       }
 
-      const polled = await transport.pollUntilTerminal(ref, { deadlineAtMs: startedAtMs + (config.runDeadlineMs as number), ...(signal === undefined ? {} : { signal }) });
+      const runDeadlineAtMs = startedAtMs + (config.runDeadlineMs as number);
+      const polled = await transport.pollUntilTerminal(ref, { deadlineAtMs: runDeadlineAtMs, ...(signal === undefined ? {} : { signal }) });
       evidence.polls = polled.polls;
       if (polled.kind === 'deadline' || polled.kind === 'aborted') {
         await cancelBestEffort(ref);
@@ -494,7 +496,7 @@ export function createGrokBotCodingAgentProvider(input: {
         await cancelBestEffort(ref);
         return polled.cause === 'authentication' || polled.cause === 'key_absent'
           ? started('AUTHENTICATION', 'coder_grok_poll_unauthenticated', 'The Cursor API stopped accepting the key while the run was active; the outcome is unknown.', { outcomeUnknown: true })
-          : started('INTERRUPTED', 'coder_grok_poll_failed', 'The run status could not be read; the outcome is unknown.', { outcomeUnknown: true });
+          : started('INTERRUPTED', polled.cause === 'transient_exhausted' ? 'coder_grok_poll_transient_exhausted' : 'coder_grok_poll_failed', 'The run status could not be read; the outcome is unknown.', { outcomeUnknown: true, pollFailureCause: polled.cause });
       }
       evidence.providerStatus = polled.status.toLowerCase();
       if (polled.status === 'ERROR') return started('PROCESS_EXIT', 'coder_grok_run_error', 'The Cloud Agent run ended in an error.');
@@ -502,8 +504,13 @@ export function createGrokBotCodingAgentProvider(input: {
       if (polled.status === 'CANCELLED') return started('CANCELLED', 'coder_cancelled', 'The Cloud Agent run was cancelled outside Julius.');
       if (aborted()) return started('CANCELLED', 'coder_cancelled', 'The Grok Bot coder run was cancelled.');
 
-      const result = await transport.fetchResult(ref, signal);
-      if (result.kind !== 'result') return started('PARTIAL_RESPONSE', 'coder_grok_result_unavailable', 'The finished run\'s result could not be read.');
+      const result = await transport.fetchResult(ref, signal, { deadlineAtMs: runDeadlineAtMs });
+      // F14: an abort during the read is a cancellation, not a partial response.
+      if (aborted()) {
+        await cancelBestEffort(ref);
+        return started('CANCELLED', 'coder_cancelled', 'The Grok Bot coder run was cancelled.');
+      }
+      if (result.kind !== 'result') return started('PARTIAL_RESPONSE', 'coder_grok_result_unavailable', 'The finished run\'s result could not be read.', { resultUnavailableCause: result.cause });
       if (result.usage !== null) {
         Object.assign(evidence, {
           inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens, cachedInputTokens: result.usage.cacheReadTokens,

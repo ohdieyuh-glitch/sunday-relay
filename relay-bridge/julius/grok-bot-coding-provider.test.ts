@@ -636,6 +636,30 @@ describe('F5: with REAL git (local temp repository, no network), the generated d
   });
 });
 
+describe('F14: the provider labels an abort during the result read as CANCELLED, and passes the run deadline', () => {
+  it('abort during fetchResult: CANCELLED (not PARTIAL_RESPONSE), cancel requested, nothing applied', async () => {
+    const ac = new AbortController();
+    const t = fakeTransport();
+    t.transport.fetchResult = async () => { ac.abort(); return { kind: 'unavailable', cause: 'aborted' }; };
+    const w = fakeWorkspace();
+    const f = failed((await run({ t, w, signal: ac.signal })).outcome);
+    expect(f).toMatchObject({ failure: 'CANCELLED', providerFailureClass: 'coder_cancelled' });
+    expect(t.calls.cancel).toBe(1);
+    expect(w.calls.apply).toBe(0);
+  });
+  it('the result read gets the run deadline; a poll that ran out of transient retries has its own class', async () => {
+    const t = fakeTransport();
+    const seen: unknown[] = [];
+    const orig = t.transport.fetchResult.bind(t.transport);
+    t.transport.fetchResult = async (ref, signal, options) => { seen.push(options); return orig(ref, signal, options); };
+    completed((await run({ t })).outcome);
+    expect(seen).toEqual([{ deadlineAtMs: 1_000 + 60_000 }]);
+    const f = failed((await run({ t: fakeTransport({ poll: { kind: 'poll_failed', cause: 'transient_exhausted', polls: 5 } }) })).outcome);
+    expect(f).toMatchObject({ providerFailureClass: 'coder_grok_poll_transient_exhausted' });
+    expect(f.diagnostics).toMatchObject({ outcomeUnknown: true, pollFailureCause: 'transient_exhausted' });
+  });
+});
+
 describe('Grok Bot coder: identifiers reach the router diagnostics', () => {
   it('a MATCH run: cursorAgentId, agentBranch, cursorServedModel and servedModel all survive safeReviewDiagnostics', async () => {
     const { outcome, t } = await run();
