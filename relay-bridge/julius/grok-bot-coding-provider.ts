@@ -13,6 +13,7 @@ import {
   type JuliusWorkspaceChange,
 } from '../../src/relay/mission/julius/julius-coding-agent';
 import type { ShellEffectPort } from './executor-effects';
+import { grokWorkspaceCommands, isSafeBranchName } from './grok-workspace-commands';
 
 /**
  * THE GROK BOT CODER: a `JuliusCodingAgentProvider` (julius-coding-agent.ts, the one-method port) whose session runs as a
@@ -139,11 +140,7 @@ export interface GrokBotWorkspacePort {
 
 const SHA40 = /^[0-9a-f]{40}$/u;
 const SAFE_OWNER_REPO = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/u;
-/** A conservative subset of git's ref rules: no leading dash, no `..`, no `//`, no `@{`, no trailing `/` or `.lock`. */
-export function isSafeBranchName(branch: string): boolean {
-  return /^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$/u.test(branch) && !branch.includes('..') && !branch.includes('//')
-    && !branch.endsWith('/') && !branch.endsWith('.lock') && !branch.endsWith('.');
-}
+export { isSafeBranchName, grokWorkspaceCommands };
 
 /** `https://github.com/<owner>/<repo>` (optionally `.git` or a trailing slash) as `{ owner, repo }`, or null. */
 export function parseGithubRepoUrl(raw: string): { readonly owner: string; readonly repo: string } | null {
@@ -160,29 +157,7 @@ export const isSundayRelayRepo = (raw: string): boolean => {
   return (parsed !== null && `${parsed.owner}/${parsed.repo}`.toLowerCase() === SUNDAY_RELAY_REPO) || loose.endsWith(`/${SUNDAY_RELAY_REPO}`) || loose.endsWith('/sunday-relay');
 };
 
-const q = (value: string): string => `'${value.replace(/'/gu, `'\\''`)}'`;
-const FETCHED_REF = 'refs/julius/grok-coder/fetched';
-const GIT = 'git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c protocol.allow=never -c protocol.https.allow=always';
 const STATUS_TO_CHANGE: Readonly<Record<string, JuliusWorkspaceChange['change']>> = { M: 'MODIFIED', A: 'ADDED', D: 'DELETED', T: 'MODIFIED' };
-
-/** The three fixed command shapes the shell-backed workspace port issues. Every interpolated value is validated first. */
-export const grokWorkspaceCommands = Object.freeze({
-  baseRevision: (): string => `${GIT} rev-parse --verify 'HEAD^{commit}'`,
-  fetchBranch: (owner: string, repo: string, branch: string, base: string): string => [
-    'set -eu',
-    `${GIT} fetch --no-tags --no-recurse-submodules --quiet -- ${q(`https://github.com/${owner}/${repo}.git`)} ${q(`+refs/heads/${branch}:${FETCHED_REF}`)}`,
-    `head="$(${GIT} rev-parse --verify '${FETCHED_REF}^{commit}')"`,
-    `${GIT} merge-base --is-ancestor ${base} "$head"`,
-    'printf \'HEAD %s\\n\' "$head"',
-    `${GIT} -c core.quotePath=true diff --no-renames --name-status ${base} "$head"`,
-  ].join('\n'),
-  applyFetched: (base: string, head: string): string => [
-    'set -euo pipefail',
-    `${GIT} diff --binary --no-renames ${base} ${head} | ${GIT} apply --check --whitespace=nowarn -`,
-    `${GIT} diff --binary --no-renames ${base} ${head} | ${GIT} apply --whitespace=nowarn -`,
-    'echo APPLIED',
-  ].join('\n'),
-});
 
 /**
  * The workspace port over the EXISTING shell port (`ShellEffectPort`). The J1 local shell port (julius-local-shell-port.ts)
