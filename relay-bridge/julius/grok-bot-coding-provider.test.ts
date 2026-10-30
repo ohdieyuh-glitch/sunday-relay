@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   GROK_BOT_CODER_CONFIG_DEFAULTS, GROK_BOT_CODER_PROVIDER_KIND, canonicalModelFamily, familyFromModelId,
-  createGrokBotCodingAgentProvider, createShellGrokBotWorkspacePort, grokBotCoderConfigRefusal, grokCoderAgentId, grokCoderIdempotencyKey,
+  createGrokBotCodingAgentProvider, createShellGrokBotWorkspacePort, grokCoderAgentId, grokCoderIdempotencyKey,
   isProtectedRepoPath, isSafeBranchName, isSundayRelayRepo,
   type CodingAgentCreateInput, type CodingAgentCreateOutcome, type CodingAgentPollOutcome, type CodingAgentResultOutcome, type CodingAgentTransport,
   type GrokBotCoderConfig, type GrokBotWorkspacePort,
@@ -125,11 +125,12 @@ describe('the happy path', () => {
 });
 
 describe('cost: unknown is never $0', () => {
-  it('a completed run is NOT_APPLICABLE, unverified, charged the full reservation; tokens are evidence only', async () => {
+  it('F8: a completed run is UNKNOWN basis and path (pool or prepaid credit, unverified), charged the full reservation; tokens are evidence only', async () => {
     const c = completed((await run()).outcome);
     expect(c.observation.costUsdMicros).toBeNull();
-    expect(c.observation.costBasis).toBe('NOT_APPLICABLE');
-    expect(c.observation.diagnostics).toMatchObject({ costBasis: 'NOT_APPLICABLE', billingPath: 'SUBSCRIPTION', spendVerified: false, chargedAs: 'FULL_RESERVATION' });
+    expect(c.observation.costBasis).toBe('UNKNOWN');
+    expect(c.observation.diagnostics).toMatchObject({ costBasis: 'UNKNOWN', billingPath: 'UNKNOWN', billingNote: 'cursor_pool_or_prepaid_credit_spend_unverified', spendVerified: false, chargedAs: 'FULL_RESERVATION' });
+    expect(JSON.stringify(c.observation.diagnostics)).not.toMatch(/SUBSCRIPTION|NOT_APPLICABLE/u);
     expect(c.observation.diagnostics).not.toHaveProperty('executionCostUsdMicros');
   });
 
@@ -139,10 +140,11 @@ describe('cost: unknown is never $0', () => {
     expect(c.observation.diagnostics).toMatchObject({ usageAllZero: true, chargedAs: 'FULL_RESERVATION' });
   });
 
-  it('a configured fixed reservation is the execution charge; zero is refused as configuration', async () => {
-    const c = completed((await run({ cfg: config({ fixedPerAttemptReservationUsdMicros: 200_000 }) })).outcome);
-    expect(c.observation.diagnostics).toMatchObject({ executionCostUsdMicros: 200_000, chargedAs: 'FIXED_PER_ATTEMPT_RESERVATION' });
-    expect(grokBotCoderConfigRefusal(config({ fixedPerAttemptReservationUsdMicros: 0 }))?.providerFailureClass).toBe('coder_grok_config_fixed_reservation_invalid');
+  it('F8: no fixed figure stands in for a cost: the option is gone, and a stale one changes nothing', async () => {
+    expect(GROK_BOT_CODER_CONFIG_DEFAULTS).not.toHaveProperty('fixedPerAttemptReservationUsdMicros');
+    const c = completed((await run({ cfg: legacy({ fixedPerAttemptReservationUsdMicros: 200_000 }) })).outcome);
+    expect(c.observation.diagnostics).not.toHaveProperty('executionCostUsdMicros');
+    expect(c.observation.diagnostics).toMatchObject({ chargedAs: 'FULL_RESERVATION' });
   });
 
   it('every failure after the create carries the full-charge facts', async () => {
@@ -155,7 +157,7 @@ describe('cost: unknown is never $0', () => {
       const f = failed((await run({ t })).outcome);
       expect(f.runtimeStarted).toBe(true);
       expect(f.costUsdMicros).not.toBe(0);
-      expect(f.diagnostics).toMatchObject({ costBasis: 'NOT_APPLICABLE', spendVerified: false, chargedAs: 'FULL_RESERVATION' });
+      expect(f.diagnostics).toMatchObject({ costBasis: 'UNKNOWN', billingPath: 'UNKNOWN', spendVerified: false, chargedAs: 'FULL_RESERVATION' });
     }
   });
 });
@@ -174,7 +176,7 @@ describe('H2: an ending whose outcome is unknown never carries the fixed reserva
   ];
   for (const [name, make] of endings) {
     it(name, async () => {
-      const f = failed((await run({ cfg: config({ fixedPerAttemptReservationUsdMicros: FIXED }), t: make() })).outcome);
+      const f = failed((await run({ cfg: legacy({ fixedPerAttemptReservationUsdMicros: FIXED }), t: make() })).outcome);
       expect(f.runtimeStarted).toBe(true);
       expect(f.costUsdMicros).toBeNull();
       expect(f.diagnostics).not.toHaveProperty('executionCostUsdMicros');
@@ -182,9 +184,10 @@ describe('H2: an ending whose outcome is unknown never carries the fixed reserva
       expect(f.diagnostics.outcomeUnknown === true || f.diagnostics.timedOut === true).toBe(true);
     });
   }
-  it('a known ending (the run reported ERROR) still uses the configured fixed reservation', async () => {
-    const f = failed((await run({ cfg: config({ fixedPerAttemptReservationUsdMicros: FIXED }), t: fakeTransport({ poll: { kind: 'terminal', status: 'ERROR', polls: 1 } }) })).outcome);
-    expect(f.diagnostics).toMatchObject({ executionCostUsdMicros: FIXED, chargedAs: 'FIXED_PER_ATTEMPT_RESERVATION' });
+  it('a known ending (the run reported ERROR) also holds the full reservation', async () => {
+    const f = failed((await run({ cfg: legacy({ fixedPerAttemptReservationUsdMicros: FIXED }), t: fakeTransport({ poll: { kind: 'terminal', status: 'ERROR', polls: 1 } }) })).outcome);
+    expect(f.diagnostics).not.toHaveProperty('executionCostUsdMicros');
+    expect(f.diagnostics).toMatchObject({ chargedAs: 'FULL_RESERVATION', costBasis: 'UNKNOWN' });
   });
 });
 

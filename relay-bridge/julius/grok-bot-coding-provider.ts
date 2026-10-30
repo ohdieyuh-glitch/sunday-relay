@@ -41,6 +41,9 @@ import { grokWorkspaceCommands, isSafeBranchName } from './grok-workspace-comman
 
 export const GROK_BOT_CODER_PROVIDER_KIND = 'grok-bot-cloud-agent';
 
+/** F8: the closed billing wording on every record: pool or prepaid credit, never "no bill". */
+export const GROK_CODER_BILLING_NOTE = 'cursor_pool_or_prepaid_credit_spend_unverified';
+
 /** sunday-relay itself. A mission's target is never this repository (founder rule: "never sunday-relay main"). */
 const SUNDAY_RELAY_REPO = 'ohdieyuh-glitch/sunday-relay';
 
@@ -259,8 +262,6 @@ export interface GrokBotCoderConfig {
   readonly targetRepoUrl: string | null;
   /** Wall-clock limit for the run, polled. No default. */
   readonly runDeadlineMs: number | null;
-  /** A fixed execution charge per attempt, in micro-USD. Null: the full reservation is charged (the default). */
-  readonly fixedPerAttemptReservationUsdMicros: number | null;
 }
 
 export const GROK_BOT_CODER_CONFIG_DEFAULTS: GrokBotCoderConfig = Object.freeze({
@@ -270,7 +271,6 @@ export const GROK_BOT_CODER_CONFIG_DEFAULTS: GrokBotCoderConfig = Object.freeze(
   reviewerModelId: null,
   targetRepoUrl: null,
   runDeadlineMs: null,
-  fixedPerAttemptReservationUsdMicros: null,
 });
 
 const MAX_RUN_DEADLINE_MS = 6 * 60 * 60 * 1000;
@@ -340,10 +340,6 @@ export function grokBotCoderConfigRefusal(config: GrokBotCoderConfig | null | un
   if (typeof deadline !== 'number' || !Number.isInteger(deadline) || deadline <= 0 || deadline > MAX_RUN_DEADLINE_MS) {
     return refuse('coder_grok_config_deadline_absent', 'No valid run deadline is configured; nothing was dispatched.');
   }
-  const fixed = config.fixedPerAttemptReservationUsdMicros;
-  if (fixed !== null && (typeof fixed !== 'number' || !Number.isInteger(fixed) || fixed <= 0)) {
-    return refuse('coder_grok_config_fixed_reservation_invalid', 'A fixed per-attempt reservation must be a positive whole number of micro-USD; zero is never a cost.');
-  }
   return null;
 }
 
@@ -394,13 +390,9 @@ export function createGrokBotCodingAgentProvider(input: {
       if (session?.selfTest !== undefined) {
         return notStarted('LAUNCH_FAILED', 'coder_grok_self_test_unsupported', 'The Grok Bot coder cannot offer the mission\'s self-test tool; nothing was dispatched.');
       }
-      const fixed = config.fixedPerAttemptReservationUsdMicros;
       const budget = request.budget.usdMicros;
       if (budget !== null && budget < 10_000) {
         return notStarted('COST_CEILING_REACHED', 'coder_allocation_below_one_cent', 'The remaining mission budget is below one cent; the Grok Bot coder was not dispatched.');
-      }
-      if (budget !== null && fixed !== null && fixed > budget) {
-        return notStarted('COST_CEILING_REACHED', 'coder_grok_fixed_reservation_exceeds_allocation', 'The fixed per-attempt reservation exceeds this dispatch\'s allocation; nothing was dispatched.');
       }
 
       const target = parseGithubRepoUrl(config.targetRepoUrl as string) as { owner: string; repo: string };
@@ -422,20 +414,20 @@ export function createGrokBotCodingAgentProvider(input: {
         baseRevision: base.sha,
       };
       /**
-       * Every ending after the create left: unknown spend, charged in full unless a fixed reservation is configured. Never $0.
-       * An ending whose outcome is unknown (outcome-unknown create, timeout, 409, agentId mismatch, poll failure) NEVER carries the
-       * fixed figure: what ran, and for how long, is not known, so the full reservation holds.
+       * F8: WHO PAYS IS NOT KNOWN HERE, SO THE RECORD DOES NOT SAY. Cursor's docs (cloud-agent, models-and-pricing) put a Cloud
+       * Agent run on the plan's usage pool and then on prepaid credit at model rates, and third-party models on prepaid credit
+       * from the first request: a bill can exist. So the basis and the path are the kernel's `UNKNOWN`, never `NOT_APPLICABLE`
+       * or `SUBSCRIPTION`; `costUsdMicros` stays null, which keeps the whole reservation held (julius-task-pipeline commit).
+       * Never $0, and no fixed figure stands in for a cost nobody read.
        */
-      const costFacts = (unknownOutcome: boolean): Record<string, unknown> => ({
-        costBasis: 'NOT_APPLICABLE', billingPath: 'SUBSCRIPTION', costSource: 'unavailable', spendVerified: false,
-        ...(fixed === null || unknownOutcome ? { chargedAs: 'FULL_RESERVATION' } : { executionCostUsdMicros: fixed, chargedAs: 'FIXED_PER_ATTEMPT_RESERVATION' }),
+      const costFacts = (): Record<string, unknown> => ({
+        costBasis: 'UNKNOWN', billingPath: 'UNKNOWN', billingNote: GROK_CODER_BILLING_NOTE, costSource: 'unavailable', spendVerified: false, chargedAs: 'FULL_RESERVATION',
       });
       const started = (failure: JuliusCodingAgentFailure, providerFailureClass: string, safeMessage: string, extra: Record<string, unknown> = {}): JuliusCodingAgentProviderOutcome => {
         log(`grok-coder failed agent=${agentId} class=${providerFailureClass}`);
-        const unknownOutcome = extra.outcomeUnknown === true || extra.timedOut === true;
         return {
           kind: 'failed', failure, runtimeStarted: true, costUsdMicros: null, safeMessage, providerFailureClass,
-          diagnostics: { ...evidence, ...costFacts(unknownOutcome), runtimeStarted: true, outcome: 'failed', ...extra },
+          diagnostics: { ...evidence, ...costFacts(), runtimeStarted: true, outcome: 'failed', ...extra },
         };
       };
       /** Best effort: ask the service to stop a run Julius will not follow any further. Recorded, never retried, never fatal. */
@@ -590,8 +582,8 @@ export function createGrokBotCodingAgentProvider(input: {
           inputTokens: result.usage?.inputTokens ?? null,
           outputTokens: result.usage?.outputTokens ?? null,
           costUsdMicros: null,
-          costBasis: 'NOT_APPLICABLE',
-          diagnostics: { ...evidence, ...costFacts(false), runtimeStarted: true, outcome: 'succeeded' },
+          costBasis: 'UNKNOWN',
+          diagnostics: { ...evidence, ...costFacts(), runtimeStarted: true, outcome: 'succeeded' },
         },
       };
     },
