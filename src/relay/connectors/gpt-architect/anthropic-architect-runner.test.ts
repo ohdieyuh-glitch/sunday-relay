@@ -419,7 +419,7 @@ describe('adversarial messages: redacted, or omitted when redaction cannot be tr
     { name: 'phone and card numbers', message: 'call +1 (415) 555-0100 card 4111 1111 1111 1111 ok', excerpt: 'call [redacted] card [redacted] ok', never: ['555-0100', '4111'] },
     { name: 'prompt text echoed (input)', message: 'messages.0.content: the invoice export drops the last line item is not allowed', excerpt: null, omitted: 'prompt_overlap', never: ['invoice export', 'Jane'] },
     { name: 'prompt text echoed (system), different case and spacing', message: 'system:   PLAN THE CHANGE   carefully and cite', excerpt: null, omitted: 'prompt_overlap', never: ['PLAN THE CHANGE', 'carefully'] },
-    { name: 'unicode, controls and bidi', message: 'caf\u00e9 \u202eevil\u202c \u0007bell \ud83d\ude00 \u00a0nbsp', excerpt: 'caf? ?evil? bell ? nbsp', never: ['\u202e', '\u0007'] },
+    { name: 'unicode, controls and bidi', message: 'caf\u00e9 \u202eevil\u202c \u0007bell \ud83d\ude00 \u00a0nbsp', excerpt: 'caf? evil bell ? nbsp', never: ['\u202e', '\u0007'] }, // F1: bidi controls are \p{Cf}, now stripped rather than `?`
     { name: 'a spend-limit date is kept', message: 'You have reached your specified API usage limits. You will regain access on 2026-11-01 at 00:00 UTC.', excerpt: 'You have reached your specified API usage limits. You will regain access on 2026-11-01 at 00:00 UTC.', never: [] },
   ];
   for (const row of rows) {

@@ -1032,37 +1032,69 @@ export function architectRefusalFacts(outcome: ArchitectRunOutcome): Record<stri
 
 const REFUSAL_MESSAGE_CLASSES: ReadonlySet<string> = new Set(['spend_limit', 'credit_too_low', 'schema_too_complex', 'workspace_header', 'other']);
 
-/**
- * THE ONE STDOUT LINE for a refused architect request. Every field is an
- * integer or a safe token, except the LAST, `message="..."`: the runner's
- * sanitized excerpt (printable ASCII, at most 240 characters, keys and 32+
- * character tokens redacted), re-checked here, with `\` and `"` escaped so the
- * line stays one line and the value ends at the closing quote. The message
- * fields come after every field the line had before, so a reader of the old
- * prefix is unaffected. `excerpt=kept|omitted_prompt_overlap|omitted_unsafe_residue|none`
- * says whether the excerpt is there; when omitted, `message=""` and the class,
- * code, length and digest still stand. `message_class=unavailable` (and
- * `unknown` length and digest, `excerpt=none`, `message=""`) when the body was
- * not JSON with an `error` object.
- */
-export function architectProviderRefusalLine(provider: 'openai' | 'anthropic', refusal: AnthropicRefusalEvidence): string {
-  const n = (value: number | null): string => (value === null ? 'unknown' : String(value));
+const SAFE_ERROR_CODE = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$/u;
+
+function refusalMessageFields(refusal: AnthropicRefusalEvidence) {
   const evidence = refusal.providerMessage ?? null;
   const messageClass = evidence !== null && REFUSAL_MESSAGE_CLASSES.has(evidence.messageClass) ? evidence.messageClass : evidence === null ? 'unavailable' : 'other';
-  const errorCode = evidence === null || evidence.errorCode === null
-    ? (evidence?.errorCodeUnusable === true ? 'unusable' : 'none')
-    : /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$/u.test(evidence.errorCode) ? evidence.errorCode : 'unusable';
+  const errorCode = evidence === null || evidence.errorCode === null ? null : SAFE_ERROR_CODE.test(evidence.errorCode) ? evidence.errorCode : null;
+  const errorCodeStatus = errorCode !== null ? 'recorded'
+    : evidence !== null && (evidence.errorCodeUnusable === true || evidence.errorCode !== null) ? 'unusable' : 'none';
   const bytes = evidence !== null && Number.isSafeInteger(evidence.messageBytes) && evidence.messageBytes >= 0 ? String(evidence.messageBytes) : 'unknown';
   const digest = evidence !== null && /^[0-9a-f]{64}$/u.test(evidence.messageSha256) ? evidence.messageSha256 : 'unknown';
   const excerptStatus = evidence === null ? 'none'
     : evidence.excerptOmitted === 'prompt_overlap' || evidence.excerptOmitted === 'unsafe_residue' ? `omitted_${evidence.excerptOmitted}`
       : typeof evidence.excerpt === 'string' ? 'kept' : 'omitted_unsafe_residue';
-  const excerpt = (excerptStatus === 'kept' ? evidence?.excerpt ?? '' : '').replace(/[^\x20-\x7e]/gu, '?').slice(0, 240).replace(/[\\"]/gu, (c) => `\\${c}`);
+  const excerpt = excerptStatus === 'kept' ? (evidence?.excerpt ?? '').replace(/[^\x20-\x7e]/gu, '?').slice(0, 240) : null;
+  return { messageClass, errorCode, errorCodeStatus, bytes, digest, excerptStatus, excerpt };
+}
+
+/**
+ * THE ONE STDOUT LINE for a refused architect request (Skywalker's M2 ruling).
+ * Every field is an integer, a digest or a token from a closed set: the line
+ * carries NO provider-supplied message text and no provider error code, so
+ * the paid-slot log classifier (`scripts/julius-paid-slot.mjs`
+ * `classifyProviderFailure`, which reads the whole LIVE job log) answers the
+ * same whatever the provider wrote. `message_class` is one of
+ * spend_limit|credit_too_low|schema_too_complex|workspace_header|other|unavailable;
+ * `error_code=recorded|unusable|none` and `excerpt=kept|omitted_prompt_overlap|omitted_unsafe_residue|none`
+ * say only whether the separate record ({@link architectProviderMessageRecord})
+ * holds a code and an excerpt. The fields come after request_id, so the old
+ * prefix is unchanged.
+ */
+export function architectProviderRefusalLine(provider: 'openai' | 'anthropic', refusal: AnthropicRefusalEvidence): string {
+  const n = (value: number | null): string => (value === null ? 'unknown' : String(value));
+  const fields = refusalMessageFields(refusal);
   return `provider_refusal role=PROMPT_ARCHITECT provider=${provider} http=${refusal.httpStatus} type=${refusal.errorType ?? 'unknown'}`
     + ` limit_tokens=${n(refusal.rateLimit.tokensLimit)} remaining_tokens=${n(refusal.rateLimit.tokensRemaining)}`
     + ` limit_requests=${n(refusal.rateLimit.requestsLimit)} remaining_requests=${n(refusal.rateLimit.requestsRemaining)}`
     + ` request_id=${refusal.requestId ?? 'unavailable'}`
-    + ` error_code=${errorCode} message_class=${messageClass} message_bytes=${bytes} message_sha256=${digest} excerpt=${excerptStatus} message="${excerpt}"`;
+    + ` error_code=${fields.errorCodeStatus} message_class=${fields.messageClass} message_bytes=${fields.bytes} message_sha256=${fields.digest} excerpt=${fields.excerptStatus}`;
+}
+
+/** The provider-message evidence that never goes to stdout: the sanitized excerpt and the provider's error code. */
+export interface ArchitectProviderMessageRecord {
+  readonly kind: 'architect_provider_message';
+  readonly provider: 'openai' | 'anthropic';
+  readonly httpStatus: number;
+  readonly requestId: string | null;
+  readonly messageClass: string;
+  readonly messageBytes: string;
+  readonly messageSha256: string;
+  readonly errorCode: string | null;
+  readonly excerptStatus: string;
+  /** The runner's sanitized excerpt (printable ASCII, at most 240 characters), or null unless `excerptStatus` is `kept`. */
+  readonly excerpt: string | null;
+}
+
+/** The separate evidence record for a refused architect request. Not printed; `julius-paid-slot.mjs` never reads it. */
+export function architectProviderMessageRecord(provider: 'openai' | 'anthropic', refusal: AnthropicRefusalEvidence): ArchitectProviderMessageRecord {
+  const fields = refusalMessageFields(refusal);
+  return {
+    kind: 'architect_provider_message', provider, httpStatus: refusal.httpStatus, requestId: refusal.requestId ?? null,
+    messageClass: fields.messageClass, messageBytes: fields.bytes, messageSha256: fields.digest,
+    errorCode: fields.errorCode, excerptStatus: fields.excerptStatus, excerpt: fields.excerpt,
+  };
 }
 
 export function createLiveArchitectAdapter(input: {
@@ -1077,6 +1109,12 @@ export function createLiveArchitectAdapter(input: {
   readonly run?: ArchitectRunner;
   /** Where the one `provider_refusal` line goes. Absent prints nothing. */
   readonly report?: (line: string) => void;
+  /**
+   * Where the provider-message evidence record goes (M2): a sink that is NOT the
+   * job log. Absent records nothing; the evidence then lives only on the runner's
+   * outcome. The live composition does not wire it in this commit.
+   */
+  readonly recordProviderMessage?: (record: ArchitectProviderMessageRecord) => void;
 }): JuliusProviderAdapter {
   if (!input.config.liveMode || input.config.model === null || !input.apiKey) {
     throw new Error('architect_adapter_requires_live_config');
@@ -1238,7 +1276,10 @@ export function createLiveArchitectAdapter(input: {
           ...architectRefusalFacts(outcome),
         };
         const refusal = 'refusal' in outcome ? outcome.refusal : undefined;
-        if (refusal !== undefined) input.report?.(architectProviderRefusalLine(architectProvider, refusal));
+        if (refusal !== undefined) {
+          input.report?.(architectProviderRefusalLine(architectProvider, refusal));
+          input.recordProviderMessage?.(architectProviderMessageRecord(architectProvider, refusal));
+        }
         /*
          * NOT EVEN A 401, A 403 OR A 429 MAY SAY NOTHING RAN HERE, although each
          * is the provider refusing THIS request unprocessed. The refusal ends the

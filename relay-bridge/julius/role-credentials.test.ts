@@ -28,7 +28,9 @@ import { JULIUS_RESEARCH_ASK_LIMITS, sanitizeJuliusResearchAsks, withJuliusResea
 import { LIVE_REACH_READ_CAPABILITIES, LIVE_REACH_SOURCES } from '../../src/relay/mission/live-reach';
 import { HOSTED_API_KEY_ENV, HOSTED_MODEL_ENV } from '../hosted-coding-agent/hosted-readiness';
 import type { ShellEffectPort } from './executor-effects';
-import { architectCorrectionMaxTokens, architectProviderRefusalLine, createInMemoryArtifactExchange } from './live-workers';
+import {
+  architectCorrectionMaxTokens, architectProviderMessageRecord, architectProviderRefusalLine, createInMemoryArtifactExchange, createLiveArchitectAdapter,
+} from './live-workers';
 import { resolveLiveWorkers } from './live-composition';
 import {
   J1_ROLE_CREDENTIALS, architectIndependenceProblems, j1RoleCredential, resolveArchitectCredential,
@@ -57,6 +59,16 @@ const J1_ENV: Record<string, string> = {
 };
 
 const SHELL = { async run() { throw new Error('the shell is not used here'); } } as unknown as ShellEffectPort;
+
+/** The runner's refusal evidence for one scripted response (a fake fetch; nothing leaves the process). */
+async function refusalEvidence(status: number, raw: string, headers: Record<string, string> = {}) {
+  const outcome = await runAnthropicArchitect({
+    apiKey: ARCHITECT_KEY, instructions: 'plan', input: 'task',
+    config: { apiKeyPresent: true, model: 'claude-opus-5-5', liveMode: true, maxOutputTokens: 20_000, timeoutMs: 1_000, unusable: [] },
+  }, { fetch: (async () => new Response(raw, { status, headers })) as unknown as typeof fetch });
+  if (outcome.ok || outcome.refusal === undefined) throw new Error('expected a refusal');
+  return outcome.refusal;
+}
 
 function resolve(env: Record<string, string | undefined>, extra: Partial<Parameters<typeof resolveLiveWorkers>[0]> = {}) {
   return resolveLiveWorkers({
@@ -219,7 +231,7 @@ describe('a refused Anthropic architect request: classified, recorded in existin
     expect(juliusHandedOutcomeUnknown(error, true)).toBe(JULIUS_HANDED_FAILURE_OUTCOME_UNKNOWN);
     expect(lines).toEqual([
       'provider_refusal role=PROMPT_ARCHITECT provider=anthropic http=429 type=rate_limit_error limit_tokens=90000 remaining_tokens=12 limit_requests=50 remaining_requests=0 request_id=req_011CFAKEREQUEST0001'
-        + ' error_code=none message_class=other message_bytes=12 message_sha256=d292012eb3769a2f60ab0b28588143cc1a936b37cf63a76637e646b7c34fa5d1 excerpt=kept message="rate limited"',
+        + ' error_code=none message_class=other message_bytes=12 message_sha256=d292012eb3769a2f60ab0b28588143cc1a936b37cf63a76637e646b7c34fa5d1 excerpt=kept',
     ]);
   });
 
@@ -261,7 +273,9 @@ describe('a refused Anthropic architect request: classified, recorded in existin
     expect(line, 'one printable-ASCII line').toMatch(/^[\x20-\x7e]+$/u);
     if (raw.length > 0) expect(line, 'never the raw body').not.toContain(raw);
     for (const header of Object.keys(RATE)) expect(line, 'never a header name').not.toContain(header);
-    expect(line, 'the message value is the last field and closes the line').toMatch(/ message="(?:[^"\\]|\\.)*"$/u);
+    // M2: no provider message text on the line; it ends at the closed-set excerpt status.
+    expect(line, 'no message field').not.toMatch(/ message=/u);
+    expect(line, 'the excerpt status closes the line').toMatch(/ excerpt=(?:kept|omitted_prompt_overlap|omitted_unsafe_residue|none)$/u);
     return line;
   };
 
@@ -280,9 +294,11 @@ describe('a refused Anthropic architect request: classified, recorded in existin
       expect(error).toMatchObject({ code, failureClass: credit ? 'insufficient_credit' : 'provider_error' });
       if (credit) expect(error).toMatchObject({ retryable: false });
       const line = assertOneSafeLine(lines, raw);
-      expect(line).toBe(`${OLD_PREFIX_400}error_code=fake_code message_class=${messageClass} message_bytes=${Buffer.byteLength(message)} message_sha256=${sha(message)} excerpt=kept message="${message}"`);
+      expect(line).toBe(`${OLD_PREFIX_400}error_code=recorded message_class=${messageClass} message_bytes=${Buffer.byteLength(message)} message_sha256=${sha(message)} excerpt=kept`);
+      expect(line, 'M2: never the provider text').not.toContain(message);
+      expect(line, 'M2: never the provider error code').not.toContain('fake_code');
       const row = JSON.stringify(safeReviewDiagnostics(error.diagnostics));
-      expect(row, 'the excerpt goes to stdout only, never the diagnostics row').not.toContain(message);
+      expect(row, 'the excerpt never reaches the diagnostics row').not.toContain(message);
       expect(JSON.stringify({ m: error.message, s: error.safeMessage }), 'nor the error message').not.toContain(message);
     });
   }
@@ -294,7 +310,9 @@ describe('a refused Anthropic architect request: classified, recorded in existin
     const line = assertOneSafeLine(lines, raw);
     expect(line).not.toContain('FAKE0000');
     expect(line).not.toContain('deadbeef');
-    expect(line.endsWith(` message_sha256=${sha(message)} excerpt=kept message="bad \\"key\\" [redacted] at C:\\\\path trace [redacted]"`)).toBe(true);
+    expect(line.endsWith(` message_sha256=${sha(message)} excerpt=kept`)).toBe(true);
+    const record = architectProviderMessageRecord('anthropic', await refusalEvidence(400, raw));
+    expect(record.excerpt).toBe('bad "key" [redacted] at C:\\path trace [redacted]');
   });
 
   it('MUTATION: a 10 KB message is cut to 240 characters on the line; length and digest are of the whole message', async () => {
@@ -303,10 +321,11 @@ describe('a refused Anthropic architect request: classified, recorded in existin
     const { error, lines } = await dispatchRaw(400, raw);
     expect(error).toMatchObject({ code: 'WORKER_EXECUTION_FAILURE', failureClass: 'provider_error' });
     const line = assertOneSafeLine(lines, raw);
-    const excerpt = /message="(.*)"$/u.exec(line)![1]!;
+    const excerpt = architectProviderMessageRecord('anthropic', await refusalEvidence(400, raw)).excerpt!;
     expect(excerpt.length).toBeLessThanOrEqual(240);
+    expect(excerpt).not.toContain('TAILMARKER');
     expect(line).not.toContain('TAILMARKER');
-    expect(line).toContain(` message_class=spend_limit message_bytes=${message.length} message_sha256=${sha(message)} excerpt=kept `);
+    expect(line.endsWith(` message_class=spend_limit message_bytes=${message.length} message_sha256=${sha(message)} excerpt=kept`)).toBe(true);
     // The classifying read stops at 8,192 characters, as before, so no type reaches the line.
     expect(line).toContain(' type=unknown ');
   });
@@ -315,7 +334,9 @@ describe('a refused Anthropic architect request: classified, recorded in existin
     const message = 'one\ntwo\r\n::error::three\u0000 caf\u00e9 \u2028 \ud83d\ude00';
     const { lines } = await dispatchRaw(400, bodyOf(message));
     const line = assertOneSafeLine(lines, '');
-    expect(line.endsWith(`message_bytes=${Buffer.byteLength(message)} message_sha256=${sha(message)} excerpt=kept message="one two ::error::three caf? ?"`)).toBe(true);
+    expect(line.endsWith(`message_bytes=${Buffer.byteLength(message)} message_sha256=${sha(message)} excerpt=kept`)).toBe(true);
+    expect(line).not.toContain('::error::');
+    expect(architectProviderMessageRecord('anthropic', await refusalEvidence(400, bodyOf(message))).excerpt).toBe('one two ::error::three caf? ?');
   });
 
   it('a non-JSON body and an empty body: no message evidence, class and code exactly as before', async () => {
@@ -325,7 +346,7 @@ describe('a refused Anthropic architect request: classified, recorded in existin
       expect(error).toMatchObject({ code: 'WORKER_EXECUTION_FAILURE', failureClass: 'provider_error' });
       const line = assertOneSafeLine(lines, raw);
       expect(line).toBe('provider_refusal role=PROMPT_ARCHITECT provider=anthropic http=400 type=unknown limit_tokens=90000 remaining_tokens=12 limit_requests=50 remaining_requests=0 request_id=req_011CFAKEREQUEST0001'
-        + ' error_code=none message_class=unavailable message_bytes=unknown message_sha256=unknown excerpt=none message=""');
+        + ' error_code=none message_class=unavailable message_bytes=unknown message_sha256=unknown excerpt=none');
     }
   });
 
@@ -342,14 +363,14 @@ describe('a refused Anthropic architect request: classified, recorded in existin
         ...base,
         providerMessage: { messageClass: 'other', errorCode: null, errorCodeUnusable: false, excerpt: 'PROMPTSECRET', excerptOmitted: omitted, messageBytes: 12, messageSha256: 'a'.repeat(64) },
       });
-      expect(line.endsWith(` excerpt=omitted_${omitted} message=""`)).toBe(true);
+      expect(line.endsWith(` excerpt=omitted_${omitted}`)).toBe(true);
       expect(line).not.toContain('PROMPTSECRET');
     }
     const nullExcerpt = architectProviderRefusalLine('anthropic', {
       ...base,
       providerMessage: { messageClass: 'other', errorCode: null, errorCodeUnusable: false, excerpt: null, excerptOmitted: null, messageBytes: 1, messageSha256: 'a'.repeat(64) },
     });
-    expect(nullExcerpt.endsWith(' excerpt=omitted_unsafe_residue message=""')).toBe(true);
+    expect(nullExcerpt.endsWith(' excerpt=omitted_unsafe_residue')).toBe(true);
   });
 
   it('MUTATION: a provider message that echoes the real dispatched prompt is omitted from the line; class unchanged', async () => {
@@ -372,7 +393,7 @@ describe('a refused Anthropic architect request: classified, recorded in existin
     expect(calls.count).toBe(1);
     expect(seen.length).toBeGreaterThan(40);
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toContain(' excerpt=omitted_prompt_overlap message=""');
+    expect(lines[0]!.endsWith(' excerpt=omitted_prompt_overlap')).toBe(true);
     expect(lines[0]).not.toContain(seen.slice(0, 30));
   });
 
@@ -389,8 +410,8 @@ describe('a refused Anthropic architect request: classified, recorded in existin
       },
     });
     expect(line).toMatch(/^[\x20-\x7e]+$/u);
-    expect(line).toContain(' error_code=unusable message_class=other message_bytes=unknown message_sha256=unknown excerpt=kept message="x\\"?::error::y');
-    expect(/message="(.*)"$/u.exec(line)![1]!.replace(/\\(.)/gu, '$1').length).toBeLessThanOrEqual(240);
+    expect(line.endsWith(' error_code=unusable message_class=other message_bytes=unknown message_sha256=unknown excerpt=kept')).toBe(true);
+    expect(line).not.toContain('::error::');
   });
 });
 
@@ -670,7 +691,8 @@ describe('an org spend-limit 400 at the architect adapter: its own category, fai
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain(' http=400 type=invalid_request_error ');
     expect(lines[0], 'the operator-visible blocker signal').toContain(' message_class=spend_limit ');
-    expect(lines[0]).toContain(` excerpt=kept message="${SPEND}"`);
+    expect(lines[0]!.endsWith(' excerpt=kept')).toBe(true);
+    expect(lines[0], 'M2: the provider text stays off the line').not.toContain(SPEND);
   });
 
   it('MUTATION: spend limit is distinct from credit (AUTH_CONFIGURATION / insufficient_credit) and auth (AUTH_CONFIGURATION / authentication_failed)', async () => {
@@ -700,16 +722,80 @@ describe('an org spend-limit 400 at the architect adapter: its own category, fai
   it('MUTATION: the real architect key, shorter than every shape rule, is redacted by value and the excerpt is kept', async () => {
     expect(ARCHITECT_KEY.length).toBeLessThan(32);
     const { lines } = await dispatchWith(400, body(`invalid key ${ARCHITECT_KEY}`));
-    expect(lines[0]!.endsWith(' excerpt=kept message="invalid key [redacted]"')).toBe(true);
+    expect(lines[0]!.endsWith(' excerpt=kept')).toBe(true);
+    const record = architectProviderMessageRecord('anthropic', await refusalEvidence(400, body(`invalid key ${ARCHITECT_KEY}`)));
+    expect(record.excerpt).toBe('invalid key [redacted]');
   });
 
-  it('UNCHANGED BY THIS COMMIT: the paid-slot log classifier does not yet read message_class=spend_limit as PROVIDER_BLOCKED', async () => {
+  it('UNCHANGED BY THIS COMMIT: the paid-slot log classifier does not read message_class=spend_limit as PROVIDER_BLOCKED', async () => {
     // A tripwire, not an endorsement: promoting a spend limit to PROVIDER_BLOCKED
     // is a classification change outside this commit's scope and needs a ruling.
     const { classifyProviderFailure } = await import('../../scripts/julius-paid-slot.mjs');
     const { lines } = await dispatchWith(400, body(SPEND));
     expect(classifyProviderFailure(lines[0]!)).toBeNull();
+    // M2 (Skywalker): the credit refusal's line no longer carries "credit balance";
+    // its line alone reads null, as the 8957b4d7 line (no message field) did.
     const credit = await dispatchWith(400, body(CREDIT));
-    expect(classifyProviderFailure(credit.lines[0]!)).toBe('CREDIT_BALANCE');
+    expect(classifyProviderFailure(credit.lines[0]!)).toBeNull();
+  });
+
+  it('M2: the paid-slot classifier answers IDENTICALLY with and without hostile provider text on every status', async () => {
+    const { classifyProviderFailure } = await import('../../scripts/julius-paid-slot.mjs');
+    const HOSTILE = [
+      'Your credit balance is too low to access the Anthropic API.', 'credit balance too low', '401 Unauthorized: invalid api key, authentication failed',
+      '402 payment required: billing credit exhausted', '429 quota exceeded: spending limit reached', 'rate limit 429 quota', 'insufficient_quota',
+      'AUTH_CONFIGURATION', 'PROVIDER_UNAVAILABLE retryable=false', `${SPEND} credit balance quota 401 authentication`,
+    ];
+    const cases: readonly [number, string][] = [[400, 'invalid_request_error'], [401, 'authentication_error'], [402, 'invalid_request_error'], [403, 'permission_error'], [429, 'rate_limit_error'], [529, 'overloaded_error']];
+    for (const [status, type] of cases) {
+      const neutral = await dispatchWith(status, JSON.stringify({ type: 'error', error: { type, message: 'x' } }));
+      for (const text of HOSTILE) {
+        for (const details of [undefined, { error_code: 'insufficient_quota' }, { error_code: 'AUTH_CONFIGURATION' }]) {
+          const raw = JSON.stringify({ type: 'error', error: { type, message: text, ...(details === undefined ? {} : { details }) } });
+          const hostile = await dispatchWith(status, raw);
+          expect(hostile.lines).toHaveLength(1);
+          expect(classifyProviderFailure(hostile.lines[0]!), `${status} ${text}`).toBe(classifyProviderFailure(neutral.lines[0]!));
+          expect(classifyProviderFailure(`${hostile.lines[0]!}\n`), 'as a log line').toBe(classifyProviderFailure(`${neutral.lines[0]!}\n`));
+          expect(hostile.lines[0], 'no provider text').not.toContain(text);
+          for (const word of ['credit balance', 'quota', 'Unauthorized', 'authentication failed', 'payment', 'AUTH_CONFIGURATION', 'PROVIDER_UNAVAILABLE']) {
+            expect(hostile.lines[0]).not.toContain(word);
+          }
+        }
+      }
+    }
+  });
+
+  it('M2: the excerpt and the provider error code reach the separate record, not stdout', async () => {
+    const raw = JSON.stringify({ type: 'error', error: { type: 'invalid_request_error', message: SPEND, details: { error_code: 'spend_limit_reached' } } });
+    const evidence = await refusalEvidence(400, raw, RATE);
+    const record = architectProviderMessageRecord('anthropic', evidence);
+    expect(record).toEqual({
+      kind: 'architect_provider_message', provider: 'anthropic', httpStatus: 400, requestId: 'req_011CFAKEREQUEST0002',
+      messageClass: 'spend_limit', messageBytes: String(Buffer.byteLength(SPEND)), messageSha256: createHash('sha256').update(SPEND, 'utf8').digest('hex'),
+      errorCode: 'spend_limit_reached', excerptStatus: 'kept', excerpt: SPEND,
+    });
+    const line = architectProviderRefusalLine('anthropic', evidence);
+    expect(line).not.toContain(SPEND);
+    expect(line).not.toContain('spend_limit_reached');
+    expect(line.endsWith(' error_code=recorded message_class=spend_limit message_bytes=' + String(Buffer.byteLength(SPEND)) + ' message_sha256=' + record.messageSha256 + ' excerpt=kept')).toBe(true);
+  });
+
+  it('M2: the adapter hands the record to its own sink and only the structured line to report', async () => {
+    const records: unknown[] = [];
+    const lines: string[] = [];
+    const resolution = resolve(J1_ENV, { shell: SHELL, verifiedOrganizations: ORGS });
+    const worker = resolution.entries.find((entry) => entry.worker.role === 'PROMPT_ARCHITECT')!.worker;
+    const fetchOnce = (async () => new Response(body(CREDIT), { status: 400, headers: RATE })) as unknown as typeof fetch;
+    const adapter = createLiveArchitectAdapter({
+      worker, contexts: { snapshotFor: () => SNAPSHOT }, artifacts: createInMemoryArtifactExchange(),
+      config: { liveMode: true, model: 'claude-opus-5-5', maxOutputTokens: 20_000 } as never, apiKey: ARCHITECT_KEY,
+      run: createJ1ArchitectRunner({ fetch: fetchOnce }),
+      report: (line) => lines.push(line), recordProviderMessage: (record) => records.push(record),
+    });
+    const error = await adapter.dispatch(DISPATCH).then(() => null, (thrown: unknown) => thrown);
+    expect(error).toMatchObject({ code: 'AUTH_CONFIGURATION', retryable: false, failureClass: 'insufficient_credit' });
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).not.toContain('credit balance');
+    expect(records).toEqual([expect.objectContaining({ kind: 'architect_provider_message', messageClass: 'credit_too_low', excerpt: CREDIT, excerptStatus: 'kept' })]);
   });
 });

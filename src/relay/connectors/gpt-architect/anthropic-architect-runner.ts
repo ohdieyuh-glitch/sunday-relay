@@ -388,11 +388,22 @@ const KEY_SHAPED: readonly RegExp[] = [
   /\bgithub_pat_[A-Za-z0-9_]{6,}/gu,
   /\bAKIA[0-9A-Z]{8,}/gu,
   /\bbearer\s+\S+/giu,
-  /\b(?:x-api-key|authorization|api[_-]?key)\s*[:=]?\s*[^\s,;]+/giu,
+  // An authorization value with its scheme (PILOT M1): the scheme AND the credential after it.
+  /\b(?:x-api-key|authorization|api[_-]?key)\s*[:=]?\s*(?:(?:basic|bearer|token|digest)\s+)?[^\s,;]+/giu,
+  // A bare Basic credential (base64), and a bare Token value that carries a digit (PILOT M1).
+  /\bbasic\s+[A-Za-z0-9+/]{6,}={0,2}(?![A-Za-z0-9+/=])/giu,
+  /\btoken\s+(?=[A-Za-z0-9+/._=-]*\d)[A-Za-z0-9+/._=-]{6,}/giu,
   /\b(?:token|secret|password|credential)\s*[:=]\s*\S+/giu,
+  // A password with no separator (PILOT L3): `password hunter2`, `password is hunter2`.
+  /\b(?:password|passwd|passphrase)\s+(?:is\s+)?\S+/giu,
   /-----BEGIN[^-]*-----/gu,
   /\bhttps?:\/\/\S+/giu,
   /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/gu,
+  // A spelled-out e-mail (PILOT Low): `jane dot roe at example dot com`, `jane[at]example[dot]com`.
+  /\b(?:[A-Za-z0-9._%+-]+\s*[[(]?\s*dot\s*[\])]?\s*)*[A-Za-z0-9._%+-]+\s*[[(]?\s*at\s*[\])]?\s*[A-Za-z0-9-]+(?:\s*[[(]?\s*dot\s*[\])]?\s*[A-Za-z0-9-]+)+/giu,
+  // IPv6 (PILOT Low): a compressed address (`::`) or four or more colon groups. A clock time has at most two.
+  /(?<![0-9a-f:])(?:[0-9a-f]{1,4}:){1,7}:(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4})*)?(?![0-9a-z:])/giu,
+  /\b(?:[0-9a-f]{1,4}:){3,7}[0-9a-f]{1,4}\b/giu,
   /\b\d{1,3}(?:\.\d{1,3}){3}\b/gu,
   /\+?\d(?:[ ().\/-]{0,3}\d){8,}/gu,
   // Organization, workspace, user and key identifiers below the 32-character rule (a whole UUID is above it).
@@ -405,14 +416,30 @@ const KEY_SHAPED: readonly RegExp[] = [
  * a key or prompt text interleaved with them is seen whole and redacted or
  * omitted, never kept as `?`-separated letters.
  */
-const INVISIBLE = /[\u00ad\u180e\u200b-\u200d\u2060\ufeff]/gu;
+// Skywalker F1: every format character (\p{Cf}) and combining mark (\p{M}), not only the listed ones.
+const INVISIBLE = /[\p{Cf}\p{M}\u00ad\u180e\u200b-\u200d\u2060\ufeff]/gu;
 const visible = (text: string): string => text.replace(INVISIBLE, '');
+/**
+ * FOLDED BEFORE MATCHING (PILOT L2): compatibility forms (fullwidth letters)
+ * by NFKC, every Unicode dash to `-`, and the Cyrillic and Greek letters that
+ * look like ASCII to their ASCII twin, so `\u0455k\u2011ant-...` is `sk-ant-...`
+ * to every rule. Only the excerpt is folded; the class reads the raw message.
+ */
+const DASHES = /[\u2010-\u2015\u2212\u2e3a\u2e3b\ufe58\ufe63\uff0d]/gu;
+const HOMOGLYPHS: Readonly<Record<string, string>> = {
+  '\u0430': 'a', '\u0435': 'e', '\u043e': 'o', '\u0440': 'p', '\u0441': 'c', '\u0445': 'x', '\u0443': 'y', '\u0456': 'i', '\u0458': 'j',
+  '\u0455': 's', '\u043a': 'k', '\u0410': 'A', '\u0412': 'B', '\u0415': 'E', '\u041a': 'K', '\u041c': 'M', '\u041d': 'H', '\u041e': 'O',
+  '\u0420': 'P', '\u0421': 'C', '\u0422': 'T', '\u0425': 'X', '\u0405': 'S', '\u0406': 'I', '\u0408': 'J',
+  '\u03bf': 'o', '\u03b1': 'a', '\u03ba': 'k', '\u03c1': 'p', '\u039f': 'O', '\u0391': 'A', '\u0392': 'B', '\u0395': 'E', '\u039a': 'K', '\u03a1': 'P', '\u03a4': 'T', '\u03a7': 'X',
+};
+const HOMOGLYPH = new RegExp(`[${Object.keys(HOMOGLYPHS).join('')}]`, 'gu');
+const folded = (text: string): string => visible(text).normalize('NFKC').replace(DASHES, '-').replace(HOMOGLYPH, (c) => HOMOGLYPHS[c] ?? c);
 /** What must not survive redaction; when it does, the excerpt is omitted rather than trusted. */
 const UNSAFE_RESIDUE: readonly RegExp[] = [
   /@/u, /\b(?:sk|xai|rk|pk)-/iu, /\bgh[pousr]_/u, /github_pat_/iu, /\bAKIA/u, /-----BEGIN/u, /:\/\//u,
   /\b(?:bearer|password|passwd|secret|token|credential|api[_-]?key|x-api-key|authorization)\b\s*[:=]/iu,
   /\d(?:[^A-Za-z0-9]{0,3}\d){8,}/u,
-  /\b(?:wrkspc|org|user|apikey|acct)_/iu,
+  /\b(?:wrkspc|org|user|apikey|acct|key)_/iu,
 ];
 /**
  * Only this head of a message is ever sanitized or emitted, ending at the last
@@ -531,10 +558,54 @@ function messageHead(message: string): string {
   return message.length <= SANITIZE_WINDOW ? message : message.slice(0, SANITIZE_WINDOW).replace(/\S*$/u, '');
 }
 
+/**
+ * THE FORMS OF A SECRET A PROVIDER MIGHT ECHO (PILOT M3): the value, reversed,
+ * base64 and hex, each with the run length that equals six characters of the
+ * secret (6, or 8 for base64, 12 for hex). URL-encoded and base64url forms need
+ * no entry: the run check compares letters and digits only, where a URL-encoded
+ * key is the key (plus `2F`-style escapes) and base64url is base64.
+ */
+function secretForms(secret: string): readonly { readonly form: string; readonly run: number }[] {
+  const bytes = new TextEncoder().encode(secret);
+  const base64 = globalThis.btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join(''));
+  const forms = [
+    { form: secret, run: 6 },
+    { form: secret.split('').reverse().join(''), run: 6 },
+    { form: base64, run: 8 },
+    { form: Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join(''), run: 12 },
+  ];
+  return forms.filter((entry) => entry.form.length >= 8);
+}
+const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+const joinedAlnum = (text: string): string => text.toLowerCase().replace(/[^a-z0-9]+/gu, '');
+
+/**
+ * FAILS CLOSED (PILOT M3): true when any run of the secret, or of one of its
+ * forms, as long as six characters of the secret, is still in the text once
+ * every separator is removed, so pieces split by spaces, dashes or invisible
+ * marks are re-joined before the check. Case is ignored. Erring towards true
+ * only omits an excerpt.
+ */
+export function messageCarriesSecretRun(text: string, secrets: readonly string[]): boolean {
+  const said = joinedAlnum(folded(text));
+  if (said.length === 0) return false;
+  for (const secret of secrets) {
+    if (secret.length < 8) continue;
+    for (const { form, run } of secretForms(secret)) {
+      const plain = joinedAlnum(form);
+      for (let i = 0; i + run <= plain.length; i += 1) if (said.includes(plain.slice(i, i + run))) return true;
+    }
+  }
+  return false;
+}
+
 export function sanitizeProviderExcerpt(message: string, secrets: readonly string[] = []): string {
-  let head = messageHead(visible(message));
-  // The exact secrets this request carried are redacted whatever their shape.
-  for (const secret of secrets) if (secret.length >= 8) head = head.split(secret).join(` ${REDACTED} `);
+  let head = messageHead(folded(message));
+  // The exact secrets this request carried, and their encodings, are redacted whatever their shape and case.
+  for (const secret of secrets) {
+    if (secret.length < 8) continue;
+    for (const { form } of secretForms(secret)) head = head.replace(new RegExp(escapeRegExp(form), 'giu'), ` ${REDACTED} `);
+  }
   // eslint-disable-next-line no-control-regex
   let text = head.replace(/[\s\u0000-\u001f\u007f-\u009f\u2028\u2029]+/gu, ' ').replace(/[^\x20-\x7e]/gu, '?');
   for (const shape of KEY_SHAPED) text = text.replace(shape, REDACTED);
@@ -543,7 +614,7 @@ export function sanitizeProviderExcerpt(message: string, secrets: readonly strin
 }
 
 function overlapText(text: string): string {
-  return visible(text).toLowerCase().replace(/[^a-z0-9]+/gu, ' ').trim();
+  return folded(text).toLowerCase().replace(/[^a-z0-9]+/gu, ' ').trim();
 }
 
 /**
@@ -574,12 +645,12 @@ export function messageQuotesPrompt(message: string, prompts: readonly string[])
 export function providerMessageExcerpt(message: string, prompts: readonly string[], secrets: readonly string[] = []): {
   readonly excerpt: string | null; readonly excerptOmitted: 'prompt_overlap' | 'unsafe_residue' | null;
 } {
-  if (messageQuotesPrompt(messageHead(visible(message)), prompts)) return { excerpt: null, excerptOmitted: 'prompt_overlap' };
+  if (messageQuotesPrompt(messageHead(folded(message)), prompts)) return { excerpt: null, excerptOmitted: 'prompt_overlap' };
   const excerpt = sanitizeProviderExcerpt(message, secrets);
   const scrubbed = excerpt.split(REDACTED).join(' ');
   if (UNSAFE_RESIDUE.some((shape) => shape.test(scrubbed))) return { excerpt: null, excerptOmitted: 'unsafe_residue' };
-  // A fragment of a secret (16+ normalized characters) left after redaction omits the excerpt.
-  if (messageQuotesPrompt(scrubbed, secrets)) return { excerpt: null, excerptOmitted: 'unsafe_residue' };
+  // Any six-character run of a secret (or its encodings) left after redaction, re-joined across separators, omits the excerpt.
+  if (messageCarriesSecretRun(scrubbed, secrets)) return { excerpt: null, excerptOmitted: 'unsafe_residue' };
   return { excerpt, excerptOmitted: null };
 }
 
