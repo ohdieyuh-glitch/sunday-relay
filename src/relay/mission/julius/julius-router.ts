@@ -161,7 +161,7 @@ const safePositiveCount=(value:unknown):number|null=>{const n=safeCount(value);r
  */
 const safeHttpStatus=(value:unknown):number|null=>typeof value==='number'&&Number.isInteger(value)&&value>=100&&value<=599?value:null;
 const safeExitCode=(value:unknown):number|null=>typeof value==='number'&&Number.isInteger(value)&&value>=-256&&value<=65535?value:null;
-const safeModel=(value:unknown):string|null=>typeof value==='string'&&MODEL_TOKEN.test(value)&&!CREDENTIAL_SHAPED.test(value)?value:null;
+export const safeModel=(value:unknown):string|null=>typeof value==='string'&&MODEL_TOKEN.test(value)&&!CREDENTIAL_SHAPED.test(value)?value:null;
 const safeEnum=<T extends string>(value:unknown,allowed:readonly T[]):T|null=>typeof value==='string'&&(allowed as readonly string[]).includes(value)?value as T:null;
 /**
  * A FIELD PATH THIS REPOSITORY WROTE, not a value a model produced.
@@ -186,7 +186,13 @@ const safeEnum=<T extends string>(value:unknown,allowed:readonly T[]):T|null=>ty
 const FIELD_PATH=/^[A-Za-z][A-Za-z0-9_]{0,31}(\.[A-Za-z][A-Za-z0-9_]{0,31}|\[(?:\d{1,3}|many)\])*$/;
 const safeFieldName=(value:unknown):string|null=>typeof value==='string'&&value.length<=160&&FIELD_PATH.test(value)?value:null;
 /** A provider response identifier: bounded, and refused when credential-shaped. */
-const safeResponseId=(value:unknown):string|null=>typeof value==='string'&&/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(value)&&!CREDENTIAL_SHAPED.test(value)?value:null;
+export const safeResponseId=(value:unknown):string|null=>typeof value==='string'&&/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(value)&&!CREDENTIAL_SHAPED.test(value)?value:null;
+/**
+ * A provider name on a slot. Any non-empty label the ledger already stored,
+ * refused when it is shaped like a credential so a bad fact cannot become the
+ * identity a surface renders.
+ */
+export const safeProviderId=(value:unknown):string|null=>typeof value==='string'&&value.trim()!==''&&value.length<=64&&!CREDENTIAL_SHAPED.test(value)?value:null;
 /**
  * AN INSTANT, AND NOTHING THAT MERELY CONTAINS ONE.
  *

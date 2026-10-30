@@ -26,7 +26,7 @@ argument and refuses before it reads anything.
 | Agentic Architect state (the `PROMPT_ARCHITECT` role) | `inspectSlots` → `JuliusSlotView` | **new** |
 | Coding Agent state | `inspectSlots` → `JuliusSlotView` | **new** |
 | Independent Reviewer state | `inspectSlots` → `JuliusSlotView` | **new** |
-| provider identity | `JuliusSlotView.providerId`, `requestedModel`, `servedModel` | **new**, and null where the provider was silent |
+| provider identity | `JuliusSlotView.providerId`, `requestedModel`, `servedModel`, `providerResponseId` | null where the provider was silent. Live completions store these as `diag_`-prefixed timeline facts; the slot projection reads those, and falls back to the unprefixed names on older rows. A credential-shaped response id is null, never rendered. |
 | usage / cost where known | `JuliusSlotView.knownUsdMicros` + `costComplete` + `unknownCostComponents` | **new**, as a FLOOR |
 | errors | `JuliusSlotView.lastFailureClass`, plus `timeline` | **new** per slot |
 | evidence | `inspectEvidence` | served |

@@ -39,6 +39,7 @@ import {
 } from './julius-lifecycle-runtime';
 import type { JuliusClock, JuliusEventWriter, JuliusIdFactory, JuliusRunRow, JuliusRuntimeStore } from './julius-runtime-ports';
 import { juliusCostComponent } from './julius-cost-accounting';
+import { safeModel, safeProviderId, safeResponseId } from './julius-router';
 import { juliusCurrentAttemptEvidence } from './julius-attempt-evidence';
 
 /* -------------------------------------------------------------- identity */
@@ -240,6 +241,12 @@ export interface JuliusSlotView {
   readonly requestedModel: string | null;
   /** What ANSWERED. Null is the provider's silence, never a copy of the request. */
   readonly servedModel: string | null;
+  /**
+   * The provider's own response or request id, from the adapter's diagnostics.
+   * Null when the provider was silent or the value was credential-shaped.
+   * Never a runtime session id copied in from somewhere else.
+   */
+  readonly providerResponseId: string | null;
   /**
    * `NEVER_DISPATCHED` is a real state and the commonest one early in a mission.
    * `ACTIVE` means a dispatch is open — dispatched with nothing recorded after
@@ -722,6 +729,7 @@ export function projectJuliusSlotViews(
   const byRole = new Map<JuliusDefaultRole, {
     workerId: string | null; providerId: string | null;
     requestedModel: string | null; servedModel: string | null;
+    providerResponseId: string | null;
     dispatches: number; lastSequence: number | null;
     knownUsdMicros: number; unknownCostComponents: number;
     lastFailureClass: string | null; findingsRaised: number;
@@ -733,6 +741,7 @@ export function projectJuliusSlotViews(
     if (existing !== undefined) return existing;
     const fresh = {
       workerId: null, providerId: null, requestedModel: null, servedModel: null,
+      providerResponseId: null,
       dispatches: 0, lastSequence: null as number | null,
       knownUsdMicros: 0, unknownCostComponents: 0,
       lastFailureClass: null as string | null, findingsRaised: 0,
@@ -763,12 +772,34 @@ export function projectJuliusSlotViews(
     const account = slot(role);
     account.lastSequence = entry.sequence;
     if (entry.workerId !== null) account.workerId = entry.workerId;
-    // Provider identity and the two model fields arrive on whichever row carries
-    // the adapter's diagnostics. They are only ever OVERWRITTEN by a later row
-    // that states them, so a silent row cannot erase what an earlier one said.
-    account.providerId = text(entry.facts.provider) ?? text(entry.facts.providerId) ?? account.providerId;
-    account.requestedModel = text(entry.facts.requestedModel) ?? account.requestedModel;
-    account.servedModel = text(entry.facts.servedModel) ?? account.servedModel;
+    // Provider identity, the two model fields, and the provider's own response
+    // id arrive on whichever row carries the adapter's diagnostics. Live
+    // completions store them under the `diag_` prefix `flattenDiagnostics`
+    // writes; older and hand-built rows still use the unprefixed names. A
+    // `diag_` value wins when it is present and safe. A null, empty, or
+    // credential-shaped value does not erase a prior safe one, and it is
+    // never copied onto the slot.
+    const stated = (
+      read: (value: unknown) => string | null,
+      prefixed: unknown,
+      plain: unknown,
+    ): string | null => read(prefixed) ?? read(plain);
+    account.providerId = stated(safeProviderId, entry.facts.diag_provider, entry.facts.provider)
+      ?? stated(safeProviderId, entry.facts.diag_providerId, entry.facts.providerId)
+      ?? account.providerId;
+    account.requestedModel = stated(safeModel, entry.facts.diag_requestedModel, entry.facts.requestedModel)
+      ?? account.requestedModel;
+    account.servedModel = stated(safeModel, entry.facts.diag_servedModel, entry.facts.servedModel)
+      ?? account.servedModel;
+    // A response id belongs to the dispatch that stated it. `diag_responseId`
+    // wins over an unprefixed `responseId` on the same row. A `worker.dispatched`
+    // row with no safe id reports null: the previous dispatch's id is not
+    // carried forward. A later row of this dispatch overwrites only when it
+    // states a safe id, so a credential-shaped value is not copied and does
+    // not erase one already stated for this dispatch.
+    const responseId = stated(safeResponseId, entry.facts.diag_responseId, entry.facts.responseId);
+    if (entry.type === 'worker.dispatched') account.providerResponseId = responseId;
+    else if (responseId !== null) account.providerResponseId = responseId;
 
     switch (entry.type) {
       case 'worker.dispatched':
@@ -840,6 +871,7 @@ export function projectJuliusSlotViews(
     if (account === undefined) {
       return {
         role, workerId: null, providerId: null, requestedModel: null, servedModel: null,
+        providerResponseId: null,
         state: 'NEVER_DISPATCHED', dispatches: 0, lastSequence: null,
         knownUsdMicros: 0, unknownCostComponents: 0, costComplete: true,
         lastFailureClass: null, findingsRaised: 0,
@@ -851,6 +883,7 @@ export function projectJuliusSlotViews(
       providerId: account.providerId,
       requestedModel: account.requestedModel,
       servedModel: account.servedModel,
+      providerResponseId: account.providerResponseId,
       state: account.dispatches === 0 ? 'NEVER_DISPATCHED'
         : account.open ? 'ACTIVE' : account.failed ? 'FAILED' : 'IDLE',
       dispatches: account.dispatches,
