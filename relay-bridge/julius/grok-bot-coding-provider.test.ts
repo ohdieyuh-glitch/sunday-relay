@@ -852,6 +852,13 @@ describe('F15/E8: transportMode is stamped by the transport module, not claimed;
     const c = completed((await run({ t })).outcome);
     expect(c.observation.diagnostics).toMatchObject({ transportMode: 'fake' });
   });
+  it('a failed ending after start is stamped fake too, for a fake that calls itself the Cursor transport', async () => {
+    const t = fakeTransport({ poll: { kind: 'poll_failed', cause: 'transient_exhausted', polls: 5 } });
+    (t.transport as { transportKind: string }).transportKind = 'cursor_cloud_agents_v1';
+    const f = failed((await run({ t })).outcome);
+    expect(f).toMatchObject({ runtimeStarted: true });
+    expect(f.diagnostics).toMatchObject({ transportMode: 'fake', outcome: 'failed' });
+  });
   it('receipt fields reach the evidence; a mismatched run id is recorded as such', async () => {
     const sha = 'e'.repeat(64);
     const c = completed((await run({ t: fakeTransport({ result: goodResult({ receipt: { runId: 'run-x', createdAt: '2026-10-30T16:00:00Z', requestId: 'req_1', responseSha256: sha } }) }) })).outcome);

@@ -528,7 +528,7 @@ export function createGrokBotCodingAgentProvider(input: {
         codingAgentProvider: GROK_BOT_CODER_PROVIDER_KIND,
         transport: transport.transportKind,
         codingAgentTransport: transport.transportKind,
-        transportMode: cursorTransportMode(transport),
+        // transportMode is not recorded here: it is stamped once, at the ending (started/succeeded), from the transport module.
         requestedModel: modelId,
         cursorAgentId: agentId,
         idempotencyKeySha256: createHash('sha256').update(idempotencyKey).digest('hex'),
