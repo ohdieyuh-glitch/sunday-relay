@@ -395,12 +395,24 @@ const KEY_SHAPED: readonly RegExp[] = [
   /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/gu,
   /\b\d{1,3}(?:\.\d{1,3}){3}\b/gu,
   /\+?\d(?:[ ().\/-]{0,3}\d){8,}/gu,
+  // Organization, workspace, user and key identifiers below the 32-character rule (a whole UUID is above it).
+  /\b(?:wrkspc|org|user|apikey|acct|key)_[A-Za-z0-9]{4,}/giu,
+  /\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{8,}\b/giu,
 ];
+/**
+ * Invisible format characters (zero-width space, joiners, word joiner, BOM,
+ * soft hyphen, Mongolian vowel separator) are DELETED before any matching, so
+ * a key or prompt text interleaved with them is seen whole and redacted or
+ * omitted, never kept as `?`-separated letters.
+ */
+const INVISIBLE = /[\u00ad\u180e\u200b-\u200d\u2060\ufeff]/gu;
+const visible = (text: string): string => text.replace(INVISIBLE, '');
 /** What must not survive redaction; when it does, the excerpt is omitted rather than trusted. */
 const UNSAFE_RESIDUE: readonly RegExp[] = [
   /@/u, /\b(?:sk|xai|rk|pk)-/iu, /\bgh[pousr]_/u, /github_pat_/iu, /\bAKIA/u, /-----BEGIN/u, /:\/\//u,
   /\b(?:bearer|password|passwd|secret|token|credential|api[_-]?key|x-api-key|authorization)\b\s*[:=]/iu,
   /\d(?:[^A-Za-z0-9]{0,3}\d){8,}/u,
+  /\b(?:wrkspc|org|user|apikey|acct)_/iu,
 ];
 /**
  * Only this head of a message is ever sanitized or emitted, ending at the last
@@ -519,16 +531,19 @@ function messageHead(message: string): string {
   return message.length <= SANITIZE_WINDOW ? message : message.slice(0, SANITIZE_WINDOW).replace(/\S*$/u, '');
 }
 
-export function sanitizeProviderExcerpt(message: string): string {
+export function sanitizeProviderExcerpt(message: string, secrets: readonly string[] = []): string {
+  let head = messageHead(visible(message));
+  // The exact secrets this request carried are redacted whatever their shape.
+  for (const secret of secrets) if (secret.length >= 8) head = head.split(secret).join(` ${REDACTED} `);
   // eslint-disable-next-line no-control-regex
-  let text = messageHead(message).replace(/[\s\u0000-\u001f\u007f-\u009f\u2028\u2029]+/gu, ' ').replace(/[^\x20-\x7e]/gu, '?');
+  let text = head.replace(/[\s\u0000-\u001f\u007f-\u009f\u2028\u2029]+/gu, ' ').replace(/[^\x20-\x7e]/gu, '?');
   for (const shape of KEY_SHAPED) text = text.replace(shape, REDACTED);
   text = text.replace(LONG_TOKEN, REDACTED).replace(/ {2,}/gu, ' ').trim();
   return text.length <= PROVIDER_MESSAGE_EXCERPT_MAX ? text : `${text.slice(0, PROVIDER_MESSAGE_EXCERPT_MAX - 3)}...`;
 }
 
 function overlapText(text: string): string {
-  return text.toLowerCase().replace(/[^a-z0-9]+/gu, ' ').trim();
+  return visible(text).toLowerCase().replace(/[^a-z0-9]+/gu, ' ').trim();
 }
 
 /**
@@ -556,13 +571,15 @@ export function messageQuotesPrompt(message: string, prompts: readonly string[])
 }
 
 /** The excerpt, or why there is none. */
-export function providerMessageExcerpt(message: string, prompts: readonly string[]): {
+export function providerMessageExcerpt(message: string, prompts: readonly string[], secrets: readonly string[] = []): {
   readonly excerpt: string | null; readonly excerptOmitted: 'prompt_overlap' | 'unsafe_residue' | null;
 } {
-  if (messageQuotesPrompt(messageHead(message), prompts)) return { excerpt: null, excerptOmitted: 'prompt_overlap' };
-  const excerpt = sanitizeProviderExcerpt(message);
+  if (messageQuotesPrompt(messageHead(visible(message)), prompts)) return { excerpt: null, excerptOmitted: 'prompt_overlap' };
+  const excerpt = sanitizeProviderExcerpt(message, secrets);
   const scrubbed = excerpt.split(REDACTED).join(' ');
   if (UNSAFE_RESIDUE.some((shape) => shape.test(scrubbed))) return { excerpt: null, excerptOmitted: 'unsafe_residue' };
+  // A fragment of a secret (16+ normalized characters) left after redaction omits the excerpt.
+  if (messageQuotesPrompt(scrubbed, secrets)) return { excerpt: null, excerptOmitted: 'unsafe_residue' };
   return { excerpt, excerptOmitted: null };
 }
 
@@ -577,7 +594,7 @@ async function sha256Hex(text: string): Promise<{ readonly bytes: number; readon
  * message still yields its full length and digest. Null when it is not JSON
  * with an `error` object. Never throws; never returns raw text.
  */
-export async function providerMessageEvidence(raw: string | null, prompts: readonly string[] = []): Promise<AnthropicProviderMessageEvidence | null> {
+export async function providerMessageEvidence(raw: string | null, prompts: readonly string[] = [], secrets: readonly string[] = []): Promise<AnthropicProviderMessageEvidence | null> {
   if (raw === null || raw.length > MAX_ERROR_EVIDENCE_CHARS) return null;
   let error: { message?: unknown; details?: { error_code?: unknown } } | null;
   try {
@@ -597,7 +614,7 @@ export async function providerMessageEvidence(raw: string | null, prompts: reado
       messageClass: providerMessageClass(message),
       errorCode,
       errorCodeUnusable: rawCode !== undefined && rawCode !== null && errorCode === null,
-      ...providerMessageExcerpt(message, prompts),
+      ...providerMessageExcerpt(message, prompts, secrets),
       messageBytes: bytes,
       messageSha256: hex,
     };
@@ -708,7 +725,7 @@ export async function runAnthropicArchitect(
           requestId,
           requestIdUnavailableReason: reason,
           rateLimit: anthropicRateLimitEvidence(response.headers),
-          providerMessage: await providerMessageEvidence(errorText, [request.instructions, request.input]),
+          providerMessage: await providerMessageEvidence(errorText, [request.instructions, request.input], [request.apiKey]),
         },
       };
     }

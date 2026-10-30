@@ -630,3 +630,86 @@ describe('a correction re-ask is started only if it can finish inside the coordi
     expect(source).toContain('(signal,deadlineAtMs)=>this.router.dispatch(worker,{taskId:request.claim.taskId,contextId:request.claim.contextId,taskType:request.taskType,signal,deadlineAtMs,');
   });
 });
+
+describe('an org spend-limit 400 at the architect adapter: its own category, fail-closed, one provider, one call', () => {
+  const RATE = { 'request-id': 'req_011CFAKEREQUEST0002' };
+  const SPEND = 'You have reached your specified API usage limits. You will regain access on 2026-11-01 at 00:00 UTC.';
+  const CREDIT = 'Your credit balance is too low to access the Anthropic API.';
+  const body = (message: string): string => JSON.stringify({ type: 'error', error: { type: 'invalid_request_error', message } });
+
+  async function dispatchWith(status: number, raw: string) {
+    const urls: string[] = [];
+    const lines: string[] = [];
+    // ANY OTHER TRANSPORT IS A FALLBACK: the global fetch must never be reached.
+    const globalFetch = vi.fn(async () => { throw new Error('fallback transport reached'); });
+    vi.stubGlobal('fetch', globalFetch);
+    try {
+      const injected = (async (url: RequestInfo | URL) => {
+        urls.push(String(url));
+        return new Response(raw, { status, headers: RATE });
+      }) as unknown as typeof fetch;
+      const resolution = resolve(J1_ENV, {
+        shell: SHELL, verifiedOrganizations: ORGS, report: (line) => lines.push(line),
+        runners: { architect: createJ1ArchitectRunner({ fetch: injected }) },
+      });
+      const architect = resolution.entries.find((entry) => entry.worker.role === 'PROMPT_ARCHITECT')!;
+      const error = await architect.adapter.dispatch(DISPATCH).then(() => null, (thrown: unknown) => thrown);
+      expect(error, 'fails closed: the dispatch throws, never resolves').toBeInstanceOf(JuliusDispatchError);
+      expect(globalFetch, 'no fallback transport').not.toHaveBeenCalled();
+      return { error: error as JuliusDispatchError, urls, lines };
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  }
+
+  it('MUTATION: spend limit is non-retryable WORKER_EXECUTION_FAILURE / provider_error, one call to the pinned Anthropic URL', async () => {
+    const { error, urls, lines } = await dispatchWith(400, body(SPEND));
+    expect(urls).toEqual(['https://api.anthropic.com/v1/messages']);
+    expect(error).toMatchObject({ code: 'WORKER_EXECUTION_FAILURE', retryable: false, failureClass: 'provider_error' });
+    expect(juliusHandedOutcomeUnknown(error, true), 'non-retryable: never re-sent, before or after the handoff').toBeNull();
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain(' http=400 type=invalid_request_error ');
+    expect(lines[0], 'the operator-visible blocker signal').toContain(' message_class=spend_limit ');
+    expect(lines[0]).toContain(` excerpt=kept message="${SPEND}"`);
+  });
+
+  it('MUTATION: spend limit is distinct from credit (AUTH_CONFIGURATION / insufficient_credit) and auth (AUTH_CONFIGURATION / authentication_failed)', async () => {
+    const spend = await dispatchWith(400, body(SPEND));
+    const credit = await dispatchWith(400, body(CREDIT));
+    const auth = await dispatchWith(401, JSON.stringify({ type: 'error', error: { type: 'authentication_error', message: 'invalid x-api-key' } }));
+    expect(credit.error).toMatchObject({ code: 'AUTH_CONFIGURATION', retryable: false, failureClass: 'insufficient_credit' });
+    expect(auth.error).toMatchObject({ code: 'AUTH_CONFIGURATION', retryable: false, failureClass: 'authentication_failed' });
+    expect(new Set([spend.error.failureClass, credit.error.failureClass, auth.error.failureClass]).size).toBe(3);
+    expect(spend.error.code).not.toBe(credit.error.code);
+    expect(credit.lines[0]).toContain(' message_class=credit_too_low ');
+    expect(auth.lines[0]).toContain(' http=401 type=authentication_error ');
+    for (const run of [spend, credit, auth]) expect(run.urls).toHaveLength(1);
+  });
+
+  it('the spend-limit line never carries a key, the org id, or the dispatched prompt', async () => {
+    const hostile = `${SPEND} org ${ORGS.architect} key ${ARCHITECT_KEY} workspace wrkspc_01TFFXWF62v6c3KaYy8gVTEe`;
+    const { error, lines } = await dispatchWith(400, body(hostile));
+    expect(error).toMatchObject({ code: 'WORKER_EXECUTION_FAILURE', retryable: false, failureClass: 'provider_error' });
+    const everything = JSON.stringify({ lines, message: error.message, safe: error.safeMessage, row: safeReviewDiagnostics(error.diagnostics) });
+    for (const secret of [ORGS.architect, 'aff8a85a', ARCHITECT_KEY, 'FAKETESTNOTREAL', 'wrkspc_01TFFXWF62v6c3KaYy8gVTEe']) {
+      expect(everything, `${secret} never travels`).not.toContain(secret);
+    }
+    expect(lines[0]).toContain(' message_class=spend_limit ');
+  });
+
+  it('MUTATION: the real architect key, shorter than every shape rule, is redacted by value and the excerpt is kept', async () => {
+    expect(ARCHITECT_KEY.length).toBeLessThan(32);
+    const { lines } = await dispatchWith(400, body(`invalid key ${ARCHITECT_KEY}`));
+    expect(lines[0]!.endsWith(' excerpt=kept message="invalid key [redacted]"')).toBe(true);
+  });
+
+  it('UNCHANGED BY THIS COMMIT: the paid-slot log classifier does not yet read message_class=spend_limit as PROVIDER_BLOCKED', async () => {
+    // A tripwire, not an endorsement: promoting a spend limit to PROVIDER_BLOCKED
+    // is a classification change outside this commit's scope and needs a ruling.
+    const { classifyProviderFailure } = await import('../../scripts/julius-paid-slot.mjs');
+    const { lines } = await dispatchWith(400, body(SPEND));
+    expect(classifyProviderFailure(lines[0]!)).toBeNull();
+    const credit = await dispatchWith(400, body(CREDIT));
+    expect(classifyProviderFailure(credit.lines[0]!)).toBe('CREDIT_BALANCE');
+  });
+});
