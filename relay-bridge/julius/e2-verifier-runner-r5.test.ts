@@ -28,10 +28,12 @@ const c = spawn(process.execPath, ['-e', 'setTimeout(()=>{},20000)'], { stdio: [
 afterAll(() => { rmSync(dir, { recursive: true, force: true }); });
 
 describe('PILOT N-3: the program allowlist', () => {
-  it('allows node with a script file, npx vitest/tsc, tsc, npm test and git with fixed subcommands', () => {
-    for (const a of [[NODE, join(dir, 'ok.mjs')], ['node', 'ok.mjs'], ['npx', 'vitest', 'run'], ['npx', 'tsc', '--noEmit'], ['tsc', '-p', '.'], ['npm', 'test'], ['git', 'diff', '--stat'], ['git', 'merge-base', '--is-ancestor', 'a', 'b']]) {
+  it('allows node with a script file, npx vitest run, npx tsc/tsc --noEmit and npm test', () => {
+    for (const a of [[NODE, join(dir, 'ok.mjs')], ['node', 'ok.mjs'], ['npx', 'vitest', 'run'], ['npx', 'tsc', '--noEmit'], ['tsc', '--noEmit'], ['npm', 'test']]) {
       expect(isVerifierCommandAllowed(a, dir), a.join(' ')).toBe(true);
     }
+    /* 5366ad30 R3-4 / Skywalker M1: git verifiers and `tsc -p .` (no --noEmit) are no longer verifiers. */
+    for (const a of [['tsc', '-p', '.'], ['git', 'diff', '--stat'], ['git', 'merge-base', '--is-ancestor', 'a', 'b']]) expect(isVerifierCommandAllowed(a, dir), a.join(' ')).toBe(false);
   });
   it('refuses inline code, wrappers, shells under any spelling, git aliases and trivially-true commands', () => {
     for (const a of [[NODE, '-e', '0'], ['node', '--eval', '0'], ['node', '-p', '1'], ['node', '--input-type=module'], ['node'], ['python', '-c', 'x'], ['python3', 'x.py'], ['perl', '-e', '1'],

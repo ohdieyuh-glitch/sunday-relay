@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { readEvidenceLines } from './cursor-run-stream-evidence';
-import { e2Gate, externalAnchor, recordGitDiff, recordVerifierReexec, spawnVerifierRunner } from './e2-evidence-gate';
+import { e2Gate, externalAnchor, pinVerifierSpec, type E2VerifierSpec, recordGitDiff, recordVerifierReexec, spawnVerifierRunner } from './e2-evidence-gate';
 
 /* PILOT 43b93a4e M-8 (git diff isolation) and Skywalker 43b93a4e N3 rule (b) (edit paths vs diff paths), failing-first. */
 const KEY = 'SENTINEL-KEY-0123456789-never-print';
@@ -27,6 +27,7 @@ function makeRepo(name: string): { repo: string; base: string; head: string } {
   git(repo, 'init', '-q');
   writeFileSync(join(repo, 'a.txt'), Array.from({ length: 40 }, (_, i) => `line ${i}\n`).join(''));
   writeFileSync(join(repo, 'b.txt'), 'b\n');
+  writeFileSync(join(repo, 'ok.cjs'), 'process.exit(0)\n'); // R3-2: the verifier script is pinned at base
   git(repo, 'add', '.'); git(repo, '-c', 'commit.gpgsign=false', 'commit', '-qm', 'a');
   const base = git(repo, 'rev-parse', 'HEAD');
   writeFileSync(join(repo, 'a.txt'), Array.from({ length: 40 }, (_, i) => (i === 5 || i === 20 ? `changed ${i}\n` : `line ${i}\n`)).join(''));
@@ -34,6 +35,7 @@ function makeRepo(name: string): { repo: string; base: string; head: string } {
   git(repo, '-c', 'commit.gpgsign=false', 'commit', '-qam', 'b');
   return { repo, base, head: git(repo, 'rev-parse', 'HEAD') };
 }
+const spec = (r: { repo: string; base: string }): E2VerifierSpec => pinVerifierSpec({ testCommand: 'node ok.cjs', workspace: r.repo, base: r.base }) as E2VerifierSpec;
 beforeAll(() => { root = realpathSync(mkdtempSync(join(tmpdir(), 'e2r6-'))); writeFileSync(join(root, 'ok.cjs'), 'process.exit(0)\n'); });
 afterAll(() => { rmSync(root, { recursive: true, force: true }); });
 
@@ -59,8 +61,9 @@ describe('PILOT 43b93a4e M-8: the diff bytes do not depend on repository config 
     const d = await recordGitDiff({ ...r, cwd: r.repo, runner });
     expect(d?.isolated).toBe(false);
     const s = await liveCapture('attrs.jsonl', stream({ name: 'edit_file', args: { path: 'a.txt' } }, { name: 'edit_file', args: { path: 'b.txt' } }));
-    const reexec = await recordVerifierReexec({ commands: [[process.execPath, join(root, 'ok.cjs')]], cwd: r.repo, runner });
-    expect(e2Gate({ streamLines: s.lines, anchor: s.anchor, reexec, diff: d, binding: { runId: RUN, base: r.base, head: r.head, workspace: r.repo }, modelId: MODEL })).toEqual({ ok: false, reasons: ['e2_diff_not_isolated'] });
+    const verifierSpec = spec(r);
+    const reexec = await recordVerifierReexec({ spec: verifierSpec, cwd: r.repo, runner });
+    expect(e2Gate({ streamLines: s.lines, anchor: s.anchor, reexec, verifierSpec, diff: d, binding: { runId: RUN, base: r.base, head: r.head, workspace: r.repo }, modelId: MODEL })).toEqual({ ok: false, reasons: ['e2_diff_not_isolated'] });
     const clean = makeRepo('attrs-clean');
     expect((await recordGitDiff({ ...clean, cwd: clean.repo, runner }))?.isolated).toBe(true);
   });
@@ -88,7 +91,8 @@ describe('Skywalker N3 rule (b): every edit-call path is in the diff', () => {
   it('passes when the edited paths are in the diff (relative, ./ or absolute under the workspace)', async () => {
     const r = makeRepo('rb-ok');
     const runner = spawnVerifierRunner();
-    const p = { reexec: await recordVerifierReexec({ commands: [[process.execPath, join(root, 'ok.cjs')]], cwd: r.repo, runner }), diff: await recordGitDiff({ ...r, cwd: r.repo, runner }), binding: { runId: RUN, base: r.base, head: r.head, workspace: r.repo }, modelId: MODEL };
+    const verifierSpec = spec(r);
+    const p = { verifierSpec, reexec: await recordVerifierReexec({ spec: verifierSpec, cwd: r.repo, runner }), diff: await recordGitDiff({ ...r, cwd: r.repo, runner }), binding: { runId: RUN, base: r.base, head: r.head, workspace: r.repo }, modelId: MODEL };
     expect(p.diff?.paths).toEqual(['a.txt', 'b.txt']);
     const s = await liveCapture('rb-ok.jsonl', stream({ name: 'edit_file', args: { path: 'a.txt' } }, { name: 'write', args: { file_path: './b.txt' } }, { name: 'apply_patch', args: { target_file: join(r.repo, 'a.txt') } }));
     expect(e2Gate({ streamLines: s.lines, anchor: s.anchor, ...p })).toEqual({ ok: true });
@@ -96,7 +100,8 @@ describe('Skywalker N3 rule (b): every edit-call path is in the diff', () => {
   it('an edit to a path the diff does not contain, or an edit call with no recognisable path, is refused', async () => {
     const r = makeRepo('rb-bad');
     const runner = spawnVerifierRunner();
-    const p = { reexec: await recordVerifierReexec({ commands: [[process.execPath, join(root, 'ok.cjs')]], cwd: r.repo, runner }), diff: await recordGitDiff({ ...r, cwd: r.repo, runner }), binding: { runId: RUN, base: r.base, head: r.head, workspace: r.repo }, modelId: MODEL };
+    const verifierSpec = spec(r);
+    const p = { verifierSpec, reexec: await recordVerifierReexec({ spec: verifierSpec, cwd: r.repo, runner }), diff: await recordGitDiff({ ...r, cwd: r.repo, runner }), binding: { runId: RUN, base: r.base, head: r.head, workspace: r.repo }, modelId: MODEL };
     const out = await liveCapture('rb-out.jsonl', stream({ name: 'edit_file', args: { path: 'a.txt' } }, { name: 'edit_file', args: { path: 'elsewhere.txt' } }));
     expect(e2Gate({ streamLines: out.lines, anchor: out.anchor, ...p })).toEqual({ ok: false, reasons: ['e2_edit_path_not_in_diff'] });
     const unknown = await liveCapture('rb-unk.jsonl', stream({ name: 'edit_file', args: { path: 'a.txt' } }, { name: 'edit_file', args: { files: ['b.txt'] } }));

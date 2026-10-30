@@ -1,7 +1,7 @@
-import { execFile, spawn } from 'node:child_process';
+import { execFile, execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { realpathSync, statSync } from 'node:fs';
-import { basename, dirname, isAbsolute, join } from 'node:path';
+import { lstatSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { basename, dirname, isAbsolute, join, normalize as normalizePath } from 'node:path';
 
 import { E2_STREAM_LABEL_LIVE, verifyEvidenceChain } from './cursor-run-stream-evidence';
 import { familyFromModelId, isRouterModelId } from './grok-bot-coding-provider';
@@ -56,9 +56,6 @@ export function isCanonicalDir(cwd: string): boolean {
  * per-call env; node's own directory comes first so npx/npm/tsc resolve beside the running node.
  */
 export const E2_VERIFIER_PATH = `${dirname(process.execPath)}:/usr/local/bin:/usr/bin:/bin`;
-/** Git subcommands a verifier (or this module's diff) may run; no -C, --exec-path, --git-dir or alias config. */
-const GIT_SUBCOMMANDS = new Set(['diff', 'merge-base', 'rev-parse', 'status', 'log', 'show', 'ls-files']);
-const isGitPin = (v: string): boolean => GIT_PIN_VALUES.has(v);
 const progName = (p: string): string => basename(p.replace(/\\/gu, '/')).toLowerCase();
 /** Resolves a program name to an absolute binary on the fixed PATH (node is process.execPath), or null. */
 function resolveProgram(program: string): string | null {
@@ -70,42 +67,76 @@ function resolveProgram(program: string): string | null {
   }
   return null;
 }
+
 /**
- * PILOT 43b93a4e N-3 / Skywalker N3: the closed program allowlist. node with a script FILE (no -e/-p/--eval/flags first),
- * npx vitest|tsc, tsc, npm test (no --script-shell), git with a fixed subcommand and only this module's -c pins.
- * Everything else, including wrappers (timeout, nice, setsid), interpreters with inline code, any shell under any spelling
- * (bash.exe, wsl.exe, powershell.exe) and trivially-true commands (true, :, exit 0), is refused. An absolute argv0 must be
- * the binary the fixed PATH resolves to.
+ * PILOT 5366ad30 R3-2 / Skywalker 5366ad30 M1, M2: a workspace-relative file a verifier may name. Absolute paths outside
+ * the workspace, `..` escapes, /proc and symlinks that resolve outside the workspace are refused.
+ */
+function workspaceFile(p: string, workspace: string): string | null {
+  if (typeof p !== 'string' || p === '' || p.startsWith('-') || p.includes('\u0000') || p.includes('\\')) return null;
+  const abs = normalizePath(isAbsolute(p) ? p : join(workspace, p));
+  if (abs.startsWith('/proc/') || abs === '/proc' || !abs.startsWith(`${workspace}/`)) return null;
+  return abs.slice(workspace.length + 1);
+}
+/** Exact package.json `scripts.test` bodies `npm test` / `npm run test` may run (anything else is refused). */
+export const E2_NPM_TEST_BODIES: ReadonlySet<string> = Object.freeze(new Set(['vitest run', 'vitest --run', 'node --test', 'tsc --noEmit', 'tsc -p tsconfig.json --noEmit']));
+/** Config files whose content shapes what npm/npx/tsc run; pinned to base whenever one of them is used. */
+const TOOL_CONFIGS = Object.freeze(['package.json', 'package-lock.json', 'tsconfig.json', 'vitest.config.ts', 'vitest.config.mts', 'vitest.config.js', 'vitest.config.mjs', 'vitest.config.cjs', 'vite.config.ts', 'vite.config.mts', 'vite.config.js', 'vite.config.mjs', '.npmrc']);
+export type E2VerifierShapeRefusal = 'program_not_allowed' | 'shape_not_allowed' | 'path_outside_workspace';
+/**
+ * The closed verifier shapes, with the workspace files each one reads (to be pinned to base):
+ * `node <file>`, `node --test <file>...`, `npm test`, `npm run test`, `npx vitest run [<file>...]`,
+ * `npx tsc --noEmit [-p <file>]`, `tsc --noEmit [-p <file>]`. No --version/--help/--prefix/--config, no git (R3-4).
+ */
+function verifierShape(argv: readonly string[], workspace: string): { readonly files: readonly string[]; readonly configs: boolean } | E2VerifierShapeRefusal {
+  const name = progName(argv[0] as string);
+  const args = argv.slice(1);
+  const files = (xs: readonly string[]): readonly string[] | null => { const out = xs.map((x) => workspaceFile(x, workspace)); return out.every((x) => x !== null) ? out as string[] : null; };
+  const tscArgs = (xs: readonly string[]): ReturnType<typeof verifierShape> => {
+    if (xs.length === 1 && xs[0] === '--noEmit') return { files: [], configs: true };
+    if (xs.length === 3 && xs[0] === '--noEmit' && xs[1] === '-p') { const f = files([xs[2] as string]); return f === null ? 'path_outside_workspace' : { files: f, configs: true }; }
+    return 'shape_not_allowed';
+  };
+  switch (name) {
+    case 'node': {
+      /* `node <file> [args to the script...]` (the script is pinned; its own arguments are its business) or `node --test <file>...`. */
+      const list = args[0] === '--test' ? args.slice(1) : args.slice(0, 1);
+      if (list.length === 0 || list.some((x) => x.startsWith('-'))) return 'shape_not_allowed';
+      const f = files(list); return f === null ? 'path_outside_workspace' : { files: f, configs: false };
+    }
+    case 'npm': return (args.length === 1 && args[0] === 'test') || (args.length === 2 && args[0] === 'run' && args[1] === 'test') ? { files: [], configs: true } : 'shape_not_allowed';
+    case 'npx': {
+      if (args[0] === 'tsc') return tscArgs(args.slice(1));
+      if (args[0] !== 'vitest' || args[1] !== 'run' || args.slice(2).some((x) => x.startsWith('-'))) return 'shape_not_allowed';
+      const f = files(args.slice(2)); return f === null ? 'path_outside_workspace' : { files: f, configs: true };
+    }
+    case 'tsc': return tscArgs(args);
+    default: return 'program_not_allowed';
+  }
+}
+/** Module-built git argv (recordGitDiff and its helpers), keyed by JSON; verifiers may not run git at all (R3-4). */
+const MODULE_GIT = new Set<string>();
+const moduleGit = (argv: readonly string[]): readonly string[] => { MODULE_GIT.add(JSON.stringify(argv)); return Object.freeze([...argv]); };
+const isModuleGit = (argv: readonly string[]): boolean => MODULE_GIT.has(JSON.stringify(argv));
+/**
+ * PILOT 43b93a4e N-3, 5366ad30 R3-2/R3-4 and Skywalker 5366ad30 M1/M2: the closed verifier allowlist (see verifierShape).
+ * Every named file must exist, be a regular file, and realpath inside the cwd. An absolute argv0 must be the binary the
+ * fixed PATH resolves to. Git, wrappers, shells, inline code and no-op forms are refused.
  */
 export function isVerifierCommandAllowed(argv: readonly string[], cwd: string): boolean {
-  if (!validArgv(argv)) return false;
+  if (!validArgv(argv) || !isCanonicalDir(cwd)) return false;
   const program = argv[0] as string;
   const name = progName(program);
-  if (!['node', 'npx', 'npm', 'tsc', 'git'].includes(name) || program !== program.trim()) return false;
+  if (!['node', 'npx', 'npm', 'tsc'].includes(name) || program !== program.trim()) return false;
   if (program.includes('/') || program.includes('\\')) {
     const resolved = resolveProgram(name);
     let real: string | null = null;
     try { real = realpathSync(program); } catch { real = null; }
     if (resolved === null || real !== resolved) return false;
   }
-  const args = argv.slice(1);
-  if (args.some((x) => /^--?(script-shell|node-options|require|import|loader|experimental-loader|eval|print|call|package)\b/iu.test(x))) return false;
-  switch (name) {
-    case 'node': {
-      const script = args[0];
-      if (script === undefined || script.startsWith('-')) return false;
-      try { return statSync(isAbsolute(script) ? script : join(cwd, script)).isFile(); } catch { return false; }
-    }
-    case 'npx': return args[0] === 'vitest' || args[0] === 'tsc';
-    case 'npm': return args[0] === 'test';
-    case 'tsc': return true;
-    case 'git': {
-      let i = 0;
-      while (args[i] === '-c' && typeof args[i + 1] === 'string' && isGitPin(args[i + 1] as string)) i += 2;
-      return GIT_SUBCOMMANDS.has(args[i] ?? '') && !args.slice(i).some((x) => x === '-C' || x.startsWith('--exec-path') || x.startsWith('--git-dir') || x.startsWith('--work-tree') || x.startsWith('--output'));
-    }
-    default: return false;
-  }
+  const shape = verifierShape(argv, cwd);
+  if (typeof shape === 'string') return false;
+  return shape.files.every((f) => { try { const r = realpathSync(join(cwd, f)); return r.startsWith(`${cwd}/`) && statSync(r).isFile(); } catch { return false; } });
 }
 
 /** What the spawn runner reports when it gave up: a refused argv, the hard deadline, or an output overrun. */
@@ -135,7 +166,7 @@ export function spawnVerifierRunner(options: {
   const noPath = (e: Readonly<Record<string, string>> | undefined): Record<string, string> =>
     Object.fromEntries(Object.entries(e ?? {}).filter(([k]) => k.toUpperCase() !== 'PATH'));
   const runner: VerifierRunner = (argv, cwd, extraEnv) => new Promise((resolve) => {
-    if (!isCanonicalDir(cwd) || !isVerifierCommandAllowed(argv, cwd)) { resolve({ ...refused, cause: 'refused' }); return; }
+    if (!validArgv(argv) || !isCanonicalDir(cwd) || !(isVerifierCommandAllowed(argv, cwd) || isModuleGit(argv))) { resolve({ ...refused, cause: 'refused' }); return; }
     const bin = resolveProgram(argv[0] as string);
     if (bin === null) { resolve({ ...refused, cause: 'refused' }); return; }
     const env: Record<string, string> = { LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...noPath(options.env), ...noPath(extraEnv), PATH: E2_VERIFIER_PATH };
@@ -195,7 +226,7 @@ export function spawnVerifierRunner(options: {
   });
   TRUSTED_RUNNERS.add(runner);
   CAPTURE.set(runner, (argv, cwd, extra) => new Promise((resolve) => {
-    if (!isCanonicalDir(cwd) || !isVerifierCommandAllowed(argv, cwd) || progName(argv[0] as string) !== 'git') { resolve(null); return; }
+    if (!isCanonicalDir(cwd) || !isModuleGit(argv)) { resolve(null); return; }
     const bin = resolveProgram('git');
     if (bin === null) { resolve(null); return; }
     execFile(bin, argv.slice(1), { cwd, shell: false, encoding: 'buffer', maxBuffer: 64 * 1024 * 1024, timeout: timeoutMs, killSignal: 'SIGKILL',
@@ -214,7 +245,12 @@ export interface E2CommandRecord {
   readonly startedAt: string;
   readonly endedAt: string;
 }
-export interface E2ReexecEvidence { readonly label: typeof E2_JULIUS_LABEL | typeof E2_FAKE_LABEL; readonly cwd: string; readonly commands: readonly E2CommandRecord[] }
+export interface E2ReexecEvidence {
+  readonly label: typeof E2_JULIUS_LABEL | typeof E2_FAKE_LABEL; readonly cwd: string; readonly commands: readonly E2CommandRecord[];
+  /** The mission spec the commands came from (null: the legacy free-argv form, refused by the gate). */
+  readonly spec: E2VerifierSpec | null;
+  readonly refusal: E2ReexecRefusal | null;
+}
 export interface E2DiffEvidence {
   readonly label: typeof E2_JULIUS_LABEL | typeof E2_FAKE_LABEL;
   readonly base: string;
@@ -245,26 +281,128 @@ const run = async (runner: VerifierRunner, argv: readonly string[], cwd: string,
   try { return normalize(await runner([...argv], cwd, env)); } catch { return normalize({ exitCode: null, stdout: '', stderr: '' }); }
 };
 
-/** (B) Re-runs each verifier command in order. Invalid argv, a shell program or a relative cwd is refused (null) before anything runs. */
-export async function recordVerifierReexec(input: {
+/**
+ * PILOT 5366ad30 R3-2 / Skywalker 5366ad30 M1, M2: the verifier commands come from the MISSION, not from the coder. The
+ * mission's `testCommand` (a shell string) and any explicitly listed additional checks are mapped to argv by a plain
+ * whitespace split (any shell metacharacter or quote refuses the spec), each argv must be one of the closed verifier
+ * shapes, and every file those commands read (scripts, test files, package.json and tool configs) is hashed AT BASE from
+ * the git object store. {@link recordVerifierReexec} re-hashes the workspace files and refuses to run if any differ.
+ * HONEST LIMITS: files a script imports transitively (other modules, node_modules) are NOT pinned; a coder who edits a
+ * helper the pinned test imports can still change behaviour. Pins are checked right before running (a TOCTOU window
+ * remains against a concurrent writer in the workspace).
+ */
+export interface E2MissionVerifierInput {
+  readonly testCommand: string;
+  readonly additionalChecks?: readonly string[];
+  readonly workspace: string;
+  readonly base: string;
+}
+export interface E2VerifierSpec {
+  readonly base: string;
+  readonly workspace: string;
   readonly commands: readonly (readonly string[])[];
+  /** workspace-relative path -> sha256 of its content at base, or 'absent'. */
+  readonly pins: Readonly<Record<string, string>>;
+}
+export type E2VerifierSpecRefusal =
+  | 'spec_invalid' | 'spec_shell_syntax' | 'spec_base_invalid' | 'spec_workspace_invalid'
+  | E2VerifierShapeRefusal | 'spec_file_not_at_base' | 'spec_npm_script_not_allowlisted';
+const SPECS = new WeakSet<object>();
+const SHELL_SYNTAX = /[;&|<>$`'"\\(){}[\]*?~!#=%^\r\n\t]/u;
+const gitBlob = (workspace: string, base: string, path: string): Buffer | null => {
+  const bin = resolveProgram('git');
+  if (bin === null) return null;
+  try {
+    return execFileSync(bin, ['--no-replace-objects', ...GIT_PINS, 'cat-file', 'blob', `${base}:${path}`], {
+      cwd: workspace, shell: false, stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024,
+      env: { LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...E2_GIT_ENV, GIT_NO_REPLACE_OBJECTS: '1', PATH: E2_VERIFIER_PATH },
+    });
+  } catch { return null; }
+};
+/** Builds the pinned spec, or a named refusal. Call it on the mission record, not on anything the coder wrote. */
+export function pinVerifierSpec(input: E2MissionVerifierInput): E2VerifierSpec | { readonly refused: E2VerifierSpecRefusal } {
+  const no = (refused: E2VerifierSpecRefusal) => Object.freeze({ refused });
+  if (typeof input !== 'object' || input === null || typeof input.testCommand !== 'string') return no('spec_invalid');
+  if (!SHA.test(input.base)) return no('spec_base_invalid');
+  if (!isCanonicalDir(input.workspace)) return no('spec_workspace_invalid');
+  const strings = [input.testCommand, ...(input.additionalChecks ?? [])];
+  if (!strings.every((x) => typeof x === 'string' && x.trim() !== '')) return no('spec_invalid');
+  if (strings.some((x) => SHELL_SYNTAX.test(x.trim()))) return no('spec_shell_syntax');
+  const commands = strings.map((x) => Object.freeze(x.trim().split(/ +/u)));
+  const pins: Record<string, string> = {};
+  for (const argv of commands) {
+    if ((argv[0] as string).includes('/')) return no('program_not_allowed');
+    const shape = verifierShape(argv, input.workspace);
+    if (typeof shape === 'string') return no(shape);
+    for (const f of shape.files) {
+      const blob = gitBlob(input.workspace, input.base, f);
+      if (blob === null) return no('spec_file_not_at_base');
+      pins[f] = sha256(blob);
+    }
+    if (shape.configs) for (const f of TOOL_CONFIGS) { const blob = gitBlob(input.workspace, input.base, f); pins[f] = blob === null ? 'absent' : sha256(blob); }
+    if (progName(argv[0] as string) === 'npm') {
+      const pkg = gitBlob(input.workspace, input.base, 'package.json');
+      let body: unknown = null;
+      try { body = (JSON.parse(pkg?.toString('utf8') ?? 'null') as { scripts?: Record<string, unknown> } | null)?.scripts?.test; } catch { body = null; }
+      if (typeof body !== 'string' || !E2_NPM_TEST_BODIES.has(body)) return no('spec_npm_script_not_allowlisted');
+      /* npm also runs pretest/posttest: refuse if either exists. */
+      try {
+        const sc = (JSON.parse(pkg?.toString('utf8') ?? '{}') as { scripts?: Record<string, unknown> }).scripts ?? {};
+        if ('pretest' in sc || 'posttest' in sc) return no('spec_npm_script_not_allowlisted');
+      } catch { return no('spec_npm_script_not_allowlisted'); }
+    }
+  }
+  const spec: E2VerifierSpec = Object.freeze({ base: input.base, workspace: input.workspace, commands: Object.freeze(commands), pins: Object.freeze(pins) });
+  SPECS.add(spec);
+  return spec;
+}
+const isSpec = (x: unknown): x is E2VerifierSpec => typeof x === 'object' && x !== null && SPECS.has(x);
+/** The workspace file still has its base content (a symlink, a missing file where one was pinned, or new content: false). */
+function pinHolds(workspace: string, path: string, want: string): boolean {
+  const f = join(workspace, path);
+  let st;
+  try { st = lstatSync(f); } catch (e) { return want === 'absent' && (e as { code?: string }).code === 'ENOENT'; }
+  if (want === 'absent' || !st.isFile()) return false;
+  try { return sha256(readFileSync(f)) === want; } catch { return false; }
+}
+
+/** Why a spec re-exec did not run its commands. */
+export type E2ReexecRefusal = 'pin_changed' | 'cwd_not_spec_workspace';
+/**
+ * (B) Re-runs the verifier commands in order. With `spec` (the only form the gate accepts) the commands are the spec's
+ * and every pin is re-checked first; a changed file runs nothing and records `refusal: 'pin_changed'`. The legacy
+ * `commands` form still records evidence for the runner's own tests but the gate refuses it (`e2_verifier_not_from_spec`).
+ * Invalid argv, a shell program, a non-allowlisted command or a relative cwd is refused (null) before anything runs.
+ */
+export async function recordVerifierReexec(input: {
+  readonly spec?: E2VerifierSpec;
+  readonly commands?: readonly (readonly string[])[];
   readonly cwd: string;
   readonly runner: VerifierRunner;
   readonly now?: () => number;
 }): Promise<E2ReexecEvidence | null> {
   const now = input.now ?? Date.now;
-  if (!Array.isArray(input.commands) || input.commands.length === 0 || !input.commands.every(validArgv)) return null;
-  if (input.commands.some((a) => isShellProgram(a[0] as string))) return null;
+  const spec = isSpec(input.spec) ? input.spec : null;
+  if (input.spec !== undefined && spec === null) return null;
+  const list = spec !== null ? spec.commands : input.commands;
+  if (!Array.isArray(list) || list.length === 0 || !list.every(validArgv)) return null;
+  if (list.some((a) => isShellProgram(a[0] as string))) return null;
   if (typeof input.cwd !== 'string' || !isAbsolute(input.cwd)) return null;
+  const label = TRUSTED_RUNNERS.has(input.runner) ? E2_JULIUS_LABEL : E2_FAKE_LABEL;
+  const refusedEv = (refusal: E2ReexecRefusal): E2ReexecEvidence => { const e: E2ReexecEvidence = Object.freeze({ label, cwd: input.cwd, commands: Object.freeze([]), spec, refusal }); RECORDED.add(e); return e; };
+  if (spec !== null) {
+    if (input.cwd !== spec.workspace) return refusedEv('cwd_not_spec_workspace');
+    if (!Object.entries(spec.pins).every(([f, h]) => pinHolds(spec.workspace, f, h))) return refusedEv('pin_changed');
+  }
   /* PILOT 43b93a4e N-3 / Skywalker N3: only allowlisted, non-trivial verifier programs, whatever runner is supplied. */
-  if (!input.commands.every((a) => isVerifierCommandAllowed(a, input.cwd))) return null;
+  if (!list.every((a) => isVerifierCommandAllowed(a, input.cwd))) return null;
   const commands: E2CommandRecord[] = [];
-  for (const argv of input.commands) {
+  for (const argv of list) {
     const startedAt = new Date(now()).toISOString();
     const r = await run(input.runner, argv, input.cwd);
     commands.push(Object.freeze({ argv: Object.freeze([...argv]), ...r, startedAt, endedAt: new Date(now()).toISOString() }));
   }
-  const ev: E2ReexecEvidence = Object.freeze({ label: TRUSTED_RUNNERS.has(input.runner) ? E2_JULIUS_LABEL : E2_FAKE_LABEL, cwd: input.cwd, commands: Object.freeze(commands) });
+  const ev: E2ReexecEvidence = Object.freeze({ label, cwd: input.cwd, commands: Object.freeze(commands), spec, refusal: null });
   RECORDED.add(ev);
   return ev;
 }
@@ -281,23 +419,22 @@ const GIT_PINS = Object.freeze([
 ]);
 /** M-8: the same settings as explicit flags (a flag beats config). */
 const DIFF_FLAGS = Object.freeze(['-U3', '--inter-hunk-context=0', '-O/dev/null', '--src-prefix=a/', '--dst-prefix=b/', '--diff-algorithm=myers', '--indent-heuristic']);
-const GIT_PIN_VALUES: ReadonlySet<string> = new Set(GIT_PINS.filter((_, i) => i % 2 === 1));
 /** (C) The config-pinned diff between two full commit SHAs, and whether head descends from base. Bad SHAs are refused (null). */
 export async function recordGitDiff(input: { readonly base: string; readonly head: string; readonly cwd: string; readonly runner: VerifierRunner }): Promise<E2DiffEvidence | null> {
   if (!SHA.test(input.base) || !SHA.test(input.head)) return null;
   if (typeof input.cwd !== 'string' || !isAbsolute(input.cwd)) return null;
   const range = `${input.base}..${input.head}`;
-  const argv = Object.freeze(['git', ...GIT_PINS, 'diff', '--no-ext-diff', '--no-textconv', '--binary', '--no-renames', '--no-color', '--full-index', ...DIFF_FLAGS, range]);
+  const argv = moduleGit(['git', ...GIT_PINS, 'diff', '--no-ext-diff', '--no-textconv', '--binary', '--no-renames', '--no-color', '--full-index', ...DIFF_FLAGS, range]);
   const r = await run(input.runner, argv, input.cwd, E2_GIT_ENV);
-  const anc = await run(input.runner, ['git', 'merge-base', '--is-ancestor', input.base, input.head], input.cwd, E2_GIT_ENV);
+  const anc = await run(input.runner, moduleGit(['git', ...GIT_PINS, 'merge-base', '--is-ancestor', input.base, input.head]), input.cwd, E2_GIT_ENV);
   /* Rule (b) needs the changed paths; M-8 needs to know whether info/attributes (which no config can switch off) is empty. */
   const capture = CAPTURE.get(input.runner);
   let paths: readonly string[] | null = null;
   let isolated = false;
   if (capture !== undefined) {
-    const names = await capture(['git', ...GIT_PINS, 'diff', '--no-ext-diff', '--no-renames', '--name-only', '-z', range], input.cwd, E2_GIT_ENV);
+    const names = await capture(moduleGit(['git', ...GIT_PINS, 'diff', '--no-ext-diff', '--no-renames', '--name-only', '-z', range]), input.cwd, E2_GIT_ENV);
     if (names !== null) paths = Object.freeze(names.toString('utf8').split('\u0000').filter((x) => x !== ''));
-    const attr = await capture(['git', 'rev-parse', '--git-path', 'info/attributes'], input.cwd, E2_GIT_ENV);
+    const attr = await capture(moduleGit(['git', ...GIT_PINS, 'rev-parse', '--git-path', 'info/attributes']), input.cwd, E2_GIT_ENV);
     if (attr !== null) {
       const f = attr.toString('utf8').replace(/\n$/u, '');
       try { isolated = statSync(isAbsolute(f) ? f : join(input.cwd, f)).size === 0; } catch (e) { isolated = (e as { code?: string }).code === 'ENOENT'; }
@@ -320,7 +457,7 @@ export const E2_GATE_REASONS = Object.freeze([
   'e2_model_absent', 'e2_model_router', 'e2_model_claude', 'e2_model_unrecognised',
   'e2_final_record_mismatch', 'e2_no_edit_calls', 'e2_diff_empty', 'e2_stream_mid_run_start', 'e2_model_unbound',
   'e2_diff_not_isolated', 'e2_edit_path_not_in_diff', 'e2_edit_path_unknown',
-  'e2_anchor_not_external',
+  'e2_anchor_not_external', 'e2_verifier_spec_absent', 'e2_verifier_not_from_spec', 'e2_verifier_pin_changed',
 ] as const);
 export type E2GateReason = (typeof E2_GATE_REASONS)[number];
 
@@ -445,12 +582,14 @@ export function e2Gate(input: {
   readonly streamLines: readonly string[] | null | undefined;
   readonly anchor: ExternalAnchor | null | undefined;
   readonly reexec: E2ReexecEvidence | null | undefined;
+  /** R3-2 / M1: the pinned mission spec (from {@link pinVerifierSpec}); the re-exec must have run exactly this. */
+  readonly verifierSpec: E2VerifierSpec | { readonly refused: E2VerifierSpecRefusal } | null | undefined;
   readonly diff: E2DiffEvidence | null | undefined;
   readonly modelId: string | null | undefined;
   readonly binding: E2Binding | null | undefined;
 }): { readonly ok: true } | { readonly ok: false; readonly reasons: readonly E2GateReason[] } {
   const reasons: E2GateReason[] = [];
-  const { streamLines, anchor, reexec, diff, modelId, binding } = input;
+  const { streamLines, anchor, reexec, diff, modelId, binding, verifierSpec } = input;
   const bound = binding !== null && binding !== undefined && typeof binding === 'object'
     && typeof binding.runId === 'string' && binding.runId !== '' && SHA.test(binding.base) && SHA.test(binding.head) && isCanonicalDir(binding.workspace);
   let header: Record<string, unknown> | null = null;
@@ -485,7 +624,10 @@ export function e2Gate(input: {
   const realReexec = reexec !== null && reexec !== undefined && RECORDED.has(reexec);
   if (reexec === null || reexec === undefined) reasons.push('e2_reexec_absent');
   else if (!realReexec) reasons.push('e2_reexec_forged');
-  else if (reexec.commands.length === 0) reasons.push('e2_reexec_absent');
+  else if (!isSpec(verifierSpec)) reasons.push('e2_verifier_spec_absent');
+  else if (reexec.spec !== verifierSpec) reasons.push('e2_verifier_not_from_spec');
+  else if (reexec.refusal === 'pin_changed') reasons.push('e2_verifier_pin_changed');
+  else if (reexec.refusal !== null || reexec.commands.length === 0) reasons.push('e2_reexec_absent');
   else {
     if (reexec.label !== E2_JULIUS_LABEL) reasons.push('e2_reexec_fake');
     if (reexec.commands.some((c) => c.exitCode === 'unknown')) reasons.push('e2_reexec_exit_unknown');
@@ -505,6 +647,7 @@ export function e2Gate(input: {
     if (header !== null && header.runId !== binding.runId) reasons.push('e2_binding_run_mismatch');
     if (realDiff && (diff.base !== binding.base || diff.head !== binding.head)) reasons.push('e2_binding_diff_mismatch');
     if (realDiff && !diff.ancestry) reasons.push('e2_diff_not_descendant');
+    if (isSpec(verifierSpec) && verifierSpec.base !== binding.base && !reasons.includes('e2_verifier_not_from_spec')) reasons.push('e2_verifier_not_from_spec');
     if ((realReexec && reexec.cwd !== binding.workspace) || (realDiff && diff.cwd !== binding.workspace)) reasons.push('e2_binding_cwd_mismatch');
     /* Skywalker N3 rule (b): every edit-type call names one path, and that path is in the diff. Conservative: an edit call
        whose path the gate cannot read is refused, not skipped. Paths an edit touched but later reverted are refused too. */

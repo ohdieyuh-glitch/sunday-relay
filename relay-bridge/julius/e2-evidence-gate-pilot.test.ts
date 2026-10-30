@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { createCursorCloudAgentsTransport, type CursorFetch } from './cursor-cloud-agents-transport';
 import { captureCursorRunStream, createFileEvidenceSink, readEvidenceLines, verifyEvidenceChain } from './cursor-run-stream-evidence';
-import { E2_FAKE_LABEL, e2Gate, externalAnchor, recordGitDiff, recordVerifierReexec, spawnVerifierRunner, type E2DiffEvidence, type E2ReexecEvidence } from './e2-evidence-gate';
+import { E2_FAKE_LABEL, e2Gate, externalAnchor, pinVerifierSpec, type E2VerifierSpec, recordGitDiff, recordVerifierReexec, spawnVerifierRunner, type E2DiffEvidence, type E2ReexecEvidence } from './e2-evidence-gate';
 
 /*
  * PILOT review of 0774db05, gate findings (H-3, H-4, M-7, M-8, L-4), written failing-first. The live-labelled capture uses
@@ -20,9 +20,10 @@ const sha = (b: string | Uint8Array): string => createHash('sha256').update(b).d
 const NODE = process.execPath;
 
 /* 43b93a4e N-3: the runner refuses `node -e`; inline verifier code is written to a script file (argv shifted to match -e). */
-const JS_DIR = realpathSync(mkdtempSync(join(tmpdir(), 'e2js-')));
+/* R3-2: a verifier script must live in the workspace, so the scripts are written under the repo (untracked). */
 const js = (code: string): string => {
-  const f = join(JS_DIR, `${createHash('sha256').update(code).digest('hex').slice(0, 16)}.cjs`);
+  mkdirSync(join(repo, '.e2js'), { recursive: true });
+  const f = join(repo, '.e2js', `${createHash('sha256').update(code).digest('hex').slice(0, 16)}.cjs`);
   writeFileSync(f, `process.argv.splice(1, 1);\n${code}\n`);
   return f;
 };
@@ -47,6 +48,7 @@ beforeAll(() => {
   mkdirSync(repo);
   git(repo, 'init', '-q');
   writeFileSync(join(repo, 'a.txt'), 'one\n');
+  writeFileSync(join(repo, 'ok.cjs'), 'process.exit(0)\n'); // R3-2: the verifier script is pinned at base
   writeFileSync(join(repo, 'old name.txt'), 'line\n'.repeat(20));
   git(repo, 'add', '.'); git(repo, '-c', 'commit.gpgsign=false', 'commit', '-qm', 'a');
   base = git(repo, 'rev-parse', 'HEAD');
@@ -101,9 +103,10 @@ function rechain(lines: readonly string[], edit: (r: Record<string, unknown>, i:
 }
 async function parts() {
   const runner = spawnVerifierRunner({ timeoutMs: 30_000 });
-  const reexec = await recordVerifierReexec({ commands: [[NODE, js('0')]], cwd: repo, runner });
+  const verifierSpec = pinVerifierSpec({ testCommand: 'node ok.cjs', workspace: repo, base }) as E2VerifierSpec;
+  const reexec = await recordVerifierReexec({ spec: verifierSpec, cwd: repo, runner });
   const diff = await recordGitDiff({ base, head, cwd: repo, runner });
-  return { runner, reexec, diff, binding: { runId: REF.runId, base, head, workspace: repo }, modelId: 'grok-code-fast-1' };
+  return { runner, verifierSpec, reexec, diff, binding: { runId: REF.runId, base, head, workspace: repo }, modelId: 'grok-code-fast-1' };
 }
 const reasons = (r: ReturnType<typeof e2Gate>): readonly string[] => (r.ok ? [] : r.reasons);
 
@@ -114,10 +117,10 @@ describe('PILOT 0774db05 H-3: the gate verifies the evidence FILE against an anc
     expect(evidence.mode).toBe('live');
     const streamLines = await readEvidenceLines(path);
     const p = await parts();
-    expect(e2Gate({ streamLines, anchor: externalAnchor('workflow_output', evidence.finalHash), reexec: p.reexec, diff: p.diff, modelId: p.modelId, binding: p.binding })).toEqual({ ok: true });
+    expect(e2Gate({ streamLines, anchor: externalAnchor('workflow_output', evidence.finalHash), reexec: p.reexec, verifierSpec: p.verifierSpec, diff: p.diff, modelId: p.modelId, binding: p.binding })).toEqual({ ok: true });
     /* The same file from a fake transport is refused only for being fake: chain and anchor still verify. */
     const f = await fakeCapture('a-fake.jsonl');
-    expect(reasons(e2Gate({ streamLines: await readEvidenceLines(f.path), anchor: externalAnchor('workflow_output', f.evidence.finalHash), reexec: p.reexec, diff: p.diff, modelId: p.modelId, binding: p.binding }))).toEqual(['e2_stream_not_live', 'e2_stream_mid_run_start', 'e2_model_unbound']); // 43b93a4e: the fake capture used a literal ref
+    expect(reasons(e2Gate({ streamLines: await readEvidenceLines(f.path), anchor: externalAnchor('workflow_output', f.evidence.finalHash), reexec: p.reexec, verifierSpec: p.verifierSpec, diff: p.diff, modelId: p.modelId, binding: p.binding }))).toEqual(['e2_stream_not_live', 'e2_stream_mid_run_start', 'e2_model_unbound']); // 43b93a4e: the fake capture used a literal ref
   });
   it('(b) one record edited with every hash recomputed verifies as a chain but is refused: anchor mismatch', async () => {
     const { path, evidence } = await liveCapture('b.jsonl');
@@ -125,19 +128,19 @@ describe('PILOT 0774db05 H-3: the gate verifies the evidence FILE against an anc
     const forged = rechain(lines, (r) => { if (r.kind === 'event' && r.event === 'tool_call') r.data = JSON.stringify({ callId: 'c1', name: 'read_file', status: 'completed' }); });
     expect(verifyEvidenceChain(forged).ok).toBe(true);
     const p = await parts();
-    expect(reasons(e2Gate({ streamLines: forged, anchor: externalAnchor('workflow_output', evidence.finalHash), reexec: p.reexec, diff: p.diff, modelId: p.modelId, binding: p.binding }))).toEqual(['e2_anchor_mismatch', 'e2_no_edit_calls']); // 43b93a4e N3: the forgery leaves only a read call
+    expect(reasons(e2Gate({ streamLines: forged, anchor: externalAnchor('workflow_output', evidence.finalHash), reexec: p.reexec, verifierSpec: p.verifierSpec, diff: p.diff, modelId: p.modelId, binding: p.binding }))).toEqual(['e2_anchor_mismatch', 'e2_no_edit_calls']); // 43b93a4e N3: the forgery leaves only a read call
     /* An edit without recomputing breaks the chain. */
     const broken = [...lines]; const at = broken.findIndex((l) => l.includes('edit_file')); broken[at] = (broken[at] as string).replace('edit_file', 'read_file');
-    expect(reasons(e2Gate({ streamLines: broken, anchor: externalAnchor('workflow_output', evidence.finalHash), reexec: p.reexec, diff: p.diff, modelId: p.modelId, binding: p.binding }))).toContain('e2_stream_chain_invalid');
+    expect(reasons(e2Gate({ streamLines: broken, anchor: externalAnchor('workflow_output', evidence.finalHash), reexec: p.reexec, verifierSpec: p.verifierSpec, diff: p.diff, modelId: p.modelId, binding: p.binding }))).toContain('e2_stream_chain_invalid');
   });
   it('(c) no anchor, or an empty one, is refused', async () => {
     const { path } = await liveCapture('c.jsonl');
     const streamLines = await readEvidenceLines(path);
     const p = await parts();
     for (const anchor of [undefined, null, externalAnchor('workflow_output', '')]) {
-      expect(reasons(e2Gate({ streamLines, anchor, reexec: p.reexec, diff: p.diff, modelId: p.modelId, binding: p.binding } as Parameters<typeof e2Gate>[0]))).toEqual(['e2_anchor_absent']);
+      expect(reasons(e2Gate({ streamLines, anchor, reexec: p.reexec, verifierSpec: p.verifierSpec, diff: p.diff, modelId: p.modelId, binding: p.binding } as Parameters<typeof e2Gate>[0]))).toEqual(['e2_anchor_absent']);
     }
-    expect(reasons(e2Gate({ streamLines: [], anchor: externalAnchor('workflow_output', 'a'.repeat(64)), reexec: p.reexec, diff: p.diff, modelId: p.modelId, binding: p.binding }))).toContain('e2_stream_chain_invalid');
+    expect(reasons(e2Gate({ streamLines: [], anchor: externalAnchor('workflow_output', 'a'.repeat(64)), reexec: p.reexec, verifierSpec: p.verifierSpec, diff: p.diff, modelId: p.modelId, binding: p.binding }))).toContain('e2_stream_chain_invalid');
   });
   it('hand-made or copied re-exec and diff objects are refused (module-private registry, no setter)', async () => {
     const { path, evidence } = await liveCapture('d.jsonl');
@@ -145,16 +148,16 @@ describe('PILOT 0774db05 H-3: the gate verifies the evidence FILE against an anc
     const p = await parts();
     const handReexec = { label: 'julius_observed', cwd: repo, commands: [{ argv: ['x'], exitCode: 0, stdoutSha256: '', stderrSha256: '', stdoutBytes: 0, stderrBytes: 0, startedAt: '', endedAt: '' }] } as unknown as E2ReexecEvidence;
     const handDiff = { ...p.diff } as E2DiffEvidence;
-    const g = { streamLines, anchor: externalAnchor('workflow_output', evidence.finalHash), modelId: p.modelId, binding: p.binding };
+    const g = { streamLines, anchor: externalAnchor('workflow_output', evidence.finalHash), modelId: p.modelId, binding: p.binding, verifierSpec: p.verifierSpec };
     expect(reasons(e2Gate({ ...g, reexec: handReexec, diff: p.diff }))).toEqual(['e2_reexec_forged']);
     expect(reasons(e2Gate({ ...g, reexec: { ...p.reexec! }, diff: p.diff }))).toEqual(['e2_reexec_forged']);
-    expect(reasons(e2Gate({ ...g, reexec: p.reexec, diff: handDiff }))).toEqual(['e2_diff_forged']);
+    expect(reasons(e2Gate({ ...g, reexec: p.reexec, verifierSpec: p.verifierSpec, diff: handDiff }))).toEqual(['e2_diff_forged']);
   });
   it('a failed, unfinished or non-FINISHED capture in the file is refused even with the right anchor', async () => {
     const { path, evidence } = await liveCapture('e.jsonl');
     const lines = await readEvidenceLines(path);
     const p = await parts();
-    const g = { reexec: p.reexec, diff: p.diff, modelId: p.modelId, binding: p.binding };
+    const g = { reexec: p.reexec, verifierSpec: p.verifierSpec, diff: p.diff, modelId: p.modelId, binding: p.binding };
     const forged = rechain(lines, (r) => { if (r.kind === 'final') r.cause = 'e2_stream_gap'; });
     const anchor = externalAnchor('ledger_hash', (verifyEvidenceChain(forged) as { finalHash: string }).finalHash);
     expect(reasons(e2Gate({ ...g, streamLines: forged, anchor }))).toEqual(['e2_stream_failed']);
@@ -173,7 +176,7 @@ describe('Skywalker 0774db05 F8: tampering with the FINAL record is refused by t
     const { path, evidence } = await liveCapture('final.jsonl');
     const lines = await readEvidenceLines(path);
     const p = await parts();
-    const g = { anchor: externalAnchor('workflow_output', evidence.finalHash), reexec: p.reexec, diff: p.diff, modelId: p.modelId, binding: p.binding };
+    const g = { anchor: externalAnchor('workflow_output', evidence.finalHash), reexec: p.reexec, verifierSpec: p.verifierSpec, diff: p.diff, modelId: p.modelId, binding: p.binding };
     for (const [from, to] of [['"unfinishedCalls":0', '"unfinishedCalls":1'], ['"toolCallCount":1', '"toolCallCount":2'], ['"cause":null', '"cause":"x"']] as const) {
       const t = [...lines];
       t[t.length - 1] = (t[t.length - 1] as string).replace(from, to);
@@ -192,15 +195,19 @@ describe('PILOT 0774db05 H-4: run, base, head and workspace are bound across str
     const { path, evidence } = await liveCapture('h4.jsonl');
     const streamLines = await readEvidenceLines(path);
     const p = await parts();
-    const g = { streamLines, anchor: externalAnchor('workflow_output', evidence.finalHash), reexec: p.reexec, diff: p.diff, modelId: p.modelId, binding: p.binding };
+    const g = { streamLines, anchor: externalAnchor('workflow_output', evidence.finalHash), reexec: p.reexec, verifierSpec: p.verifierSpec, diff: p.diff, modelId: p.modelId, binding: p.binding };
     expect(reasons(e2Gate({ ...g, binding: undefined } as unknown as Parameters<typeof e2Gate>[0]))).toEqual(['e2_binding_absent']);
     expect(reasons(e2Gate({ ...g, binding: { ...p.binding, runId: 'run-other' } }))).toEqual(['e2_binding_run_mismatch']);
     const swapped = await recordGitDiff({ base: head, head: base, cwd: repo, runner: p.runner });
     expect(swapped?.ancestry).toBe(false);
     expect(reasons(e2Gate({ ...g, diff: swapped }))).toEqual(['e2_binding_diff_mismatch', 'e2_diff_not_descendant']);
-    expect(reasons(e2Gate({ ...g, diff: swapped, binding: { ...p.binding, base: head, head: base } }))).toEqual(['e2_diff_not_descendant']);
-    const rootReexec = await recordVerifierReexec({ commands: [[NODE, js('0')]], cwd: '/', runner: p.runner });
-    expect(reasons(e2Gate({ ...g, reexec: rootReexec }))).toEqual(['e2_binding_cwd_mismatch']);
+    expect(reasons(e2Gate({ ...g, diff: swapped, binding: { ...p.binding, base: head, head: base } }))).toEqual(['e2_diff_not_descendant', 'e2_verifier_not_from_spec']); // R3-2: the spec was pinned at the real base
+    /* R3-2: a spec re-exec in another cwd runs nothing; the legacy argv form in another cwd is refused twice over. */
+    const elsewhere = await recordVerifierReexec({ spec: p.verifierSpec, cwd: root, runner: p.runner });
+    expect(elsewhere?.refusal).toBe('cwd_not_spec_workspace');
+    expect(reasons(e2Gate({ ...g, reexec: elsewhere }))).toEqual(['e2_reexec_absent', 'e2_binding_cwd_mismatch']);
+    const rootReexec = await recordVerifierReexec({ commands: [[NODE, js('0')]], cwd: root, runner: p.runner });
+    expect(reasons(e2Gate({ ...g, reexec: rootReexec }))).toEqual(['e2_verifier_not_from_spec', 'e2_binding_cwd_mismatch']);
     expect(await recordVerifierReexec({ commands: [[NODE, js('0')]], cwd: '.', runner: p.runner })).toBeNull();
   });
 });
@@ -275,14 +282,14 @@ describe('PILOT 0774db05 L-4: a model the reviewed table cannot place is refused
   it('fake-model is unrecognised', async () => {
     const { path, evidence } = await liveCapture('l4.jsonl');
     const p = await parts();
-    const g = { streamLines: await readEvidenceLines(path), anchor: externalAnchor('workflow_output', evidence.finalHash), reexec: p.reexec, diff: p.diff, binding: p.binding };
+    const g = { streamLines: await readEvidenceLines(path), anchor: externalAnchor('workflow_output', evidence.finalHash), reexec: p.reexec, verifierSpec: p.verifierSpec, diff: p.diff, binding: p.binding };
     expect(idReasons(e2Gate({ ...g, modelId: 'fake-model' }))).toEqual(['e2_model_unrecognised']);
     expect(idReasons(e2Gate({ ...g, modelId: 'auto' }))).toEqual(['e2_model_router']);
   });
   it('Skywalker F5b: router lookalikes (trailing space, Cyrillic, full-width, zero-width) are routers; Claude and unknown ids are refused', async () => {
     const { path, evidence } = await liveCapture('f5.jsonl');
     const p = await parts();
-    const g = { streamLines: await readEvidenceLines(path), anchor: externalAnchor('workflow_output', evidence.finalHash), reexec: p.reexec, diff: p.diff, binding: p.binding };
+    const g = { streamLines: await readEvidenceLines(path), anchor: externalAnchor('workflow_output', evidence.finalHash), reexec: p.reexec, verifierSpec: p.verifierSpec, diff: p.diff, binding: p.binding };
     for (const m of ['AUTO ', ' auto', '\u0410uto', '\u0410UTO ', '\uff41\uff55\uff54\uff4f', 'au\u200bto', 'Auto\t']) expect(idReasons(e2Gate({ ...g, modelId: m })), JSON.stringify(m)).toEqual(['e2_model_router']);
     for (const m of ['claude-opus-5', 'claude-sonnet-4-5', 'anthropic/claude-3']) expect(idReasons(e2Gate({ ...g, modelId: m })), m).toEqual(['e2_model_claude']);
     for (const m of ['claude-opus-5', 'fake-model', 'my-model-1', 'x']) expect(idReasons(e2Gate({ ...g, modelId: m })).length, m).toBeGreaterThan(0);

@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { readEvidenceLines, verifyEvidenceChain } from './cursor-run-stream-evidence';
-import { e2Gate, externalAnchor, recordGitDiff, recordVerifierReexec, spawnVerifierRunner } from './e2-evidence-gate';
+import { e2Gate, externalAnchor, pinVerifierSpec, type E2VerifierSpec, recordGitDiff, recordVerifierReexec, spawnVerifierRunner } from './e2-evidence-gate';
 
 /*
  * PILOT 43b93a4e N-1, N-5, N-6, M-2, mutant M2 and Skywalker 43b93a4e N2/N3/L3, failing-first. The live-labelled capture
@@ -30,12 +30,12 @@ beforeAll(() => {
   repo = join(root, 'repo'); mkdirSync(repo);
   git(repo, 'init', '-q');
   writeFileSync(join(repo, 'a.txt'), 'one\n');
+  writeFileSync(join(repo, 'ok.mjs'), 'process.exit(0)\n'); // R3-2: the verifier script is pinned at base
   git(repo, 'add', '.'); git(repo, '-c', 'commit.gpgsign=false', 'commit', '-qm', 'a');
   base = git(repo, 'rev-parse', 'HEAD');
   writeFileSync(join(repo, 'a.txt'), 'two\n');
   git(repo, '-c', 'commit.gpgsign=false', 'commit', '-qam', 'b');
   head = git(repo, 'rev-parse', 'HEAD');
-  writeFileSync(join(root, 'ok.mjs'), 'process.exit(0)\n');
 });
 afterAll(() => { rmSync(root, { recursive: true, force: true }); });
 
@@ -76,8 +76,9 @@ function rechain(lines: readonly string[], edit: (r: Record<string, unknown>) =>
 const anchorOf = (l: readonly string[]) => externalAnchor('ledger_hash', (verifyEvidenceChain(l) as { finalHash: string }).finalHash); // R3-1: simulates a writer who also controls the anchor source (recount tests)
 async function parts() {
   const runner = spawnVerifierRunner({ timeoutMs: 30_000 });
+  const verifierSpec = pinVerifierSpec({ testCommand: 'node ok.mjs', workspace: repo, base }) as E2VerifierSpec;
   return {
-    reexec: await recordVerifierReexec({ commands: [[process.execPath, join(root, 'ok.mjs')]], cwd: repo, runner }),
+    verifierSpec, reexec: await recordVerifierReexec({ spec: verifierSpec, cwd: repo, runner }),
     diff: await recordGitDiff({ base, head, cwd: repo, runner }),
     binding: { runId: RUN, base, head, workspace: repo }, runner,
   };
@@ -128,7 +129,7 @@ describe('Skywalker 43b93a4e N3: real work', () => {
     const p = await parts();
     const same = await recordGitDiff({ base: head, head, cwd: repo, runner: p.runner });
     expect(same?.bytes).toBe(0);
-    expect(reasons(e2Gate({ streamLines: lines, anchor: externalAnchor('workflow_output', evidence.finalHash), ...p, diff: same, binding: { ...p.binding, base: head }, modelId: MODEL }))).toEqual(['e2_diff_empty', 'e2_edit_path_not_in_diff']); // r6 rule (b): the edit is not in an empty diff
+    expect(reasons(e2Gate({ streamLines: lines, anchor: externalAnchor('workflow_output', evidence.finalHash), ...p, diff: same, binding: { ...p.binding, base: head }, modelId: MODEL }))).toEqual(['e2_diff_empty', 'e2_verifier_not_from_spec', 'e2_edit_path_not_in_diff']); // R3-2: spec pinned at the real base; r6 rule (b): the edit is not in an empty diff
   });
 });
 

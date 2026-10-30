@@ -12,7 +12,7 @@ const sha = (s: string): string => createHash('sha256').update(s).digest('hex');
 const NODE = process.execPath;
 
 /* 43b93a4e N-3: the runner refuses `node -e`; inline verifier code is written to a script file (argv shifted to match -e). */
-const JS_DIR = realpathSync(mkdtempSync(join(tmpdir(), 'e2js-')));
+const JS_DIR = realpathSync(mkdtempSync(join(tmpdir(), 'e2js-'))); // R3-2: also the cwd, so the scripts are in the workspace
 const js = (code: string): string => {
   const f = join(JS_DIR, `${createHash('sha256').update(code).digest('hex').slice(0, 16)}.cjs`);
   writeFileSync(f, `process.argv.splice(1, 1);\n${code}\n`);
@@ -24,9 +24,9 @@ const clock = (): (() => number) => { let t = Date.parse('2026-10-30T18:00:00.00
 describe('E2 part B: Julius re-runs the verifier commands', () => {
   it('records argv, exit code, output hashes and times; only the spawn runner is julius_observed', async () => {
     const runner = spawnVerifierRunner();
-    const ev = await recordVerifierReexec({ commands: [[NODE, js('process.stdout.write("ok")')], [NODE, js('process.stderr.write("e");process.exit(3)')]], cwd: process.cwd(), runner, now: clock() });
+    const ev = await recordVerifierReexec({ commands: [[NODE, js('process.stdout.write("ok")')], [NODE, js('process.stderr.write("e");process.exit(3)')]], cwd: JS_DIR, runner, now: clock() });
     expect(ev).toEqual({
-      label: E2_JULIUS_LABEL, cwd: process.cwd(),
+      label: E2_JULIUS_LABEL, cwd: JS_DIR, spec: null, refusal: null,
       commands: [
         { argv: [NODE, js('process.stdout.write("ok")')], exitCode: 0, stdoutSha256: sha('ok'), stderrSha256: sha(''), stdoutBytes: 2, stderrBytes: 0, startedAt: '2026-10-30T18:00:01.000Z', endedAt: '2026-10-30T18:00:02.000Z' },
         { argv: [NODE, js('process.stderr.write("e");process.exit(3)')], exitCode: 3, stdoutSha256: sha(''), stderrSha256: sha('e'), stdoutBytes: 0, stderrBytes: 1, startedAt: '2026-10-30T18:00:03.000Z', endedAt: '2026-10-30T18:00:04.000Z' },
@@ -34,27 +34,27 @@ describe('E2 part B: Julius re-runs the verifier commands', () => {
     });
     expect(Object.isFrozen(ev)).toBe(true);
     const fake: VerifierRunner = async () => ({ exitCode: 0, stdout: 'ok', stderr: '' });
-    expect((await recordVerifierReexec({ commands: [['npm', 'test']], cwd: process.cwd(), runner: fake }))?.label).toBe(E2_FAKE_LABEL);
+    expect((await recordVerifierReexec({ commands: [['npm', 'test']], cwd: JS_DIR, runner: fake }))?.label).toBe(E2_FAKE_LABEL);
   });
   it('no shell: metacharacters are plain arguments; a missing binary, a kill or a throwing runner is exit unknown', async () => {
     const runner = spawnVerifierRunner({ timeoutMs: 300 });
-    const ev = await recordVerifierReexec({ commands: [[NODE, js('process.stdout.write(process.argv[1])'), '$(echo hi);x']], cwd: process.cwd(), runner });
+    const ev = await recordVerifierReexec({ commands: [[NODE, js('process.stdout.write(process.argv[1])'), '$(echo hi);x']], cwd: JS_DIR, runner });
     expect(ev?.commands[0]?.stdoutSha256).toBe(sha('$(echo hi);x'));
     /* 43b93a4e N-3: a program outside the allowlist is refused before running; the runner itself reports exit null. */
-    expect(await recordVerifierReexec({ commands: [['/nonexistent/verifier-binary']], cwd: process.cwd(), runner })).toBeNull();
-    expect((await runner(['/nonexistent/verifier-binary'], process.cwd())).exitCode).toBeNull();
-    const slow = await recordVerifierReexec({ commands: [[NODE, js('setTimeout(()=>{},5000)')]], cwd: process.cwd(), runner });
+    expect(await recordVerifierReexec({ commands: [['/nonexistent/verifier-binary']], cwd: JS_DIR, runner })).toBeNull();
+    expect((await runner(['/nonexistent/verifier-binary'], JS_DIR)).exitCode).toBeNull();
+    const slow = await recordVerifierReexec({ commands: [[NODE, js('setTimeout(()=>{},5000)')]], cwd: JS_DIR, runner });
     expect(slow?.commands[0]?.exitCode).toBe('unknown');
     const thrower: VerifierRunner = async () => { throw new Error('x'); };
-    expect((await recordVerifierReexec({ commands: [[NODE, js('0')]], cwd: process.cwd(), runner: thrower }))?.commands[0]?.exitCode).toBe('unknown');
+    expect((await recordVerifierReexec({ commands: [[NODE, js('0')]], cwd: JS_DIR, runner: thrower }))?.commands[0]?.exitCode).toBe('unknown');
     const fractional: VerifierRunner = async () => ({ exitCode: 1.5, stdout: '', stderr: '' });
-    expect((await recordVerifierReexec({ commands: [[NODE, js('0')]], cwd: process.cwd(), runner: fractional }))?.commands[0]?.exitCode).toBe('unknown');
+    expect((await recordVerifierReexec({ commands: [[NODE, js('0')]], cwd: JS_DIR, runner: fractional }))?.commands[0]?.exitCode).toBe('unknown');
   });
   it('refuses an empty list, an empty argv, an empty program or a NUL before running anything', async () => {
     let ran = 0;
     const runner: VerifierRunner = async () => { ran += 1; return { exitCode: 0, stdout: '', stderr: '' }; };
     for (const commands of [[], [[]], [['']], [['a', 'b\u0000c']], [['ok'], []]] as (readonly string[])[][]) {
-      expect(await recordVerifierReexec({ commands, cwd: process.cwd(), runner })).toBeNull();
+      expect(await recordVerifierReexec({ commands, cwd: JS_DIR, runner })).toBeNull();
     }
     expect(ran).toBe(0);
   });
@@ -103,10 +103,10 @@ describe('E2 part C: the diff', () => {
 describe('E2 gate', () => {
   it('publishes every reason once', () => {
     expect(new Set(E2_GATE_REASONS).size).toBe(E2_GATE_REASONS.length);
-    expect(E2_GATE_REASONS.length).toBe(37);
+    expect(E2_GATE_REASONS.length).toBe(40);
   });
   it('refuses when everything is absent, with every reason, never the diff alone', () => {
-    const r = e2Gate({ streamLines: null, anchor: null, reexec: null, diff: null, modelId: null, binding: null });
+    const r = e2Gate({ streamLines: null, anchor: null, reexec: null, verifierSpec: null, diff: null, modelId: null, binding: null });
     expect(r).toEqual({ ok: false, reasons: ['e2_stream_absent', 'e2_reexec_absent', 'e2_diff_absent', 'e2_binding_absent', 'e2_model_absent'] });
   });
 });
