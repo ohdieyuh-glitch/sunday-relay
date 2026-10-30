@@ -16,8 +16,10 @@
  * also not zero. The ref is created before the provider call and is not
  * updated afterwards, so the figure on it is the reserved ceiling, not a
  * provider invoice. This module never claims a provider balance was verified.
- * Only a ledger whose `durableRecord` is `PRESENT` may be compared with
- * `JULIUS_QUALIFYING_PAIR_CAP_USD_MICROS` ($60).
+ * Only a ledger whose `durableRecord` is `PRESENT` may be compared with the
+ * namespace's qualifying grant (`juliusQualifyingPairGrant`): 2 runs and
+ * `JULIUS_QUALIFYING_PAIR_CAP_USD_MICROS` ($60) by default, and 3 runs and $90
+ * for `julius-inworld-data-1` only (founder ruling, 2026-10-30).
  *
  * The pair check applies only to `JULIUS_QUALIFYING_PAIR_NAMESPACES`. It does
  * not apply to `julius-continuous-1` (whose $60 figure is an allocator input),
@@ -69,8 +71,9 @@ export const JULIUS_NAMESPACE_CEILINGS: Readonly<Record<string, JuliusNamespaceC
 
 /**
  * Namespaces allowed one initial run and one repeat, together not above $60
- * of known provider spend. J1 is listed here so its $60 is the combined cap
- * across the initial run and the repeat, never a per-run figure.
+ * of known provider spend, unless `JULIUS_QUALIFYING_PAIR_GRANTS` names a
+ * different grant. J1 is listed here so its cap ($90 over 3 runs since the
+ * founder ruling of 2026-10-30) is a combined cap, never a per-run figure.
  */
 export const JULIUS_QUALIFYING_PAIR_NAMESPACES: readonly string[] = Object.freeze([
   'julius-live-mission-5',
@@ -78,8 +81,41 @@ export const JULIUS_QUALIFYING_PAIR_NAMESPACES: readonly string[] = Object.freez
   'julius-inworld-data-1',
 ]);
 
-/** $60, in USD micros. Equality is inside the cap; one micro over is not. */
+/** $60, in USD micros: the DEFAULT pair cap. Equality is inside the cap; one micro over is not. */
 export const JULIUS_QUALIFYING_PAIR_CAP_USD_MICROS = 60_000_000;
+
+/** How many counted runs a qualifying namespace may have in total, and their combined cap. */
+export interface JuliusQualifyingPairGrant {
+  readonly runs: number;
+  readonly capUsdMicros: number;
+}
+
+/** The initial run and one repeat, together not above $60. */
+export const JULIUS_QUALIFYING_PAIR_DEFAULT_GRANT: JuliusQualifyingPairGrant = Object.freeze({
+  runs: 2,
+  capUsdMicros: JULIUS_QUALIFYING_PAIR_CAP_USD_MICROS,
+});
+
+/**
+ * Per-namespace grants that differ from the default.
+ *
+ * FOUNDER RULING, 2026-10-30 (J1 cap expansion): one additional paid live run
+ * of `julius-inworld-data-1` at its existing $30 per-run ceiling and 3 repair
+ * cycles, so the J1 grant goes from 2 runs / $60 to 3 runs / $90 in total.
+ * No run count, spent tag, marker, classification or spend counter is reset:
+ * every earlier counted run still counts, at least at its $30 reservation,
+ * and unknown charges stay unknown, never $0. No other namespace changes.
+ */
+export const JULIUS_QUALIFYING_PAIR_GRANTS: Readonly<Record<string, JuliusQualifyingPairGrant>> = Object.freeze({
+  'julius-inworld-data-1': Object.freeze({ runs: 3, capUsdMicros: 90_000_000 }),
+});
+
+export function juliusQualifyingPairGrant(namespace: string | null): JuliusQualifyingPairGrant {
+  if (namespace !== null && Object.hasOwn(JULIUS_QUALIFYING_PAIR_GRANTS, namespace)) {
+    return JULIUS_QUALIFYING_PAIR_GRANTS[namespace] as JuliusQualifyingPairGrant;
+  }
+  return JULIUS_QUALIFYING_PAIR_DEFAULT_GRANT;
+}
 
 export function juliusNamespaceCeiling(namespace: string | null): JuliusNamespaceCeiling {
   if (namespace !== null && Object.hasOwn(JULIUS_NAMESPACE_CEILINGS, namespace)) {
@@ -267,11 +303,13 @@ export function authorizeJuliusLiveSpend(input: {
     };
   }
   const priorRuns = input.ledger.priorRuns;
-  if (priorRuns.length >= 2) {
+  const grant = juliusQualifyingPairGrant(input.namespace);
+  if (priorRuns.length >= grant.runs) {
+    // The code keeps its historical name: it is the refusal of any run beyond the namespace's grant.
     return {
       authorized: false,
       reasonCode: 'qualifying_pair_third_run_refused',
-      safeMessage: `This qualifying mission already has ${String(priorRuns.length)} runs. The founder cap allows the initial run and one repeat. No provider was contacted, and no provider balance was verified.`,
+      safeMessage: `This qualifying mission already has ${String(priorRuns.length)} runs. The founder cap allows ${String(grant.runs)} runs in total. No provider was contacted, and no provider balance was verified.`,
     };
   }
   const unverified = priorRuns.find((run) => !run.spendVerified || run.unknownCostComponents > 0 || run.unverifiableApiSpend);
@@ -286,11 +324,11 @@ export function authorizeJuliusLiveSpend(input: {
   for (const run of priorRuns) {
     priorKnown += run.knownUsdMicros;
   }
-  if (!Number.isSafeInteger(priorKnown) || priorKnown + spendCeilingUsdMicros > JULIUS_QUALIFYING_PAIR_CAP_USD_MICROS) {
+  if (!Number.isSafeInteger(priorKnown) || priorKnown + spendCeilingUsdMicros > grant.capUsdMicros) {
     return {
       authorized: false,
       reasonCode: 'qualifying_pair_spend_exceeded',
-      safeMessage: `Known prior spend ${String(priorKnown)} micros plus this contract's ceiling ${String(spendCeilingUsdMicros)} micros exceeds the ${String(JULIUS_QUALIFYING_PAIR_CAP_USD_MICROS)} micro combined cap. No provider was contacted, and no provider balance was verified.`,
+      safeMessage: `Known prior spend ${String(priorKnown)} micros plus this contract's ceiling ${String(spendCeilingUsdMicros)} micros exceeds the ${String(grant.capUsdMicros)} micro combined cap. No provider was contacted, and no provider balance was verified.`,
     };
   }
   return { authorized: true, spendCeilingUsdMicros, maxRepairRounds: input.repairCycles };
