@@ -400,7 +400,7 @@ describe('configuration fails closed, before anything is sent', () => {
     expect(familyFromModelId('fake-coder-1')).toBeNull();
   });
   it('L1: router aliases and Claude lookalikes in any spelling are refused', async () => {
-    for (const id of ['auto', 'Auto', 'AUTO', 'cursor-auto', 'auto-smart', 'best', 'default', 'default-model', 'model.default', 'latest', 'router']) {
+    for (const id of ['auto', 'Auto', 'AUTO', 'cursor-auto', 'auto-smart', 'best', 'default', 'default-model', 'model.default', 'latest', 'router', 'balance', 'Balance', 'BALANCE', 'balanced', 'intelligence', 'Intelligence', 'cursor-balance', 'router.intelligence', 'cheapest', 'fastest']) {
       expect(await refusedClass(config({ pinnedModelId: id })), id).toBe('coder_grok_model_router_refused');
     }
     for (const id of ['c1aude-4', 'cl4ude-4', 'CLAUDE-4', 's0nnet-4', '0pus-5', 'Haiku-3']) {

@@ -276,9 +276,10 @@ export const GROK_BOT_CODER_CONFIG_DEFAULTS: GrokBotCoderConfig = Object.freeze(
 const MAX_RUN_DEADLINE_MS = 6 * 60 * 60 * 1000;
 const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
 const CLAUDE_LIKE = /claude|anthropic|opus|sonnet|haiku/iu;
-const ROUTER_ALIASES = new Set(['auto', 'default', 'auto-smart', 'auto-fast', 'best', 'fast', 'smart', 'latest', 'router']);
+/** Includes Cursor Router's own mode names, "Balance" and "Intelligence" (F11). */
+const ROUTER_ALIASES = new Set(['auto', 'default', 'auto-smart', 'auto-fast', 'best', 'fast', 'smart', 'latest', 'router', 'balance', 'balanced', 'intelligence', 'cheapest', 'fastest']);
 /** Any id with one of these as a dash/dot/underscore-delimited token is a router, not a pinned model (`cursor-auto`, `default-model`). */
-const ROUTER_TOKEN = /(^|[-._:])(auto|default|best|router|latest)($|[-._:])/u;
+const ROUTER_TOKEN = /(^|[-._:])(auto|default|best|router|latest|balance|balanced|intelligence)($|[-._:])/u;
 /** Digit/letter lookalikes folded before the Claude and alias checks (`c1aude`, `0pus`, `s0nnet`). */
 const foldLookalikes = (v: string): string => v.toLowerCase().normalize('NFKC').replace(/[1|!]/gu, 'l').replace(/0/gu, 'o').replace(/3/gu, 'e').replace(/5/gu, 's').replace(/4/gu, 'a').replace(/[\u200b-\u200f\ufeff]/gu, '');
 
