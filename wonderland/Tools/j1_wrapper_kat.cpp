@@ -1188,9 +1188,20 @@ int main()
 		Expect(Rig.Session.Dispatch("demo-mission", "").bSent, "start_dispatch");
 		const std::string Run = Rig.Session.RunId();
 		Expect(Rig.Session.MintStartKey(Key) && IsCanonicalUuidV4(Key), "start_key_is_uuidv4");
-		Expect(!Rig.Session.StartRequest("run live mission", Key).bSent, "start_needs_exact_phrase");
-		Expect(!Rig.Session.StartRequest("RUN LIVE MISSION", "not-a-uuid").bSent, "start_needs_canonical_key");
-		const FCommandOutcome Start = Rig.Session.StartRequest("RUN LIVE MISSION", Key);
+		std::string Trigger;
+		Expect(Rig.Session.MintClientTriggerId(Trigger) && Trigger.size() == 32 && Trigger.find_first_not_of("0123456789abcdef") == std::string::npos, "start_trigger_is_32_lower_hex");
+		Expect(!Rig.Session.StartRequest("run live mission", Key, Trigger).bSent, "start_needs_exact_phrase");
+		Expect(!Rig.Session.StartRequest("RUN LIVE MISSION", "not-a-uuid", Trigger).bSent, "start_needs_canonical_key");
+		Expect(!Rig.Session.StartRequest("RUN LIVE MISSION", Key, "").bSent, "start_needs_a_trigger_id");
+		Expect(!Rig.Session.StartRequest("RUN LIVE MISSION", Key, std::string(32, 'G')).bSent, "start_trigger_must_be_hex");
+		Expect(!Rig.Session.StartRequest("RUN LIVE MISSION", Key, Trigger.substr(0, 31)).bSent, "start_trigger_must_be_32");
+		const FCommandOutcome Start = Rig.Session.StartRequest("RUN LIVE MISSION", Key, Trigger);
+		// A-9 RESEND: the same key re-sends the SAME clientTriggerId (the bridge digests it); a new random id would be
+		// 409 julius_start_key_reused. The time stamp may differ; the digest does not cover it.
+		Rig.Clock.Now += 5000;
+		const FCommandOutcome Again = Rig.Session.StartRequest("RUN LIVE MISSION", Key, Trigger);
+		Expect(Contains(Start.Request.Body, "\"clientTriggerId\":\"" + Trigger + "\""), "start_sends_the_persisted_trigger");
+		Expect(Again.bSent && Contains(Again.Request.Body, "\"clientTriggerId\":\"" + Trigger + "\""), "start_resend_reuses_the_trigger");
 		Expect(Start.bSent && Start.Request.Method == "POST", "start_is_a_post");
 		Expect(Contains(Start.Request.Url, "/relay-api/wonderland/julius/missions/" + Run + "/start?projectId=proj-1"), "start_route");
 		Expect(Contains(Start.Request.Body, "\"confirm\":\"RUN LIVE MISSION\"") && Contains(Start.Request.Body, "\"wljRunId\":\"" + Run + "\""), "start_body_binding");
@@ -1202,10 +1213,10 @@ int main()
 		for (const auto& Header : Start.Request.Headers) { if (Header.first == "x-relay-idempotency-key" && Header.second == Key) { bKeyHeader = true; } }
 		Expect(bKeyHeader, "start_key_header");
 		Rig.Session.SetNativeSessionToken("");
-		Expect(!Rig.Session.StartRequest("RUN LIVE MISSION", Key).bSent, "start_needs_a_session");
+		Expect(!Rig.Session.StartRequest("RUN LIVE MISSION", Key, Trigger).bSent, "start_needs_a_session");
 		Rig.Session.SetNativeSessionToken("SECRET_TOKEN_VALUE");
 		(void)Rig.Session.SetBaseUrl("http://example.com");
-		Expect(!Rig.Session.StartRequest("RUN LIVE MISSION", Key).bSent, "start_loopback_only");
+		Expect(!Rig.Session.StartRequest("RUN LIVE MISSION", Key, Trigger).bSent, "start_loopback_only");
 	}
 
 	Expect(CheckJuliusModuleRootIncludes(), "julius_no_bare_module_root_include");

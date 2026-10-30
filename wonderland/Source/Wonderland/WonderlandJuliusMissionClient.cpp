@@ -1040,15 +1040,27 @@ namespace WonderlandJuliusMissionClient
 		return WonderlandJuliusMissionLogic::IsCanonicalUuidV4(OutKey);
 	}
 
-	FCommandOutcome FJuliusMissionSession::StartRequest(std::string_view Confirm, const std::string& StartKey)
+	bool FJuliusMissionSession::MintClientTriggerId(std::string& OutId)
+	{
+		std::uint8_t Bytes[16] = {};
+		if (!Random.Fill(Bytes)) { return false; }
+		OutId = HexOf(Bytes, 16);
+		return true;
+	}
+
+	FCommandOutcome FJuliusMissionSession::StartRequest(std::string_view Confirm, const std::string& StartKey, const std::string& ClientTriggerId)
 	{
 		FCommandOutcome Outcome;
 		if (Confirm != "RUN LIVE MISSION") { Outcome.Detail = "the confirmation phrase was not typed exactly"; return Outcome; } // CLIENT_START_CONFIRM_EXACT
 		if (!WonderlandJuliusMissionLogic::IsCanonicalUuidV4(StartKey)) { Outcome.Detail = "start key is malformed"; return Outcome; }
+		bool bTriggerOk = ClientTriggerId.size() == 32;
+		for (const char Ch : ClientTriggerId)
+		{
+			if (!((Ch >= '0' && Ch <= '9') || (Ch >= 'a' && Ch <= 'f'))) { bTriggerOk = false; }
+		}
+		if (!bTriggerOk) { Outcome.Detail = "client trigger id is malformed"; return Outcome; } // CLIENT_START_TRIGGER_WELL_FORMED
 		Outcome = MissionReadRequest(false); // the same run, session and loopback refusals as every read
 		if (!Outcome.bSent) { return Outcome; }
-		std::uint8_t TriggerBytes[16] = {};
-		if (!Random.Fill(TriggerBytes)) { Outcome = FCommandOutcome(); Outcome.Detail = LabelRandomUnavailable; return Outcome; }
 		Outcome.Request.Method = "POST";
 		Outcome.Request.Url = JoinBase(BaseUrl, MissionReadRelativePrefix);
 		Outcome.Request.Url += PercentEncode(CurrentRunId);
@@ -1059,7 +1071,7 @@ namespace WonderlandJuliusMissionClient
 		std::string Body = "{\"wljRunId\":";
 		Body += JsonString(CurrentRunId);
 		Body += ",\"confirm\":\"RUN LIVE MISSION\",\"clientTriggerId\":";
-		Body += JsonString(HexOf(TriggerBytes, 16));
+		Body += JsonString(ClientTriggerId); // CLIENT_START_TRIGGER_IS_THE_PERSISTED_ONE
 		Body += ",\"clientUiActionUtc\":";
 		Body += JsonString(FormatIso8601UtcMs(Clock.NowUtcMs()));
 		Body.push_back('}');

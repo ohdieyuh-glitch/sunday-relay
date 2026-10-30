@@ -1692,6 +1692,25 @@ namespace WonderlandJuliusMissionFlow
 			const FReportedString Run = ReadString(&Root, "wljRunId");
 			if (!Run.bKnown || !SameText(Run.Text, WljRunId)) { return Out; } // FLOW_START_OWN_RUN_ONLY
 			const FJson* State = Field(Root, "state");
+			const FJson* Ack = Field(Root, "ack");
+			if (Ack != nullptr)
+			{
+				// A-9 (JULIUS_WONDERLAND_START_ACK): 202 {ack:"accepted", state:"accepted", startKeyHash, acceptedAt, replayed,
+				// workflowRunId:null, dispatchedAt:null}. The request was durably RECEIVED; nothing says it was dispatched.
+				if (HttpStatus != 202 || !IsExactString(Ack, "accepted") || !IsExactString(State, "accepted")) { return Out; }
+				const FJson* AckWorkflow = Field(Root, "workflowRunId");
+				const FJson* AckDispatched = Field(Root, "dispatchedAt");
+				if (AckWorkflow == nullptr || AckWorkflow->Kind != EJsonKind::Null || AckDispatched == nullptr || AckDispatched->Kind != EJsonKind::Null) { return Out; }
+				const FJson* AckReplayed = Field(Root, "replayed");
+				if (AckReplayed == nullptr || AckReplayed->Kind != EJsonKind::Bool) { return Out; }
+				const FJson* Hash = Field(Root, "startKeyHash");
+				if (Hash == nullptr || Hash->Kind != EJsonKind::String || !LowerHex(Hash->Text, 64)) { return Out; }
+				Out.bReplayed = AckReplayed->bBool;
+				Out.StartKeyHash = Hash->Text;
+				Out.State = State->Text;
+				Out.Outcome = EStartOutcome::Acknowledged; // FLOW_START_ACK_IS_NOT_DISPATCH
+				return Out;
+			}
 			if (!IsExactString(State, "dispatched") && !IsExactString(State, "dispatching")) { return Out; }
 			const FJson* WorkflowNode = Field(Root, "workflowRunId");
 			if (WorkflowNode != nullptr && WorkflowNode->Kind == EJsonKind::String)
@@ -1703,8 +1722,16 @@ namespace WonderlandJuliusMissionFlow
 			const FJson* Replayed = Field(Root, "replayed");
 			if (Replayed != nullptr && Replayed->Kind != EJsonKind::Bool) { return Out; }
 			Out.bReplayed = Replayed != nullptr && Replayed->bBool;
-			if ((HttpStatus == 200) != Out.bReplayed) { return Out; } // 202 made it; 200 is only ever a replay
 			Out.State = State->Text;
+			if (State->Text == "dispatching")
+			{
+				// "dispatching" is a record whose dispatch may not have reached GitHub: V2's dispatch_outcome_unknown answers 200
+				// replayed:false, and a replay of such a record says the same word. Never bound as started; /status decides.
+				if (HttpStatus != 200) { return Out; }
+				Out.Outcome = EStartOutcome::Uncertain; // FLOW_START_DISPATCHING_IS_UNCERTAIN
+				return Out;
+			}
+			if ((HttpStatus == 200) != Out.bReplayed) { return Out; } // 202 made it; 200 is only ever a replay
 			Out.Outcome = EStartOutcome::Accepted;
 			return Out;
 		}
@@ -1724,8 +1751,33 @@ namespace WonderlandJuliusMissionFlow
 		}
 		if (Kind.empty()) { return Out; }
 		Out.ErrorKind = Kind;
+		if (HttpStatus == 409 && Kind == "julius_start_in_progress") { Out.Outcome = EStartOutcome::InProgress; return Out; } // FLOW_START_IN_PROGRESS_POLLS_STATUS
+		// The same key with a different body: an earlier Start under this key may be claiming. Not a refusal of THIS run.
+		if (HttpStatus == 409 && Kind == "julius_start_key_reused") { Out.Outcome = EStartOutcome::Uncertain; return Out; } // FLOW_START_KEY_REUSED_IS_UNCERTAIN
 		if (HttpStatus >= 400 && HttpStatus < 500) { Out.Outcome = EStartOutcome::Refused; }
 		return Out;
+	}
+
+	EStartRecord StartRecordAfterAnswer(EStartOutcome Outcome, int HttpStatus)
+	{
+		switch (Outcome)
+		{
+		case EStartOutcome::Accepted: return EStartRecord::Started;
+		case EStartOutcome::Acknowledged: return EStartRecord::Accepted; // FLOW_START_ACK_RECORD_IS_NOT_STARTED
+		case EStartOutcome::InProgress: return EStartRecord::Accepted;
+		case EStartOutcome::Refused: return EStartRecord::Refused;
+		case EStartOutcome::Retryable:
+			// Only an answer the bridge GAVE says nothing was dispatched. A lost answer is a timeout: reconcile first.
+			return HttpStatus == 401 || HttpStatus == 503 ? EStartRecord::NotStarted : EStartRecord::Sending; // FLOW_START_LOST_ANSWER_BLOCKS
+		case EStartOutcome::Uncertain:
+		case EStartOutcome::Malformed:
+		default: return EStartRecord::Sending; // FLOW_START_UNCERTAIN_BLOCKS
+		}
+	}
+
+	bool ClientTriggerIdOk(std::string_view Id)
+	{
+		return LowerHex(std::string(Id), ClientTriggerIdChars);
 	}
 
 	FStartGate StartGateFor(std::string_view WrapperToken, bool bHasSession, bool bHasWorkflowRun, EStartRecord Record,
@@ -1734,7 +1786,19 @@ namespace WonderlandJuliusMissionFlow
 		FStartGate Out;
 		if (WrapperToken != "admitted_waiting") { Out.Why = "the run is not waiting for the operator"; return Out; } // FLOW_START_ONLY_WHILE_AWAITING
 		if (bHasWorkflowRun) { Out.Why = "this run already has a GitHub Actions run"; return Out; } // FLOW_START_NEVER_AFTER_DISPATCH
-		if (Record == EStartRecord::Sending || Record == EStartRecord::Started || Record == EStartRecord::Refused)
+		if (Record == EStartRecord::Sending)
+		{
+			// Founder ruling 2026-10-30: a Start that crashed, timed out or is outcome-unknown is never re-offered and never
+			// resent until /status has reconciled it.
+			Out.Why = "the last Start is not reconciled yet; waiting for the bridge's /status";
+			return Out; // FLOW_START_UNRECONCILED_BLOCKS
+		}
+		if (Record == EStartRecord::Accepted)
+		{
+			Out.Why = "the bridge accepted the Start request; waiting for /status to report the dispatch";
+			return Out; // FLOW_START_ACCEPTED_NOT_REOFFERED
+		}
+		if (Record == EStartRecord::Started || Record == EStartRecord::Refused)
 		{
 			Out.Why = "this run was already started or refused";
 			return Out; // FLOW_START_RECORDED_ONCE

@@ -260,11 +260,18 @@ namespace WonderlandJuliusMissionClient
 		 */
 		bool MintStartKey(std::string& OutKey);
 		/**
-		 * POST {prefix}{wljRunId}/start?projectId= with the founder's typed confirmation and the run's start key. Refuses
-		 * (sends nothing) without a run, a session, a loopback base, a canonical start key, or the exact confirm phrase.
-		 * The body carries no lane, budget, repo or ref: those are the server's.
+		 * A-9: the clientTriggerId for a start key, 32 lowercase hex from the platform crypto source. Minted ONCE with the
+		 * key; the caller persists it beside the key and sends the SAME value on every resend (the bridge's body digest
+		 * covers it, so a fresh id under the same key is 409 julius_start_key_reused). False when no random is available.
 		 */
-		FCommandOutcome StartRequest(std::string_view Confirm, const std::string& StartKey);
+		bool MintClientTriggerId(std::string& OutId);
+		/**
+		 * POST {prefix}{wljRunId}/start?projectId= with the founder's typed confirmation, the run's start key and its
+		 * persisted clientTriggerId. Refuses (sends nothing) without a run, a session, a loopback base, a canonical start
+		 * key, a well-formed trigger id, or the exact confirm phrase. Mints nothing. The body carries no lane, budget, repo
+		 * or ref: those are the server's.
+		 */
+		FCommandOutcome StartRequest(std::string_view Confirm, const std::string& StartKey, const std::string& ClientTriggerId);
 		/** True when a well-formed native session token is held (nothing about its validity on the bridge). */
 		bool HasSessionToken() const { return !SessionToken.empty() && SessionToken.find_first_of(" \r\n\t") == std::string::npos; }
 

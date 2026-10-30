@@ -643,6 +643,52 @@ MUTATIONS = [
         'Out.push_back(FContractBeat{"repair.completed", View.Role, Round}); // FLOW_CONTRACT_VERIFYING_IS_REVIEWER_ON_REPAIR',
         'Out.push_back(FContractBeat{"review.started", View.Role, Round}); // FLOW_CONTRACT_VERIFYING_IS_REVIEWER_ON_REPAIR',
     ),
+    # CLIENT LANE C1 (A-9 ack, outcome-unknown, no auto-retry).
+    (
+        "c1_ack_treated_as_dispatched",
+        "Out.Outcome = EStartOutcome::Acknowledged; // FLOW_START_ACK_IS_NOT_DISPATCH",
+        "Out.Outcome = EStartOutcome::Accepted; // FLOW_START_ACK_IS_NOT_DISPATCH",
+    ),
+    (
+        "c1_ack_record_is_started",
+        "case EStartOutcome::Acknowledged: return EStartRecord::Accepted; // FLOW_START_ACK_RECORD_IS_NOT_STARTED",
+        "case EStartOutcome::Acknowledged: return EStartRecord::Started; // FLOW_START_ACK_RECORD_IS_NOT_STARTED",
+    ),
+    (
+        "c1_dispatching_binds_as_started",
+        "Out.Outcome = EStartOutcome::Uncertain; // FLOW_START_DISPATCHING_IS_UNCERTAIN",
+        "Out.Outcome = EStartOutcome::Accepted; // FLOW_START_DISPATCHING_IS_UNCERTAIN",
+    ),
+    (
+        "c1_key_reused_is_a_refusal",
+        "if (HttpStatus == 409 && Kind == \"julius_start_key_reused\") { Out.Outcome = EStartOutcome::Uncertain; return Out; } // FLOW_START_KEY_REUSED_IS_UNCERTAIN",
+        "// FLOW_START_KEY_REUSED_IS_UNCERTAIN",
+    ),
+    (
+        "c1_in_progress_is_a_refusal",
+        "if (HttpStatus == 409 && Kind == \"julius_start_in_progress\") { Out.Outcome = EStartOutcome::InProgress; return Out; } // FLOW_START_IN_PROGRESS_POLLS_STATUS",
+        "// FLOW_START_IN_PROGRESS_POLLS_STATUS",
+    ),
+    (
+        "c1_lost_answer_reoffers_start",
+        "return HttpStatus == 401 || HttpStatus == 503 ? EStartRecord::NotStarted : EStartRecord::Sending; // FLOW_START_LOST_ANSWER_BLOCKS",
+        "return EStartRecord::NotStarted; // FLOW_START_LOST_ANSWER_BLOCKS",
+    ),
+    (
+        "c1_uncertain_reoffers_start",
+        "default: return EStartRecord::Sending; // FLOW_START_UNCERTAIN_BLOCKS",
+        "default: return EStartRecord::NotStarted; // FLOW_START_UNCERTAIN_BLOCKS",
+    ),
+    (
+        "c1_unreconciled_start_offered",
+        "Out.Why = \"the last Start is not reconciled yet; waiting for the bridge's /status\";\n\t\t\treturn Out; // FLOW_START_UNRECONCILED_BLOCKS",
+        "Out.Why = \"the last Start is not reconciled yet; waiting for the bridge's /status\"; // FLOW_START_UNRECONCILED_BLOCKS",
+    ),
+    (
+        "c1_accepted_start_offered",
+        "Out.Why = \"the bridge accepted the Start request; waiting for /status to report the dispatch\";\n\t\t\treturn Out; // FLOW_START_ACCEPTED_NOT_REOFFERED",
+        "Out.Why = \"the bridge accepted the Start request; waiting for /status to report the dispatch\"; // FLOW_START_ACCEPTED_NOT_REOFFERED",
+    ),
 ]
 
 
@@ -658,6 +704,17 @@ CLIENT_MUTATIONS = [
         "client_concludes_any_run",
         "if (!bAdmitted || bFinished || bRefused || bFailClosed || RunId.empty() || RunId != CurrentRunId) { return false; } // CLIENT_CONCLUDE_ONLY_THIS_ADMITTED_RUN",
         "if (bFinished) { return false; } // CLIENT_CONCLUDE_ONLY_THIS_ADMITTED_RUN",
+    ),
+    # CLIENT LANE C1: a same-key resend reuses the persisted clientTriggerId.
+    (
+        "c1_client_trigger_minted_per_send",
+        "Body += JsonString(ClientTriggerId); // CLIENT_START_TRIGGER_IS_THE_PERSISTED_ONE",
+        "std::uint8_t Fresh[16] = {}; (void)Random.Fill(Fresh); Body += JsonString(HexOf(Fresh, 16)); // CLIENT_START_TRIGGER_IS_THE_PERSISTED_ONE",
+    ),
+    (
+        "c1_client_trigger_unchecked",
+        "if (!bTriggerOk) { Outcome.Detail = \"client trigger id is malformed\"; return Outcome; } // CLIENT_START_TRIGGER_WELL_FORMED",
+        "(void)bTriggerOk; // CLIENT_START_TRIGGER_WELL_FORMED",
     ),
 ]
 
@@ -676,8 +733,38 @@ TARGETS = {
 }
 
 
+# KNOWN BASELINE FAILURES (client lane 2026-10-30): the wrapper KAT already fails these at e9a2d7a0, before any
+# client-lane change, and they are out of the lane's scope. The baseline must fail EXACTLY these names; a mutation is a
+# catch only when the KAT fails a name NOT in this set. Never add a name here to make a mutation "pass".
+KNOWN_BASELINE_FAILURES = {
+    "flow": set(),
+    "client": {"restore_held_server_expiry_is_not_started", "restore_late_server_dispatch_wins"},
+}
+
+
+def fail_names(output):
+    return {line[5:].strip() for line in output.splitlines() if line.startswith("FAIL ")}
+
+
+# SAFETY (Skywalker ruling 5): no KAT, script or tool here may name the console commands that start, dispatch or
+# resend for real. The names are assembled so this file does not contain them either.
+FORBIDDEN_COMMANDS = ["wl.Julius.J1.Panel." + verb for verb in ("Start", "Dispatch", "Resend")]
+
+
+def safety_scan():
+    hits = []
+    tools = os.path.join(ROOT, "wonderland/Tools")
+    for name in sorted(os.listdir(tools)):
+        path = os.path.join(tools, name)
+        if not os.path.isfile(path):
+            continue
+        text = open(path, encoding="utf-8", errors="replace").read()
+        hits += [f"{name}: {cmd}" for cmd in FORBIDDEN_COMMANDS if cmd in text]
+    return hits
+
+
 def build_and_run(cxx, target, old, new):
-    """Returns (built, kat_exit_code)."""
+    """Returns (built, kat_exit_code, kat_stdout)."""
     mutated, kat, sources, includes, whole_tree = TARGETS[target]
     tmp = tempfile.mkdtemp(prefix="j1-sab-")
     try:
@@ -707,15 +794,20 @@ def build_and_run(cxx, target, old, new):
             command += files + ["-o", exe]
         build = subprocess.run(command, capture_output=True, text=True)
         if build.returncode != 0:
-            return False, build.stdout[-400:] + build.stderr[-400:]
+            return False, build.stdout[-400:] + build.stderr[-400:], ""
         run = subprocess.run([exe], capture_output=True, text=True, timeout=120, cwd=tmp)
-        return True, run.returncode
+        return True, run.returncode, run.stdout
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
 def main():
     cxx = os.environ.get("CXX", "g++").strip()
+    hits = safety_scan()
+    if hits:
+        print(f"SABOTAGE SAFETY FAIL: {'; '.join(hits)}")
+        return 2
+    print("SABOTAGE SAFETY PASS no start/dispatch/resend console command in Tools")
     plan = [("flow", m) for m in MUTATIONS] + [("client", m) for m in CLIENT_MUTATIONS]
     for target, (name, old, _new) in plan:
         source = open(os.path.join(ROOT, TARGETS[target][0]), encoding="utf-8").read()
@@ -723,21 +815,28 @@ def main():
         if count != 1:
             print(f"SABOTAGE TARGET BROKEN {name}: found {count} times")
             return 2
-    # A baseline per target: the unmutated copy must build and PASS, or every "catch" below would be meaningless.
+    # J1_SABOTAGE_ONLY=prefix[,prefix]: run only the mutations whose names start with a prefix (all targets are still
+    # checked above, and every baseline still runs).
+    only = [p for p in os.environ.get("J1_SABOTAGE_ONLY", "").split(",") if p]
+    if only:
+        plan = [(t, m) for t, m in plan if any(m[0].startswith(p) for p in only)]
+    # A baseline per target: the unmutated copy must build and PASS (or fail exactly its known names), or every
+    # "catch" below would be meaningless.
     for target in TARGETS:
-        built, code = build_and_run(cxx, target, None, None)
-        if not built or code != 0:
-            print(f"SABOTAGE BASELINE FAIL {target}: built={built} result={code}")
+        built, code, out = build_and_run(cxx, target, None, None)
+        known = KNOWN_BASELINE_FAILURES[target]
+        if not built or (code != 0 and fail_names(out) != known) or (code == 0 and known):
+            print(f"SABOTAGE BASELINE FAIL {target}: built={built} result={code} fails={sorted(fail_names(out)) if built else code}")
             return 2
-        print(f"SABOTAGE BASELINE PASS {target}")
+        print(f"SABOTAGE BASELINE PASS {target}" + (f" (known failures: {' '.join(sorted(known))})" if known else ""))
     survived = []
     for target, (name, old, new) in plan:
-        built, code = build_and_run(cxx, target, old, new)
+        built, code, out = build_and_run(cxx, target, old, new)
         if not built:
             survived.append(name)
             print(f"SABOTAGE COMPILE FAIL {name}: not a catch")
             print(code)
-        elif code == 0:
+        elif code == 0 or not (fail_names(out) - KNOWN_BASELINE_FAILURES[target]):
             survived.append(name)
             print(f"SABOTAGE SURVIVED {name}")
         else:

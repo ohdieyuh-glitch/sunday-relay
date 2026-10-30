@@ -542,6 +542,13 @@ namespace WonderlandJuliusMissionFlow
 		Refused,
 		/** 401 / 503 / transport: nothing dispatched; a resend (same key) is allowed only on the founder's click. */
 		Retryable,
+		/** A-9 (ACK): 202 ack:"accepted" -- the bridge durably RECEIVED the request. NOT a dispatch: /status decides. */
+		Acknowledged,
+		/** 200 state "dispatching" (V2 dispatch_outcome_unknown, or a replay of one) or 409 julius_start_key_reused: the
+		 *  dispatch may or may not have happened. Never Started, never offered again; /status decides. */
+		Uncertain,
+		/** 409 julius_start_in_progress: a Start for this run is live on the bridge. Poll /status; never send a new key. */
+		InProgress,
 	};
 
 	struct FStartAnswer
@@ -551,12 +558,30 @@ namespace WonderlandJuliusMissionFlow
 		std::string State;
 		std::string ErrorKind;
 		bool bReplayed = false;
+		/** Acknowledged only: the bridge's startKeyHash (64 lowercase hex). */
+		std::string StartKeyHash;
 	};
 
 	FStartAnswer ParseStartAnswer(std::string_view WljRunId, int HttpStatus, std::string_view Json);
 
-	/** What the client has recorded (and persisted) about starting the current admitted run. */
-	enum class EStartRecord : std::uint8_t { None, Sending, Started, Refused, NotStarted };
+	/**
+	 * What the client has recorded (and persisted) about starting the current admitted run. Values are persisted by
+	 * number order: append only. Sending = sent and not reconciled (in flight, crashed, timed out, or uncertain): never
+	 * offered, never resent, until /status reconciles it. Accepted = the bridge acknowledged the request (A-9), which is
+	 * NOT a dispatch.
+	 */
+	enum class EStartRecord : std::uint8_t { None, Sending, Started, Refused, NotStarted, Accepted };
+
+	/**
+	 * The record an answer leaves (founder ruling 2026-10-30: after a crash, timeout or outcome-unknown Start, Start stays
+	 * ineligible until /status reconciles it). Only an answer the bridge GAVE that says nothing was dispatched (401, 503)
+	 * is NotStarted; a lost answer (transport 0, 502, 504) is Sending.
+	 */
+	EStartRecord StartRecordAfterAnswer(EStartOutcome Outcome, int HttpStatus);
+
+	/** clientTriggerId: 32 lowercase hex (16 random bytes), minted ONCE per start key and persisted with it (A-9 digest). */
+	inline constexpr std::size_t ClientTriggerIdChars = 32;
+	bool ClientTriggerIdOk(std::string_view Id);
 
 	struct FStartGate
 	{

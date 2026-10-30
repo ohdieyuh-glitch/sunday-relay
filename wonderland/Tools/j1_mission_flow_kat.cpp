@@ -681,7 +681,7 @@ const ABSENT_PHASE = {
 		A = ParseStartAnswer(W, 200, Swap(Made, "\"replayed\":false", "\"replayed\":true"));
 		Expect(A.Outcome == EStartOutcome::Accepted && A.bReplayed, "200 replayed binds, never re-dispatches");
 		A = ParseStartAnswer(W, 200, Swap(Swap(Swap(Made, "\"replayed\":false", "\"replayed\":true"), "\"dispatched\"", "\"dispatching\""), "\"40242149156\"", "null"));
-		Expect(A.Outcome == EStartOutcome::Accepted && A.WorkflowRunId.empty() && A.State == "dispatching", "dispatching with a pending run id binds");
+		Expect(A.Outcome == EStartOutcome::Uncertain && A.WorkflowRunId.empty() && A.State == "dispatching", "dispatching is uncertain (A-9: never bound as started)");
 		Expect(ParseStartAnswer(W, 200, Made).Outcome == EStartOutcome::Malformed, "200 must be a replay");
 		Expect(ParseStartAnswer(W, 202, Swap(Made, "\"replayed\":false", "\"replayed\":true")).Outcome == EStartOutcome::Malformed, "202 is never a replay");
 		Expect(ParseStartAnswer("wlj_11111111-2222-4333-8444-555555555555", 202, Made).Outcome == EStartOutcome::Malformed, "another run's answer is refused");
@@ -1471,6 +1471,70 @@ const ABSENT_PHASE = {
 		Expect(!HasLine(RedactedPanel, "providerRequestId: "), "request id is not invented");
 		++Bridge;
 	}
+
+	// CLIENT LANE C1 (2026-10-30; Skywalker ruling 3 / A-9): the 202 ack is a RECEIPT, not a dispatch; outcome-unknown
+	// is 200 dispatching replayed:false; a same-key resend reuses the persisted clientTriggerId.
+	int AckCases = 0;
+	void StartAckFixtures()
+	{
+		using R = EStartRecord;
+		const char* const W = "wlj_0f8fad5b-d9cb-469f-a165-70867728950e";
+		const std::string Hash(64, 'a');
+		const std::string AckBody = std::string("{\"wljRunId\":\"") + W + "\",\"ack\":\"accepted\",\"state\":\"accepted\",\"startKeyHash\":\"" + Hash +
+			"\",\"acceptedAt\":\"2026-10-30T18:00:00.000Z\",\"replayed\":false,\"workflowRunId\":null,\"dispatchedAt\":null}";
+		FStartAnswer A = ParseStartAnswer(W, 202, AckBody);
+		Expect(A.Outcome == EStartOutcome::Acknowledged && A.WorkflowRunId.empty() && A.StartKeyHash == Hash && !A.bReplayed, "202 ack is acknowledged");
+		Expect(A.Outcome != EStartOutcome::Accepted, "202 ack is NEVER treated as dispatched");
+		Expect(StartRecordAfterAnswer(A.Outcome, 202) == R::Accepted, "an ack records Accepted, not Started");
+		A = ParseStartAnswer(W, 202, Swap(AckBody, "\"replayed\":false", "\"replayed\":true"));
+		Expect(A.Outcome == EStartOutcome::Acknowledged && A.bReplayed, "a replayed ack is still only an ack");
+		Expect(ParseStartAnswer(W, 200, AckBody).Outcome == EStartOutcome::Malformed, "an ack is only ever 202");
+		Expect(ParseStartAnswer(W, 202, Swap(AckBody, "\"workflowRunId\":null", "\"workflowRunId\":\"40242149156\"")).Outcome == EStartOutcome::Malformed, "an ack with a run id is not understood");
+		Expect(ParseStartAnswer(W, 202, Swap(AckBody, "\"dispatchedAt\":null", "\"dispatchedAt\":\"2026-10-30T18:00:01.000Z\"")).Outcome == EStartOutcome::Malformed, "an ack with a dispatch time is not understood");
+		Expect(ParseStartAnswer(W, 202, Swap(AckBody, "\"state\":\"accepted\"", "\"state\":\"dispatched\"")).Outcome == EStartOutcome::Malformed, "an ack must say state accepted");
+		Expect(ParseStartAnswer(W, 202, Swap(AckBody, Hash, Hash.substr(1))).Outcome == EStartOutcome::Malformed, "an ack needs the 64-hex key hash");
+		Expect(ParseStartAnswer(W, 202, Swap(AckBody, ",\"replayed\":false", "")).Outcome == EStartOutcome::Malformed, "an ack must say whether it replayed");
+		Expect(ParseStartAnswer("wlj_11111111-2222-4333-8444-555555555555", 202, AckBody).Outcome == EStartOutcome::Malformed, "another run's ack is refused");
+		++AckCases;
+
+		// V2 dispatch_outcome_unknown: 200 dispatching replayed:false. Never Started, never offered, never resent.
+		const std::string Unknown = std::string("{\"wljRunId\":\"") + W + "\",\"state\":\"dispatching\",\"workflowRunId\":null,\"dispatchedAt\":null,\"replayed\":false}";
+		A = ParseStartAnswer(W, 200, Unknown);
+		Expect(A.Outcome == EStartOutcome::Uncertain && A.State == "dispatching", "200 dispatching replayed:false is outcome-unknown");
+		Expect(StartRecordAfterAnswer(A.Outcome, 200) == R::Sending, "outcome-unknown keeps the record unreconciled");
+		Expect(ParseStartAnswer(W, 200, Swap(Unknown, "\"replayed\":false", "\"replayed\":true")).Outcome == EStartOutcome::Uncertain, "a replay of dispatching is still uncertain");
+		Expect(ParseStartAnswer(W, 202, Unknown).Outcome == EStartOutcome::Malformed, "202 dispatching is not understood");
+		++AckCases;
+
+		// 409 kinds under ACK.
+		const FStartAnswer Reused = ParseStartAnswer(W, 409, "{\"error\":{\"kind\":\"julius_start_key_reused\",\"message\":\"x\"}}");
+		Expect(Reused.Outcome == EStartOutcome::Uncertain, "key reused is uncertain, not a refusal of the run");
+		const FStartAnswer Busy = ParseStartAnswer(W, 409, "{\"error\":{\"kind\":\"julius_start_in_progress\",\"message\":\"Poll /status; do not send a new key\"}}");
+		Expect(Busy.Outcome == EStartOutcome::InProgress && StartRecordAfterAnswer(Busy.Outcome, 409) == R::Accepted, "in progress polls /status");
+		const FStartAnswer Cut = ParseStartAnswer(W, 409, "{\"error\":{\"kind\":\"julius_start_interrupted\",\"message\":\"Start again with a new key\"}}");
+		Expect(Cut.Outcome == EStartOutcome::Refused && StartRecordAfterAnswer(Cut.Outcome, 409) == R::Refused, "interrupted is refused; no automatic new key");
+		++AckCases;
+
+		// Founder ruling 2026-10-30: a lost answer (crash, timeout) blocks Start until /status reconciles it.
+		Expect(StartRecordAfterAnswer(EStartOutcome::Retryable, 0) == R::Sending, "transport/timeout blocks (no auto retry)");
+		Expect(StartRecordAfterAnswer(EStartOutcome::Retryable, 504) == R::Sending, "a gateway timeout blocks");
+		Expect(StartRecordAfterAnswer(EStartOutcome::Retryable, 502) == R::Sending, "a bad gateway blocks");
+		Expect(StartRecordAfterAnswer(EStartOutcome::Retryable, 503) == R::NotStarted, "503 unavailable said nothing was claimed");
+		Expect(StartRecordAfterAnswer(EStartOutcome::Retryable, 401) == R::NotStarted, "401 said nothing was claimed");
+		Expect(StartRecordAfterAnswer(EStartOutcome::Malformed, 202) == R::Sending, "an unreadable answer blocks");
+		Expect(StartRecordAfterAnswer(EStartOutcome::Accepted, 202) == R::Started, "a dispatch answer is Started");
+		const char* const Ok = "RUN LIVE MISSION";
+		for (const R Record : {R::Sending, R::Accepted})
+		{
+			const FStartGate Blocked = StartGateFor("admitted_waiting", true, false, Record, true, Ok);
+			Expect(!Blocked.bOffer && !Blocked.bSend && Blocked.Why != nullptr && *Blocked.Why != 0, "an unreconciled or acknowledged start is blocked with a reason");
+		}
+		Expect(std::strstr(StartGateFor("admitted_waiting", true, false, R::Sending, true, Ok).Why, "/status") != nullptr, "the reason names /status");
+		++AckCases;
+
+		Expect(ClientTriggerIdOk(std::string(32, 'f')) && !ClientTriggerIdOk(std::string(32, 'F')) && !ClientTriggerIdOk(std::string(31, 'f')), "trigger id is 32 lowercase hex");
+		++AckCases;
+	}
 }
 
 int main()
@@ -1711,6 +1775,7 @@ int main()
 	LiveFixtures();
 	StartFixtures();
 	ExecFixtures();
+	StartAckFixtures();
 
 	if (Failures != 0)
 	{
@@ -1718,7 +1783,7 @@ int main()
 		return 1;
 	}
 	std::printf(
-		"J1 MISSION FLOW KAT PASS meanings=%d route=%d result=%d flow=%d windows=%d bridge=%d phases=%d live=%d start=%d exec=%d\n",
-		Meanings, Routes, Results, FlowSteps, Windows, Bridge, PhaseCases, LiveCases, StartCases, ExecCases);
+		"J1 MISSION FLOW KAT PASS meanings=%d route=%d result=%d flow=%d windows=%d bridge=%d phases=%d live=%d start=%d exec=%d ack=%d\n",
+		Meanings, Routes, Results, FlowSteps, Windows, Bridge, PhaseCases, LiveCases, StartCases, ExecCases, AckCases);
 	return 0;
 }

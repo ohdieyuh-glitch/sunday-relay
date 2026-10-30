@@ -327,6 +327,7 @@ namespace
 		case 2: return TEXT("started");
 		case 3: return TEXT("refused");
 		case 4: return TEXT("not_started");
+		case 5: return TEXT("accepted");
 		default: return TEXT("none");
 		}
 	}
@@ -339,32 +340,37 @@ void UWonderlandJuliusMissionSubsystem::SyncStartRecord()
 	// A different run (or the first look after a restart): the record is the saved one only if it names THIS run.
 	StartRunId = RunId;
 	StartKey.Reset();
+	StartTriggerId.Reset();
 	StartWorkflowRunId.Reset();
 	StartMessage.Reset();
 	StartRecord = 0;
 	TArray<FString> Lines;
 	if (RunId.IsEmpty() || !FFileHelper::LoadFileToStringArray(Lines, *StartRecordPath()) || Lines.Num() < 5 || Lines[0] != TEXT("WJ1START 1")) { return; }
-	FString Run, Key, State, Workflow;
+	FString Run, Key, State, Workflow, Trigger;
 	for (const FString& Line : Lines)
 	{
 		if (Line.StartsWith(TEXT("run "))) { Run = Line.Mid(4); }
 		else if (Line.StartsWith(TEXT("key "))) { Key = Line.Mid(4); }
 		else if (Line.StartsWith(TEXT("state "))) { State = Line.Mid(6); }
 		else if (Line.StartsWith(TEXT("workflow "))) { Workflow = Line.Mid(9); }
+		else if (Line.StartsWith(TEXT("trigger "))) { Trigger = Line.Mid(8); }
 	}
 	if (Run != RunId) { return; }
 	StartKey = Key;
+	StartTriggerId = Trigger;
 	StartWorkflowRunId = Workflow;
 	// A start that was in flight when the client stopped is NOT assumed sent or unsent: it stays "sending" (never
 	// re-offered); /status and /events say what happened.
-	StartRecord = State == TEXT("sending") ? 1 : State == TEXT("started") ? 2 : State == TEXT("refused") ? 3 : State == TEXT("not_started") ? 4 : 0;
+	StartRecord = State == TEXT("sending") ? 1 : State == TEXT("started") ? 2 : State == TEXT("refused") ? 3 : State == TEXT("not_started") ? 4 : State == TEXT("accepted") ? 5 : 0;
 	if (StartRecord == 2) { StartMessage = FString::Printf(TEXT("Started: GitHub Actions run %s."), *StartWorkflowRunId); }
+	if (StartRecord == 1) { StartMessage = TEXT("Start blocked: the last Start was not reconciled (crash, timeout or unknown outcome). Waiting for the bridge's /status; nothing is resent."); }
+	if (StartRecord == 5) { StartMessage = TEXT("Start request accepted by the bridge (not yet dispatched). Waiting for /status."); }
 }
 
 void UWonderlandJuliusMissionSubsystem::SaveStartRecord() const
 {
-	const FString Text = FString::Printf(TEXT("WJ1START 1\nrun %s\nkey %s\nstate %s\nworkflow %s\n"),
-		*StartRunId, *StartKey, StartRecordWord(StartRecord), *StartWorkflowRunId);
+	const FString Text = FString::Printf(TEXT("WJ1START 1\nrun %s\nkey %s\nstate %s\nworkflow %s\ntrigger %s\n"),
+		*StartRunId, *StartKey, StartRecordWord(StartRecord), *StartWorkflowRunId, *StartTriggerId);
 	FFileHelper::SaveStringToFile(Text, *StartRecordPath());
 }
 
@@ -593,8 +599,16 @@ bool UWonderlandJuliusMissionSubsystem::StartPaidMission(const FString& Typed)
 		std::string Minted;
 		if (!Host->Session.MintStartKey(Minted)) { StartMessage = TEXT("Not started: no secure random source."); return false; }
 		StartKey = ToF(Minted);
+		StartTriggerId.Reset();
 	}
-	const WonderlandJuliusMissionClient::FCommandOutcome Outcome = Host->Session.StartRequest(TypedStd, ToStd(StartKey));
+	if (StartTriggerId.IsEmpty())
+	{
+		// Minted ONCE per key and persisted with it (A-9: the bridge digests it; a new id under the same key is refused).
+		std::string Minted;
+		if (!Host->Session.MintClientTriggerId(Minted)) { StartMessage = TEXT("Not started: no secure random source."); return false; }
+		StartTriggerId = ToF(Minted);
+	}
+	const WonderlandJuliusMissionClient::FCommandOutcome Outcome = Host->Session.StartRequest(TypedStd, ToStd(StartKey), ToStd(StartTriggerId));
 	if (!Outcome.bSent)
 	{
 		StartMessage = FString::Printf(TEXT("Not started: %s."), *ToF(Outcome.Detail));
@@ -603,7 +617,7 @@ bool UWonderlandJuliusMissionSubsystem::StartPaidMission(const FString& Typed)
 	// Recorded BEFORE it leaves: a crash after this line can never lead to a second, different start.
 	StartRecord = 1;
 	SaveStartRecord();
-	StartMessage = TEXT("Starting the paid mission... (the bridge is claiming and dispatching; this can take 5-15 s)");
+	StartMessage = TEXT("Sending the Start request to the bridge... (its acknowledgement is not a dispatch; /status decides)");
 	UE_LOG(LogJuliusJ1, Display, TEXT("{\"event\":\"start_requested\",\"wlj_run_id\":\"%s\"}"), *StartRunId);
 	ClampHttpLogging();
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Http = FHttpModule::Get().CreateRequest();
@@ -653,28 +667,38 @@ void UWonderlandJuliusMissionSubsystem::CompleteStart(
 		}
 	}
 	const FStartAnswer Answer = ParseStartAnswer(ToStd(ForRunId), Status, Body);
+	// The record is the pure core's (StartRecordAfterAnswer): a lost, unknown or unreadable answer stays "sending" (never
+	// offered, never resent) until /status reconciles it. Nothing here sends anything.
+	StartRecord = static_cast<uint8>(StartRecordAfterAnswer(Answer.Outcome, Status));
 	switch (Answer.Outcome)
 	{
 	case EStartOutcome::Accepted:
-		StartRecord = 2;
 		bStartAcceptedHere = true;
 		StartWorkflowRunId = ToF(Answer.WorkflowRunId);
 		StartMessage = StartWorkflowRunId.IsEmpty()
 			? FString::Printf(TEXT("Started%s: the GitHub Actions run id is pending; watching the run."), Answer.bReplayed ? TEXT(" (already started)") : TEXT(""))
 			: FString::Printf(TEXT("Started%s: GitHub Actions run %s."), Answer.bReplayed ? TEXT(" (already started)") : TEXT(""), *StartWorkflowRunId);
 		break;
+	case EStartOutcome::Acknowledged:
+		StartMessage = TEXT("Start request accepted by the bridge (not yet dispatched). Waiting for /status.");
+		break;
+	case EStartOutcome::InProgress:
+		StartMessage = TEXT("A Start for this run is already in progress on the bridge. Waiting for /status; no new key is sent.");
+		break;
+	case EStartOutcome::Uncertain:
+		StartMessage = TEXT("Start outcome unknown, needs reconciliation. Start stays blocked until /status settles it; nothing is resent.");
+		break;
 	case EStartOutcome::Refused:
-		StartRecord = 3;
 		StartMessage = FString::Printf(TEXT("The bridge refused the start (%s). Nothing was dispatched by this client."), *ToF(Answer.ErrorKind));
 		break;
 	case EStartOutcome::Retryable:
-		StartRecord = 4;
-		StartMessage = FString::Printf(TEXT("Not started yet (bridge %s). You may press Start again; it re-sends the same authorisation."),
-			Status == 0 ? TEXT("unreachable") : *FString::FromInt(Status));
+		StartMessage = StartRecord == static_cast<uint8>(EStartRecord::NotStarted)
+			? FString::Printf(TEXT("Not started yet (bridge %d). You may press Start again; it re-sends the same authorisation."), Status)
+			: FString::Printf(TEXT("No answer from the bridge (%s). Start stays blocked until /status says what happened; nothing is resent."),
+				Status == 0 ? TEXT("unreachable or timed out") : *FString::FromInt(Status));
 		break;
 	default:
 		// Not understood: the start may or may not have happened, so it is never offered again; /status decides.
-		StartRecord = 1;
 		StartMessage = FString::Printf(TEXT("The bridge's answer was not understood (HTTP %d). Watching the run's status instead."), Status);
 		break;
 	}

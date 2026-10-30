@@ -170,9 +170,11 @@ private:
 	uint64 LastLiveOkUtcMs = 0;
 	int32 LiveReadFailures = 0;
 	FString LiveRefusedSavedFor;
-	/** The persisted start record (SaveGames/JuliusJ1/start.v1) of StartRunId; record 0..4 = EStartRecord. */
+	/** The persisted start record (SaveGames/JuliusJ1/start.v1) of StartRunId; record 0..5 = EStartRecord. */
 	FString StartRunId;
 	FString StartKey;
+	/** A-9: the clientTriggerId minted ONCE with StartKey and persisted beside it; every resend sends this value. */
+	FString StartTriggerId;
 	FString StartWorkflowRunId;
 	FString StartMessage;
 	uint8 StartRecord = 0;
