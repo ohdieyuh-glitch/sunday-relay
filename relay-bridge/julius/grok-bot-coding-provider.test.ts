@@ -432,8 +432,31 @@ describe('configuration fails closed, before anything is sent', () => {
     expect(grokBotCoderConfigRefusal(silent, { modelId: 'composer-max', modelFamily: 'cursor' })?.providerFailureClass).toBe('coder_grok_same_family_as_reviewer');
     expect(grokBotCoderConfigRefusal(silent, { modelId: 'Composer_1', modelFamily: 'cursor' })?.providerFailureClass).toBe('coder_grok_same_model_as_reviewer');
     expect(grokBotCoderConfigRefusal(silent, undefined)?.providerFailureClass).toBe('coder_grok_reviewer_pin_absent');
-    /* A normalised restatement agrees. */
-    expect(grokBotCoderConfigRefusal(config({ pinnedModelId: 'composer-1', coderModelFamily: 'cursor', reviewerModelId: 'GROK BUILD 0.1', reviewerModelFamily: 'X.AI' }), { modelId: 'grok-build-0.1', modelFamily: 'xai' })).toBeNull();
+    /* PILOT L-2: the cross-check compares the exact pinned id (trim and case only), never the coarse normaliser. */
+    const restated = (reviewerModelId: string) => grokBotCoderConfigRefusal(config({ pinnedModelId: 'composer-1', coderModelFamily: 'cursor', reviewerModelId, reviewerModelFamily: 'X.AI' }), { modelId: 'grok-build-0.1', modelFamily: 'xai' })?.providerFailureClass ?? null;
+    expect(restated('  GROK-BUILD-0.1 ')).toBeNull();
+    for (const other of ['grok-build-0.2', 'grok-build-0.2x', 'grok-build-9', 'grok-build', 'GROK BUILD 0.1', 'grok_build_0.1', 'grok-build-0.1-preview']) {
+      expect(restated(other), other).toBe('coder_grok_reviewer_pin_mismatch');
+    }
+  });
+  it('PILOT L-3: separator-split xAI names are never cursor; they are unrecognised and refused beside any reviewer', () => {
+    for (const id of ['x.ai-composer', 'x-ai-composer', 'x_ai-cursor', 'X.AI-Composer-1', 'x ai composer', 'composer-x.ai', 'cursor-x_ai-1', 'x:ai-composer', 'g.r.o.k-composer', 'g-r-o-k-cursor', 'g.r.0.k-cursor', 'G_R_0_K-composer']) {
+      expect(familyFromModelId(id), id).toBeNull();
+      expect(resolveModelFamily(id), id).toBeNull();
+      for (const pin of [{ modelId: 'grok-build-0.1', modelFamily: 'xai' }, { modelId: 'gpt-5', modelFamily: 'openai' }]) {
+        for (const fam of ['cursor', 'xai']) {
+          const r = grokBotCoderConfigRefusal(config({ pinnedModelId: id.replace(/ /gu, '-'), coderModelFamily: fam, reviewerModelId: null, reviewerModelFamily: null }), pin);
+          expect(r?.providerFailureClass, `${id}/${fam}/${pin.modelId}`).toMatch(/^coder_grok_(model_family_unrecognised|same_family_as_reviewer)$/u);
+        }
+      }
+      /* As the reviewer, it cannot show independence either. */
+      expect(grokBotCoderConfigRefusal(config({ pinnedModelId: 'gpt-5', coderModelFamily: 'openai', reviewerModelId: null, reviewerModelFamily: null }), { modelId: id.replace(/ /gu, '-'), modelFamily: 'xai' })?.providerFailureClass, id).toBe('coder_grok_reviewer_family_unrecognised');
+    }
+    /* Real ids keep their family. */
+    expect(familyFromModelId('composer-1')).toBe('cursor');
+    expect(familyFromModelId('cursor-small')).toBe('cursor');
+    expect(familyFromModelId('gpt-5')).toBe('openai');
+    expect(grokBotCoderConfigRefusal(config({ pinnedModelId: 'composer-1', coderModelFamily: 'cursor', reviewerModelId: null, reviewerModelFamily: null }), { modelId: 'grok-build-0.1', modelFamily: 'xai' })).toBeNull();
   });
   it('H1 fail-closed (PILOT R1 residuals): an opaque model id is refused whatever family is declared for it', async () => {
     /* PILOT's exact accepted cases at a1795dc0. */
@@ -668,7 +691,9 @@ describe('F5/F6/F13: exec bits, protected paths, an empty permitted list, and th
   it('N6: 8.3 short names (GIT~1), NTFS alternate data streams, .lfsconfig and .gitlab-ci.yml are protected too', () => {
     for (const path of ['GIT~1/config', 'src/git~1/hooks/x', 'GITHUB~1/workflows/ci.yml', 'GITMOD~1', 'GITATT~2', 'HUSKY~1/pre-commit', 'LFSCON~1', 'GITLAB~1',
       '.git::$INDEX_ALLOCATION/config', '.git:$DATA', '.gitmodules::$DATA', 'src/.github:stream/x', '.git.::$INDEX_ALLOCATION/x',
-      '.lfsconfig', 'sub/.LFSCONFIG', '.gitlab-ci.yml', '.GitLab-CI.yml', 'pkg/.gitlab-ci.yml']) {
+      '.lfsconfig', 'sub/.LFSCONFIG', '.gitlab-ci.yml', '.GitLab-CI.yml', 'pkg/.gitlab-ci.yml',
+      /* PILOT L-1: an 8.3 short name WITH its extension. */
+      'GITLAB~1.YML', 'ci/gitlab~2.yml', 'GITLAB~1.YML::$DATA', 'GITLAB~1.YML.', 'GIT~1.X/config']) {
       expect(isProtectedRepoPath(path), path).toBe(true);
     }
     for (const path of ['src/progit~1', 'docs/abc~1', 'src/a~b', 'notes~1.md', 'git~x/y', 'src/lfsconfig.ts', 'gitlab-ci.yml', 'src/time:12', 'ci/.gitlab-ci.yml.bak']) {

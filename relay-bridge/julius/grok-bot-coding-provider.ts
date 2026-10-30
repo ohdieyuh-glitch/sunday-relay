@@ -187,8 +187,12 @@ const PLAIN_MODES = new Set(['000000', '100644', '100755']);
  * `.git`): git's own directory and hooks, the files that change how git reads the tree, CI workflows, and hook managers.
  */
 const PROTECTED_COMPONENTS = new Set(['.git', '.gitmodules', '.gitattributes', '.github', '.githooks', '.husky', '.lfsconfig', '.gitlab-ci.yml']);
-/** N6: an NTFS 8.3 short name (`GIT~1`, `GITHUB~1`, `LFSCON~1`): up to six leading characters of a protected name, without its dot. */
-const SHORT_NAME = /^([a-z0-9]{1,6})~[0-9]+$/u;
+/**
+ * N6: an NTFS 8.3 short name (`GIT~1`, `GITHUB~1`, `LFSCON~1`): up to six leading characters of a protected name, without its
+ * dot. PILOT L-1: with an optional extension of up to three characters (`GITLAB~1.YML` for `.gitlab-ci.yml`). Any extension
+ * is accepted as protected, which can only refuse more.
+ */
+const SHORT_NAME = /^([a-z0-9]{1,6})~[0-9]+(?:\.[a-z0-9]{1,3})?$/u;
 const PROTECTED_STEMS = [...PROTECTED_COMPONENTS].map((name) => name.replace(/^\./u, '').replace(/[^a-z0-9]/gu, ''));
 export function isProtectedRepoPath(path: string): boolean {
   return path.split(/[/\\]/u).some((part) => {
@@ -365,6 +369,11 @@ export const familyFromModelId = (id: string): string | null => {
   const v = foldLookalikes(id);
   const raw = id.trim().toLowerCase();
   if (/grok|xai/u.test(v) || /grok|xai/u.test(raw)) return 'xai';
+  /* PILOT L-3, FAIL CLOSED: an id that names xAI only once its separators are removed (`x.ai-composer`, `x_ai-cursor`,
+   * `g.r.o.k-4`) is a split vendor name. It is placed in NO family (unrecognised, so refused beside any reviewer), and in
+   * particular never in Cursor because it also says `composer` or `cursor`. Checked before every other vendor. */
+  const squeezed = (s: string): string => s.replace(/[^a-z0-9]/gu, '');
+  if (/grok|xai/u.test(squeezed(v)) || /grok|xai/u.test(squeezed(raw))) return null;
   if (foldVariants(id).some((f) => /claude|anthropic|opus|sonnet|haiku/u.test(f))) return 'anthropic';
   if (/gpt|openai|codex/u.test(v) || /(^|[-._])o[1-9]($|[-._])/u.test(raw)) return 'openai';
   if (/gemini/u.test(v)) return 'google';
@@ -432,7 +441,9 @@ export function grokBotCoderConfigRefusal(config: GrokBotCoderConfig | null | un
   const reviewerId = pinId;
   const statedId = typeof config.reviewerModelId === 'string' ? config.reviewerModelId.trim() : '';
   const statedFamily = typeof config.reviewerModelFamily === 'string' ? config.reviewerModelFamily.trim() : '';
-  if ((statedId !== '' && normaliseModelId(statedId) !== normaliseModelId(reviewerId)) || (statedFamily !== '' && canonicalModelFamily(statedFamily) !== reviewerFamily)) {
+  /* PILOT L-2: the cross-check is EXACT (trim and case only). The coarse normaliser is for the same-model refusal below,
+   * where folding can only refuse; here it would hide a different version (`grok-build-0.2` against `grok-build-0.1`). */
+  if ((statedId !== '' && statedId.toLowerCase() !== reviewerId.toLowerCase()) || (statedFamily !== '' && canonicalModelFamily(statedFamily) !== reviewerFamily)) {
     return refuse('coder_grok_reviewer_pin_mismatch', 'The coder config describes a reviewer that is not the wired reviewer pin; nothing was dispatched.');
   }
   /* Never relaxable: the coder is never the reviewer's own model, compared after normalisation (case, spacing, separators,

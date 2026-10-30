@@ -76,10 +76,11 @@ export const J1_SHELL_PORT_MISSING: readonly string[] = Object.freeze([
 export type J1CoderOccupant = 'claude-code-hosted' | typeof GROK_BOT_CODER_PROVIDER_KIND;
 
 /**
- * What the coder hook is given per dispatch. `reviewer` (N1) is the WIRED reviewer pin: the J1 core passes
- * `{ modelId: reviewerModel, modelFamily: <the reviewer's vendor family> }` from its own `JULIUS_J1_REVIEWER_MODEL`
- * pin. The Claude occupant ignores it; the Grok Bot occupant REQUIRES it and refuses (`coder_grok_reviewer_pin_absent`)
- * without it, so the grok occupant cannot run from a core that does not pass it.
+ * What the coder hook is given per dispatch. `reviewer` (N1) is the WIRED reviewer pin, which the J1 core is meant to pass
+ * as `{ modelId: reviewerModel, modelFamily: <the reviewer's vendor family> }` from its own `JULIUS_J1_REVIEWER_MODEL` pin.
+ * PILOT L-4: core does NOT pass it yet (julius-dispatch-wiring-core.ts passes only `{ requestedModel: coderModel }`); that
+ * wiring is open. The Claude occupant ignores `reviewer`; the Grok Bot occupant REQUIRES it and refuses
+ * (`coder_grok_reviewer_pin_absent`) without it, so today the grok occupant cannot run from core: fail closed.
  */
 export interface J1CoderProviderContext {
   readonly requestedModel: string;
