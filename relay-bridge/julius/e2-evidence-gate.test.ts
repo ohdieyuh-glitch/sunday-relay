@@ -73,7 +73,7 @@ describe('E2 part C: the diff', () => {
       git('-c', 'commit.gpgsign=false', 'commit', '-qam', 'b');
       const head = git('rev-parse', 'HEAD');
       /* 43b93a4e M-8: more pins and explicit flags; the bytes are re-derived from the recorded argv itself. */
-      const argv = ['git', '-c', 'diff.noprefix=false', '-c', 'diff.renames=false', '-c', 'core.quotepath=false', '-c', 'diff.mnemonicPrefix=false',
+      const argv = ['git', '--no-replace-objects', '-c', 'diff.noprefix=false', '-c', 'diff.renames=false', '-c', 'core.quotepath=false', '-c', 'diff.mnemonicPrefix=false',
         '-c', 'color.ui=never', '-c', 'diff.relative=false', '-c', 'diff.suppressBlankEmpty=false', '-c', 'core.autocrlf=false',
         '-c', 'diff.context=3', '-c', 'diff.interHunkContext=0', '-c', 'diff.orderFile=/dev/null', '-c', 'diff.srcPrefix=a/', '-c', 'diff.dstPrefix=b/',
         '-c', 'diff.algorithm=myers', '-c', 'diff.indentHeuristic=true', '-c', 'core.attributesFile=/dev/null', '-c', 'diff.wsErrorHighlight=none',

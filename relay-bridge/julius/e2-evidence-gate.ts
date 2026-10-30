@@ -321,7 +321,7 @@ const gitBlob = (workspace: string, base: string, path: string): Buffer | null =
   const bin = resolveProgram('git');
   if (bin === null) return null;
   try {
-    return execFileSync(bin, ['--no-replace-objects', ...GIT_PINS, 'cat-file', 'blob', `${base}:${path}`], {
+    return execFileSync(bin, [...GIT_PINS, 'cat-file', 'blob', `${base}:${path}`], {
       cwd: workspace, shell: false, stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024,
       env: { LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...E2_GIT_ENV, GIT_NO_REPLACE_OBJECTS: '1', PATH: E2_VERIFIER_PATH },
     });
@@ -419,6 +419,8 @@ const SHA = /^[0-9a-f]{40}$/u;
 /** M-8: git configuration that would change the diff bytes is pinned; global and system config are not read. */
 export const E2_GIT_ENV = Object.freeze({ GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', GIT_ATTR_NOSYSTEM: '1' });
 const GIT_PINS = Object.freeze([
+  /* Skywalker L2: replace refs never redirect objects (also GIT_NO_REPLACE_OBJECTS=1 in the env). */
+  '--no-replace-objects',
   '-c', 'diff.noprefix=false', '-c', 'diff.renames=false', '-c', 'core.quotepath=false', '-c', 'diff.mnemonicPrefix=false',
   '-c', 'color.ui=never', '-c', 'diff.relative=false', '-c', 'diff.suppressBlankEmpty=false', '-c', 'core.autocrlf=false',
   /* PILOT 43b93a4e M-8: everything else in the repo's own config that shapes the bytes. */
