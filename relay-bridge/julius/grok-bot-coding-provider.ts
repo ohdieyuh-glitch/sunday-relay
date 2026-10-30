@@ -161,12 +161,27 @@ const RAW_LINE = /^:([0-7]{6}) ([0-7]{6}) ([0-9a-f]{40}) ([0-9a-f]{40}) ([A-Z])\
 const PLAIN_MODES = new Set(['000000', '100644', '100755']);
 
 /**
+ * PATH COMPONENTS NO AGENT PATCH MAY TOUCH, compared case-insensitively (a case-insensitive checkout treats `.GIT` as
+ * `.git`): git's own directory and hooks, the files that change how git reads the tree, CI workflows, and hook managers.
+ */
+const PROTECTED_COMPONENTS = new Set(['.git', '.gitmodules', '.gitattributes', '.github', '.githooks', '.husky']);
+export function isProtectedRepoPath(path: string): boolean {
+  // Trailing dots and spaces are dropped too: some filesystems open `.git.` or `.git ` as `.git`.
+  return path.split(/[/\\]/u).some((part) => {
+    const folded = part.normalize('NFKC').toLowerCase();
+    return PROTECTED_COMPONENTS.has(folded) || PROTECTED_COMPONENTS.has(folded.replace(/[. ]+$/u, ''));
+  });
+}
+
+/**
  * The workspace port over the EXISTING shell port (`ShellEffectPort`). The J1 local shell port (julius-local-shell-port.ts)
  * runs only exact bridge-generated strings and refuses these with `command_not_allowed` until its allow-list is extended
  * by a reviewed change; that refusal surfaces here as a closed failure, never as a fallback.
  */
 export function createShellGrokBotWorkspacePort(input: {
   readonly shell: ShellEffectPort;
+  /** The working tree the shell port runs in. Every call must name exactly this path, or it is refused (`workspace_path_mismatch`). */
+  readonly workspacePath: string;
   readonly ids: { readonly runId: string; readonly projectId: string; readonly taskId: string; readonly workerId: string };
   readonly timeoutMs?: number;
 }): GrokBotWorkspacePort {
@@ -176,15 +191,19 @@ export function createShellGrokBotWorkspacePort(input: {
     seq += 1;
     return input.shell.run({ ...input.ids, invocationKey: `grok-coder:${step}:${seq}`, command, timeoutMs });
   };
+  const bound = typeof input.workspacePath === 'string' && input.workspacePath !== '' ? input.workspacePath : null;
+  const samePath = (p: string): boolean => bound !== null && p === bound;
   return {
-    async baseRevision() {
+    async baseRevision(workspacePath) {
+      if (!samePath(workspacePath)) return { ok: false, cause: 'workspace_path_mismatch' };
       try {
         const r = await run('base', grokWorkspaceCommands.baseRevision());
         const sha = r.stdout.trim();
         return r.status === 'SUCCEEDED' && SHA40.test(sha) ? { ok: true, sha } : { ok: false, cause: 'base_revision_unreadable' };
       } catch { return { ok: false, cause: 'base_revision_unreadable' }; }
     },
-    async fetchBranch({ repoUrl, branch, baseRevision }) {
+    async fetchBranch({ workspacePath, repoUrl, branch, baseRevision }) {
+      if (!samePath(workspacePath)) return { ok: false, cause: 'workspace_path_mismatch' };
       const parsed = parseGithubRepoUrl(repoUrl);
       if (parsed === null || !isSafeBranchName(branch) || !SHA40.test(baseRevision)) return { ok: false, cause: 'fetch_input_unsafe' };
       let r;
@@ -202,13 +221,16 @@ export function createShellGrokBotWorkspacePort(input: {
         if (oldMode === undefined || newMode === undefined || status === undefined || path === undefined) return { ok: false, cause: 'fetch_output_malformed' };
         const kind = STATUS_TO_CHANGE[status];
         // A type change, or a symlink/gitlink on either side, is never a plain patch: counted, and the provider refuses it.
-        if (status === 'T' || !PLAIN_MODES.has(oldMode) || !PLAIN_MODES.has(newMode)) unsafeEntries += 1;
+        // So is an executable-bit flip (100644 <-> 100755) on a file that exists on both sides.
+        const modeFlip = oldMode !== '000000' && newMode !== '000000' && oldMode !== newMode;
+        if (status === 'T' || !PLAIN_MODES.has(oldMode) || !PLAIN_MODES.has(newMode) || modeFlip) unsafeEntries += 1;
         else if (kind === undefined) return { ok: false, cause: 'fetch_output_malformed' };
         changes.push(Object.freeze({ path, change: kind ?? 'MODIFIED' }));
       }
       return { ok: true, headSha: head, changes: Object.freeze(changes), unsafeEntries };
     },
-    async applyFetched({ baseRevision, headSha }) {
+    async applyFetched({ workspacePath, baseRevision, headSha }) {
+      if (!samePath(workspacePath)) return { ok: false, cause: 'workspace_path_mismatch' };
       if (!SHA40.test(baseRevision) || !SHA40.test(headSha)) return { ok: false, cause: 'apply_input_unsafe' };
       try {
         const r = await run('apply', grokWorkspaceCommands.applyFetched(baseRevision, headSha));
@@ -538,11 +560,15 @@ export function createGrokBotCodingAgentProvider(input: {
         evidence.agentHeadSha = fetched.headSha;
         evidence.fetchedChangeCount = fetched.changes.length;
         const violations = juliusScopeViolations({ changes: fetched.changes, permittedPaths: request.permissions.permittedPaths, outOfScope: request.permissions.outOfScope });
-        const gitInternal = fetched.changes.some((c) => c.path === '.git' || c.path.startsWith('.git/') || c.path.includes('/.git/'));
+        const gitInternal = fetched.changes.some((c) => isProtectedRepoPath(c.path));
+        // F6: a mission that permits no path permits no change. (The kernel reads an empty list as "unrestricted"; this coder does not.)
+        const permittedNone = request.permissions.permittedPaths.every((p) => p.trim() === '') && fetched.changes.length > 0;
         // Fail closed: a port that does not report special entries is treated as reporting one.
         const unsafeEntries = typeof fetched.unsafeEntries === 'number' && Number.isInteger(fetched.unsafeEntries) && fetched.unsafeEntries >= 0 ? fetched.unsafeEntries : 1;
-        if (violations.length > 0 || gitInternal || unsafeEntries > 0) {
-          return started('ENVELOPE_NOT_HONOURED', 'coder_grok_patch_out_of_scope', 'The agent changed paths outside the mission\'s permitted scope, or a symlink, submodule or file type; nothing was applied.', { scopeViolationCount: violations.length, unsafeEntryCount: unsafeEntries });
+        if (violations.length > 0 || gitInternal || permittedNone || unsafeEntries > 0) {
+          return started('ENVELOPE_NOT_HONOURED', 'coder_grok_patch_out_of_scope', 'The agent changed paths outside the mission\'s permitted scope, a protected git path, or a symlink, submodule, file type or executable bit; nothing was applied.', {
+            scopeViolationCount: violations.length, unsafeEntryCount: unsafeEntries, protectedPathTouched: gitInternal, permittedPathsEmpty: permittedNone,
+          });
         }
         const applied = await workspace.applyFetched({ workspacePath: request.workspacePath, baseRevision: base.sha, headSha: fetched.headSha }, signal);
         if (!applied.ok) return started('TOOL_CRASH', 'coder_grok_patch_apply_failed', 'The agent\'s changes could not be applied to the workspace.', { applyRefusal: applied.cause });
