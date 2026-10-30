@@ -241,9 +241,11 @@ export function createShellGrokBotWorkspacePort(input: {
         if (oldMode === undefined || newMode === undefined || status === undefined || path === undefined) return { ok: false, cause: 'fetch_output_malformed' };
         const kind = STATUS_TO_CHANGE[status];
         // A type change, or a symlink/gitlink on either side, is never a plain patch: counted, and the provider refuses it.
-        // So is an executable-bit flip (100644 <-> 100755) on a file that exists on both sides.
+        // So is an executable-bit flip (100644 <-> 100755) on a file that exists on both sides, and a NEW file that arrives
+        // executable (000000 -> 100755): an agent may not introduce a runnable file either way.
         const modeFlip = oldMode !== '000000' && newMode !== '000000' && oldMode !== newMode;
-        if (status === 'T' || !PLAIN_MODES.has(oldMode) || !PLAIN_MODES.has(newMode) || modeFlip) unsafeEntries += 1;
+        const newExecutable = oldMode === '000000' && newMode === '100755';
+        if (status === 'T' || !PLAIN_MODES.has(oldMode) || !PLAIN_MODES.has(newMode) || modeFlip || newExecutable) unsafeEntries += 1;
         else if (kind === undefined) return { ok: false, cause: 'fetch_output_malformed' };
         changes.push(Object.freeze({ path, change: kind ?? 'MODIFIED' }));
       }
@@ -640,7 +642,7 @@ export function createGrokBotCodingAgentProvider(input: {
         // Fail closed: a port that does not report special entries is treated as reporting one.
         const unsafeEntries = typeof fetched.unsafeEntries === 'number' && Number.isInteger(fetched.unsafeEntries) && fetched.unsafeEntries >= 0 ? fetched.unsafeEntries : 1;
         if (violations.length > 0 || gitInternal || permittedNone || unsafeEntries > 0) {
-          return started('ENVELOPE_NOT_HONOURED', 'coder_grok_patch_out_of_scope', 'The agent changed paths outside the mission\'s permitted scope, a protected git path, or a symlink, submodule, file type or executable bit; nothing was applied.', {
+          return started('ENVELOPE_NOT_HONOURED', 'coder_grok_patch_out_of_scope', 'The agent changed paths outside the mission\'s permitted scope, a protected git path, or a symlink, submodule, file type or executable bit (including a new executable file); nothing was applied.', {
             patchApplied: false, scopeViolationCount: violations.length, unsafeEntryCount: unsafeEntries, protectedPathTouched: gitInternal, permittedPathsEmpty: permittedNone,
           });
         }

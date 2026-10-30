@@ -549,9 +549,9 @@ describe('M3: the scope check sees modes and type changes (git diff --raw --no-r
     expect(cmd).toContain(`diff --raw --no-renames --no-abbrev ${BASE} "$head"`);
     expect(cmd).not.toContain('--name-status');
   });
-  it('plain modify, add, delete and an executable file are plain changes', async () => {
-    expect(await fetch([raw('100644', '100644', 'M', 'src/a.ts'), raw('000000', '100755', 'A', 'src/run.sh'), raw('100644', '000000', 'D', 'src/old.ts')]))
-      .toEqual({ ok: true, headSha: HEAD, unsafeEntries: 0, changes: [{ path: 'src/a.ts', change: 'MODIFIED' }, { path: 'src/run.sh', change: 'ADDED' }, { path: 'src/old.ts', change: 'DELETED' }] });
+  it('plain modify, add, delete and an edit to an existing executable are plain changes', async () => {
+    expect(await fetch([raw('100644', '100644', 'M', 'src/a.ts'), raw('000000', '100644', 'A', 'src/new.ts'), raw('100755', '100755', 'M', 'src/run.sh'), raw('100644', '000000', 'D', 'src/old.ts'), raw('100755', '000000', 'D', 'src/gone.sh')]))
+      .toEqual({ ok: true, headSha: HEAD, unsafeEntries: 0, changes: [{ path: 'src/a.ts', change: 'MODIFIED' }, { path: 'src/new.ts', change: 'ADDED' }, { path: 'src/run.sh', change: 'MODIFIED' }, { path: 'src/old.ts', change: 'DELETED' }, { path: 'src/gone.sh', change: 'DELETED' }] });
   });
   it('a symlink (120000), a gitlink (160000) or a type change (T), on either side, is counted unsafe', async () => {
     for (const line of [raw('000000', '120000', 'A', 'src/link'), raw('100644', '120000', 'T', 'src/a.ts'), raw('120000', '100644', 'T', 'src/a.ts'), raw('000000', '160000', 'A', 'src/sub'), raw('160000', '160000', 'M', 'src/sub'), raw('120000', '000000', 'D', 'src/link'), raw('100644', '100755', 'T', 'src/x')]) {
@@ -589,11 +589,12 @@ describe('F5/F6/F13: exec bits, protected paths, an empty permitted list, and th
     shell: { run: async (i: { command: string }) => { seen.push(i.command); return { status: 'SUCCEEDED', stdout: i.command.includes('fetch') ? `HEAD ${HEAD}\n${lines.join('\n')}\n` : i.command.includes('apply') ? 'APPLIED' : BASE, stderr: '', exitCode: 0 }; } } as never,
   });
 
-  it('F5: an executable-bit flip either way is unsafe; a new executable file is not a flip', async () => {
-    for (const line of [raw('100644', '100755', 'M', 'src/run.sh'), raw('100755', '100644', 'M', 'src/run.sh')]) {
+  it('F5 + PILOT Low 5: an executable-bit flip either way, and a NEW executable file, are unsafe', async () => {
+    for (const line of [raw('100644', '100755', 'M', 'src/run.sh'), raw('100755', '100644', 'M', 'src/run.sh'), raw('000000', '100755', 'A', 'src/new.sh')]) {
       expect(await portAt('/w', [line]).fetchBranch({ workspacePath: '/w', repoUrl: TARGET, branch: 'cursor/fix-1', baseRevision: BASE }), line).toMatchObject({ ok: true, unsafeEntries: 1 });
     }
-    expect(await portAt('/w', [raw('000000', '100755', 'A', 'src/new.sh'), raw('100755', '100755', 'M', 'src/run.sh')]).fetchBranch({ workspacePath: '/w', repoUrl: TARGET, branch: 'cursor/fix-1', baseRevision: BASE })).toMatchObject({ ok: true, unsafeEntries: 0 });
+    expect(await portAt('/w', [raw('000000', '100755', 'A', 'src/new.sh'), raw('000000', '100755', 'A', 'src/new2.sh')]).fetchBranch({ workspacePath: '/w', repoUrl: TARGET, branch: 'cursor/fix-1', baseRevision: BASE })).toMatchObject({ ok: true, unsafeEntries: 2 });
+    expect(await portAt('/w', [raw('000000', '100644', 'A', 'src/new.ts'), raw('100755', '100755', 'M', 'src/run.sh')]).fetchBranch({ workspacePath: '/w', repoUrl: TARGET, branch: 'cursor/fix-1', baseRevision: BASE })).toMatchObject({ ok: true, unsafeEntries: 0 });
   });
 
   it('F6: .git, .gitmodules, .gitattributes, .github, .githooks and .husky are protected in any case, at any depth', () => {
@@ -643,7 +644,7 @@ describe('F5/F6/F13: exec bits, protected paths, an empty permitted list, and th
 });
 
 describe('F5: with REAL git (local temp repository, no network), the generated diff command and the port\'s parser agree', () => {
-  it('a plain edit and a new executable pass; an exec-bit flip, a symlink, a type change and a gitlink are unsafe; .github is protected', async () => {
+  it('a plain edit, a new plain file and an edit to an existing executable pass; a new executable, an exec-bit flip, a symlink, a type change and a gitlink are unsafe; .github is protected', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'grok-raw-'));
     try {
       const git = (...args: string[]) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t.invalid', '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', ...args], { cwd: dir, encoding: 'utf8' }).trim();
@@ -667,8 +668,10 @@ describe('F5: with REAL git (local temp repository, no network), the generated d
         });
         return port.fetchBranch({ workspacePath: dir, repoUrl: TARGET, branch: 'cursor/fix-1', baseRevision: base });
       };
-      expect(await plain(() => { writeFileSync(join(dir, 'src', 'a.ts'), 'edited\n'); writeFileSync(join(dir, 'src', 'new.sh'), 'x\n'); chmodSync(join(dir, 'src', 'new.sh'), 0o755); }))
-        .toEqual({ ok: true, headSha: expect.any(String), unsafeEntries: 0, changes: [{ path: 'src/a.ts', change: 'MODIFIED' }, { path: 'src/new.sh', change: 'ADDED' }] });
+      expect(await plain(() => { writeFileSync(join(dir, 'src', 'a.ts'), 'edited\n'); writeFileSync(join(dir, 'src', 'new.ts'), 'x\n'); writeFileSync(join(dir, 'src', 'unflip.sh'), 'edited\n'); }))
+        .toEqual({ ok: true, headSha: expect.any(String), unsafeEntries: 0, changes: [{ path: 'src/a.ts', change: 'MODIFIED' }, { path: 'src/new.ts', change: 'ADDED' }, { path: 'src/unflip.sh', change: 'MODIFIED' }] });
+      /* PILOT R11 newExecutableFile: a new file at mode 100755 is now unsafe. */
+      expect(await plain(() => { writeFileSync(join(dir, 'src', 'new.sh'), 'x\n'); chmodSync(join(dir, 'src', 'new.sh'), 0o755); })).toMatchObject({ ok: true, unsafeEntries: 1 });
       expect(await plain(() => chmodSync(join(dir, 'src', 'flip.sh'), 0o755))).toMatchObject({ ok: true, unsafeEntries: 1 });
       expect(await plain(() => chmodSync(join(dir, 'src', 'unflip.sh'), 0o644))).toMatchObject({ ok: true, unsafeEntries: 1 });
       expect(await plain(() => symlinkSync('../../etc/passwd', join(dir, 'src', 'link')))).toMatchObject({ ok: true, unsafeEntries: 1 });
