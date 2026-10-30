@@ -131,6 +131,8 @@ export const E2_DEFAULT_IDLE_MS = 120_000;
 const READ_ONLY_TOOL_NAMES = new Set(['read_file']);
 const ZERO = '0'.repeat(64);
 const sha256 = (s: string): string => createHash('sha256').update(s).digest('hex');
+/** Skywalker 43b93a4e N1: a finite number, else the default. */
+export const finiteOr = (v: unknown, def: number): number => (typeof v === 'number' && Number.isFinite(v) ? v : def);
 const isAborted = (signal: AbortSignal | undefined): boolean => signal?.aborted === true;
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const parseJson = (s: string): { ok: true; value: unknown } | { ok: false } => { try { return { ok: true, value: JSON.parse(s) as unknown }; } catch { return { ok: false }; } };
@@ -216,10 +218,13 @@ export async function captureCursorRunStream(input: {
 }): Promise<E2StreamEvidence> {
   const now = input.now ?? Date.now;
   const sleep = input.sleep ?? defaultSleep;
-  const maxReconnects = Math.min(E2_MAX_RECONNECTS, Math.max(0, input.maxReconnects ?? 5));
-  const idleTimeoutMs = Math.max(100, input.idleTimeoutMs ?? E2_DEFAULT_IDLE_MS);
-  const reconnectDelayMs = Math.max(3_000, input.reconnectDelayMs ?? 3_000);
-  const maxStreamBytes = Math.min(E2_MAX_STREAM_BYTES, Math.max(0, input.maxStreamBytes ?? E2_MAX_STREAM_BYTES));
+  // Skywalker 43b93a4e N1: a NaN or infinite setting (config or env parsing) falls back to the safe default, never open.
+  const maxReconnects = Math.min(E2_MAX_RECONNECTS, Math.max(0, Math.floor(finiteOr(input.maxReconnects, 5))));
+  const idleTimeoutMs = Math.max(100, finiteOr(input.idleTimeoutMs, E2_DEFAULT_IDLE_MS));
+  const reconnectDelayMs = Math.max(3_000, finiteOr(input.reconnectDelayMs, 3_000));
+  const maxStreamBytes = Math.min(E2_MAX_STREAM_BYTES, Math.max(0, input.maxStreamBytes === Number.NEGATIVE_INFINITY ? 0 : finiteOr(input.maxStreamBytes, E2_MAX_STREAM_BYTES)));
+  // A deadline that is not a finite number is no time at all: the capture ends at once (no_terminal).
+  const deadlineAtMs = Number.isFinite(input.deadlineAtMs) ? input.deadlineAtMs : Number.NEGATIVE_INFINITY;
   const { ref, signal } = input;
   const iso = (): string => new Date(now()).toISOString();
   const chain = new Chain(input.sink);
@@ -283,11 +288,11 @@ export async function captureCursorRunStream(input: {
         await sleep(reconnectDelayMs, signal);
         if (isAborted(signal)) throw new Stop('e2_stream_aborted');
       }
-      if (now() >= input.deadlineAtMs) throw new Stop('e2_stream_no_terminal');
+      if (now() >= deadlineAtMs) throw new Stop('e2_stream_no_terminal');
       connections += 1;
       const n = connections;
       if (lastId !== null) resumed = true;
-      const open: CursorStreamOpen = await openCursorRunStream(input.transport, ref, lastId, { deadlineAtMs: input.deadlineAtMs, ...(signal === undefined ? {} : { signal }) });
+      const open: CursorStreamOpen = await openCursorRunStream(input.transport, ref, lastId, { deadlineAtMs: deadlineAtMs, ...(signal === undefined ? {} : { signal }) });
       await chain.write({
         kind: 'connection', n, lastEventId: lastId, at: iso(), outcome: open.kind,
         status: open.kind === 'opened' || open.kind === 'status' ? open.status : null,
@@ -408,7 +413,7 @@ export async function captureCursorRunStream(input: {
         const ended = await readSse(open.body, async (e) => onEvent(e), (bytes) => {
           totalBytes += bytes;
           if (totalBytes > maxStreamBytes) throw new Stop('e2_stream_too_large');
-        }, signal, input.deadlineAtMs, now, idleTimeoutMs);
+        }, signal, deadlineAtMs, now, idleTimeoutMs);
         if (ended.partial) partialDiscarded += 1;
         if (doneSeen) {
           // H-1: SSE ids are opaque, so events a server skipped on resume cannot be detected; any resume fails.

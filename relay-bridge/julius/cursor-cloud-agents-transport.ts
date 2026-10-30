@@ -512,14 +512,16 @@ type Sent =
   | { readonly kind: 'not_sent'; readonly cause: 'aborted' | 'key_absent' | 'transport_untrusted' }
   | { readonly kind: 'failed_in_flight'; readonly cause: 'timeout' | 'network' | 'aborted_in_flight' };
 
+/** Skywalker 43b93a4e N1: NaN or infinite options fall back to the default (never disable a limit). */
+const finiteNumber = (v: unknown, def: number): number => (typeof v === 'number' && Number.isFinite(v) ? v : def);
 export function createCursorCloudAgentsTransport(options: CursorCloudAgentsTransportOptions): CodingAgentTransport {
   const base = options.baseUrl ?? CURSOR_API_ORIGIN;
   if (base !== CURSOR_API_ORIGIN) throw new Error('cursor_base_url_unpinned');
   const now = options.now ?? Date.now;
   const sleep = options.sleep ?? defaultSleep;
-  const pollMs = Math.max(MIN_POLL_MS, options.pollIntervalMs ?? 6_000);
-  const requestTimeoutMs = options.requestTimeoutMs ?? 30_000;
-  const firstBackoff = Math.max(1_000, options.rateLimitBackoffMs ?? 10_000);
+  const pollMs = Math.max(MIN_POLL_MS, finiteNumber(options.pollIntervalMs, 6_000));
+  const requestTimeoutMs = Math.max(1, finiteNumber(options.requestTimeoutMs, 30_000));
+  const firstBackoff = Math.max(1_000, finiteNumber(options.rateLimitBackoffMs, 10_000));
   const modelField = effectiveAttestedModelField(CURSOR_ATTESTED_MODEL_FIELD);
   const log = options.log ?? ((): void => undefined);
   /*
@@ -528,7 +530,7 @@ export function createCursorCloudAgentsTransport(options: CursorCloudAgentsTrans
    * maximum 20, Cursor's documented default) is not sent (`rate_budget_exhausted`). Other calls are counted, not blocked:
    * they keep their 429 handling. The window uses the transport's clock.
    */
-  const budget = Math.min(20, Math.max(1, Math.floor(options.requestsPerMinute ?? 20)));
+  const budget = Math.min(20, Math.max(1, Math.floor(finiteNumber(options.requestsPerMinute, 20))));
   const sentAt: number[] = [];
   const budgetLeft = (): number => {
     const t = now();
