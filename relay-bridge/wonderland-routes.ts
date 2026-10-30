@@ -13,11 +13,21 @@ import {
 import { isWonderlandMissionReadRoute, wonderlandMissionRead } from './wonderland-mission-result-route';
 import { isWonderlandMissionEventsRoute } from './wonderland-mission-events-route';
 import { isWonderlandMissionStartRoute } from './wonderland-mission-start-route';
+import { isWonderlandMissionStatusRoute } from './wonderland-mission-status-route';
 
 export interface WonderlandRouteRequest {
   readonly method: string; readonly path: string; readonly url: string;
   readonly authorization: string | undefined; readonly origin: string | undefined;
   readonly body: unknown; readonly now: number;
+}
+
+/**
+ * JULIUS_WONDERLAND_START_V2 only: the mission status pathname is a Julius
+ * read, served by the mission routes, not this catch-all. Without it (the
+ * default) that path stays here, as on main.
+ */
+export interface WonderlandDispatchOptions {
+  readonly missionStatus?: boolean;
 }
 
 const asRecord = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -31,9 +41,10 @@ const text = (body: Record<string, unknown>, key: string): string => { const val
  * catch-all refuses a native session before it reads the path, so those
  * Julius reads cannot be served from inside it.
  */
-export function isWonderlandRoute(path: string): boolean {
+export function isWonderlandRoute(path: string, options: WonderlandDispatchOptions = {}): boolean {
   const pathname = wonderlandAdmissionPathname(path);
   if (pathname === WONDERLAND_ADMISSION_PATH || pathname === WONDERLAND_STATUS_PATH) return false;
+  if (options.missionStatus === true && isWonderlandMissionStatusRoute(pathname)) return false;
   if (isWonderlandMissionReadRoute(pathname)) return false;
   if (isWonderlandMissionEventsRoute(pathname)) return false;
   if (isWonderlandMissionStartRoute(pathname)) return false;
@@ -45,7 +56,8 @@ export function isWonderlandRoute(path: string): boolean {
   if (isWonderlandCompanionAgentRoute(folded)) return true;
   return folded === WONDERLAND_ADMISSION_PATH || folded.startsWith(`${WONDERLAND_ADMISSION_PATH}/`)
     || folded === WONDERLAND_STATUS_PATH || folded.startsWith(`${WONDERLAND_STATUS_PATH}/`)
-    || /^\/wonderland\/julius\/missions\/[^/]+\/(result|progress|events|start)(\/.*)?$/.test(folded);
+    || /^\/wonderland\/julius\/missions\/[^/]+\/(result|progress|events|start)(\/.*)?$/.test(folded)
+    || (options.missionStatus === true && /^\/wonderland\/julius\/missions\/[^/]+\/status(\/.*)?$/.test(folded));
 }
 
 /**
@@ -57,7 +69,7 @@ export function isWonderlandRoute(path: string): boolean {
  * admission and a trailing slash is not. Comparing the normalized bridge
  * path would turn that slash into the admission URL.
  */
-export function classifyWonderlandDispatchPath(bridgePath: string, rawPath: string): {
+export function classifyWonderlandDispatchPath(bridgePath: string, rawPath: string, options: WonderlandDispatchOptions = {}): {
   readonly catchAllPath: string | null;
   readonly exactAdmission: boolean;
   readonly exactStatus: boolean;
@@ -66,6 +78,8 @@ export function classifyWonderlandDispatchPath(bridgePath: string, rawPath: stri
   readonly exactMissionEvents: boolean;
   readonly exactMissionStart: boolean;
   readonly exactCompanion: boolean;
+  /** Present, and true, only with `options.missionStatus` and the exact mission status pathname. */
+  readonly exactMissionStatus?: true;
 } {
   const classified = (
     over: {
@@ -95,14 +109,15 @@ export function classifyWonderlandDispatchPath(bridgePath: string, rawPath: stri
   if (missionRead?.kind === 'progress') return classified({ exactMissionProgress: true });
   if (isWonderlandMissionEventsRoute(rawPath)) return classified({ exactMissionEvents: true });
   if (isWonderlandMissionStartRoute(rawPath)) return classified({ exactMissionStart: true });
+  if (options.missionStatus === true && isWonderlandMissionStatusRoute(rawPath)) return { ...classified(), exactMissionStatus: true };
   if (isWonderlandCompanionRoute(rawPath) || isWonderlandCompanionAgentRoute(rawPath)) {
     return classified({ exactCompanion: true });
   }
   const candidate = bridgePath === WONDERLAND_ADMISSION_PATH || bridgePath === WONDERLAND_STATUS_PATH
-    || (!isWonderlandRoute(bridgePath) && isWonderlandRoute(rawPath))
+    || (!isWonderlandRoute(bridgePath, options) && isWonderlandRoute(rawPath, options))
     ? rawPath
     : bridgePath;
-  return isWonderlandRoute(candidate)
+  return isWonderlandRoute(candidate, options)
     ? classified({ catchAllPath: candidate })
     : classified();
 }

@@ -66,7 +66,7 @@ const ABSENT: GhResult = { code: 1, stdout: 'HTTP/2.0 404 Not Found\nDate: Fri, 
 const CONTENTS = `repos/${REPO}/contents/`;
 
 /** `gh` as GitHub would answer the claim core: main's files, an absent spent tag, and one workflow run. */
-function fakeGh(): { spawn: GhSpawner; calls: string[][] } {
+function fakeGh(dispatch?: GhResult): { spawn: GhSpawner; calls: string[][] } {
   const calls: string[][] = [];
   return {
     calls,
@@ -82,7 +82,7 @@ function fakeGh(): { spawn: GhSpawner; calls: string[][] } {
           return text === null ? { code: 1, stdout: '', stderr: 'HTTP 404' } : { code: 0, stdout: text, stderr: '' };
         }
         if (args[0] === 'api') return ABSENT;
-        if (args[0] === 'workflow') return { code: 0, stdout: `https://github.com/${REPO}/actions/runs/${WORKFLOW_RUN}\n`, stderr: '' };
+        if (args[0] === 'workflow') return dispatch ?? { code: 0, stdout: `https://github.com/${REPO}/actions/runs/${WORKFLOW_RUN}\n`, stderr: '' };
         return { code: 99, stdout: '', stderr: '' };
       },
     },
@@ -150,13 +150,13 @@ const startRequest = (over: Partial<WonderlandAdmissionRouteRequest> = {}) => ba
 /** The paid workflow's attempted-marker count, proven zero: a first run. */
 const ZERO_PRIOR: PriorAttemptReader = { read: () => Promise.resolve({ readable: true, counted: 0 }), readCompleted: () => Promise.resolve({ readable: true, counted: 0 }) };
 
-async function admitted(over: Record<string, string | undefined> = {}, nowIso: () => string = () => WHEN, prior: PriorAttemptReader = ZERO_PRIOR) {
+async function admitted(over: Record<string, string | undefined> = {}, nowIso: () => string = () => WHEN, prior: PriorAttemptReader = ZERO_PRIOR, dispatch?: GhResult) {
   const dir = mkdtempSync(join(tmpdir(), 'wlj-start-'));
   const storePath = join(dir, 'admission.json');
   const ports = service(storePath, over);
   const created = await handleWonderlandAdmissionRoute(admitRequest(), ports);
   expect(created?.status).toBe(202);
-  const gh = fakeGh();
+  const gh = fakeGh(dispatch);
   const tool = createOperatorClaimTool(openAdmissionFile(storePath), gh.spawn, { nowIso }, prior);
   const claims: string[] = [];
   const deps = {
@@ -332,6 +332,35 @@ describe('the in-Wonderland mission start route', () => {
       expect(kind(result?.body)).toBe('AWAITING_OPERATOR_EXPIRED');
       expect((result?.body as { retry?: boolean }).retry).toBe(false);
       expect(workflowRuns(fx.gh.calls)).toEqual([]);
+    } finally {
+      fx.cleanup();
+    }
+  });
+
+  it('a gh workflow run with no answer (timeout, signal, not started) answers dispatching, not a replay; a repeat replays it and runs no workflow', async () => {
+    for (const failure of ['timeout', 'signal', 'spawn_failed'] as const) {
+      const fx = await admitted({}, () => WHEN, ZERO_PRIOR, { code: failure === 'spawn_failed' ? 127 : 1, stdout: '', stderr: '', failure });
+      try {
+        const first = await handleWonderlandMissionStartRoute(startRequest(), fx.ports, fx.deps);
+        expect(first?.status, failure).toBe(200);
+        expect(first?.body).toEqual({ wljRunId: RUN, state: 'dispatching', workflowRunId: null, dispatchedAt: WHEN, replayed: false });
+        const again = await handleWonderlandMissionStartRoute(startRequest({ idempotencyKey: '12345678-1234-4234-8234-123456789abc' }), fx.ports, fx.deps);
+        expect(again?.status).toBe(200);
+        expect(again?.body).toMatchObject({ state: 'dispatching', replayed: true });
+        expect(workflowRuns(fx.gh.calls)).toHaveLength(1);
+      } finally {
+        fx.cleanup();
+      }
+    }
+  });
+
+  it('a plain non-zero gh workflow run exit is still a refused dispatch (dispatch_failed), unchanged', async () => {
+    const fx = await admitted({}, () => WHEN, ZERO_PRIOR, { code: 1, stdout: '', stderr: 'HTTP 422' });
+    try {
+      const first = await handleWonderlandMissionStartRoute(startRequest(), fx.ports, fx.deps);
+      expect(first?.status).toBe(409);
+      expect(first?.body).toMatchObject({ state: 'dispatch_failed', replayed: false });
+      expect(readAdmissionDocument(fx.storePath).claims.at(-1)).toMatchObject({ state: 'dispatch_failed', dispatchError: 'gh_workflow_run_failed' });
     } finally {
       fx.cleanup();
     }

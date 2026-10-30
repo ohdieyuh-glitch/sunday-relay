@@ -46,6 +46,13 @@
  * nothing here reports completion or a verdict: /result does, from the
  * evidence reader and the hidden checker's grade.
  *
+ * RUN FOUND BY DISPATCH KEY (JULIUS_WONDERLAND_START_V2=1 only). When the
+ * bridge passes `recoveredRunId`, a `dispatched` claim that recorded no
+ * `workflowRunId` (gh older than 2.87.0), or a `gh_workflow_run_failed` claim
+ * whose run GitHub lists anyway, is bound to the run the recovery found by
+ * dispatch key (wonderland-dispatching-recovery.ts). The run must still pass
+ * `runMatchesClaim`. Without the option nothing here changes.
+ *
  * REHEARSAL. `JULIUS_WONDERLAND_EVENTS_REHEARSAL_RUN_ID` binds a PREFLIGHT run
  * (` mode=preflight`), and only while this admission has no dispatched claim.
  * A finished rehearsal run is `github_actions_recorded` and never live; a
@@ -128,15 +135,21 @@ export function isWonderlandMissionEventsRoute(path: string): boolean {
   return EVENTS_PATH.test(wonderlandAdmissionPathname(path));
 }
 
+export interface WonderlandMissionEventsOptions {
+  /** JULIUS_WONDERLAND_START_V2 only: the run the dispatching recovery bound by dispatch key, when the claim recorded none. */
+  readonly recoveredRunId?: (wljRunId: string) => string | null;
+}
+
 export function createWonderlandMissionEventsBridge(
   ports: WonderlandAdmissionRoutePorts,
   reader: JuliusRunJobsReader | undefined,
+  options: WonderlandMissionEventsOptions = {},
 ): WonderlandMissionEventsBridge {
   const epoch = randomUUID().slice(0, 8);
   const caches = new Map<string, RunCache>();
   return {
     matches: (path) => isWonderlandMissionEventsRoute(path),
-    handle: (request) => handleWonderlandMissionEventsRoute(wonderlandAdmissionRequestFrom(request), ports, reader, { epoch, caches }),
+    handle: (request) => handleWonderlandMissionEventsRoute(wonderlandAdmissionRequestFrom(request), ports, reader, { epoch, caches, ...options }),
   };
 }
 
@@ -144,7 +157,7 @@ export async function handleWonderlandMissionEventsRoute(
   request: WonderlandAdmissionRouteRequest,
   ports: WonderlandAdmissionRoutePorts,
   reader: JuliusRunJobsReader | undefined,
-  state: { readonly epoch: string; readonly caches: Map<string, RunCache> },
+  state: { readonly epoch: string; readonly caches: Map<string, RunCache>; readonly recoveredRunId?: (wljRunId: string) => string | null },
 ): Promise<{ status: number; body: unknown } | null> {
   const match = EVENTS_PATH.exec(wonderlandAdmissionPathname(request.path));
   if (match === null) return null;
@@ -166,7 +179,7 @@ export async function handleWonderlandMissionEventsRoute(
   const empty = (reason: WonderlandEventsReason) => ({ status: 200, body: noneBody(wlj, reason, request.nowMs) });
   if (reader === undefined) return empty('live_view_unconfigured');
 
-  const binding = bindingFor(ports, wlj);
+  const binding = bindingFor(ports, wlj, state.recoveredRunId);
   if (binding.kind === 'none') return empty(binding.reason);
   const cache = cacheFor(state.caches, binding.runId);
   await refresh(cache, reader, binding, request.nowMs);
@@ -207,7 +220,7 @@ type Binding =
   | { readonly kind: 'claim'; readonly runId: string; readonly keyHash: string; readonly wlj8: string; readonly githubDateMs: number | null }
   | { readonly kind: 'rehearsal'; readonly runId: string; readonly wlj8: null; readonly githubDateMs: null };
 
-function bindingFor(ports: WonderlandAdmissionRoutePorts, wlj: string): Binding {
+function bindingFor(ports: WonderlandAdmissionRoutePorts, wlj: string, recoveredRunId?: (wljRunId: string) => string | null): Binding {
   const storePath = (ports.env.JULIUS_WONDERLAND_ADMISSION_STORE ?? '').trim();
   if (storePath === '' || !isLocalStorePath(storePath)) return { kind: 'none', reason: 'github_unreadable' };
   let document;
@@ -220,12 +233,17 @@ function bindingFor(ports: WonderlandAdmissionRoutePorts, wlj: string): Binding 
   if (admission === null) return { kind: 'none', reason: 'not_dispatched' };
   const claims = document.claims.filter((event) => event.wonderlandRunId === wlj && event.serverRunId === admission.serverRunId);
   const latest = claims.at(-1) ?? null;
-  if (latest !== null && latest.state === 'dispatched') {
-    if (latest.workflowRunId === null || !RUN_ID.test(latest.workflowRunId)) return { kind: 'none', reason: 'run_unbound' };
+  // The run found by dispatch key, only when the claim recorded none (v2 only). `runMatchesClaim` still checks it.
+  const recovered = recoveredRunId === undefined || latest === null || latest.workflowRunId !== null ? null : recoveredRunId(wlj);
+  const fallback = recovered !== null && RUN_ID.test(recovered) ? recovered : null;
+  const outcomeUnknown = latest !== null && latest.state === 'dispatch_failed' && latest.dispatchError === 'gh_workflow_run_failed';
+  if (latest !== null && (latest.state === 'dispatched' || (outcomeUnknown && fallback !== null))) {
+    const runId = latest.workflowRunId ?? fallback;
+    if (runId === null || !RUN_ID.test(runId)) return { kind: 'none', reason: 'run_unbound' };
     const githubDate = claims.find((event) => event.githubDate !== null)?.githubDate ?? null;
     return {
       kind: 'claim',
-      runId: latest.workflowRunId,
+      runId,
       keyHash: admission.keyHash,
       wlj8: wlj.slice('wlj_'.length, 'wlj_'.length + 8),
       githubDateMs: githubDate === null ? null : Date.parse(githubDate),

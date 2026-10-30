@@ -612,6 +612,10 @@ describe('wonderland status', () => {
       gh_workflow_run_failed: 'gh_workflow_run_failed',
       workflow_run_unspent: null,
       workflow_run_absent: null,
+      // An outcome-unknown `gh workflow run` (timeout, signal, not started) is still `dispatching`, with no cause.
+      gh_workflow_run_timeout: null,
+      gh_workflow_run_signal: null,
+      gh_spawn_failed: null,
     };
     const clockCauses: readonly WonderlandStatusCause[] = ['AWAITING_OPERATOR_EXPIRED'];
     for (const [stored, state] of Object.entries(admissionStatus) as Array<[AdmissionState, WonderlandStatusState]>) {

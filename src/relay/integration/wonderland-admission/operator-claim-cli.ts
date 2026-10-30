@@ -23,6 +23,7 @@ import { PAID_WORKFLOW_FILE } from './admission-contract';
 import { isLocalStorePath, openAdmissionFile } from './admission-file';
 import {
   createOperatorClaimTool,
+  ghResultFromChildExit,
   type ClaimResult,
   type GhResult,
   type GhSpawner,
@@ -309,13 +310,10 @@ function ghSpawn(args: readonly string[]): GhResult {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
     });
-    return {
-      code: typeof result.status === 'number' ? result.status : 1,
-      stdout: typeof result.stdout === 'string' ? result.stdout : '',
-      stderr: typeof result.stderr === 'string' ? result.stderr : '',
-    };
+    // A signal kill or a failed spawn is reported as such, never as an ordinary non-zero exit.
+    return ghResultFromChildExit(result);
   } catch {
-    return { code: 127, stdout: '', stderr: '' };
+    return { code: 127, stdout: '', stderr: '', failure: 'spawn_failed' };
   }
 }
 

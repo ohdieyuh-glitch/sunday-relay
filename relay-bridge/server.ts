@@ -80,7 +80,8 @@ import { classifyWonderlandDispatchPath, handleWonderlandRoute } from './wonderl
 import { createWonderlandAdmissionBridge, createWonderlandAdmissionService, createWonderlandStatusBridge, isWonderlandAdmissionRoute, isWonderlandStatusRoute, type WonderlandAdmissionRoutePorts } from './wonderland-admission-route';
 import { createWonderlandMissionReadBridge, isWonderlandMissionReadRoute } from './wonderland-mission-result-route';
 import { createWonderlandMissionEventsBridge, isWonderlandMissionEventsRoute } from './wonderland-mission-events-route';
-import { createWonderlandMissionStartBridge, isWonderlandMissionStartRoute, type WonderlandMissionStartBridge } from './wonderland-mission-start-route';
+import { createWonderlandMissionStartBridge, isWonderlandMissionStartRoute, WONDERLAND_START_V2_FLAG, type WonderlandMissionStartBridge } from './wonderland-mission-start-route';
+import { createWonderlandStartV2Wiring, isWonderlandMissionStatusRoute } from './wonderland-mission-status-route';
 import { wonderlandLiveReadsFrom } from './wonderland-live-wiring';
 import { wonderlandStatusPriorAttemptsFrom } from './wonderland-prior-attempts';
 import { createCompanionResultStore, createWonderlandCompanionBridge, isWonderlandCompanionAgentRoute, isWonderlandCompanionRoute } from './wonderland-companion-route';
@@ -506,6 +507,30 @@ const wonderlandLive = (wonderlandAdmission: WonderlandAdmissionRoutePorts) => {
   }
   return wonderlandLiveCache;
 };
+/**
+ * JULIUS_WONDERLAND_START_V2=1 only: the awaitable Start, the dispatching
+ * recovery, /events bound by dispatch key, and the one-read mission status,
+ * over one claim core per store. Unset, none of it is built or routed.
+ */
+const juliusStartV2 = (): boolean => process.env[WONDERLAND_START_V2_FLAG] === '1';
+let wonderlandStartV2StopWorker: (() => void) | null = null;
+let wonderlandStartV2Cache: { readonly ports: WonderlandAdmissionRoutePorts; readonly wiring: ReturnType<typeof createWonderlandStartV2Wiring> } | null = null;
+const wonderlandStartV2 = (wonderlandAdmission: WonderlandAdmissionRoutePorts): ReturnType<typeof createWonderlandStartV2Wiring> => {
+  if (wonderlandStartV2Cache === null || wonderlandStartV2Cache.ports !== wonderlandAdmission) {
+    const reads = wonderlandLive(wonderlandAdmission).reads;
+    wonderlandStartV2Cache = {
+      ports: wonderlandAdmission,
+      wiring: createWonderlandStartV2Wiring(wonderlandAdmission, { runReader: reads?.runReader, evidenceReader: reads?.evidenceReader }),
+    };
+    // A-9 recovery worker: every pass re-reads the env and does nothing unless
+    // JULIUS_WONDERLAND_START_ACK and JULIUS_WONDERLAND_START_RESUME are `1` and
+    // JULIUS_WONDERLAND_START_RESUME_DISABLED is not. Only this bridge, which
+    // holds `<store>.bridge.lock`, serves the store.
+    if (wonderlandStartV2StopWorker !== null) wonderlandStartV2StopWorker();
+    wonderlandStartV2StopWorker = wonderlandStartV2Cache.wiring.requests.startWorker(() => wonderlandAdmission.env);
+  }
+  return wonderlandStartV2Cache.wiring;
+};
 const juliusMissionPorts = (
   wonderlandAdmission: WonderlandAdmissionRoutePorts,
   companionResults: ReturnType<typeof createCompanionResultStore>,
@@ -534,6 +559,13 @@ const juliusMissionPorts = (
     // The founder's Start from the Julius Mission Terminal: the operator claim core, off unless JULIUS_WONDERLAND_START=1.
     wonderlandMissionStartBridge: wonderlandMissionStart(wonderlandAdmission),
     wonderlandCompanionBridge: createWonderlandCompanionBridge({ ...wonderlandAdmission, companionResults, companionAgents }),
+    ...(juliusStartV2()
+      ? {
+        wonderlandMissionEventsBridge: wonderlandStartV2(wonderlandAdmission).eventsBridge,
+        wonderlandMissionStartBridge: wonderlandStartV2(wonderlandAdmission).startBridge,
+        wonderlandMissionStatusBridge: wonderlandStartV2(wonderlandAdmission).statusBridge,
+      }
+      : {}),
   };
 };
 
@@ -920,7 +952,9 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
 
         const wonderlandBridgePath = path.replace('/relay-api', '');
         const wonderlandRawPath = (req.url ?? '/').replace('/relay-api', '');
-        const wonderlandDispatch = classifyWonderlandDispatchPath(wonderlandBridgePath, wonderlandRawPath);
+        const wonderlandDispatch = juliusStartV2()
+          ? classifyWonderlandDispatchPath(wonderlandBridgePath, wonderlandRawPath, { missionStatus: true })
+          : classifyWonderlandDispatchPath(wonderlandBridgePath, wonderlandRawPath);
         if (wonderlandDispatch.catchAllPath !== null) {
           const wonderlandResult = await handleWonderlandRoute({
             method,
@@ -1140,6 +1174,7 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
             && isWonderlandMissionReadRoute(missionPath))
           || (wonderlandDispatch.exactMissionEvents && isWonderlandMissionEventsRoute(missionPath))
           || (wonderlandDispatch.exactMissionStart && isWonderlandMissionStartRoute(missionPath))
+          || (wonderlandDispatch.exactMissionStatus === true && isWonderlandMissionStatusRoute(missionPath))
           || (wonderlandDispatch.exactCompanion && (isWonderlandCompanionRoute(missionPath) || isWonderlandCompanionAgentRoute(missionPath)))) {
           const missionAuthz = typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
           const missionResult = await handleJuliusMissionRoute({
@@ -1622,7 +1657,13 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
       }
     })();
   });
+  // JULIUS_WONDERLAND_START_V2 only: build the v2 wiring now, so the A-9 recovery worker's first pass runs at boot.
+  if (juliusStartV2()) wonderlandStartV2(wonderlandAdmission);
   server.on('close', () => {
+    if (wonderlandStartV2StopWorker !== null) {
+      wonderlandStartV2StopWorker();
+      wonderlandStartV2StopWorker = null;
+    }
     wonderlandAdmission.close();
   });
   return server;

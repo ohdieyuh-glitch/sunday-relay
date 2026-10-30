@@ -640,6 +640,8 @@ function claimCause(claim: ClaimEvent): string | null {
   // `workflow_run_unspent` (written by reconcile) is not in the client's closed cause list:
   // the client sees `dispatch_failed` with no cause, and the journal keeps why.
   if (claim.dispatchError === 'workflow_run_unspent' || claim.dispatchError === 'workflow_run_absent') return null;
+  // A paid-workflow child that timed out, was killed or never started is still `dispatching` (outcome unknown), with no cause.
+  if (claim.state === 'dispatching') return null;
   return claim.dispatchError;
 }
 
