@@ -500,6 +500,8 @@ namespace WonderlandJuliusMissionFlow
 		}
 		/** Seqs skipped as unreadable since the feed began (kept for the log). */
 		std::size_t SkippedEvents() const { return SkippedCount; }
+		/** The newest seq this feed holds (-1 = none), for the evidence logs. */
+		std::int64_t LastSeenSeq() const { return LastSeq; }
 
 	private:
 		bool bHasRead = false;
@@ -875,4 +877,16 @@ namespace WonderlandJuliusMissionFlow
 	/** R1 $0 seam (Skywalker 2026-10-30): a recorded replay is read-only; Start is hard-refused while it is set. */
 	FStartGate RecordedReplayGate(const FStartGate& Gate, bool bRecordedReplay);
 	inline constexpr const char* RecordedReplayWhy = "RECORDED RUN, NOT LIVE: Start is refused while a recorded run is replayed";
+
+	// ---------------------------------------------------------------------------------------------------------------
+	// C6 EVIDENCE LOGS (E4/E5/E6): one JSON object per LogJuliusJ1 line. Every value is one the client READ from the
+	// bridge (or its own beat decision); an absent value is null, never a guess. No model or cost field exists here.
+	// ---------------------------------------------------------------------------------------------------------------
+	/** {"event":"status_read",...}: the /status read that the client now acts on. */
+	std::string FormatStatusReadLog(std::string_view WljRunId, const FMissionStatusRead& Status);
+	/** {"event":"resync",...}: a seq gap or reset:true cleared the latches; /status is read next. */
+	std::string FormatResyncLog(std::string_view WljRunId, std::string_view Why, std::size_t SkippedEvents, std::int64_t LastSeq);
+	/** {"event":"beat",...}: a contract beat, with the backend state that caused it (phase, stream seq, /status phase). */
+	std::string FormatBeatLog(std::string_view WljRunId, std::string_view BeatType, EExecutionPhase Phase, std::int64_t SourceSeq,
+		const FMissionStatusRead* Status, bool bApplied, std::string_view StageLabel);
 }

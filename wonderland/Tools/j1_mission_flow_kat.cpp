@@ -1803,6 +1803,35 @@ const ABSENT_PHASE = {
 		}
 	}
 
+	// C6 EVIDENCE LOGS: exact JSON lines; absent values are null; success only when verified; no model or cost.
+	int LogCases = 0;
+	void LogFixtures()
+	{
+		const FMissionStatusRead Pass = ParseMissionStatus(StatusWlj, 200, Completed("PASS", true));
+		const std::string Read = FormatStatusReadLog(StatusWlj, Pass);
+		Expect(Read.rfind("{\"event\":\"status_read\",\"wlj_run_id\":\"" + std::string(StatusWlj) + "\",\"http\":200,\"ok\":true,\"phase\":\"completed\",\"terminal\":true", 0) == 0, "status_read line opens with the run and phase");
+		Expect(Read.find("\"progress_percent\":100") != std::string::npos && Read.find("\"checker_verdict\":\"PASS\"") != std::string::npos
+			&& Read.find("\"verified_success\":true") != std::string::npos && Read.back() == '}', "status_read carries the verified success");
+		const FMissionStatusRead Fail = ParseMissionStatus(StatusWlj, 200, Completed("FAIL", false));
+		const std::string FailLine = FormatStatusReadLog(StatusWlj, Fail);
+		Expect(FailLine.find("\"verified_success\":false") != std::string::npos && FailLine.find("\"progress_percent\":null") != std::string::npos, "completed FAIL logs no success and a null percent");
+		Expect(FailLine.find("model") == std::string::npos && FailLine.find("cost") == std::string::npos, "the log invents no model or cost");
+		const std::string Refused = FormatStatusReadLog(StatusWlj, ParseMissionStatus(StatusWlj, 503, "{}"));
+		Expect(Refused.find("\"ok\":false,\"why\":") != std::string::npos && Refused.find("phase") == std::string::npos, "a refused read logs why, nothing else");
+		++LogCases;
+		Expect(FormatResyncLog("wlj_x", "seq_gap", 2, 41) == "{\"event\":\"resync\",\"wlj_run_id\":\"wlj_x\",\"reason\":\"seq_gap\",\"events_skipped\":2,\"last_seq\":41,\"next\":\"status_read\"}", "resync line, exact");
+		Expect(FormatResyncLog("wlj_x", "reset", 0, -1).find("\"last_seq\":null") != std::string::npos, "resync with no seq: null");
+		++LogCases;
+		const std::string Beat = FormatBeatLog("wlj_x", "run.completed", EExecutionPhase::Completed, 57, &Pass, true, "COMPLETE / VERIFIED");
+		Expect(Beat == "{\"event\":\"beat\",\"wlj_run_id\":\"wlj_x\",\"type\":\"run.completed\",\"phase\":\"" + std::string(ExecutionPhaseWord(EExecutionPhase::Completed))
+			+ "\",\"source_seq\":57,\"status_phase\":\"completed\",\"verified_success\":true,\"applied\":true,\"stage\":\"COMPLETE / VERIFIED\"}", "beat line, exact");
+		const std::string NoStatus = FormatBeatLog("wlj_x", "run.failed", EExecutionPhase::DidNotStart, -1, nullptr, false, "");
+		Expect(NoStatus.find("\"source_seq\":null,\"status_phase\":null,\"verified_success\":false,\"applied\":false,\"stage\":null}") != std::string::npos, "beat without status or seq: nulls, never success");
+		Expect(FormatBeatLog("wlj_\"q\\", "x", EExecutionPhase::Grading, 1, &Fail, true, "a\nb").find("wlj_\\\"q\\\\") != std::string::npos
+			&& FormatBeatLog("w", "x", EExecutionPhase::Grading, 1, &Fail, true, "a\nb").find("a\\u000ab") != std::string::npos, "log strings are escaped");
+		++LogCases;
+	}
+
 	// YUJI M-b 2026-10-30: after a bridge restart start.requested is false and retryStartSafe true (journal only); only
 	// start.request reveals the saved intent. Neither is ever permission to send; interrupted is explicit, never resent.
 	int RestartCases = 0;
@@ -2179,6 +2208,7 @@ int main()
 	StatusPanelFixtures();
 	BridgeRestartFixtures();
 	EndingFixtures();
+	LogFixtures();
 
 	if (Failures != 0)
 	{
@@ -2186,7 +2216,7 @@ int main()
 		return 1;
 	}
 	std::printf(
-		"J1 MISSION FLOW KAT PASS meanings=%d route=%d result=%d flow=%d windows=%d bridge=%d phases=%d live=%d start=%d exec=%d ack=%d status=%d resync=%d panel=%d restart=%d ending=%d\n",
-		Meanings, Routes, Results, FlowSteps, Windows, Bridge, PhaseCases, LiveCases, StartCases, ExecCases, AckCases, StatusCases, ResyncCases, PanelCases, RestartCases, EndingCases);
+		"J1 MISSION FLOW KAT PASS meanings=%d route=%d result=%d flow=%d windows=%d bridge=%d phases=%d live=%d start=%d exec=%d ack=%d status=%d resync=%d panel=%d restart=%d ending=%d log=%d\n",
+		Meanings, Routes, Results, FlowSteps, Windows, Bridge, PhaseCases, LiveCases, StartCases, ExecCases, AckCases, StatusCases, ResyncCases, PanelCases, RestartCases, EndingCases, LogCases);
 	return 0;
 }

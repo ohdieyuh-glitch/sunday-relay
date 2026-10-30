@@ -550,8 +550,9 @@ void UWonderlandJuliusMissionSubsystem::SyncMissionContract()
 		if (Beat.Type == "run.completed" || Beat.Type == "run.failed") { Contract->ReleaseRealRunBeat(); } // SUBSYSTEM_ENDING_ON_CLEARED_STAGE
 		const bool bApplied = Contract->OfferRealJuliusEvent(FName(*ToF(Beat.Type)), FName(*MissionId), FName(*Run),
 			ContractRole(Beat.Role), static_cast<int32>(Beat.RepairRound));
-		UE_LOG(LogJuliusJ1, Display, TEXT("{\"event\":\"contract_beat\",\"wlj_run_id\":\"%s\",\"type\":\"%s\",\"applied\":%s,\"beat\":\"%s\"}"),
-			*Run, *ToF(Beat.Type), bApplied ? TEXT("true") : TEXT("false"), *Contract->GetBeatLabel());
+		// C6 evidence (E6): every beat with the backend state that caused it.
+		UE_LOG(LogJuliusJ1, Display, TEXT("%s"), UTF8_TO_TCHAR(FormatBeatLog(ToStd(Run), Beat.Type, View.Phase, Host->LiveFeed.LastSeenSeq(),
+			StatusRunId == Run && Host->LastStatus.bOk ? &Host->LastStatus : nullptr, bApplied, ToStd(Contract->GetBeatLabel())).c_str())); // SUBSYSTEM_LOGS_BEAT
 	}
 	// GRADING IS NEVER A BLANK BEAT (Skywalker 2026-10-30): the task row shows VERIFICATION (ContractTaskStateFor) and
 	// the stage keeps what the backend last reported; nothing is released here.
@@ -1105,8 +1106,8 @@ void UWonderlandJuliusMissionSubsystem::CompleteLiveRead(
 		bStatusStopped = false;
 		NextLiveReadAtUtcMs = 0;
 		bLiveDrained = false;
-		UE_LOG(LogJuliusJ1, Display, TEXT("{\"event\":\"live_resync\",\"wlj_run_id\":\"%s\",\"reason\":\"%s\",\"events_skipped\":%d}"),
-			*ForRunId, UTF8_TO_TCHAR(Resync), static_cast<int32>(Read.SkippedSeqs.size()));
+		// C6 evidence (E5).
+		UE_LOG(LogJuliusJ1, Display, TEXT("%s"), UTF8_TO_TCHAR(FormatResyncLog(ToStd(ForRunId), Resync, Feed.SkippedEvents(), Feed.LastSeenSeq()).c_str())); // SUBSYSTEM_LOGS_RESYNC
 	}
 	else if (!Read.SkippedSeqs.empty())
 	{
@@ -1204,6 +1205,7 @@ void UWonderlandJuliusMissionSubsystem::CompleteStatusRead(
 	}
 	StatusReadFailures = 0;
 	Host->LastStatus = Read;
+	UE_LOG(LogJuliusJ1, Display, TEXT("%s"), UTF8_TO_TCHAR(FormatStatusReadLog(ToStd(ForRunId), Read).c_str())); // SUBSYSTEM_LOGS_STATUS_READ (C6 evidence, E4)
 	if (Read.NextPollMs == 0) { bStatusStopped = true; }
 	else { NextStatusReadAtUtcMs = Host->Clock.NowUtcMs() + static_cast<uint64>(Read.NextPollMs); }
 	if (StartRunId == ForRunId)

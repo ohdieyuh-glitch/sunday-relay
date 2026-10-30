@@ -2421,4 +2421,62 @@ namespace WonderlandJuliusMissionFlow
 		Out.Why = RecordedReplayWhy;
 		return Out;
 	}
+
+	namespace
+	{
+		std::string LogString(std::string_view Value)
+		{
+			std::string Out = "\"";
+			for (const char C : Value)
+			{
+				const unsigned char U = static_cast<unsigned char>(C);
+				if (C == '"' || C == '\\') { Out += '\\'; Out += C; } // FLOW_LOG_ESCAPES
+				else if (U < 0x20) { static const char Hex[] = "0123456789abcdef"; Out += "\\u00"; Out += Hex[U >> 4]; Out += Hex[U & 15]; }
+				else { Out += C; }
+			}
+			return Out + "\"";
+		}
+		std::string LogStringOrNull(std::string_view Value) { return Value.empty() ? std::string("null") : LogString(Value); }
+		std::string LogIntOrNull(std::int64_t Value) { return Value < 0 ? std::string("null") : std::to_string(Value); } // FLOW_LOG_ABSENT_IS_NULL
+		const char* LogBool(bool b) { return b ? "true" : "false"; }
+	}
+
+	std::string FormatStatusReadLog(std::string_view WljRunId, const FMissionStatusRead& Status)
+	{
+		std::string Out = "{\"event\":\"status_read\",\"wlj_run_id\":" + LogString(WljRunId);
+		Out += ",\"http\":" + std::to_string(Status.HttpStatus);
+		Out += ",\"ok\":"; Out += LogBool(Status.bOk);
+		if (!Status.bOk) { return Out + ",\"why\":" + LogString(Status.Why) + "}"; }
+		Out += ",\"phase\":" + LogStringOrNull(Status.PhaseWord);
+		Out += ",\"terminal\":"; Out += LogBool(Status.bTerminal);
+		Out += ",\"requested\":"; Out += LogBool(Status.bRequested);
+		Out += ",\"request_state\":" + LogStringOrNull(Status.RequestState);
+		Out += ",\"workflow_run_id\":" + LogStringOrNull(Status.WorkflowRunId);
+		Out += ",\"progress_percent\":" + LogIntOrNull(Status.ProgressPercent);
+		Out += ",\"checker_verdict\":" + LogStringOrNull(Status.CheckerVerdict);
+		Out += ",\"outcome_unknown\":"; Out += LogBool(Status.bOutcomeUnknown);
+		Out += ",\"verified_success\":"; Out += LogBool(StatusIsVerifiedSuccess(Status)); // FLOW_LOG_SUCCESS_IS_VERIFIED
+		Out += ",\"next_poll_ms\":" + (Status.NextPollMs == 0 ? std::string("null") : std::to_string(Status.NextPollMs));
+		Out += ",\"skipped_fields\":" + std::to_string(Status.Skipped.size());
+		return Out + "}";
+	}
+
+	std::string FormatResyncLog(std::string_view WljRunId, std::string_view Why, std::size_t SkippedEvents, std::int64_t LastSeq)
+	{
+		return "{\"event\":\"resync\",\"wlj_run_id\":" + LogString(WljRunId) + ",\"reason\":" + LogStringOrNull(Why) // FLOW_LOG_RESYNC_REASON
+			+ ",\"events_skipped\":" + std::to_string(SkippedEvents) + ",\"last_seq\":" + LogIntOrNull(LastSeq) + ",\"next\":\"status_read\"}";
+	}
+
+	std::string FormatBeatLog(std::string_view WljRunId, std::string_view BeatType, EExecutionPhase Phase, std::int64_t SourceSeq,
+		const FMissionStatusRead* Status, bool bApplied, std::string_view StageLabel)
+	{
+		const bool bStatus = Status != nullptr && Status->bOk;
+		std::string Out = "{\"event\":\"beat\",\"wlj_run_id\":" + LogString(WljRunId) + ",\"type\":" + LogString(BeatType);
+		Out += ",\"phase\":" + LogString(ExecutionPhaseWord(Phase));
+		Out += ",\"source_seq\":" + LogIntOrNull(SourceSeq); // FLOW_LOG_BEAT_CARRIES_SEQ
+		Out += ",\"status_phase\":" + (bStatus ? LogStringOrNull(Status->PhaseWord) : std::string("null"));
+		Out += ",\"verified_success\":"; Out += LogBool(bStatus && StatusIsVerifiedSuccess(*Status));
+		Out += ",\"applied\":"; Out += LogBool(bApplied);
+		return Out + ",\"stage\":" + LogStringOrNull(StageLabel) + "}";
+	}
 }

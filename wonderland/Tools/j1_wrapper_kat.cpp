@@ -445,6 +445,34 @@ namespace
 		return bGates && bSuccess && bReleases && bNoTimer;
 	}
 
+	/**
+	 * C6: the evidence lines are written where the state is decided -- the status_read line after an accepted /status
+	 * read, the resync line inside the resync branch, and the beat line for every beat the cursor emits.
+	 */
+	bool CheckEvidenceLogs()
+	{
+		const std::string Text = SubsystemSource();
+		auto Within = [&Text](const std::string& Func, const std::string& From, const std::string& Needle)
+		{
+			const std::size_t Def = Text.find(Func);
+			const std::size_t End = Def == std::string::npos ? std::string::npos : Text.find("\n}\n", Def);
+			const std::size_t After = Def == std::string::npos ? std::string::npos : Text.find(From, Def);
+			const std::size_t At = After == std::string::npos ? std::string::npos : Text.find(Needle, After);
+			return End != std::string::npos && At != std::string::npos && At < End;
+		};
+		const bool bStatus = Within("void UWonderlandJuliusMissionSubsystem::CompleteStatusRead(", "Host->LastStatus = Read;", "FormatStatusReadLog(ToStd(ForRunId), Read)");
+		const bool bResync = Within("void UWonderlandJuliusMissionSubsystem::CompleteLiveRead(", "TakeResyncRequest()", "FormatResyncLog(")
+			&& !Within("void UWonderlandJuliusMissionSubsystem::CompleteLiveRead(", "else if (!Read.SkippedSeqs.empty())", "FormatResyncLog(");
+		const std::size_t Loop = Text.find("for (const FContractBeat& Beat : ContractCursor->Advance(View))");
+		const std::size_t LoopEnd = Loop == std::string::npos ? std::string::npos : Text.find("\n\t}", Loop);
+		const std::size_t BeatLog = Loop == std::string::npos ? std::string::npos : Text.find("FormatBeatLog(ToStd(Run), Beat.Type, View.Phase, Host->LiveFeed.LastSeenSeq()", Loop);
+		const bool bBeat = LoopEnd != std::string::npos && BeatLog != std::string::npos && BeatLog < LoopEnd;
+		if (!bStatus) { std::printf("EVIDENCE LOG CHECK FAIL: no status_read line for an accepted /status read\n"); }
+		if (!bResync) { std::printf("EVIDENCE LOG CHECK FAIL: no resync line in the resync branch\n"); }
+		if (!bBeat) { std::printf("EVIDENCE LOG CHECK FAIL: a beat is applied without its beat line\n"); }
+		return bStatus && bResync && bBeat;
+	}
+
 	bool CheckJuliusModuleRootIncludes()
 	{
 		namespace fs = std::filesystem;
@@ -1369,6 +1397,7 @@ int main()
 	Expect(CheckLiveResyncReadsStatus(), "julius_live_resync_reads_status");
 	Expect(CheckStartKeyReused(), "julius_start_key_and_trigger_reused");
 	Expect(CheckEndingsFollowBackendState(), "julius_endings_follow_backend_state");
+	Expect(CheckEvidenceLogs(), "julius_evidence_logs");
 	Expect(CheckPlatformCryptoTypesInclude(), "platform_crypto_result_includes_types");
 
 	if (Failures == 0)

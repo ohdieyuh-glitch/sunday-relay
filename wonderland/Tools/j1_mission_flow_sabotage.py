@@ -901,6 +901,32 @@ MUTATIONS = [
         "Out.bSend = false; // FLOW_RECORDED_REPLAY_REFUSES_START",
         "Out.bSend = Gate.bSend; // FLOW_RECORDED_REPLAY_REFUSES_START",
     ),
+    # CLIENT LANE C6: evidence logs carry only what was read; absent is null; success only when verified.
+    (
+        "c6_log_absent_is_zero",
+        'std::string LogIntOrNull(std::int64_t Value) { return Value < 0 ? std::string("null") : std::to_string(Value); } // FLOW_LOG_ABSENT_IS_NULL',
+        'std::string LogIntOrNull(std::int64_t Value) { return std::to_string(Value < 0 ? 0 : Value); } // FLOW_LOG_ABSENT_IS_NULL',
+    ),
+    (
+        "c6_log_success_is_completed_word",
+        'Out += ",\\"verified_success\\":"; Out += LogBool(StatusIsVerifiedSuccess(Status)); // FLOW_LOG_SUCCESS_IS_VERIFIED',
+        'Out += ",\\"verified_success\\":"; Out += LogBool(Status.Phase == EMissionStatusPhase::Completed); // FLOW_LOG_SUCCESS_IS_VERIFIED',
+    ),
+    (
+        "c6_beat_log_drops_seq",
+        'Out += ",\\"source_seq\\":" + LogIntOrNull(SourceSeq); // FLOW_LOG_BEAT_CARRIES_SEQ',
+        '(void)SourceSeq; // FLOW_LOG_BEAT_CARRIES_SEQ',
+    ),
+    (
+        "c6_resync_log_drops_reason",
+        '"{\\"event\\":\\"resync\\",\\"wlj_run_id\\":" + LogString(WljRunId) + ",\\"reason\\":" + LogStringOrNull(Why) // FLOW_LOG_RESYNC_REASON',
+        '"{\\"event\\":\\"resync\\",\\"wlj_run_id\\":" + LogString(WljRunId) + ",\\"reason\\":null" + LogStringOrNull(std::string_view()) // FLOW_LOG_RESYNC_REASON',
+    ),
+    (
+        "c6_log_does_not_escape",
+        "if (C == '\"' || C == '\\\\') { Out += '\\\\'; Out += C; } // FLOW_LOG_ESCAPES",
+        "if (false) { Out += C; } // FLOW_LOG_ESCAPES",
+    ),
 ]
 
 
@@ -980,6 +1006,22 @@ SUBSYSTEM_MUTATIONS = [
         "c5_subsystem_timer_drives_ending",
         "Contract->ReleaseRealRunBeat(); // SUBSYSTEM_UNKNOWN_PLAYS_NO_ENDING",
         "Contract->ReleaseRealRunBeat(); FTimerHandle Later; (void)Later; // SUBSYSTEM_UNKNOWN_PLAYS_NO_ENDING",
+    ),
+    # CLIENT LANE C6: the evidence lines are written where the state is decided (source-checked by julius_evidence_logs).
+    (
+        "c6_subsystem_no_status_read_log",
+        "UE_LOG(LogJuliusJ1, Display, TEXT(\"%s\"), UTF8_TO_TCHAR(FormatStatusReadLog(ToStd(ForRunId), Read).c_str())); // SUBSYSTEM_LOGS_STATUS_READ (C6 evidence, E4)",
+        "// SUBSYSTEM_LOGS_STATUS_READ (C6 evidence, E4)",
+    ),
+    (
+        "c6_subsystem_no_resync_log",
+        "UE_LOG(LogJuliusJ1, Display, TEXT(\"%s\"), UTF8_TO_TCHAR(FormatResyncLog(ToStd(ForRunId), Resync, Feed.SkippedEvents(), Feed.LastSeenSeq()).c_str())); // SUBSYSTEM_LOGS_RESYNC",
+        "(void)Resync; // SUBSYSTEM_LOGS_RESYNC",
+    ),
+    (
+        "c6_subsystem_beat_log_without_seq",
+        "UE_LOG(LogJuliusJ1, Display, TEXT(\"%s\"), UTF8_TO_TCHAR(FormatBeatLog(ToStd(Run), Beat.Type, View.Phase, Host->LiveFeed.LastSeenSeq(),",
+        "UE_LOG(LogJuliusJ1, Display, TEXT(\"%s\"), UTF8_TO_TCHAR(FormatBeatLog(ToStd(Run), Beat.Type, View.Phase, -1,",
     ),
 ]
 
