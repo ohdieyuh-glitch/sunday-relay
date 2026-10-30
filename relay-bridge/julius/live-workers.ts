@@ -48,6 +48,11 @@ import {
   type GptArchitectConfig,
 } from '../../src/relay/connectors/gpt-architect';
 import type { AnthropicRefusalEvidence, ArchitectRunOutcome, ArchitectRunner } from '../../src/relay/connectors/gpt-architect/anthropic-architect-runner';
+import {
+  anthropicArchitectRequestBody, anthropicBodyShapeFragment, anthropicEvidenceLevels, anthropicEvidenceLine, anthropicProbeMatrix, anthropicSchemaLimitsCheck,
+  anthropicStructuredOutputSchema, firstFailingAnthropicProbe, runAnthropicProbes,
+  type AnthropicProbe, type AnthropicProbeResult,
+} from '../../src/relay/connectors/gpt-architect/anthropic-architect-runner';
 import { validateArchitectPlan, type ArchitectPlanReasonCode } from '../../src/relay/mission/prompt-architect/prompt-architect-plan';
 import { sanitizeJuliusGuidanceProposal } from '../../src/relay/mission/julius/julius-continuous-lifecycle';
 import { sanitizeJuliusRebuttal } from '../../src/relay/mission/julius/julius-disagreement';
@@ -1036,8 +1041,111 @@ export function architectProviderRefusalLine(provider: 'openai' | 'anthropic', r
   return `provider_refusal role=PROMPT_ARCHITECT provider=${provider} http=${refusal.httpStatus} type=${refusal.errorType ?? 'unknown'}`
     + ` limit_tokens=${n(refusal.rateLimit.tokensLimit)} remaining_tokens=${n(refusal.rateLimit.tokensRemaining)}`
     + ` limit_requests=${n(refusal.rateLimit.requestsLimit)} remaining_requests=${n(refusal.rateLimit.requestsRemaining)}`
-    + ` request_id=${refusal.requestId ?? 'unavailable'}`;
+    + ` request_id=${refusal.requestId ?? 'unavailable'}`
+    // The provider's words never travel: a class from a fixed set, the length and a short hash (the full hash is in the evidence).
+    + (refusal.message === null || refusal.message === undefined
+      ? ''
+      : ` message_class=${refusal.message.messageClass} message_len=${refusal.message.length} message_sha256=${refusal.message.sha256.slice(0, 16)}`)
+    // A 4xx Messages refusal is an acceptance rejection (EV3 FAIL). 5xx and
+    // other non-4xx statuses are UNKNOWN, not a rejection. A count_tokens pass
+    // never writes this field.
+    + ` messages_accepted=${refusal.httpStatus >= 400 && refusal.httpStatus < 500 ? 'FAIL' : 'UNKNOWN'} generation_ok=FAIL`
+    + (refusal.shape === undefined ? '' : ` ${anthropicBodyShapeFragment(refusal.shape)}`);
 }
+
+/**
+ * THE PRODUCTION PARTS OF THE ARCHITECT'S PLAN REQUEST, for the $0 acceptance probe.
+ *
+ * The instructions and the schema are the ones `createLiveArchitectAdapter` builds for the plan path
+ * (charter, research-ask guidance, and the authority line the composition hands when no policy is
+ * supplied), so the probe's body is the production body with a SYNTHETIC input in place of a mission
+ * packet. Nothing here reads a mission, a key or a clock.
+ */
+export function architectPlanProbeParts(): { readonly instructions: string; readonly schema: Record<string, unknown> } {
+  return {
+    instructions: `${ARCHITECT_CHARTER}\n\n${RESEARCH_FIELD_GUIDANCE}\n\n${RESEARCH_AUTHORITY_NOT_STATED}`,
+    schema: withJuliusResearchAsks(ARCHITECT_PLAN_SCHEMA),
+  };
+}
+
+/**
+ * THE $0 ACCEPTANCE PROBES, PRINTED (OBSERVE MODE).
+ *
+ * `POST /v1/messages/count_tokens` is documented as free and takes the production fields, so the
+ * architect's production body is checked BEFORE any spend. Observe mode prints one line per probe and a
+ * summary and NEVER fails the preflight: the first trial calibrates what count_tokens accepts, and only
+ * then does the production-body probe become a gate. The coder is the Claude Agent SDK, which builds its
+ * own requests, so its key is probed with the two bodies we can state: a short message, and effort `low`.
+ * Nothing here throws; a missing key is a printed skip.
+ *
+ * The live entrypoint calls this only when JULIUS_ANTHROPIC_ACCEPTANCE_PROBES is
+ * the exact token `1`, and never on `--confirm-live`. This printer itself does
+ * not re-check the env var: the gate lives in one place, before construction.
+ */
+/** The key variables, as `J1_ROLE_CREDENTIALS` names them (live-composition.ts imports this file, so they are stated here and a test holds the two together). */
+export const ARCHITECT_KEY_ENV = 'ANTHROPIC_ARCHITECT_API_KEY';
+export const CODER_KEY_ENV = 'ANTHROPIC_API_KEY';
+
+export async function printAnthropicAcceptanceProbes(input: {
+  readonly env: Readonly<Record<string, string | undefined>>;
+  readonly architectOnAnthropic: boolean;
+  readonly architectModel: string | null;
+  readonly architectEffort: string | undefined;
+  readonly coderModel: string | null;
+  readonly out: (line: string) => void;
+  readonly fetch?: typeof fetch;
+}): Promise<void> {
+  const { out } = input;
+  const summary = (role: 'architect' | 'coder', results: readonly AnthropicProbeResult[], schemaCheck: ReturnType<typeof anthropicSchemaLimitsCheck> | null): void => {
+    const failing = firstFailingAnthropicProbe(results);
+    const control = (id: string): string => String(results.find((entry) => entry.id === id)?.http ?? 'none');
+    // EV3/EV4 are only ever set by a real Messages call: this printer never calls one, so they are NOT_OBSERVED here.
+    out(anthropicEvidenceLine(role, anthropicEvidenceLevels({ schemaCheck, probeResults: results, messages: 'not_called' })));
+    out(`request_acceptance_summary role=${role} mode=observe first_failing=${failing ?? 'none'} controls=C1:${control('C1')},C2:${control('C2')}${failing === null ? ' token_count_only=not_proof_of_messages_acceptance' : ''}`);
+  };
+  if (input.architectOnAnthropic) {
+    try {
+      const key = input.env[ARCHITECT_KEY_ENV] ?? '';
+      if (key.trim() === '' || input.architectModel === null || input.architectModel === '') {
+        out('request_acceptance role=architect probe=none skipped=key_or_model_absent');
+      } else {
+        const parts = architectPlanProbeParts();
+        const transformed = anthropicStructuredOutputSchema(parts.schema);
+        const schemaCheck = anthropicSchemaLimitsCheck(transformed);
+        out(`request_schema_check role=architect EV1=${schemaCheck.valid ? 'PASS' : 'FAIL'} optional=${schemaCheck.optionalProperties} unions=${schemaCheck.unionNodes}${schemaCheck.problems.length === 0 ? '' : ` problems=${schemaCheck.problems.slice(0, 5).join(',')}`}`);
+        const body = anthropicArchitectRequestBody(
+          { instructions: parts.instructions, input: ARCHITECT_PROBE_SYNTHETIC_INPUT },
+          { model: input.architectModel, maxOutputTokens: 1, reasoningEffort: input.architectEffort },
+          transformed,
+        );
+        const results = await runAnthropicProbes({ role: 'architect', apiKey: key, probes: anthropicProbeMatrix(body), ...(input.fetch === undefined ? {} : { fetch: input.fetch }) });
+        for (const result of results) out(result.line);
+        summary('architect', results, schemaCheck);
+      }
+    } catch {
+      out('request_acceptance role=architect probe=none skipped=probe_error');
+    }
+  }
+  try {
+    const key = input.env[CODER_KEY_ENV] ?? '';
+    if (key.trim() === '' || input.coderModel === null || input.coderModel === '') {
+      out('request_acceptance role=coder probe=none skipped=key_or_model_absent');
+    } else {
+      const probes: readonly AnthropicProbe[] = [
+        { id: 'P0', label: 'model + short message', body: { model: input.coderModel, messages: [{ role: 'user', content: 'ping' }] } },
+        { id: 'C2', label: 'control: effort low', body: { model: input.coderModel, messages: [{ role: 'user', content: 'ping' }], output_config: { effort: 'low' } } },
+      ];
+      const results = await runAnthropicProbes({ role: 'coder', apiKey: key, probes, ...(input.fetch === undefined ? {} : { fetch: input.fetch }) });
+      for (const result of results) out(result.line);
+      summary('coder', results, null);
+    }
+  } catch {
+    out('request_acceptance role=coder probe=none skipped=probe_error');
+  }
+}
+
+/** A fixed synthetic user input for the probe: a plan-shaped ask with no mission, prompt or secret data in it. */
+export const ARCHITECT_PROBE_SYNTHETIC_INPUT = 'SYNTHETIC ACCEPTANCE PROBE. Objective: draft a plan to add a README line. Return the plan object only.';
 
 export function createLiveArchitectAdapter(input: {
   readonly worker: JuliusWorker;

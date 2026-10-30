@@ -212,9 +212,9 @@ describe('a refused Anthropic architect request: classified, recorded in existin
     expect(error).toMatchObject({ code: 'RATE_LIMIT', retryable: true, failureClass: 'rate_limited' });
     expect(error.diagnostics?.runtimeStarted, 'nothing attests the provider processed nothing').not.toBe(false);
     expect(juliusHandedOutcomeUnknown(error, true)).toBe(JULIUS_HANDED_FAILURE_OUTCOME_UNKNOWN);
-    expect(lines).toEqual([
-      'provider_refusal role=PROMPT_ARCHITECT provider=anthropic http=429 type=rate_limit_error limit_tokens=90000 remaining_tokens=12 limit_requests=50 remaining_requests=0 request_id=req_011CFAKEREQUEST0001',
-    ]);
+    expect(lines).toHaveLength(1);
+    // The unchanged part of the line, byte for byte; then the message evidence and the body SHAPE (sizes, hashes, flags: never text).
+    expect(lines[0]).toMatch(/^provider_refusal role=PROMPT_ARCHITECT provider=anthropic http=429 type=rate_limit_error limit_tokens=90000 remaining_tokens=12 limit_requests=50 remaining_requests=0 request_id=req_011CFAKEREQUEST0001 message_class=other message_len=12 message_sha256=d292012eb3769a2f messages_accepted=FAIL generation_ok=FAIL shape=model:[A-Za-z0-9._-]+,max_tokens:[0-9]+,effort:[a-z]+,body_bytes:[0-9]+,body_sha:[0-9a-f]{16},system_chars:[0-9]+,system_bytes:[0-9]+,input_chars:[0-9]+,input_bytes:[0-9]+,messages:1,parts:string,schema_bytes:[0-9]+,schema_sha:[0-9a-f]{16},nul:0,lone_surrogate:0,ctrl:0,empty_system:0,empty_input:0,json_valid:1$/u);
   });
 
   it('MUTATION: insufficient credit is AUTH_CONFIGURATION, non-retryable, one call', async () => {

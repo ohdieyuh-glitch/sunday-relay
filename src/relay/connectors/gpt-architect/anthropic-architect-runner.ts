@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { ARCHITECT_PLAN_SCHEMA } from './plan-schema';
 import type {
   GptEffort, GptFailureClass, GptRunFailure, GptRunOutcome, GptRunRequest, GptRunSuccess, GptUsage,
@@ -286,6 +288,24 @@ export interface AnthropicRefusalEvidence {
   /** Present exactly when `requestId` is null. */
   readonly requestIdUnavailableReason: 'request_id_header_absent' | 'request_id_header_unusable' | null;
   readonly rateLimit: AnthropicRateLimitEvidence;
+  /** The provider message's closed class, its length and SHA-256. Never the text; null when no body could be read. */
+  readonly message: AnthropicMessageEvidence | null;
+  /** The structure of the exact body that was sent (sizes, hashes, flags), never its text. */
+  readonly shape?: AnthropicBodyShape | undefined;
+}
+
+/** The closed set a provider message is reduced to. A class names a kind of defect, never carries its words. */
+export const ANTHROPIC_MESSAGE_CLASSES = [
+  'credit_balance', 'schema_too_complex', 'schema_or_output_config', 'effort', 'max_tokens', 'thinking',
+  'prefill', 'tool_choice', 'sampling', 'organization_or_access', 'model', 'request_too_large', 'other',
+] as const;
+export type AnthropicMessageClass = (typeof ANTHROPIC_MESSAGE_CLASSES)[number];
+
+export interface AnthropicMessageEvidence {
+  readonly messageClass: AnthropicMessageClass;
+  readonly length: number;
+  /** Full SHA-256 hex of the raw message, so two refusals can be compared and a provider can be shown the hash. */
+  readonly sha256: string;
 }
 
 export interface AnthropicArchitectSuccess extends GptRunSuccess {
@@ -322,6 +342,248 @@ const CREDIT_TOO_LOW = /credit balance is too low/iu;
 const MAX_ERROR_BODY_CHARS = 8_192;
 
 const token = (raw: unknown): string | null => (typeof raw === 'string' && SAFE_TOKEN.test(raw) ? raw : null);
+
+/**
+ * WHAT A PROVIDER MESSAGE IS REDUCED TO, so a refusal is diagnosable without quoting it.
+ *
+ * The class is chosen by fixed phrases and never carries the message. The first match wins, so the
+ * credit case (which classifies the failure itself) is checked first.
+ */
+const MESSAGE_CLASS_RULES: ReadonlyArray<readonly [AnthropicMessageClass, RegExp]> = [
+  ['credit_balance', /credit balance is too low|billing|payment|spend limit|usage limit/iu],
+  ['schema_too_complex', /too complex|compilation/iu],
+  ['schema_or_output_config', /output_config|output_format|json_schema|structured output|schema|additionalProperties/iu],
+  ['effort', /effort/iu],
+  ['max_tokens', /max_tokens/iu],
+  ['thinking', /thinking|budget_tokens/iu],
+  ['prefill', /prefill|final assistant|must end with a user/iu],
+  ['tool_choice', /tool_choice|forced tool|tool use/iu],
+  ['sampling', /temperature|top_p|top_k/iu],
+  ['organization_or_access', /organization|workspace|retention|not enabled|permission|not authori[sz]ed|access/iu],
+  ['model', /model/iu],
+  ['request_too_large', /too large|too long|prompt is too long|context/iu],
+];
+
+export function anthropicMessageEvidence(raw: string): AnthropicMessageEvidence {
+  const messageClass = MESSAGE_CLASS_RULES.find(([, rule]) => rule.test(raw))?.[0] ?? 'other';
+  return { messageClass, length: raw.length, sha256: createHash('sha256').update(raw, 'utf8').digest('hex') };
+}
+
+/**
+ * A MESSAGE SAFE TO PRINT FROM A $0 PROBE ONLY. The probe's payload is the production schema and a
+ * synthetic prompt, so the provider's words carry no mission, no prompt and no key. Anything that looks
+ * like a credential, an e-mail or a long opaque token is removed anyway, whitespace is collapsed and the
+ * text is capped. A real mission call never uses this: it keeps class, length and hash only.
+ */
+export const PROBE_MESSAGE_MAX_CHARS = 300;
+export function sanitizeProbeMessage(raw: string): string {
+  return raw
+    .replace(/sk-[A-Za-z0-9_-]{8,}/gu, '[key]')
+    .replace(/\b(?:Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}/giu, '[token]')
+    .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/gu, '[email]')
+    .replace(/\b[A-Fa-f0-9]{32,}\b/gu, '[hex]')
+    .replace(/\b[A-Za-z0-9_-]{40,}\b/gu, '[opaque]')
+    .replace(/\s+/gu, ' ')
+    .trim()
+    .slice(0, PROBE_MESSAGE_MAX_CHARS);
+}
+
+/** The architect's Messages request body: ONE builder, used by the live call, the $0 probe and the tests. */
+export function anthropicArchitectRequestBody(
+  request: Pick<GptRunRequest, 'instructions' | 'input'>,
+  config: { readonly model: string; readonly maxOutputTokens: number; readonly reasoningEffort?: string | undefined },
+  schema: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    model: config.model,
+    max_tokens: config.maxOutputTokens,
+    system: request.instructions,
+    messages: [{ role: 'user', content: request.input }],
+    output_config: {
+      format: { type: 'json_schema', schema },
+      // Only when the mission declared it; absent sends no effort.
+      ...(config.reasoningEffort === undefined ? {} : { effort: config.reasoningEffort }),
+    },
+  };
+}
+
+/**
+ * THE STRUCTURE OF THE EXACT BODY SENT, never its text.
+ *
+ * A refused real call carries a mission packet the $0 probe's synthetic input cannot reproduce. These are
+ * counts, sizes, hashes and yes/no facts about the body as serialized, so a failed live call can be compared
+ * with the probe by SHAPE even when the provider's message is unavailable. Every field is an integer, a
+ * safe token or a hash.
+ */
+export interface AnthropicBodyShape {
+  readonly model: string;
+  readonly maxTokens: number | null;
+  readonly effort: string | null;
+  readonly bodyBytes: number;
+  readonly bodySha256: string;
+  readonly systemChars: number;
+  readonly systemBytes: number;
+  readonly inputChars: number;
+  readonly inputBytes: number;
+  readonly messageCount: number;
+  /** `string` for a plain string content, otherwise the part `type` tokens in order. */
+  readonly contentParts: readonly string[];
+  readonly schemaBytes: number;
+  readonly schemaSha256: string;
+  readonly hasNul: boolean;
+  readonly hasLoneSurrogate: boolean;
+  readonly hasControlChars: boolean;
+  readonly emptySystem: boolean;
+  readonly emptyInput: boolean;
+  /** The serialized body parses back to a structurally identical value. */
+  readonly jsonValid: boolean;
+}
+
+const hasControl = (text: string): boolean => /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/u.test(text);
+
+export function anthropicBodyShape(body: Record<string, unknown>, bodyText: string): AnthropicBodyShape {
+  const messages = Array.isArray(body.messages) ? body.messages as Array<{ content?: unknown }> : [];
+  const input = messages.at(-1)?.content;
+  const inputText = typeof input === 'string' ? input : '';
+  const systemText = typeof body.system === 'string' ? body.system : '';
+  const parts = messages.flatMap((message) => (typeof message.content === 'string'
+    ? ['string']
+    : Array.isArray(message.content)
+      ? (message.content as Array<{ type?: unknown }>).map((part) => token(part?.type) ?? 'unknown')
+      : ['unknown']));
+  const outputConfig = (body.output_config ?? {}) as { readonly format?: { readonly schema?: unknown }; readonly effort?: unknown };
+  const schemaText = JSON.stringify(outputConfig.format?.schema ?? null);
+  let jsonValid = false;
+  try { jsonValid = JSON.stringify(JSON.parse(bodyText)) === bodyText; } catch { jsonValid = false; }
+  const joined = `${systemText}${inputText}`;
+  return {
+    model: typeof body.model === 'string' && SAFE_MODEL.test(body.model) ? body.model : 'unsafe',
+    maxTokens: typeof body.max_tokens === 'number' && Number.isSafeInteger(body.max_tokens) ? body.max_tokens : null,
+    effort: token(outputConfig.effort),
+    bodyBytes: Buffer.byteLength(bodyText, 'utf8'),
+    bodySha256: createHash('sha256').update(bodyText, 'utf8').digest('hex'),
+    systemChars: systemText.length,
+    systemBytes: Buffer.byteLength(systemText, 'utf8'),
+    inputChars: inputText.length,
+    inputBytes: Buffer.byteLength(inputText, 'utf8'),
+    messageCount: messages.length,
+    contentParts: parts,
+    schemaBytes: Buffer.byteLength(schemaText, 'utf8'),
+    schemaSha256: createHash('sha256').update(schemaText, 'utf8').digest('hex'),
+    hasNul: joined.includes('\u0000'),
+    hasLoneSurrogate: /\p{Surrogate}/u.test(joined),
+    hasControlChars: hasControl(joined),
+    emptySystem: systemText.trim() === '',
+    emptyInput: inputText.trim() === '',
+    jsonValid,
+  };
+}
+
+/** The shape as ONE printable fragment: integers, 0/1 flags, safe tokens and 16-hex hash prefixes only. */
+export function anthropicBodyShapeFragment(shape: AnthropicBodyShape): string {
+  const flag = (value: boolean): string => (value ? '1' : '0');
+  return `shape=model:${shape.model},max_tokens:${shape.maxTokens ?? 'unknown'},effort:${shape.effort ?? 'none'}`
+    + `,body_bytes:${shape.bodyBytes},body_sha:${shape.bodySha256.slice(0, 16)}`
+    + `,system_chars:${shape.systemChars},system_bytes:${shape.systemBytes},input_chars:${shape.inputChars},input_bytes:${shape.inputBytes}`
+    + `,messages:${shape.messageCount},parts:${shape.contentParts.join('+') || 'none'}`
+    + `,schema_bytes:${shape.schemaBytes},schema_sha:${shape.schemaSha256.slice(0, 16)}`
+    + `,nul:${flag(shape.hasNul)},lone_surrogate:${flag(shape.hasLoneSurrogate)},ctrl:${flag(shape.hasControlChars)}`
+    + `,empty_system:${flag(shape.emptySystem)},empty_input:${flag(shape.emptyInput)},json_valid:${flag(shape.jsonValid)}`;
+}
+
+/**
+ * THE TOKEN-COUNT ADAPTER: the ONE place the production body is turned into a `count_tokens` body.
+ *
+ * `POST /v1/messages/count_tokens` takes no `max_tokens`; that is the only endpoint-specific difference
+ * and it is listed here. Every other field (model, system, messages, output_config) is passed through
+ * untouched, byte for byte, so the probe can never test a different request from the one that is sent.
+ */
+export const COUNT_TOKENS_ENDPOINT_ONLY_FIELDS: readonly string[] = Object.freeze(['max_tokens']);
+export function anthropicCountTokensBody(body: Record<string, unknown>): Record<string, unknown> {
+  const adapted: Record<string, unknown> = { ...body };
+  for (const field of COUNT_TOKENS_ENDPOINT_ONLY_FIELDS) delete adapted[field];
+  return adapted;
+}
+
+/**
+ * FOUR KINDS OF EVIDENCE, NEVER CONFLATED.
+ *   EV1 OFFLINE_SCHEMA_VALID  the transformed schema passes the documented structured-output limits (no network).
+ *   EV2 TOKEN_COUNT_ACCEPTED  `count_tokens` answered 200. NOT proof the Messages API accepts the request:
+ *                             count_tokens does not compile structured-output schemas.
+ *   EV3 MESSAGES_ACCEPTED     a real `POST /v1/messages` was accepted. Observable only in a real call.
+ *   EV4 GENERATION_OK         a real call returned a successful response.
+ * Nothing that holds only EV1 or EV2 may be read as EV3 or EV4.
+ */
+export type AnthropicEvidenceLevel = 'EV1' | 'EV2' | 'EV3' | 'EV4';
+export const ANTHROPIC_EVIDENCE_NAMES: Readonly<Record<AnthropicEvidenceLevel, string>> = Object.freeze({
+  EV1: 'OFFLINE_SCHEMA_VALID', EV2: 'TOKEN_COUNT_ACCEPTED', EV3: 'MESSAGES_ACCEPTED', EV4: 'GENERATION_OK',
+});
+export type AnthropicEvidenceState = 'PASS' | 'FAIL' | 'NOT_OBSERVED';
+export interface AnthropicEvidence {
+  readonly ev1: AnthropicEvidenceState;
+  readonly ev2: AnthropicEvidenceState;
+  readonly ev3: AnthropicEvidenceState;
+  readonly ev4: AnthropicEvidenceState;
+}
+
+export interface AnthropicSchemaLimitsCheck {
+  readonly valid: boolean;
+  readonly problems: readonly string[];
+  readonly optionalProperties: number;
+  readonly unionNodes: number;
+}
+
+/** EV1: the transformed schema against the documented limits (24 optional parameters, 16 anyOf/type-array nodes, no unsupported keyword). */
+const UNSUPPORTED_SCHEMA_KEYWORDS = new Set(['maxItems', 'maxLength', 'minLength', 'minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'multipleOf', 'pattern', 'uniqueItems', 'oneOf', 'not', 'if', 'then', 'else', 'patternProperties', 'propertyNames']);
+export function anthropicSchemaLimitsCheck(schema: Record<string, unknown>): AnthropicSchemaLimitsCheck {
+  const problems: string[] = [];
+  let optional = 0;
+  let unions = 0;
+  const walk = (node: unknown, at: string): void => {
+    if (Array.isArray(node)) { node.forEach((entry, index) => walk(entry, `${at}/${index}`)); return; }
+    if (node === null || typeof node !== 'object') return;
+    const record = node as Record<string, unknown>;
+    if ('anyOf' in record || Array.isArray(record.type)) unions += 1;
+    if (record.properties !== null && typeof record.properties === 'object') {
+      const required = new Set(Array.isArray(record.required) ? record.required as string[] : []);
+      for (const key of Object.keys(record.properties as object)) if (!required.has(key)) optional += 1;
+      if (record.additionalProperties !== false) problems.push(`additionalProperties_not_false:${at}`);
+    }
+    if (record.type === 'array' && (typeof record.minItems === 'number') && record.minItems > 1) problems.push(`minItems_above_1:${at}`);
+    for (const [key, value] of Object.entries(record)) {
+      if (UNSUPPORTED_SCHEMA_KEYWORDS.has(key)) problems.push(`unsupported_keyword:${key}:${at}`);
+      if (key !== 'enum' && key !== 'const') walk(value, `${at}/${key}`);
+    }
+  };
+  walk(schema, '#');
+  if (optional > 24) problems.push(`optional_properties_above_24:${optional}`);
+  if (unions > 16) problems.push(`union_nodes_above_16:${unions}`);
+  return { valid: problems.length === 0, problems, optionalProperties: optional, unionNodes: unions };
+}
+
+/**
+ * THE EVIDENCE LEVELS FROM WHAT WAS ACTUALLY OBSERVED. EV3 and EV4 come only from a real Messages call
+ * (`messages`); a count_tokens pass never sets them, whatever it printed.
+ */
+export function anthropicEvidenceLevels(input: {
+  readonly schemaCheck: AnthropicSchemaLimitsCheck | null;
+  readonly probeResults: readonly AnthropicProbeResult[] | null;
+  readonly messages: 'not_called' | 'accepted' | 'generated' | 'refused';
+}): AnthropicEvidence {
+  const ev1: AnthropicEvidenceState = input.schemaCheck === null ? 'NOT_OBSERVED' : input.schemaCheck.valid ? 'PASS' : 'FAIL';
+  const production = input.probeResults === null ? [] : input.probeResults.filter((entry) => ['P0', 'P1', 'P2', 'P3', 'P4', 'P5'].includes(entry.id));
+  const ev2: AnthropicEvidenceState = production.length === 0 ? 'NOT_OBSERVED' : production.every((entry) => entry.http === 200) ? 'PASS' : 'FAIL';
+  const ev3: AnthropicEvidenceState = input.messages === 'not_called' ? 'NOT_OBSERVED' : input.messages === 'refused' ? 'FAIL' : 'PASS';
+  const ev4: AnthropicEvidenceState = input.messages === 'generated' ? 'PASS' : input.messages === 'refused' ? 'FAIL' : 'NOT_OBSERVED';
+  return { ev1, ev2, ev3, ev4 };
+}
+
+/** The one printable evidence line. A passing EV2 always carries the warning that it proves nothing about the Messages endpoint. */
+export function anthropicEvidenceLine(role: 'architect' | 'coder', evidence: AnthropicEvidence): string {
+  return `request_evidence role=${role} EV1_${ANTHROPIC_EVIDENCE_NAMES.EV1}=${evidence.ev1} EV2_${ANTHROPIC_EVIDENCE_NAMES.EV2}=${evidence.ev2}`
+    + ` EV3_${ANTHROPIC_EVIDENCE_NAMES.EV3}=${evidence.ev3} EV4_${ANTHROPIC_EVIDENCE_NAMES.EV4}=${evidence.ev4}`
+    + `${evidence.ev2 === 'PASS' ? ' token_count_only=not_proof_of_messages_acceptance' : ''}`;
+}
 
 /** The request id from the response header, or why it is unavailable. */
 export function anthropicRequestId(headers: Headers | null | undefined): {
@@ -448,17 +710,10 @@ export async function runAnthropicArchitect(
   if (request.signal?.aborted) controller.abort();
   request.signal?.addEventListener('abort', onCallerAbort, { once: true });
 
-  const body = {
-    model: config.model,
-    max_tokens: config.maxOutputTokens,
-    system: request.instructions,
-    messages: [{ role: 'user', content: request.input }],
-    output_config: {
-      format: { type: 'json_schema', schema },
-      // Only when the mission declared it; absent sends no effort.
-      ...(config.reasoningEffort === undefined ? {} : { effort: config.reasoningEffort }),
-    },
-  };
+  // THE ONE BUILDER: the $0 acceptance probe sends this same body (minus max_tokens), so what was probed is what is sent.
+  const body = anthropicArchitectRequestBody(request, { model: config.model, maxOutputTokens: config.maxOutputTokens, reasoningEffort: config.reasoningEffort }, schema);
+  const bodyText = JSON.stringify(body);
+  const bodyShape = anthropicBodyShape(body, bodyText);
   const effortSent = config.reasoningEffort ?? null;
 
   try {
@@ -471,7 +726,7 @@ export async function runAnthropicArchitect(
           'x-api-key': request.apiKey,
           'anthropic-version': ANTHROPIC_API_VERSION,
         },
-        body: JSON.stringify(body),
+        body: bodyText,
         signal: controller.signal,
       });
     } catch (error) {
@@ -501,6 +756,9 @@ export async function runAnthropicArchitect(
           requestId,
           requestIdUnavailableReason: reason,
           rateLimit: anthropicRateLimitEvidence(response.headers),
+          // The provider's words are reduced to a class, a length and a hash here, and dropped.
+          message: errorBody === null ? null : anthropicMessageEvidence(errorBody.message),
+          shape: bodyShape,
         },
       };
     }
@@ -573,4 +831,133 @@ export async function runAnthropicArchitect(
  */
 export function createJ1ArchitectRunner(deps: AnthropicArchitectDeps = {}): ArchitectRunner {
   return (request) => runAnthropicArchitect(request, deps);
+}
+
+/* ------------------------------------------------------------------------------------------------
+ * THE $0 ACCEPTANCE PROBE. `GET /v1/models` (the org and readiness probes) never sends a Messages
+ * request, so the first test of a real request body used to be a paid call. `POST /v1/messages/
+ * count_tokens` is documented as free and takes the same fields, so the production body can be
+ * checked before any spend. It is a BISECTION: the first failing probe isolates the defect, and the
+ * controls (a trivial schema, a trivial effort) say whether count_tokens itself supports the field.
+ * ---------------------------------------------------------------------------------------------- */
+
+export const ANTHROPIC_COUNT_TOKENS_URL = `${ANTHROPIC_PINNED_ORIGIN}/v1/messages/count_tokens`;
+
+export type AnthropicProbeId = 'P0' | 'P1' | 'P2' | 'P3' | 'P4' | 'P5' | 'C1' | 'C2';
+
+export interface AnthropicProbe {
+  readonly id: AnthropicProbeId;
+  readonly label: string;
+  readonly body: Record<string, unknown>;
+}
+
+const CONTROL_SCHEMA: Record<string, unknown> = Object.freeze({
+  type: 'object', additionalProperties: false, required: ['ok'], properties: { ok: { type: 'boolean' } },
+});
+
+/**
+ * The fixed matrix, from the PRODUCTION body. Every probe body is a strict subset of it (or one of two
+ * controls), so a probe that fails names the first field that makes the request unacceptable.
+ *   P0 model + one short user message      P3 + output_config.format (production transformed schema)
+ *   P1 + production system                 P4 + output_config.effort
+ *   P2 + production user input             P5 the full production body (minus max_tokens)
+ *   C1 P0 + a trivial schema               C2 P0 + effort `low`
+ */
+export function anthropicProbeMatrix(production: Record<string, unknown>): readonly AnthropicProbe[] {
+  const model = production.model;
+  const outputConfig = (production.output_config ?? {}) as { readonly format?: unknown; readonly effort?: unknown };
+  const p0: Record<string, unknown> = { model, messages: [{ role: 'user', content: 'ping' }] };
+  const p1: Record<string, unknown> = { ...p0, system: production.system };
+  const p2: Record<string, unknown> = { ...p1, messages: production.messages };
+  const probes: AnthropicProbe[] = [
+    { id: 'P0', label: 'model + short message', body: p0 },
+    { id: 'P1', label: '+ production system', body: p1 },
+    { id: 'P2', label: '+ production input', body: p2 },
+    { id: 'P3', label: '+ output_config.format', body: { ...p2, output_config: { format: outputConfig.format } } },
+  ];
+  if (outputConfig.effort !== undefined) {
+    probes.push({ id: 'P4', label: '+ output_config.effort', body: { ...p2, output_config: { effort: outputConfig.effort } } });
+  }
+  probes.push(
+    { id: 'P5', label: 'full production body', body: anthropicCountTokensBody(production) },
+    { id: 'C1', label: 'control: trivial schema', body: { ...p0, output_config: { format: { type: 'json_schema', schema: CONTROL_SCHEMA } } } },
+    { id: 'C2', label: 'control: effort low', body: { ...p0, output_config: { effort: 'low' } } },
+  );
+  return probes;
+}
+
+export interface AnthropicProbeResult {
+  readonly id: AnthropicProbeId;
+  readonly http: number | null;
+  readonly inputTokens: number | null;
+  readonly errorType: string | null;
+  readonly requestId: string | null;
+  readonly message: AnthropicMessageEvidence | null;
+  /** Always null: probe output never carries provider message text (class, status and request id only). */
+  readonly probeMessage: string | null;
+  /** The one printable line: numbers and safe tokens only. Never provider message text. */
+  readonly line: string;
+}
+
+export async function runAnthropicProbes(input: {
+  readonly role: 'architect' | 'coder';
+  readonly apiKey: string;
+  readonly probes: readonly AnthropicProbe[];
+  readonly fetch?: typeof fetch;
+  readonly timeoutMs?: number;
+}): Promise<readonly AnthropicProbeResult[]> {
+  const fetchImpl = input.fetch ?? globalThis.fetch;
+  const results: AnthropicProbeResult[] = [];
+  for (const probe of input.probes) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), input.timeoutMs ?? 20_000);
+    let http: number | null = null;
+    let inputTokens: number | null = null;
+    let errorType: string | null = null;
+    let requestId: string | null = null;
+    let message: AnthropicMessageEvidence | null = null;
+    try {
+      const response = await anthropicPinnedFetch(fetchImpl, ANTHROPIC_COUNT_TOKENS_URL, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-api-key': input.apiKey, 'anthropic-version': ANTHROPIC_API_VERSION },
+        body: JSON.stringify(probe.body),
+        signal: controller.signal,
+      });
+      http = response.status;
+      requestId = anthropicRequestId(response.headers).requestId;
+      if (response.ok) {
+        try {
+          const parsed = await response.json() as { input_tokens?: unknown };
+          inputTokens = tokens(parsed.input_tokens);
+        } catch { inputTokens = null; }
+      } else {
+        const errorBody = await readErrorBody(response);
+        errorType = token(errorBody?.type);
+        if (errorBody !== null) {
+          message = anthropicMessageEvidence(errorBody.message);
+        }
+      }
+    } catch {
+      // A reset, a timeout or a redirect refused by the pinned fetch: no text of it travels.
+      http = null;
+    } finally {
+      clearTimeout(timer);
+    }
+    const n = (value: number | null): string => (value === null ? 'unknown' : String(value));
+    const line = `request_acceptance role=${input.role} probe=${probe.id} http=${http === null ? 'none' : String(http)} input_tokens=${n(inputTokens)}`
+      + ` type=${errorType ?? 'none'} class=${message?.messageClass ?? 'none'} request_id=${requestId ?? 'unavailable'}`
+      + (probe.id.startsWith('P') ? ` ${anthropicBodyShapeFragment(anthropicBodyShape(probe.body, JSON.stringify(probe.body)))}` : '')
+      + ` message_len=${n(message?.length ?? null)} message_sha256=${message === null ? 'none' : message.sha256.slice(0, 16)}`;
+    results.push({ id: probe.id, http, inputTokens, errorType, requestId, message, probeMessage: null, line });
+  }
+  return results;
+}
+
+/** The first failing production probe (P0..P5 in order), or null when every one was accepted. Controls never count here. */
+export function firstFailingAnthropicProbe(results: readonly AnthropicProbeResult[]): AnthropicProbeId | null {
+  for (const id of ['P0', 'P1', 'P2', 'P3', 'P4', 'P5'] as const) {
+    const result = results.find((entry) => entry.id === id);
+    if (result !== undefined && result.http !== 200) return id;
+  }
+  return null;
 }

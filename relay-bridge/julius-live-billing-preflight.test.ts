@@ -108,6 +108,9 @@ describe('the preflight states every role\'s billing path before any dispatch', 
     expect(run.output).not.toContain('BLOCKED');
     expect(run.output).toContain('Preflight is ready.');
     expect(run.code, 'exit 5 is the only answer that means ready').toBe(5);
+    expect(run.output, 'count_tokens probes are opt-in; unset equals main').not.toContain('request_acceptance');
+    expect(run.output).not.toContain('count_tokens');
+    expect(run.output).not.toContain('api.anthropic.com');
   });
 
   it('an UNDECLARED reviewer blocks the paid run before anything is submitted', () => {
@@ -257,6 +260,20 @@ describe('every reader of the preflight finds its own line', () => {
     expect(physical(run.output).filter((line) => line.startsWith('RESULT: COMPLETED'))).toEqual([]);
     expect(physical(run.output)).not.toContain('  run: run:forged');
   });
+});
+
+describe('Anthropic count_tokens acceptance probes are opt-in on the real preflight', () => {
+  it.each(['', 'true', '01', ' 1'])(
+    'JULIUS_ANTHROPIC_ACCEPTANCE_PROBES=%j: exit 5, no probe output, no provider contact',
+    (value) => {
+      const run = preflight({ ...READY_RIG, RELAY_HERMES_BILLING_MODE: 'api_billed', JULIUS_ANTHROPIC_ACCEPTANCE_PROBES: value });
+      expect(run.code, 'exit 5 is the only answer that means ready').toBe(5);
+      expect(run.output).toContain('Preflight is ready.');
+      expect(run.output).not.toContain('request_acceptance');
+      expect(run.output).not.toContain('count_tokens');
+      expect(run.output).not.toContain('api.anthropic.com');
+    },
+  );
 });
 
 describe('liveBillingPaths, the rule the preflight prints', () => {

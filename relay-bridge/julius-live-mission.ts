@@ -75,7 +75,7 @@ import { createPostgresMissionKnowledgeStore } from './julius/mission-knowledge'
 import { createPostgresMissionSeedStore } from './julius/mission-seed';
 import { createJuliusPostgresRuntimeStore } from './julius/postgres-store';
 import { createExecutorShellPort } from './julius/executor-effects';
-import { createDurableArtifactExchange, juliusReviewerBillingPath, type JuliusArtifactExchange } from './julius/live-workers';
+import { createDurableArtifactExchange, juliusReviewerBillingPath, printAnthropicAcceptanceProbes, type JuliusArtifactExchange } from './julius/live-workers';
 import { createJuliusDurableArtifacts, juliusWorkArtifactRoot } from './julius/durable-artifacts';
 import { LocalJuliusArtifactStore } from '../src/relay/workspace/julius-tools/local-artifact-store';
 import { JuliusWorkArtifactPostgresRepository } from '../src/relay/persistence/julius-work-artifact-postgres';
@@ -849,6 +849,45 @@ export async function attemptMarkersCommand(input: {
   return 0;
 }
 
+/**
+ * Strict opt-in for the $0 Anthropic `count_tokens` acceptance probes.
+ * Only the exact token `1` enables them. Unset, empty, `true`, `01`, ` 1` are off.
+ * They never run on a `--confirm-live` path, even when the env var is `1`.
+ */
+export function juliusAnthropicAcceptanceProbesEnabled(
+  env: Readonly<Record<string, string | undefined>>,
+  confirmLive: boolean,
+): boolean {
+  return !confirmLive && env.JULIUS_ANTHROPIC_ACCEPTANCE_PROBES === '1';
+}
+
+/**
+ * THE ONE GATE in front of probe construction. Evaluated before any probe
+ * matrix, key read or provider client exists. When off, this is a no-op.
+ */
+export async function runJuliusAnthropicAcceptanceProbesIfOptedIn(input: {
+  readonly env: Readonly<Record<string, string | undefined>>;
+  readonly confirmLive: boolean;
+  readonly architectOnAnthropic: boolean;
+  readonly architectModel: string | null;
+  readonly architectEffort: string | undefined;
+  readonly coderModel: string | null;
+  readonly out: (line: string) => void;
+  readonly fetch?: typeof fetch;
+  readonly print?: typeof printAnthropicAcceptanceProbes;
+}): Promise<void> {
+  if (!juliusAnthropicAcceptanceProbesEnabled(input.env, input.confirmLive)) return;
+  await (input.print ?? printAnthropicAcceptanceProbes)({
+    env: input.env,
+    architectOnAnthropic: input.architectOnAnthropic,
+    architectModel: input.architectModel,
+    architectEffort: input.architectEffort,
+    coderModel: input.coderModel,
+    out: input.out,
+    ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
+  });
+}
+
 /* ------------------------------------------------------------------ main */
 
 async function main(argv: readonly string[]): Promise<number> {
@@ -1105,6 +1144,17 @@ async function main(argv: readonly string[]): Promise<number> {
     return 1;
   }
   if (!flag('confirm-live')) {
+    /*
+     * THE $0 ACCEPTANCE PROBES (OBSERVE MODE), opt-in only. They run when
+     * JULIUS_ANTHROPIC_ACCEPTANCE_PROBES is the exact token `1`, and never on
+     * `--confirm-live`. Unset equals main: no probe output, no provider client,
+     * return 5. `count_tokens` is free and is printed, never a gate yet.
+     */
+    await runJuliusAnthropicAcceptanceProbesIfOptedIn({
+      env, confirmLive: flag('confirm-live'),
+      architectOnAnthropic, architectModel: preflight.requested.architectModel ?? null,
+      architectEffort: contract.limits?.architectEffort, coderModel: preflight.requested.codingModel ?? null, out,
+    });
     out('Preflight is ready. This run will spend real provider money and mutate the mission workspace.');
     out('To proceed, re-run with --confirm-live (approval is never inferred).');
     return 5;
