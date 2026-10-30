@@ -226,6 +226,17 @@ const foldConfusables = (s: string, alt = false): string => s.replace(/[\u0370-\
 const COLON_HEX_RUN = /\b[0-9a-f]{2}(?::[0-9a-f]{2}){11,}\b/giu;
 const OX_HEX_RUN = /(?:0x[0-9a-f]{2}[,;]? ?){12,}/giu;
 const rot13 = (t: string): string => t.replace(/[a-z]/giu, (c) => { const b = c <= 'Z' ? 65 : 97; return String.fromCharCode(b + ((c.charCodeAt(0) - b + 13) % 26)); });
+const NAMED_ENTITY: Readonly<Record<string, string>> = Object.freeze({ lowbar: '_', UnderBar: '_', hyphen: '-', dash: '-', colon: ':', sol: '/' });
+const B32_RUN = /(?<![a-z0-9])[a-z2-7]{16,}={0,6}(?![a-z0-9])/giu;
+function base32Decode(t: string): string {
+  const A = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  let acc = 0; let n = 0; const out: number[] = [];
+  for (const c of t.toUpperCase().replace(/=+$/u, '')) {
+    acc = ((acc << 5) | A.indexOf(c)) & 0xffff; n += 5;
+    if (n >= 8) { n -= 8; out.push((acc >> n) & 0xff); }
+  }
+  return Buffer.from(out).toString('latin1');
+}
 function secretSurvives(raw: string): boolean {
   /* Round 4 M4: our own markers are not secrets (a URL `user:[REDACTED:secret]@` must not re-trigger the userinfo pattern). */
   const text = raw.replace(/\[REDACTED:secret\]/gu, ' ');
@@ -233,6 +244,8 @@ function secretSurvives(raw: string): boolean {
     /* Round 4 R3-8: HTML numeric entities. */
     .replace(/&#x([0-9a-f]{1,6});/giu, (_m, h: string) => codePoint(parseInt(h, 16)))
     .replace(/&#([0-9]{1,7});/gu, (_m, d: string) => codePoint(parseInt(d, 10)))
+    /* Round 7 R6-5: the named entities for the separators token formats use. */
+    .replace(/&(lowbar|UnderBar|hyphen|dash|colon|sol);/gu, (_m, n: string) => NAMED_ENTITY[n] ?? '')
     .replace(/\\u([0-9a-f]{4})/giu, (_m, h: string) => codePoint(parseInt(h, 16)))
     .replace(/%([0-9a-f]{2})/giu, (_m, h: string) => String.fromCharCode(parseInt(h, 16)))
     .replace(INVISIBLE, '');
@@ -252,6 +265,8 @@ function secretSurvives(raw: string): boolean {
   if (anyPattern(rot13(joined))) return true;
   for (const m of joined.matchAll(COLON_HEX_RUN)) if (anyPattern(Buffer.from(m[0].replace(/:/gu, ''), 'hex').toString('latin1'))) return true;
   for (const m of joined.matchAll(OX_HEX_RUN)) if (anyPattern(Buffer.from(m[0].replace(/0x|[,; ]/giu, ''), 'hex').toString('latin1'))) return true;
+  /* Round 7 R6-5: base32 runs (RFC 4648 alphabet, either case, optional padding), one linear decode each. */
+  for (const m of joined.matchAll(B32_RUN)) if (anyPattern(base32Decode(m[0]))) return true;
   /* Round 4 R3-8: hex-encoded tokens; R4-7: also space-separated hex bytes. */
   for (const m of joined.matchAll(HEX_RUN)) if (anyPattern(Buffer.from(m[0], 'hex').toString('latin1'))) return true;
   for (const m of joined.matchAll(SPACED_HEX_RUN)) if (anyPattern(Buffer.from(m[0].replace(/ /gu, ''), 'hex').toString('latin1'))) return true;
