@@ -207,6 +207,17 @@ describe('result: branches, usage, and a served model only from a configured fie
     }
     expect(isRequestEchoField({ record: 'run', path: ['servedBy', 'engine'] })).toBe(false);
   });
+  it('F4 + PILOT Low 8: modelName (and its spellings) is a request echo and never attests', () => {
+    for (const path of [['modelName'], ['model_name'], ['MODEL-NAME'], ['ModelName'], ['agent', 'modelName'], ['requestedModelName'], ['requested_model_name'], ['model-id']]) {
+      for (const record of ['run', 'agent'] as const) {
+        expect(isRequestEchoField({ record, path }), path.join('.')).toBe(true);
+        expect(readAttestedModelId({ modelName: 'x1', model_name: 'x1', 'MODEL-NAME': 'x1', ModelName: 'x1', agent: { modelName: 'x1' }, requestedModelName: 'x1', requested_model_name: 'x1', 'model-id': 'x1' }, { record, path }, (v) => v)).toBeNull();
+      }
+    }
+    /* Not over-broad: a segment that merely contains "model" is not an echo by this rule. */
+    for (const path of [['servedModel'], ['modelServedBy'], ['models_used', 'x'], ['namedModel']]) expect(isRequestEchoField({ record: 'run', path }), path.join('.')).toBe(false);
+    expect(readAttestedModelId({ servedModel: 'x1' }, { record: 'run', path: ['servedModel'] }, (v) => v)).toBe('x1');
+  });
   it('missing usage is null, not zero', async () => {
     const r = await make((call) => (call.url.includes('/usage') ? { status: 404 } : finished)).transport.fetchResult({ agentId: AGENT, runId: RUN });
     expect(r).toMatchObject({ kind: 'result', usage: null });

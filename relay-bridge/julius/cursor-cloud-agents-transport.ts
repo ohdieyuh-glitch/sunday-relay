@@ -130,8 +130,11 @@ export interface CursorAttestedModelField { readonly record: 'agent' | 'run'; re
  */
 export const CURSOR_ATTESTED_MODEL_FIELD: CursorAttestedModelField | null = null;
 
-/** A segment that could be the service echoing the `model` the create request itself sent. */
-const REQUEST_ECHO_SEGMENT = /^(model|models|model_?id|requested_?model(_?id)?)$/iu;
+/**
+ * A segment that could be the service echoing the `model` the create request itself sent: `model`, `modelId`,
+ * `modelName` (PILOT Low 8), `requestedModel`, in any case, with or without `_`/`-` between the words.
+ */
+const REQUEST_ECHO_SEGMENT = /^(models?|model[_-]?(id|name)|requested[_-]?model([_-]?(id|name))?)$/iu;
 
 /** True when reading `field` could return the request's own model back: such a field is never attestation. */
 export function isRequestEchoField(field: CursorAttestedModelField): boolean {
