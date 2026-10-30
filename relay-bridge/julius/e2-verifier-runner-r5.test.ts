@@ -28,8 +28,9 @@ const c = spawn(process.execPath, ['-e', 'setTimeout(()=>{},20000)'], { stdio: [
 afterAll(() => { rmSync(dir, { recursive: true, force: true }); });
 
 describe('PILOT N-3: the program allowlist', () => {
-  it('allows node with a script file, npx vitest run, npx tsc/tsc --noEmit and npm test', () => {
-    for (const a of [[NODE, join(dir, 'ok.mjs')], ['node', 'ok.mjs'], ['npx', 'vitest', 'run'], ['npx', 'tsc', '--noEmit'], ['tsc', '--noEmit'], ['npm', 'test']]) {
+  it('allows node with a script file (round 5 R4-1 dropped npx vitest run, npx tsc/tsc --noEmit and npm test)', () => {
+    for (const a of [['npx', 'vitest', 'run'], ['npx', 'tsc', '--noEmit'], ['tsc', '--noEmit'], ['npm', 'test']]) expect(isVerifierCommandAllowed(a, dir), a.join(' ')).toBe(false);
+    for (const a of [[NODE, join(dir, 'ok.mjs')], ['node', 'ok.mjs']]) {
       expect(isVerifierCommandAllowed(a, dir), a.join(' ')).toBe(true);
     }
     /* 5366ad30 R3-4 / Skywalker M1: git verifiers and `tsc -p .` (no --noEmit) are no longer verifiers. */

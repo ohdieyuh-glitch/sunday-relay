@@ -34,7 +34,7 @@ describe('E2 part B: Julius re-runs the verifier commands', () => {
     });
     expect(Object.isFrozen(ev)).toBe(true);
     const fake: VerifierRunner = async () => ({ exitCode: 0, stdout: 'ok', stderr: '' });
-    expect((await recordVerifierReexec({ commands: [['npm', 'test']], cwd: JS_DIR, runner: fake }))?.label).toBe(E2_FAKE_LABEL);
+    expect((await recordVerifierReexec({ commands: [[NODE, js('0')]], cwd: JS_DIR, runner: fake }))?.label).toBe(E2_FAKE_LABEL);
   });
   it('no shell: metacharacters are plain arguments; a missing binary, a kill or a throwing runner is exit unknown', async () => {
     const runner = spawnVerifierRunner({ timeoutMs: 300 });
@@ -103,7 +103,7 @@ describe('E2 part C: the diff', () => {
 describe('E2 gate', () => {
   it('publishes every reason once', () => {
     expect(new Set(E2_GATE_REASONS).size).toBe(E2_GATE_REASONS.length);
-    expect(E2_GATE_REASONS.length).toBe(42);
+    expect(E2_GATE_REASONS.length).toBe(43);
   });
   it('refuses when everything is absent, with every reason, never the diff alone', () => {
     const r = e2Gate({ streamLines: null, anchor: null, reexec: null, verifierSpec: null, diff: null, modelId: null, binding: null });

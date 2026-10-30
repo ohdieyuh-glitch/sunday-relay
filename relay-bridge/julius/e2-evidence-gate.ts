@@ -80,11 +80,10 @@ function workspaceFile(p: string, workspace: string): string | null {
   if (abs.startsWith('/proc/') || abs === '/proc' || !abs.startsWith(`${workspace}/`)) return null;
   return abs.slice(workspace.length + 1);
 }
-/** Exact package.json `scripts.test` bodies `npm test` / `npm run test` may run (anything else is refused). */
-export const E2_NPM_TEST_BODIES: ReadonlySet<string> = Object.freeze(new Set(['vitest run', 'vitest --run', 'node --test', 'tsc --noEmit', 'tsc -p tsconfig.json --noEmit']));
 /** Config files whose content shapes what npm/npx/tsc run; pinned to base whenever one of them is used. */
-const TOOL_CONFIGS = Object.freeze(['package.json', 'package-lock.json', 'tsconfig.json', 'vitest.config.ts', 'vitest.config.mts', 'vitest.config.js', 'vitest.config.mjs', 'vitest.config.cjs', 'vite.config.ts', 'vite.config.mts', 'vite.config.js', 'vite.config.mjs', '.npmrc']);
-export type E2VerifierShapeRefusal = 'program_not_allowed' | 'shape_not_allowed' | 'path_outside_workspace';
+/** Round 5 R4-1: with only node forms left, package.json (module type, `imports` map) is the config that shapes the run. */
+const TOOL_CONFIGS = Object.freeze(['package.json']);
+export type E2VerifierShapeRefusal = 'program_not_allowed' | 'shape_not_allowed' | 'path_outside_workspace' | 'spec_program_untrusted';
 /**
  * The closed verifier shapes, with the workspace files each one reads (to be pinned to base):
  * `node <file>`, `node --test <file>...`, `npm test`, `npm run test`, `npx vitest run [<file>...]`,
@@ -104,15 +103,11 @@ function verifierShape(argv: readonly string[], workspace: string): { readonly f
       /* `node <file> [args to the script...]` (the script is pinned; its own arguments are its business) or `node --test <file>...`. */
       const list = args[0] === '--test' ? args.slice(1) : args.slice(0, 1);
       if (list.length === 0 || list.some((x) => x.startsWith('-'))) return 'shape_not_allowed';
-      const f = files(list); return f === null ? 'path_outside_workspace' : { files: f, configs: false };
+      const f = files(list); return f === null ? 'path_outside_workspace' : { files: f, configs: true };
     }
-    case 'npm': return (args.length === 1 && args[0] === 'test') || (args.length === 2 && args[0] === 'run' && args[1] === 'test') ? { files: [], configs: true } : 'shape_not_allowed';
-    case 'npx': {
-      if (args[0] === 'tsc') return tscArgs(args.slice(1));
-      if (args[0] !== 'vitest' || args[1] !== 'run' || args.slice(2).some((x) => x.startsWith('-'))) return 'shape_not_allowed';
-      const f = files(args.slice(2)); return f === null ? 'path_outside_workspace' : { files: f, configs: true };
-    }
-    case 'tsc': return tscArgs(args);
+    /* PILOT 44c062b9 R4-1: npm/npx/tsc resolve a binary from node_modules, which git does not track and the spec cannot
+       pin to base; a coder-committed node_modules/.bin/vitest ran as julius_observed. These forms are DROPPED. */
+    case 'npm': case 'npx': case 'tsc': return 'spec_program_untrusted';
     default: return 'program_not_allowed';
   }
 }
@@ -129,7 +124,7 @@ export function isVerifierCommandAllowed(argv: readonly string[], cwd: string): 
   if (!validArgv(argv) || !isCanonicalDir(cwd)) return false;
   const program = argv[0] as string;
   const name = progName(program);
-  if (!['node', 'npx', 'npm', 'tsc'].includes(name) || program !== program.trim()) return false;
+  if (name !== 'node' || program !== program.trim()) return false;
   if (program.includes('/') || program.includes('\\')) {
     const resolved = resolveProgram(name);
     let real: string | null = null;
@@ -314,7 +309,7 @@ export interface E2VerifierSpec {
 }
 export type E2VerifierSpecRefusal =
   | 'spec_invalid' | 'spec_shell_syntax' | 'spec_base_invalid' | 'spec_workspace_invalid'
-  | E2VerifierShapeRefusal | 'spec_file_not_at_base' | 'spec_npm_script_not_allowlisted';
+  | E2VerifierShapeRefusal | 'spec_file_not_at_base';
 const SPECS = new WeakSet<object>();
 const SHELL_SYNTAX = /[;&|<>$`'"\\(){}[\]*?~!#=%^\r\n\t]/u;
 const gitBlob = (workspace: string, base: string, path: string): Buffer | null => {
@@ -348,17 +343,6 @@ export function pinVerifierSpec(input: E2MissionVerifierInput): E2VerifierSpec |
       pins[f] = sha256(blob);
     }
     if (shape.configs) for (const f of TOOL_CONFIGS) { const blob = gitBlob(input.workspace, input.base, f); pins[f] = blob === null ? 'absent' : sha256(blob); }
-    if (progName(argv[0] as string) === 'npm') {
-      const pkg = gitBlob(input.workspace, input.base, 'package.json');
-      let body: unknown = null;
-      try { body = (JSON.parse(pkg?.toString('utf8') ?? 'null') as { scripts?: Record<string, unknown> } | null)?.scripts?.test; } catch { body = null; }
-      if (typeof body !== 'string' || !E2_NPM_TEST_BODIES.has(body)) return no('spec_npm_script_not_allowlisted');
-      /* npm also runs pretest/posttest: refuse if either exists. */
-      try {
-        const sc = (JSON.parse(pkg?.toString('utf8') ?? '{}') as { scripts?: Record<string, unknown> }).scripts ?? {};
-        if ('pretest' in sc || 'posttest' in sc) return no('spec_npm_script_not_allowlisted');
-      } catch { return no('spec_npm_script_not_allowlisted'); }
-    }
   }
   const spec: E2VerifierSpec = Object.freeze({ base: input.base, workspace: input.workspace, commands: Object.freeze(commands), pins: Object.freeze(pins) });
   SPECS.add(spec);
@@ -468,7 +452,7 @@ export const E2_GATE_REASONS = Object.freeze([
   'e2_final_record_mismatch', 'e2_no_edit_calls', 'e2_diff_empty', 'e2_stream_mid_run_start', 'e2_model_unbound',
   'e2_diff_not_isolated', 'e2_edit_path_not_in_diff', 'e2_edit_path_unknown',
   'e2_anchor_not_external', 'e2_verifier_spec_absent', 'e2_verifier_not_from_spec', 'e2_verifier_pin_changed',
-  'e2_tool_unknown', 'e2_edit_path_outside_workspace',
+  'e2_tool_unknown', 'e2_edit_path_outside_workspace', 'e2_verifier_binary_untrusted',
 ] as const);
 export type E2GateReason = (typeof E2_GATE_REASONS)[number];
 
@@ -711,6 +695,10 @@ export function e2Gate(input: {
         if (rels.some((r) => r === null)) reasons.push('e2_edit_path_outside_workspace');
         if (diff.paths === null || rels.some((r) => r !== null && !inDiff.has(r))) reasons.push('e2_edit_path_not_in_diff');
       }
+    }
+    /* Round 5 R4-1: a diff that adds or changes anything under node_modules can change what the verifier imports. */
+    if (realDiff && diff.exitCode === 0 && (diff.paths === null || diff.paths.some((p) => p.split('/').includes('node_modules')))) {
+      reasons.push('e2_verifier_binary_untrusted');
     }
   }
   /* Skywalker N2: the graded model is the one the creating transport requested, recorded in the chained header. */

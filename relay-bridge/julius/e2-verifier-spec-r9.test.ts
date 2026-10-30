@@ -38,71 +38,64 @@ describe('R3-2 / M1 / R3-4: isVerifierCommandAllowed', () => {
       expect(G.isVerifierCommandAllowed(a, repo), a.join(' ')).toBe(false);
     }
   });
-  it('allows the forms missions really use (Skywalker M2): node --test, npm run test, npm test, npx vitest run, tsc --noEmit', () => {
-    for (const a of [['node', '--test', 'test/a.test.mjs'], ['node', 'ok.mjs'], [process.execPath, 'ok.mjs'], ['npm', 'test'], ['npm', 'run', 'test'], ['npx', 'vitest', 'run'], ['npx', 'vitest', 'run', 'test/a.test.mjs'],
-      ['tsc', '--noEmit'], ['npx', 'tsc', '--noEmit', '-p', 'tsconfig.json']]) {
+  it('allows only the node forms (round 5 R4-1 dropped npm/npx/tsc: Skywalker M2 loses npm test / npm run test)', () => {
+    for (const a of [['node', '--test', 'test/a.test.mjs'], ['node', 'ok.mjs'], [process.execPath, 'ok.mjs']]) {
       expect(G.isVerifierCommandAllowed(a, repo), a.join(' ')).toBe(true);
+    }
+    for (const a of [['npm', 'test'], ['npm', 'run', 'test'], ['npx', 'vitest', 'run'], ['tsc', '--noEmit'], ['npx', 'tsc', '--noEmit', '-p', 'tsconfig.json']]) {
+      expect(G.isVerifierCommandAllowed(a, repo), a.join(' ')).toBe(false);
     }
   });
 });
 
 describe('R3-2: pinVerifierSpec maps the mission testCommand to argv and pins its files at base', () => {
   it('maps the string, pins the script and configs', () => {
-    const s = G.pinVerifierSpec({ testCommand: 'node --test test/a.test.mjs', additionalChecks: ['npm run test'], workspace: repo, base });
+    const s = G.pinVerifierSpec({ testCommand: 'node --test test/a.test.mjs', additionalChecks: ['node ok.mjs'], workspace: repo, base });
     expect('refused' in s).toBe(false);
     const spec = s as G.E2VerifierSpec;
-    expect(spec.commands).toEqual([['node', '--test', 'test/a.test.mjs'], ['npm', 'run', 'test']]);
+    expect(spec.commands).toEqual([['node', '--test', 'test/a.test.mjs'], ['node', 'ok.mjs']]);
     expect(Object.keys(spec.pins)).toContain('test/a.test.mjs');
     expect(spec.pins['package.json']).toMatch(/^[0-9a-f]{64}$/u);
-    expect(spec.pins['vitest.config.ts']).toBe('absent');
   });
   it('refuses with a named cause', () => {
     const r = (testCommand: string, b = base) => (G.pinVerifierSpec({ testCommand, workspace: repo, base: b }) as { refused?: string }).refused;
-    expect(r('npm test && rm -rf .')).toBe('spec_shell_syntax');
+    expect(r('node ok.mjs && rm -rf .')).toBe('spec_shell_syntax');
     expect(r('node "ok.mjs"')).toBe('spec_shell_syntax');
     expect(r('node $X')).toBe('spec_shell_syntax');
     expect(r('node ../evil.mjs')).toBe('path_outside_workspace');
     expect(r('node /proc/self/environ')).toBe('path_outside_workspace');
     expect(r('/usr/bin/node ok.mjs')).toBe('program_not_allowed');
     expect(r('git status')).toBe('program_not_allowed');
-    expect(r('npx vitest --version')).toBe('shape_not_allowed');
-    expect(r('npm test --prefix /tmp')).toBe('shape_not_allowed');
+    expect(r('npx vitest --version')).toBe('spec_program_untrusted');
+    expect(r('npm test --prefix /tmp')).toBe('spec_program_untrusted');
+    expect(r('node --version')).toBe('shape_not_allowed');
     expect(r('node new.mjs')).toBe('spec_file_not_at_base');
     expect(r('node ok.mjs', 'z'.repeat(40))).toBe('spec_base_invalid');
-  });
-  it('npm test runs only an allowlisted, pinned script body', () => {
-    const r2 = join(root, 'r2'); mkdirSync(r2);
-    const b = makeRepo(r2, { 'package.json': JSON.stringify({ scripts: { test: 'node evil.js' } }) }, {}, write).base;
-    expect((G.pinVerifierSpec({ testCommand: 'npm test', workspace: r2, base: b }) as { refused?: string }).refused).toBe('spec_npm_script_not_allowlisted');
-    const r3 = join(root, 'r3'); mkdirSync(r3);
-    const b3 = makeRepo(r3, { 'package.json': JSON.stringify({ scripts: { test: 'node --test', pretest: 'node x.js' } }) }, {}, write).base;
-    expect((G.pinVerifierSpec({ testCommand: 'npm test', workspace: r3, base: b3 }) as { refused?: string }).refused).toBe('spec_npm_script_not_allowlisted');
-    expect(G.E2_NPM_TEST_BODIES.has('node --test')).toBe(true);
   });
 });
 
 describe('R3-2: re-exec refuses when pinned content changed since base, and the gate binds the spec', () => {
-  it('a changed script, package.json or a new vitest config runs nothing: refusal pin_changed', async () => {
+  it('a changed script or package.json runs nothing: refusal pin_changed', async () => {
     const r = join(root, 'pc'); mkdirSync(r);
     const b = makeRepo(r, { 'package.json': PKG, 'test/a.test.mjs': "import test from 'node:test'; test('a', () => {});\n", 'ok.mjs': 'process.exit(0)\n' }, {}, write).base;
     let ran = 0;
     const runner: G.VerifierRunner = async () => { ran += 1; return { exitCode: 0, stdout: '', stderr: '' }; };
-    const spec = G.pinVerifierSpec({ testCommand: 'node --test test/a.test.mjs', additionalChecks: ['npm test'], workspace: r, base: b }) as G.E2VerifierSpec;
+    const spec = G.pinVerifierSpec({ testCommand: 'node --test test/a.test.mjs', additionalChecks: ['node ok.mjs'], workspace: r, base: b }) as G.E2VerifierSpec;
     expect((await G.recordVerifierReexec({ spec, cwd: r, runner }))?.refusal).toBeNull();
     expect(ran).toBe(2);
-    for (const [f, c] of [['test/a.test.mjs', 'process.exit(0)\n'], ['package.json', JSON.stringify({ scripts: { test: 'node --test', pretest: 'x' } })], ['vitest.config.ts', 'export default {}\n']] as const) {
+    for (const [f, c] of [['test/a.test.mjs', 'process.exit(0)\n'], ['package.json', JSON.stringify({ scripts: { test: 'node --test', pretest: 'x' } })]] as const) {
       const before = ran;
       write(join(r, f), c);
       const ev = await G.recordVerifierReexec({ spec, cwd: r, runner });
       expect(ev?.refusal, f).toBe('pin_changed');
       expect(ev?.commands).toEqual([]);
       expect(ran).toBe(before);
-      if (f === 'vitest.config.ts') rmSync(join(r, f)); else write(join(r, f), f === 'package.json' ? PKG : "import test from 'node:test'; test('a', () => {});\n");
+      write(join(r, f), f === 'package.json' ? PKG : "import test from 'node:test'; test('a', () => {});\n");
     }
   });
   it('gate: spec present and honoured passes; legacy argv, another spec, a pin change, no spec or a spec for another base are refused', async () => {
     const runner = G.spawnVerifierRunner({ timeoutMs: 60_000 });
-    const spec = G.pinVerifierSpec({ testCommand: 'node --test test/a.test.mjs', additionalChecks: ['npm run test'], workspace: repo, base }) as G.E2VerifierSpec;
+    const spec = G.pinVerifierSpec({ testCommand: 'node --test test/a.test.mjs', additionalChecks: ['node ok.mjs'], workspace: repo, base }) as G.E2VerifierSpec;
     const { lines, evidence } = await liveCapture(root, 'g.jsonl', GOOD());
     const g = { streamLines: lines, anchor: G.externalAnchor('workflow_output', evidence.finalHash), diff: await G.recordGitDiff({ base, head, cwd: repo, runner }), binding: { runId: RUN, base, head, workspace: repo }, modelId: MODEL };
     const reexec = await G.recordVerifierReexec({ spec, cwd: repo, runner });
