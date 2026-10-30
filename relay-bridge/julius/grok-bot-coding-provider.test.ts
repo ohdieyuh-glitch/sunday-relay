@@ -717,6 +717,15 @@ describe('F5/F6/F13: exec bits, protected paths, an empty permitted list, and th
     }
   });
 
+  it('Skywalker N13: hashed 8.3 short names (GI7EBA~1) whose leading characters could alias a protected name fail closed', () => {
+    for (const path of ['GI7EBA~1/config', 'gi7eba~1', 'GIA1B2~3/hooks/pre-commit', 'GI0F3C~1.YML', 'HU1234~1/pre-commit', 'LFABCD~1', 'G~1', 'GI~12', 'GITHU3~1/workflows/x', 'src/GIFFFF~9.YML::$DATA', 'GIABCDEF~1']) {
+      expect(isProtectedRepoPath(path), path).toBe(true);
+    }
+    for (const path of ['src/progit~1', 'docs/abc~1', 'AB12CD~1', 'notes~1.md', 'XG7EBA~1', 'GXABCD~1', 'HX12~1', 'src/a~b', 'git~x/y']) {
+      expect(isProtectedRepoPath(path), path).toBe(false);
+    }
+  });
+
   it('F6: the provider refuses a protected path even inside a permitted prefix, and nothing is applied', async () => {
     for (const path of ['src/.GIT/hooks/post-checkout', '.github/workflows/x.yml', 'src/.gitattributes']) {
       const w = fakeWorkspace({ changes: [{ path, change: 'ADDED' }] });

@@ -191,8 +191,11 @@ const PROTECTED_COMPONENTS = new Set(['.git', '.gitmodules', '.gitattributes', '
  * N6: an NTFS 8.3 short name (`GIT~1`, `GITHUB~1`, `LFSCON~1`): up to six leading characters of a protected name, without its
  * dot. PILOT L-1: with an optional extension of up to three characters (`GITLAB~1.YML` for `.gitlab-ci.yml`). Any extension
  * is accepted as protected, which can only refuse more.
+ * Skywalker N13: Windows also makes HASHED short names, the first one or two characters of the name, four hex digits of a
+ * hash, then `~N` (`GI7EBA~1` can be `.github`). The hash cannot be recomputed here, so ANY `~N` short name (base up to
+ * eight characters) whose first two characters (or its only one) begin a protected name fails closed.
  */
-const SHORT_NAME = /^([a-z0-9]{1,6})~[0-9]+(?:\.[a-z0-9]{1,3})?$/u;
+const SHORT_NAME = /^([a-z0-9]{1,8})~[0-9]+(?:\.[a-z0-9]{1,3})?$/u;
 const PROTECTED_STEMS = [...PROTECTED_COMPONENTS].map((name) => name.replace(/^\./u, '').replace(/[^a-z0-9]/gu, ''));
 export function isProtectedRepoPath(path: string): boolean {
   return path.split(/[/\\]/u).some((part) => {
@@ -204,7 +207,7 @@ export function isProtectedRepoPath(path: string): boolean {
     if (candidates.some((c) => PROTECTED_COMPONENTS.has(c))) return true;
     return candidates.some((c) => {
       const m = SHORT_NAME.exec(c);
-      return m !== null && PROTECTED_STEMS.some((stem) => stem.startsWith(m[1] as string));
+      return m !== null && PROTECTED_STEMS.some((stem) => stem.startsWith((m[1] as string).slice(0, 2)));
     });
   });
 }
