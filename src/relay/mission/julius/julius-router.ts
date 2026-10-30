@@ -504,6 +504,9 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   cursorRunId:safeCloudAgentRunId(v.cursorRunId),
   cursorRequestId:safeCloudAgentRunId(v.cursorRequestId),
   cursorRunCreatedAt:safeInstant(v.cursorRunCreatedAt),
+  /** Whether the provider's response carried the request id / createdAt above. `not_provided` is a fact, not a gap: neither is ever invented. */
+  cursorRequestIdStatus:safeEnum(v.cursorRequestIdStatus,['provided','not_provided'] as const),
+  cursorRunCreatedAtStatus:safeEnum(v.cursorRunCreatedAtStatus,['provided','not_provided'] as const),
   runResponseSha256:safeSha256Hex(v.runResponseSha256),
   receiptRunIdMatches:safeNullableBool(v.receiptRunIdMatches),
   baseRevision:safeSha40(v.baseRevision),

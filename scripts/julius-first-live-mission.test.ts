@@ -3477,6 +3477,8 @@ describe('every diagnostic the allowlist admits reaches the exported bundle', ()
     cursorRunId: 'pending the governed worker-diagnostics dump column (cursor_run_id); no live root composes the cloud-agent coder yet',
     cursorRequestId: 'pending the governed worker-diagnostics dump column (cursor_request_id); no live root composes the cloud-agent coder yet',
     cursorRunCreatedAt: 'pending the governed worker-diagnostics dump column (cursor_run_created_at); no live root composes the cloud-agent coder yet',
+    cursorRequestIdStatus: 'pending the governed worker-diagnostics dump column (cursor_request_id_status); no live root composes the cloud-agent coder yet',
+    cursorRunCreatedAtStatus: 'pending the governed worker-diagnostics dump column (cursor_run_created_at_status); no live root composes the cloud-agent coder yet',
     runResponseSha256: 'pending the governed worker-diagnostics dump column (run_response_sha256); no live root composes the cloud-agent coder yet',
     receiptRunIdMatches: 'pending the governed worker-diagnostics dump column (receipt_run_id_matches); no live root composes the cloud-agent coder yet',
     baseRevision: 'pending the governed worker-diagnostics dump column (base_revision); no live root composes the cloud-agent coder yet',

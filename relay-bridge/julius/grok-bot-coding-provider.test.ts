@@ -728,6 +728,32 @@ describe('F15/E8: transportMode is stamped by the transport module, not claimed;
   });
 });
 
+describe('receipt: request id and createdAt are never invented; when absent they are labelled not_provided', () => {
+  it('absent from the response: the values stay absent (null on the row) and the row says not_provided', async () => {
+    for (const receipt of [{ runId: 'run-1', createdAt: null, requestId: null, responseSha256: 'f'.repeat(64) }, null, undefined]) {
+      const t = fakeTransport({ result: goodResult({ receipt }) });
+      const c = completed((await run({ t })).outcome);
+      const diag = c.observation.diagnostics as Record<string, unknown>;
+      expect(diag).not.toHaveProperty('cursorRequestId');
+      expect(diag).not.toHaveProperty('cursorRunCreatedAt');
+      expect(diag).toMatchObject({ cursorRequestIdStatus: 'not_provided', cursorRunCreatedAtStatus: 'not_provided' });
+      const safe = safeReviewDiagnostics(diag)!;
+      expect(safe).toMatchObject({ cursorRequestId: null, cursorRunCreatedAt: null, cursorRequestIdStatus: 'not_provided', cursorRunCreatedAtStatus: 'not_provided' });
+    }
+  });
+  it('present in the response: carried as is and labelled provided; one without the other is labelled independently', async () => {
+    const c = completed((await run({ t: fakeTransport({ result: goodResult({ receipt: { runId: 'run-1', createdAt: '2026-10-30T16:00:00Z', requestId: 'req_1', responseSha256: 'f'.repeat(64) } }) }) })).outcome);
+    expect(c.observation.diagnostics).toMatchObject({ cursorRequestId: 'req_1', cursorRunCreatedAt: '2026-10-30T16:00:00Z', cursorRequestIdStatus: 'provided', cursorRunCreatedAtStatus: 'provided' });
+    const half = completed((await run({ t: fakeTransport({ result: goodResult({ receipt: { runId: 'run-1', createdAt: null, requestId: 'req_2', responseSha256: 'f'.repeat(64) } }) }) })).outcome);
+    expect(half.observation.diagnostics).toMatchObject({ cursorRequestIdStatus: 'provided', cursorRunCreatedAtStatus: 'not_provided' });
+    expect(half.observation.diagnostics).not.toHaveProperty('cursorRunCreatedAt');
+  });
+  it('the router admits only the two labels', () => {
+    for (const v of ['provided', 'not_provided']) expect(safeReviewDiagnostics({ cursorRequestIdStatus: v, cursorRunCreatedAtStatus: v })).toMatchObject({ cursorRequestIdStatus: v, cursorRunCreatedAtStatus: v });
+    for (const v of ['Provided', 'not provided', 'unknown', '', 1, true, null, 'provided\n']) expect(safeReviewDiagnostics({ cursorRequestIdStatus: v, cursorRunCreatedAtStatus: v })).toMatchObject({ cursorRequestIdStatus: null, cursorRunCreatedAtStatus: null });
+  });
+});
+
 describe('Grok Bot coder: identifiers reach the router diagnostics', () => {
   it('F7: the kinds are router tokens and every durable fact survives safeReviewDiagnostics unchanged', async () => {
     expect(GROK_BOT_CODER_PROVIDER_KIND).toMatch(/^[a-z][a-z0-9_]{0,63}$/u);

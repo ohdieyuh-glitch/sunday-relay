@@ -590,6 +590,10 @@ export function createGrokBotCodingAgentProvider(input: {
       }
       if (result.durationMs !== null) evidence.providerDurationMs = result.durationMs;
       const receipt = result.receipt ?? null;
+      /* The request id and createdAt are never invented (no clock reading, no generated id): what the response did not
+       * carry stays absent, and the row says so in words, "not_provided", rather than leaving a reader to guess (PILOT). */
+      evidence.cursorRequestIdStatus = receipt !== null && typeof receipt === 'object' && typeof receipt.requestId === 'string' ? 'provided' : 'not_provided';
+      evidence.cursorRunCreatedAtStatus = receipt !== null && typeof receipt === 'object' && typeof receipt.createdAt === 'string' ? 'provided' : 'not_provided';
       if (receipt !== null && typeof receipt === 'object') {
         if (typeof receipt.requestId === 'string') evidence.cursorRequestId = receipt.requestId;
         if (typeof receipt.createdAt === 'string') evidence.cursorRunCreatedAt = receipt.createdAt;
