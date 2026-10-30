@@ -322,6 +322,24 @@ namespace
 		return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("SaveGames/JuliusJ1/start.v1"));
 	}
 
+	/** YUJI n1: true while any moved-aside unreadable record exists (Start stays blocked until an operator removes it). */
+	bool StartRecordQuarantined()
+	{
+		TArray<FString> Found;
+		IFileManager::Get().FindFiles(Found, *(StartRecordPath() + UTF8_TO_TCHAR(std::string(WonderlandJuliusMissionFlow::StartRecordQuarantineSuffix).c_str()) + TEXT("*")), true, false);
+		return Found.Num() > 0;
+	}
+
+	/** YUJI n1: moves an unreadable record file aside, never replacing an earlier one. The new path, or empty if not moved. */
+	FString QuarantineStartRecordFile(const FString& File)
+	{
+		const FString Stamp = FDateTime::UtcNow().ToString(TEXT("%Y%m%dT%H%M%S%sZ"));
+		const std::string Name = WonderlandJuliusMissionFlow::QuarantinedStartRecordName(ToStd(StartRecordPath()), ToStd(Stamp));
+		if (Name.empty()) { return FString(); }
+		const FString Aside = ToF(Name);
+		return IFileManager::Get().Move(*Aside, *File, false, true) ? Aside : FString(); // SUBSYSTEM_QUARANTINE_NEVER_REPLACES
+	}
+
 	const TCHAR* StartRecordWord(uint8 Record)
 	{
 		switch (Record)
@@ -366,8 +384,20 @@ void UWonderlandJuliusMissionSubsystem::SyncStartRecord()
 		// key and trigger and could start a second run). Its run is unknown, so every run stays blocked until an operator
 		// removes the file. It is never written over (SaveStartRecord refuses).
 		StartRecord = static_cast<uint8>(EStartRecord::Unreadable); // SUBSYSTEM_CORRUPT_RECORD_BLOCKS
-		StartMessage = FString::Printf(TEXT("Start blocked: the saved Start record (%s) is unreadable. An operator must check it; nothing is sent."), *ReadFrom);
-		UE_LOG(LogJuliusJ1, Warning, TEXT("{\"event\":\"start_record_unreadable\",\"wlj_run_id\":\"%s\",\"loaded\":%s}"), *RunId, bLoaded ? TEXT("true") : TEXT("false"));
+		// YUJI n1: the unreadable file is evidence. It is moved aside (never replaced, never deleted) so no later save can
+		// write over it, and the moved-aside file keeps Start blocked (StartRecordFromDisk) until an operator removes it.
+		const FString Aside = QuarantineStartRecordFile(ReadFrom); // SUBSYSTEM_CORRUPT_RECORD_MOVED_ASIDE
+		StartMessage = FString::Printf(TEXT("Start blocked: the saved Start record (%s) is unreadable and was kept as %s. An operator must check it; nothing is sent."),
+			*ReadFrom, Aside.IsEmpty() ? *ReadFrom : *Aside);
+		UE_LOG(LogJuliusJ1, Warning, TEXT("{\"event\":\"start_record_unreadable\",\"wlj_run_id\":\"%s\",\"loaded\":%s,\"moved_aside\":%s}"), *RunId,
+			bLoaded ? TEXT("true") : TEXT("false"), Aside.IsEmpty() ? TEXT("false") : TEXT("true"));
+		return;
+	}
+	if (StartRecordFromDisk(Saved, StartRecordQuarantined()) == EStartRecord::Unreadable) // SUBSYSTEM_QUARANTINE_KEEPS_START_BLOCKED
+	{
+		StartRecord = static_cast<uint8>(EStartRecord::Unreadable);
+		StartMessage = TEXT("Start blocked: an earlier unreadable Start record was moved aside (start.v1.corrupt-*). An operator must check and remove it; nothing is sent.");
+		UE_LOG(LogJuliusJ1, Warning, TEXT("{\"event\":\"start_record_quarantine_blocks\",\"wlj_run_id\":\"%s\"}"), *RunId);
 		return;
 	}
 	if (Saved.Read != ESavedStartRead::Ok) { return; } // no record, or another run's
@@ -389,6 +419,16 @@ bool UWonderlandJuliusMissionSubsystem::SaveStartRecord() const
 	if (StartRecord == static_cast<uint8>(EStartRecord::Unreadable)) { return false; }
 	const FString Path = StartRecordPath();
 	const FString Temp = Path + TEXT(".tmp");
+	// YUJI n1: never write over an unreadable file (the record, or a temp left by a cut-short rename). It is moved aside
+	// first; when it cannot be moved, nothing is written (e.g. a /status that makes an unreadable record Started).
+	for (const FString& OnDisk : {Path, Temp})
+	{
+		if (!IFileManager::Get().FileExists(*OnDisk)) { continue; }
+		FString Existing;
+		const bool bLoaded = FFileHelper::LoadFileToString(Existing, *OnDisk);
+		if (!SavedStartRecordMayBeReplaced(ParseSavedStartRecord(true, bLoaded, ToStd(Existing), ToStd(StartRunId)).Read)
+			&& QuarantineStartRecordFile(OnDisk).IsEmpty()) { return false; } // SUBSYSTEM_SAVE_NEVER_REPLACES_UNREADABLE
+	}
 	const std::string Text = FormatSavedStartRecord(ToStd(StartRunId), ToStd(StartKey), static_cast<EStartRecord>(StartRecord),
 		ToStd(StartWorkflowRunId), ToStd(StartTriggerId));
 	// YUJI M2: the whole record goes to a temp file first, then is renamed over the record, so a crash mid-write never

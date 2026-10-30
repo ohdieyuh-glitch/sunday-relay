@@ -568,10 +568,10 @@ namespace WonderlandJuliusMissionFlow
 		Accepted,
 		/** 400 / 409 / 403 / 404: shown as is; never resent. */
 		Refused,
-		/** 401, or a 503 whose body SAYS nothing was claimed (julius_start_disabled, julius_start_not_configured, or
-		 *  julius_start_unavailable "... Nothing was claimed or dispatched."), or transport 0 / 502 / 504 (a lost answer,
-		 *  which StartRecordAfterAnswer keeps blocked). YUJI M1 2026-10-30: any OTHER 503 (no body, another kind, or
-		 *  julius_start_unavailable "The claim could not run. Check /status") is Uncertain, never Retryable. */
+		/** 401, or a 503 whose error.kind is a before-claim refusal (julius_start_disabled or julius_start_not_configured;
+		 *  the message text is never read), or transport 0 / 502 / 504 (a lost answer, which StartRecordAfterAnswer keeps
+		 *  blocked). Skywalker 2026-10-30: any OTHER 503 (no body, non-JSON, no kind, an unknown kind, or
+		 *  julius_start_unavailable with any message) is Uncertain, never Retryable. */
 		Retryable,
 		/** A-9 (ACK): 202 ack:"accepted" -- the bridge durably RECEIVED the request. NOT a dispatch: /status decides. */
 		Acknowledged,
@@ -626,8 +626,23 @@ namespace WonderlandJuliusMissionFlow
 		std::string_view TriggerId);
 
 	/**
+	 * YUJI n1 2026-10-30: an unreadable saved record is evidence of a Start whose outcome is unknown. It is moved aside to
+	 * "<record path>.corrupt-<UTC stamp>" (never written over, never deleted), and Start stays blocked while any moved-aside
+	 * record exists, until an operator inspects and removes it. A /status that later shows the dispatch makes the record
+	 * Started (still blocked) and the new record is written next to the moved-aside one, never over it.
+	 */
+	inline constexpr std::string_view StartRecordQuarantineSuffix = ".corrupt-";
+	/** The moved-aside name; empty (do not move) when the stamp is empty or not only digits, 'T' and 'Z'. */
+	std::string QuarantinedStartRecordName(std::string_view RecordPath, std::string_view UtcStamp);
+	/** A save may replace a file on disk only when it is absent or readable (Ok / OtherRun); never an unreadable one. */
+	bool SavedStartRecordMayBeReplaced(ESavedStartRead OnDisk);
+	/** The record a sync takes: this run's readable record; else Unreadable (blocked) while a moved-aside record exists;
+	 *  else the parse (None for absent or another run's, Unreadable for unreadable). */
+	EStartRecord StartRecordFromDisk(const FSavedStartRecord& Saved, bool bQuarantineExists);
+
+	/**
 	 * The record an answer leaves (founder ruling 2026-10-30: after a crash, timeout or outcome-unknown Start, Start stays
-	 * ineligible until /status reconciles it). Only an answer the bridge GAVE that says nothing was dispatched (401, or a 503 whose body says nothing was claimed -- M1)
+	 * ineligible until /status reconciles it). Only an answer the bridge GAVE that says nothing was dispatched (401, or a 503 whose error.kind is julius_start_disabled or julius_start_not_configured -- M1)
 	 * is NotStarted; a lost answer (transport 0, 502, 504) is Sending.
 	 */
 	EStartRecord StartRecordAfterAnswer(EStartOutcome Outcome, int HttpStatus);

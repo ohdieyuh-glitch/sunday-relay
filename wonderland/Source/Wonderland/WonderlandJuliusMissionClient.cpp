@@ -939,7 +939,9 @@ namespace WonderlandJuliusMissionClient
 				Fields.bHasData = true;
 				Fields.Vocabulary = WonderlandJuliusMissionLogic::EStatusVocabulary::Admission;
 				Fields.ClientRunId = CurrentRunId;
-				Fields.ServerRunId = bServerRunIdKnown ? CurrentServerRunId : std::string();
+				// H1 (Skywalker 2026-10-30): ServerRunId is a string_view; it must view the member, never a temporary copy
+				// (that dangled before RecordDispatchAnswer read it: heap-use-after-free under ASan).
+				Fields.ServerRunId = bServerRunIdKnown ? std::string_view(CurrentServerRunId) : std::string_view(); // CLIENT_RESTORE_VIEWS_SERVER_RUN_ID
 				Fields.Status = "ADMISSION_HELD";
 				Fields.ReceivedUtcMs = NowMs;
 				Progress->RecordDispatchAnswer(WonderlandJuliusMissionLogic::EDispatchAnswer::Accepted, Fields); // FLOW_RESTORE_REPLAYS_ADMISSION

@@ -553,6 +553,104 @@ namespace
 		return bOk;
 	}
 
+	/**
+	 * YUJI Y20 2026-10-30 (Skywalker: add a wrapper check): every readable /status for the Start's run reconciles the saved
+	 * Start record through the pure StartRecordFromStatus (the flow KAT tests its start.request / requested / claim rules;
+	 * this checks the UE glue that feeds it). In CompleteStatusRead, after the read is accepted and stored, the guard is
+	 * exactly the run match (no early return in between), the call passes the record and THIS read, a changed result is
+	 * applied to StartRecord and saved, and it is the only call site. Without it a Sending/Accepted record is never reconciled.
+	 */
+	bool CheckStatusReconcilesStartRecord()
+	{
+		const std::string Text = SubsystemSource();
+		const std::string Body = FunctionBody(Text, "void UWonderlandJuliusMissionSubsystem::CompleteStatusRead(");
+		auto Count = [](const std::string& Hay, const std::string& Needle)
+		{
+			int N = 0;
+			for (std::size_t At = Hay.find(Needle); At != std::string::npos; At = Hay.find(Needle, At + 1)) { ++N; }
+			return N;
+		};
+		const std::size_t Stored = Body.find("Host->LastStatus = Read;");
+		const std::size_t Guard = Body.find("\tif (StartRunId == ForRunId)\n\t{\n");
+		const std::size_t GuardEnd = Guard == std::string::npos ? std::string::npos : Body.find("\n\t}", Guard);
+		const std::size_t Call = Body.find("const FStartReconcile Reconciled = StartRecordFromStatus(static_cast<EStartRecord>(StartRecord), Read);");
+		const std::size_t Changed = Body.find("if (Reconciled.bChanged)");
+		const std::size_t Apply = Body.find("StartRecord = static_cast<uint8>(Reconciled.Record);");
+		const bool bFound = Stored != std::string::npos && Guard != std::string::npos && GuardEnd != std::string::npos && Call != std::string::npos
+			&& Changed != std::string::npos && Apply != std::string::npos;
+		const std::size_t Saved = Body.find("if (!SaveStartRecord()) // SUBSYSTEM_STATUS_READ_NEVER_SENDS");
+		const bool bOrdered = bFound && Saved != std::string::npos && Stored < Guard && Guard < Call && Call < Changed && Changed < Apply
+			&& Apply < Saved && Saved < GuardEnd;
+		const bool bReached = bFound && Body.substr(Stored, Guard - Stored).find("return") == std::string::npos;
+		const bool bOnly = Count(Text, "StartRecordFromStatus(") == 1 && Count(Body, "StartRecord = static_cast<uint8>(Reconciled.Record);") == 1;
+		const bool bOk = bOrdered && bReached && bOnly;
+		if (!bOk) { std::printf("STATUS RECONCILE CHECK FAIL: a readable /status does not reconcile the saved Start record (Y20)\n"); }
+		return bOk;
+	}
+
+	/**
+	 * YUJI n1 2026-10-30: an unreadable saved record is evidence. SyncStartRecord moves it aside (Move with replace=false,
+	 * so an earlier moved-aside file is never replaced) and keeps Start blocked; a moved-aside record keeps every later
+	 * sync blocked through the pure StartRecordFromDisk; SaveStartRecord never writes over an unreadable file (the record
+	 * or its temp), so a /status that makes the record Started cannot destroy it; and nothing deletes a record file.
+	 */
+	bool CheckCorruptRecordMovedAside()
+	{
+		const std::string Text = SubsystemSource();
+		const std::string Quarantine = FunctionBody(Text, "\tFString QuarantineStartRecordFile(const FString& File)");
+		const bool bMove = Quarantine.find("QuarantinedStartRecordName(ToStd(StartRecordPath()), ToStd(Stamp))") != std::string::npos
+			&& Quarantine.find("if (Name.empty()) { return FString(); }") != std::string::npos
+			&& Quarantine.find("IFileManager::Get().Move(*Aside, *File, false, true)") != std::string::npos;
+		const std::string Exists = FunctionBody(Text, "\tbool StartRecordQuarantined()");
+		const bool bFinds = Exists.find("FindFiles(Found, *(StartRecordPath() + ") != std::string::npos && Exists.find("StartRecordQuarantineSuffix") != std::string::npos
+			&& Exists.find("return Found.Num() > 0;") != std::string::npos;
+		const std::string Sync = FunctionBody(Text, "void UWonderlandJuliusMissionSubsystem::SyncStartRecord()");
+		const std::size_t Bad = Sync.find("if (Saved.Read == ESavedStartRead::Unreadable)");
+		const std::size_t BadEnd = Bad == std::string::npos ? std::string::npos : Sync.find("\n\t}", Bad);
+		const std::size_t Blocked = Sync.find("StartRecord = static_cast<uint8>(EStartRecord::Unreadable); // SUBSYSTEM_CORRUPT_RECORD_BLOCKS");
+		const std::size_t Aside = Sync.find("const FString Aside = QuarantineStartRecordFile(ReadFrom);");
+		const std::size_t Held = Sync.find("if (StartRecordFromDisk(Saved, StartRecordQuarantined()) == EStartRecord::Unreadable)");
+		const std::size_t HeldSet = Held == std::string::npos ? std::string::npos : Sync.find("StartRecord = static_cast<uint8>(EStartRecord::Unreadable);", Held);
+		const std::size_t HeldEnd = Held == std::string::npos ? std::string::npos : Sync.find("\n\t}", Held);
+		const std::size_t Taken = Sync.find("if (Saved.Read != ESavedStartRead::Ok) { return; }");
+		const bool bSync = Bad != std::string::npos && BadEnd != std::string::npos && Blocked != std::string::npos && Aside != std::string::npos
+			&& Bad < Blocked && Blocked < Aside && Aside < BadEnd && BadEnd < Held && Held != std::string::npos && HeldSet < HeldEnd
+			&& HeldEnd != std::string::npos && HeldEnd < Taken && Taken != std::string::npos;
+		const std::string Save = FunctionBody(Text, "bool UWonderlandJuliusMissionSubsystem::SaveStartRecord() const");
+		const std::size_t Guard = Save.find("for (const FString& OnDisk : {Path, Temp})");
+		const std::size_t May = Save.find("if (!SavedStartRecordMayBeReplaced(ParseSavedStartRecord(true, bLoaded, ToStd(Existing), ToStd(StartRunId)).Read)");
+		const std::size_t Refuse = Save.find("&& QuarantineStartRecordFile(OnDisk).IsEmpty()) { return false; }");
+		const std::size_t Write = Save.find("SaveStringToFile(");
+		const bool bSave = Guard != std::string::npos && May != std::string::npos && Refuse != std::string::npos && Write != std::string::npos
+			&& Guard < May && May < Refuse && Refuse < Write;
+		const bool bNoDelete = Text.find(".Delete(") == std::string::npos && Text.find("->Delete(") == std::string::npos && Text.find("DeleteFile(") == std::string::npos;
+		if (!bMove) { std::printf("CORRUPT RECORD CHECK FAIL: the unreadable record is not moved aside without replacing\n"); }
+		if (!bFinds) { std::printf("CORRUPT RECORD CHECK FAIL: a moved-aside record is not found\n"); }
+		if (!bSync) { std::printf("CORRUPT RECORD CHECK FAIL: an unreadable or moved-aside record does not keep Start blocked\n"); }
+		if (!bSave) { std::printf("CORRUPT RECORD CHECK FAIL: a save can write over an unreadable record\n"); }
+		if (!bNoDelete) { std::printf("CORRUPT RECORD CHECK FAIL: a record file can be deleted\n"); }
+		return bMove && bFinds && bSync && bSave && bNoDelete;
+	}
+
+	/**
+	 * Skywalker L2 (N18) 2026-10-30: the success gate and the failure ending read /status only when it is THIS run's
+	 * readable read. In SyncContract both take Host->LastStatus only under StatusRunId == Run && bOk; any other run's
+	 * /status (or an unreadable one) gives nullptr, so the view stays a grading wait and no failure ending plays.
+	 */
+	bool CheckSuccessGateSameRun()
+	{
+		const std::string Text = SubsystemSource();
+		const std::string Same = "StatusRunId == Run && Host->LastStatus.bOk ? &Host->LastStatus : nullptr";
+		const bool bGate = Text.find("View.Phase = SuccessGatedByStatus(View.Phase, " + Same + "); // SUBSYSTEM_SUCCESS_GATED_BY_STATUS") != std::string::npos;
+		const bool bEnding = Text.find("const FMissionStatusRead* RunStatus = " + Same + ";") != std::string::npos
+			&& Text.find("View = StatusFailureEnding(View, RunStatus);") != std::string::npos;
+		std::size_t Uses = 0;
+		for (std::size_t At = Text.find("&Host->LastStatus"); At != std::string::npos; At = Text.find("&Host->LastStatus", At + 1)) { ++Uses; }
+		const bool bOk = bGate && bEnding && Uses == 2;
+		if (!bOk) { std::printf("SUCCESS GATE CHECK FAIL: success or the failure ending can read another run's or an unreadable /status (L2)\n"); }
+		return bOk;
+	}
+
 	bool CheckJuliusModuleRootIncludes()
 	{
 		namespace fs = std::filesystem;
@@ -1480,6 +1578,9 @@ int main()
 	Expect(CheckEvidenceLogs(), "julius_evidence_logs");
 	Expect(CheckStartRecordSavedBeforeSend(), "julius_start_record_saved_before_send");
 	Expect(CheckStatusFailureEnding(), "julius_status_failure_ending");
+	Expect(CheckStatusReconcilesStartRecord(), "julius_status_reconciles_start_record");
+	Expect(CheckCorruptRecordMovedAside(), "julius_corrupt_record_moved_aside");
+	Expect(CheckSuccessGateSameRun(), "julius_success_gate_same_run");
 	Expect(CheckPlatformCryptoTypesInclude(), "platform_crypto_result_includes_types");
 
 	if (Failures == 0)

@@ -1817,17 +1817,14 @@ namespace WonderlandJuliusMissionFlow
 		Out.ErrorKind = Kind;
 		if (HttpStatus == 503)
 		{
-			// YUJI M1 2026-10-30 (#493 start-route.ts / start-intents.ts): julius_start_disabled and julius_start_not_configured
-			// are refused before any claim; julius_start_unavailable is "nothing claimed" ONLY with the bridge's
-			// "... Nothing was claimed or dispatched." wording (the intent could not be saved / read). The same kind with
-			// "The claim could not run. Check /status before trying again." is raised after the claim may have reserved:
-			// outcome unknown, blocked until /status. So is any other 503 (no body, an unknown kind).
-			const FJson* Message = Field(*Error, "message");
-			const std::string_view NothingClaimed = "Nothing was claimed or dispatched.";
-			const bool bSaysNothingClaimed = Message != nullptr && Message->Kind == EJsonKind::String && Message->Text.size() >= NothingClaimed.size()
-				&& std::string_view(Message->Text).substr(Message->Text.size() - NothingClaimed.size()) == NothingClaimed;
-			const bool bNotStarted = Kind == "julius_start_disabled" || Kind == "julius_start_not_configured"
-				|| (Kind == "julius_start_unavailable" && bSaysNothingClaimed);
+			// Skywalker ruling 2026-10-30 (YUJI M1 follow-up): a 503 is "not started" ONLY by its machine code, error.kind,
+			// from this explicit list of refusals the bridge raises before it reads the Start store or calls the claim core
+			// (#493 9dcb1ad9 relay-bridge/wonderland-mission-start-route.ts:245-246 julius_start_disabled, :248-251
+			// julius_start_not_configured). The message text is never read. Every other 503 -- julius_start_unavailable (the
+			// claim threw, start-route.ts:318/351, start-intents.ts:403, or the store failed, start-intents.ts:441/492/496), a
+			// non-JSON body, a missing or unknown kind -- is outcome-unknown: blocked until /status.
+			const bool bNotStarted = Kind == "julius_start_disabled" // FLOW_START_503_BEFORE_CLAIM_DISABLED
+				|| Kind == "julius_start_not_configured"; // FLOW_START_503_BEFORE_CLAIM_NOT_CONFIGURED
 			Out.Outcome = bNotStarted ? EStartOutcome::Retryable : EStartOutcome::Uncertain; // FLOW_START_503_READS_THE_BODY
 			return Out;
 		}
@@ -1884,6 +1881,28 @@ namespace WonderlandJuliusMissionFlow
 		Out += TriggerId;
 		Out += "\n";
 		return Out;
+	}
+
+	std::string QuarantinedStartRecordName(std::string_view RecordPath, std::string_view UtcStamp)
+	{
+		if (RecordPath.empty() || UtcStamp.empty() || UtcStamp.size() > 32) { return std::string(); }
+		for (const char Ch : UtcStamp)
+		{
+			if (!((Ch >= '0' && Ch <= '9') || Ch == 'T' || Ch == 'Z')) { return std::string(); } // FLOW_QUARANTINE_STAMP_IS_PLAIN
+		}
+		return std::string(RecordPath) + std::string(StartRecordQuarantineSuffix) + std::string(UtcStamp);
+	}
+
+	bool SavedStartRecordMayBeReplaced(ESavedStartRead OnDisk)
+	{
+		return OnDisk != ESavedStartRead::Unreadable; // FLOW_UNREADABLE_RECORD_NEVER_REPLACED
+	}
+
+	EStartRecord StartRecordFromDisk(const FSavedStartRecord& Saved, bool bQuarantineExists)
+	{
+		if (Saved.Read == ESavedStartRead::Ok) { return Saved.Record; }
+		if (bQuarantineExists) { return EStartRecord::Unreadable; } // FLOW_QUARANTINE_KEEPS_START_BLOCKED
+		return Saved.Read == ESavedStartRead::Unreadable ? EStartRecord::Unreadable : EStartRecord::None; // FLOW_DISK_UNREADABLE_BLOCKS
 	}
 
 	FSavedStartRecord ParseSavedStartRecord(bool bFileExists, bool bLoaded, std::string_view Text, std::string_view RunId)

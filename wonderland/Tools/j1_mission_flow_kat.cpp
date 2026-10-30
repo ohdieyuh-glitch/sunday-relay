@@ -699,7 +699,7 @@ const ABSENT_PHASE = {
 		Expect(ParseStartAnswer(W, 409, "{\"error\":{\"kind\":\"already_spent\",\"message\":\"x\"},\"retry\":false}").Outcome == EStartOutcome::Refused, "409 claim refused");
 		Expect(ParseStartAnswer(W, 400, "{\"error\":{\"kind\":\"julius_start_confirmation_required\",\"message\":\"x\"}}").Outcome == EStartOutcome::Refused, "400 refused");
 		Expect(ParseStartAnswer(W, 404, "{\"error\":{\"kind\":\"not_found\",\"message\":\"x\"}}").Outcome == EStartOutcome::Refused, "404 refused");
-		Expect(ParseStartAnswer(W, 503, "{\"error\":{\"kind\":\"julius_start_unavailable\"}}").Outcome == EStartOutcome::Uncertain, "M1: a 503 that does not SAY nothing was claimed is outcome-unknown");
+		Expect(ParseStartAnswer(W, 503, "{\"error\":{\"kind\":\"julius_start_unavailable\"}}").Outcome == EStartOutcome::Uncertain, "M1: a 503 julius_start_unavailable is outcome-unknown");
 		Expect(ParseStartAnswer(W, 0, "").Outcome == EStartOutcome::Retryable, "transport nothing dispatched");
 		Expect(ParseStartAnswer(W, 401, "").Outcome == EStartOutcome::Retryable, "401 re-pair");
 		Expect(ParseStartAnswer(W, 409, "{}").Outcome == EStartOutcome::Malformed, "a refusal without a kind is not understood");
@@ -1914,27 +1914,54 @@ const ABSENT_PHASE = {
 		using R = EStartRecord;
 		const char* const Ok = "RUN LIVE MISSION";
 		{
-			// M1: a 503 is "nothing dispatched" only when its body SAYS so.
+			// M1 (Skywalker ruling 2026-10-30, YUJI review): a 503 is "nothing dispatched" only by its error.kind, from the
+			// explicit before-claim list. The bodies are the bridge's exact ones at #493 9dcb1ad9 (err() = {error:{kind,message}},
+			// relay-bridge/wonderland-mission-start-route.ts:233, wonderland-start-intents.ts:334). The message is never read.
 			const std::string W = StatusWlj;
 			auto Err = [](const char* Kind, const char* Message)
 			{
-				return std::string("{\"error\":{\"kind\":\"") + Kind + "\",\"message\":\"" + Message + "\"},\"retry\":true}";
+				return std::string("{\"error\":{\"kind\":\"") + Kind + "\",\"message\":\"" + Message + "\"}}";
 			};
 			const std::string Safe[] = {
-				Err("julius_start_disabled", "Julius Start is switched off. Nothing was dispatched."),
-				Err("julius_start_not_configured", "Julius Start is not configured."),
-				Err("julius_start_unavailable", "The Start could not be saved. Nothing was claimed or dispatched."),
-				Err("julius_start_unavailable", "The saved Start requests could not be read. Nothing was claimed or dispatched."),
+				// start-route.ts:246 and :251, exact.
+				Err("julius_start_disabled", "Starting a mission from Wonderland is switched off. Nothing was dispatched."),
+				Err("julius_start_not_configured", "The bridge has no repository or lane for a start. Nothing was dispatched."),
+				// The code alone decides: any message, none, or extra fields.
+				Err("julius_start_disabled", "The claim could not run. Check /status before trying again."),
+				"{\"error\":{\"kind\":\"julius_start_not_configured\"}}",
+				"{\"error\":{\"kind\":\"julius_start_disabled\",\"message\":\"x\"},\"retry\":true}",
 			};
 			for (const std::string& Body : Safe)
 			{
 				const FStartAnswer A = ParseStartAnswer(W, 503, Body);
-				Expect(A.Outcome == EStartOutcome::Retryable && StartRecordAfterAnswer(A.Outcome, 503) == R::NotStarted, "M1: a 503 that says nothing was claimed is not started");
+				Expect(A.Outcome == EStartOutcome::Retryable && StartRecordAfterAnswer(A.Outcome, 503) == R::NotStarted, "M1: a 503 with a before-claim code is not started");
 			}
 			const std::string Unsafe[] = {
+				// julius_start_unavailable, every message the bridge sends (start-route.ts:318/351, start-intents.ts:403, :441/:492, :496).
 				Err("julius_start_unavailable", "The claim could not run. Check /status before trying again."),
-				Err("julius_start_unavailable", "Nothing was claimed or dispatched. Or was it"),
+				Err("julius_start_unavailable", "The Start could not be saved. Nothing was claimed or dispatched."),
+				Err("julius_start_unavailable", "The saved Start requests could not be read. Nothing was claimed or dispatched."),
+				// The old sentence with a non-allowed or missing code.
 				Err("service_unavailable", "Nothing was claimed or dispatched."),
+				Err("julius_dispatch_unavailable", "Wonderland admission store is not available. Nothing was reserved."),
+				"{\"error\":{\"message\":\"Nothing was claimed or dispatched.\"}}",
+				"{\"error\":{\"kind\":\"\",\"message\":\"Nothing was claimed or dispatched.\"}}",
+				"{\"error\":{\"kind\":null,\"message\":\"Nothing was claimed or dispatched.\"}}",
+				"{\"message\":\"Nothing was claimed or dispatched.\"}",
+				// L1 (Skywalker N14): no kind at all.
+				"{\"error\":{}}",
+				"{\"error\":null}",
+				"{}",
+				"Nothing was claimed or dispatched.",
+				// An allowed code in the wrong place or spelling is not that code.
+				"{\"kind\":\"julius_start_disabled\"}",
+				"{\"error\":\"julius_start_disabled\"}",
+				"{\"error\":{\"code\":\"julius_start_disabled\"}}",
+				Err("julius_start_disabled_x", "Nothing was dispatched."),
+				Err("JULIUS_START_DISABLED", "Nothing was dispatched."),
+				Err("julius_start_not_configured2", "Nothing was dispatched."),
+				// Unknown code, no body, non-JSON.
+				Err("julius_start_maintenance", "Nothing was dispatched."),
 				"",
 				"<html>503</html>",
 				"{\"error\":{\"kind\":\"julius_start_unavailable\"}}",
@@ -1945,6 +1972,15 @@ const ABSENT_PHASE = {
 				const R Record = StartRecordAfterAnswer(A.Outcome, 503);
 				Expect(A.Outcome != EStartOutcome::Retryable && Record == R::Sending, "M1: any other 503 is outcome-unknown (Sending)");
 				Expect(!StartGateFor("admitted_waiting", true, false, Record, true, Ok).bSend, "M1: any other 503 blocks Start until /status resolves");
+			}
+			// The allowed codes mean "not started" only on a 503: a 409 with the same kind is a refusal, and a 500 is unknown.
+			Expect(StartRecordAfterAnswer(ParseStartAnswer(W, 409, Err("julius_start_disabled", "x")).Outcome, 409) == R::Refused, "M1 control: the code releases only on a 503");
+			for (const int Http : {500, 502, 504})
+			{
+				for (const std::string& Body : {Err("julius_start_disabled", "x"), std::string("{}"), std::string("<html>"), std::string()})
+				{
+					Expect(StartRecordAfterAnswer(ParseStartAnswer(W, Http, Body).Outcome, Http) == R::Sending, "M1 control: 500 / 502 / 504 stay blocked whatever the body");
+				}
 			}
 			++M1Cases;
 			Expect(StartRecordAfterAnswer(ParseStartAnswer(W, 401, "").Outcome, 401) == R::NotStarted, "M1 control: 401 is still not started");
@@ -1993,6 +2029,31 @@ const ABSENT_PHASE = {
 			Expect(StartRecordFromStatus(R::Unreadable, Nothing).Record == R::Unreadable, "M2: nothing at all on the bridge never releases an unreadable record");
 			Expect(StartRecordFromStatus(R::Unreadable, ParseMissionStatus(StatusWlj, 200, StatusBody("dispatched", false, StartObj(true, "\"40242149156\"")))).Record == R::Started, "M2: a dispatch makes it Started (still blocked)");
 			Expect(std::string(SavedStartStateWord(R::Unreadable)) == "unreadable" && std::string(SavedStartStateWord(R::NotStarted)) == "not_started", "M2: words");
+			++M2Cases;
+			// n1 (YUJI 2026-10-30): an unreadable record is moved aside, never replaced; Start stays blocked while it exists.
+			Expect(QuarantinedStartRecordName("/s/SaveGames/JuliusJ1/start.v1", "20261030T120000123Z") == "/s/SaveGames/JuliusJ1/start.v1.corrupt-20261030T120000123Z", "n1: moved-aside name, exact");
+			for (const char* BadStamp : {"", "2026-10-30", "../x", "20261030T12/00", "20261030 120000", "123456789012345678901234567890123"})
+			{
+				Expect(QuarantinedStartRecordName("/s/start.v1", BadStamp).empty(), "n1: a stamp that is not plain digits/T/Z moves nothing");
+			}
+			Expect(QuarantinedStartRecordName("", "1").empty(), "n1: no record path, no name");
+			const std::string CorruptText = Good.substr(0, Good.size() / 2);
+			const FSavedStartRecord CorruptRead = ParseSavedStartRecord(true, true, CorruptText, Run);
+			Expect(!SavedStartRecordMayBeReplaced(CorruptRead.Read) && !SavedStartRecordMayBeReplaced(ParseSavedStartRecord(true, false, "", Run).Read), "n1: an unreadable file on disk is never replaced");
+			Expect(SavedStartRecordMayBeReplaced(ESavedStartRead::Absent) && SavedStartRecordMayBeReplaced(ESavedStartRead::Ok) && SavedStartRecordMayBeReplaced(ESavedStartRead::OtherRun), "n1 control: absent / readable files may be replaced");
+			// The evidence case: a /status that shows the dispatch promotes the unreadable record to Started, and the unreadable
+			// file it came from still may not be replaced (it is moved aside first, or nothing is written).
+			const FMissionStatusRead DispatchedRead = ParseMissionStatus(StatusWlj, 200, StatusBody("dispatched", false, StartObj(true, "\"40242149156\"")));
+			Expect(StartRecordFromStatus(R::Unreadable, DispatchedRead).Record == R::Started && !SavedStartRecordMayBeReplaced(CorruptRead.Read), "n1: Started from /status never licenses writing over the corrupt file");
+			FSavedStartRecord AbsentRec;
+			const FSavedStartRecord OtherRec = ParseSavedStartRecord(true, true, FormatSavedStartRecord("wlj_other", "k", R::NotStarted, "", "t"), Run);
+			Expect(StartRecordFromDisk(AbsentRec, true) == R::Unreadable && StartRecordFromDisk(OtherRec, true) == R::Unreadable, "n1: a moved-aside record keeps Start blocked (no record / another run's)");
+			Expect(StartRecordFromDisk(CorruptRead, false) == R::Unreadable && StartRecordFromDisk(CorruptRead, true) == R::Unreadable, "n1: unreadable stays unreadable");
+			Expect(StartRecordFromDisk(AbsentRec, false) == R::None && StartRecordFromDisk(OtherRec, false) == R::None, "n1 control: nothing moved aside, no record is None");
+			const FSavedStartRecord StartedRec = ParseSavedStartRecord(true, true, FormatSavedStartRecord(Run, "k", R::Started, "40242149156", "t"), Run);
+			const FSavedStartRecord NotStartedRec = ParseSavedStartRecord(true, true, FormatSavedStartRecord(Run, "k", R::NotStarted, "", "t"), Run);
+			Expect(StartRecordFromDisk(StartedRec, true) == R::Started && StartRecordFromDisk(NotStartedRec, false) == R::NotStarted, "n1: this run's readable record is taken as saved");
+			Expect(!StartGateFor("admitted_waiting", true, false, StartRecordFromDisk(AbsentRec, true), true, Ok).bSend, "n1: the gate refuses while a record is moved aside");
 			++M2Cases;
 		}
 		{

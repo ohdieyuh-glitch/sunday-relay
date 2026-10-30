@@ -938,10 +938,88 @@ MUTATIONS = [
         'if (HttpStatus == 0 || HttpStatus == 401 || HttpStatus == 502 || HttpStatus == 504)',
         'if (HttpStatus == 0 || HttpStatus == 401 || HttpStatus == 502 || HttpStatus == 503 || HttpStatus == 504)',
     ),
+    # FOLLOW-UP 2026-10-30 (Skywalker ruling, YUJI review: a 503 releases only by error.kind from the before-claim list,
+    # verified in #493 9dcb1ad9 start-route.ts:246/:251; julius_start_unavailable is never allowed; the message is never read).
     (
-        'm1_503_unavailable_kind_alone',
-        '|| (Kind == "julius_start_unavailable" && bSaysNothingClaimed);',
-        '|| (Kind == "julius_start_unavailable" && (bSaysNothingClaimed || true));',
+        'm1_503_unavailable_code_releases',
+        '|| Kind == "julius_start_not_configured"; // FLOW_START_503_BEFORE_CLAIM_NOT_CONFIGURED',
+        '|| Kind == "julius_start_not_configured" || Kind == "julius_start_unavailable"; // FLOW_START_503_BEFORE_CLAIM_NOT_CONFIGURED',
+    ),
+    (
+        'm1_503_old_sentence_releases',
+        '|| Kind == "julius_start_not_configured"; // FLOW_START_503_BEFORE_CLAIM_NOT_CONFIGURED',
+        '|| Kind == "julius_start_not_configured" || (Field(*Error, "message") != nullptr && Field(*Error, "message")->Kind == EJsonKind::String && Field(*Error, "message")->Text.find("Nothing was claimed or dispatched.") != std::string::npos); // FLOW_START_503_BEFORE_CLAIM_NOT_CONFIGURED',
+    ),
+    (
+        'm1_503_any_julius_start_code_releases',
+        'const bool bNotStarted = Kind == "julius_start_disabled" // FLOW_START_503_BEFORE_CLAIM_DISABLED',
+        'const bool bNotStarted = Kind.rfind("julius_start_", 0) == 0 // FLOW_START_503_BEFORE_CLAIM_DISABLED',
+    ),
+    (
+        'm1_503_code_prefix_match',
+        'const bool bNotStarted = Kind == "julius_start_disabled" // FLOW_START_503_BEFORE_CLAIM_DISABLED',
+        'const bool bNotStarted = Kind.rfind("julius_start_disabled", 0) == 0 // FLOW_START_503_BEFORE_CLAIM_DISABLED',
+    ),
+    (
+        'm1_503_any_dispatch_code_releases',
+        '|| Kind == "julius_start_not_configured"; // FLOW_START_503_BEFORE_CLAIM_NOT_CONFIGURED',
+        '|| Kind == "julius_start_not_configured" || Kind.rfind("julius_dispatch_", 0) == 0; // FLOW_START_503_BEFORE_CLAIM_NOT_CONFIGURED',
+    ),
+    (
+        'm1_503_disabled_not_released',
+        'const bool bNotStarted = Kind == "julius_start_disabled" // FLOW_START_503_BEFORE_CLAIM_DISABLED',
+        'const bool bNotStarted = false // FLOW_START_503_BEFORE_CLAIM_DISABLED',
+    ),
+    (
+        'm1_503_not_configured_not_released',
+        '|| Kind == "julius_start_not_configured"; // FLOW_START_503_BEFORE_CLAIM_NOT_CONFIGURED',
+        '; // FLOW_START_503_BEFORE_CLAIM_NOT_CONFIGURED',
+    ),
+    (
+        'm1_503_missing_kind_releases',
+        'if (Kind.empty()) { return Out; }',
+        'if (Kind.empty()) { if (HttpStatus == 503) { Out.Outcome = EStartOutcome::Retryable; } return Out; }',
+    ),
+    (
+        'm1_503_non_json_releases',
+        'if (!ParseJson(Json, Root) || Root.Kind != EJsonKind::Object) { return Out; }',
+        'if (!ParseJson(Json, Root) || Root.Kind != EJsonKind::Object) { if (HttpStatus == 503) { Out.Outcome = EStartOutcome::Retryable; } return Out; }',
+    ),
+    (
+        'm1_before_claim_code_releases_on_any_status',
+        '\t\tif (HttpStatus == 503)\n\t\t{\n\t\t\t// Skywalker ruling',
+        '\t\tif (HttpStatus == 503 || Kind == "julius_start_disabled")\n\t\t{\n\t\t\t// Skywalker ruling',
+    ),
+    (
+        'm1_500_is_settled',
+        'if (HttpStatus >= 400 && HttpStatus < 500) { Out.Outcome = EStartOutcome::Refused; }',
+        'if (HttpStatus >= 400 && HttpStatus <= 500) { Out.Outcome = EStartOutcome::Refused; }',
+    ),
+    # n1 (YUJI 2026-10-30): the pure moved-aside rules (flow KAT n1 cases).
+    (
+        'n1_quarantine_stamp_unchecked',
+        "if (!((Ch >= '0' && Ch <= '9') || Ch == 'T' || Ch == 'Z')) { return std::string(); } // FLOW_QUARANTINE_STAMP_IS_PLAIN",
+        '(void)Ch; // FLOW_QUARANTINE_STAMP_IS_PLAIN',
+    ),
+    (
+        'n1_unreadable_record_replaceable',
+        'return OnDisk != ESavedStartRead::Unreadable; // FLOW_UNREADABLE_RECORD_NEVER_REPLACED',
+        '(void)OnDisk; return true; // FLOW_UNREADABLE_RECORD_NEVER_REPLACED',
+    ),
+    (
+        'n1_quarantine_does_not_block',
+        'if (bQuarantineExists) { return EStartRecord::Unreadable; } // FLOW_QUARANTINE_KEEPS_START_BLOCKED',
+        '(void)bQuarantineExists; // FLOW_QUARANTINE_KEEPS_START_BLOCKED',
+    ),
+    (
+        'n1_disk_unreadable_is_none',
+        'return Saved.Read == ESavedStartRead::Unreadable ? EStartRecord::Unreadable : EStartRecord::None; // FLOW_DISK_UNREADABLE_BLOCKS',
+        'return EStartRecord::None; // FLOW_DISK_UNREADABLE_BLOCKS',
+    ),
+    (
+        'n1_quarantine_overrides_own_record',
+        'if (Saved.Read == ESavedStartRead::Ok) { return Saved.Record; }\n\t\tif (bQuarantineExists)',
+        'if (Saved.Read == ESavedStartRead::Ok && !bQuarantineExists) { return Saved.Record; }\n\t\tif (bQuarantineExists)',
     ),
     (
         'm2_corrupt_record_parses_as_none',
@@ -1060,6 +1138,17 @@ CLIENT_MUTATIONS = [
         "c2_client_status_wrong_route",
         'Outcome.Request.Url += "/status?projectId="; // CLIENT_STATUS_ROUTE',
         'Outcome.Request.Url += "/progress?projectId="; // CLIENT_STATUS_ROUTE',
+    ),
+    # SKYWALKER H1 2026-10-30: a restored held run replays its admission with a view of the member server run id.
+    (
+        "h1_restore_views_a_temporary",
+        "Fields.ServerRunId = bServerRunIdKnown ? std::string_view(CurrentServerRunId) : std::string_view(); // CLIENT_RESTORE_VIEWS_SERVER_RUN_ID",
+        "Fields.ServerRunId = bServerRunIdKnown ? CurrentServerRunId : std::string(); // CLIENT_RESTORE_VIEWS_SERVER_RUN_ID",
+    ),
+    (
+        "h1_restore_drops_server_run_id",
+        "Fields.ServerRunId = bServerRunIdKnown ? std::string_view(CurrentServerRunId) : std::string_view(); // CLIENT_RESTORE_VIEWS_SERVER_RUN_ID",
+        "Fields.ServerRunId = std::string_view(); // CLIENT_RESTORE_VIEWS_SERVER_RUN_ID",
     ),
 ]
 
@@ -1191,6 +1280,95 @@ SUBSYSTEM_MUTATIONS = [
         'Host->Session.ClockOffset(Evidence.bClockOffsetKnown, Evidence.ClockOffsetMs);',
         '(void)0;',
     ),
+    # SKYWALKER L2 (N18) 2026-10-30: source-checked by julius_success_gate_same_run.
+    (
+        "l2_success_gate_any_run",
+        "View.Phase = SuccessGatedByStatus(View.Phase, StatusRunId == Run && Host->LastStatus.bOk ? &Host->LastStatus : nullptr); // SUBSYSTEM_SUCCESS_GATED_BY_STATUS",
+        "View.Phase = SuccessGatedByStatus(View.Phase, Host->LastStatus.bOk ? &Host->LastStatus : nullptr); // SUBSYSTEM_SUCCESS_GATED_BY_STATUS",
+    ),
+    (
+        "l2_success_gate_unreadable_status",
+        "View.Phase = SuccessGatedByStatus(View.Phase, StatusRunId == Run && Host->LastStatus.bOk ? &Host->LastStatus : nullptr); // SUBSYSTEM_SUCCESS_GATED_BY_STATUS",
+        "View.Phase = SuccessGatedByStatus(View.Phase, StatusRunId == Run ? &Host->LastStatus : nullptr); // SUBSYSTEM_SUCCESS_GATED_BY_STATUS",
+    ),
+    (
+        "l2_failure_ending_any_run",
+        "const FMissionStatusRead* RunStatus = StatusRunId == Run && Host->LastStatus.bOk ? &Host->LastStatus : nullptr;",
+        "const FMissionStatusRead* RunStatus = Host->LastStatus.bOk ? &Host->LastStatus : nullptr;",
+    ),
+    # SKYWALKER Y20 2026-10-30: the reconciled record is saved.
+    (
+        "y20_reconcile_not_saved",
+        "if (!SaveStartRecord()) // SUBSYSTEM_STATUS_READ_NEVER_SENDS",
+        "if (false) // SUBSYSTEM_STATUS_READ_NEVER_SENDS",
+    ),
+    # FOLLOW-UP 2026-10-30 (YUJI Y20, Skywalker: wrapper check): source-checked by julius_status_reconciles_start_record.
+    (
+        'y20_sub_ignore_status_reconcile',
+        'if (StartRunId == ForRunId)\n\t{\n\t\tconst FStartReconcile',
+        'if (false)\n\t{\n\t\tconst FStartReconcile',
+    ),
+    (
+        'y20_reconciled_record_not_applied',
+        'StartRecord = static_cast<uint8>(Reconciled.Record);',
+        '(void)Reconciled.Record;',
+    ),
+    (
+        'y20_reconcile_from_empty_status',
+        'StartRecordFromStatus(static_cast<EStartRecord>(StartRecord), Read);',
+        'StartRecordFromStatus(static_cast<EStartRecord>(StartRecord), FMissionStatusRead());',
+    ),
+    (
+        'y20_return_before_reconcile',
+        '\telse { NextStatusReadAtUtcMs = Host->Clock.NowUtcMs() + static_cast<uint64>(Read.NextPollMs); }\n',
+        '\telse { NextStatusReadAtUtcMs = Host->Clock.NowUtcMs() + static_cast<uint64>(Read.NextPollMs); }\n\tif (Read.bRequested) { return; }\n',
+    ),
+    (
+        'y20_reconcile_only_other_run',
+        'if (StartRunId == ForRunId)\n\t{\n\t\tconst FStartReconcile',
+        'if (StartRunId != ForRunId)\n\t{\n\t\tconst FStartReconcile',
+    ),
+    # n1 (YUJI 2026-10-30): source-checked by julius_corrupt_record_moved_aside.
+    (
+        'n1_sub_corrupt_record_not_moved',
+        'const FString Aside = QuarantineStartRecordFile(ReadFrom); // SUBSYSTEM_CORRUPT_RECORD_MOVED_ASIDE',
+        'const FString Aside; // SUBSYSTEM_CORRUPT_RECORD_MOVED_ASIDE',
+    ),
+    (
+        'n1_sub_quarantine_replaces_earlier',
+        'IFileManager::Get().Move(*Aside, *File, false, true)',
+        'IFileManager::Get().Move(*Aside, *File, true, true)',
+    ),
+    (
+        'n1_sub_quarantine_deletes',
+        'return IFileManager::Get().Move(*Aside, *File, false, true) ? Aside : FString(); // SUBSYSTEM_QUARANTINE_NEVER_REPLACES',
+        'return IFileManager::Get().Delete(*File) ? Aside : FString(); // SUBSYSTEM_QUARANTINE_NEVER_REPLACES',
+    ),
+    (
+        'n1_sub_quarantine_not_checked',
+        'if (StartRecordFromDisk(Saved, StartRecordQuarantined()) == EStartRecord::Unreadable) // SUBSYSTEM_QUARANTINE_KEEPS_START_BLOCKED',
+        'if (StartRecordFromDisk(Saved, false) == EStartRecord::Unreadable) // SUBSYSTEM_QUARANTINE_KEEPS_START_BLOCKED',
+    ),
+    (
+        'n1_sub_quarantine_found_never',
+        'return Found.Num() > 0;',
+        'return false;',
+    ),
+    (
+        'n1_sub_save_overwrites_unreadable',
+        '&& QuarantineStartRecordFile(OnDisk).IsEmpty()) { return false; } // SUBSYSTEM_SAVE_NEVER_REPLACES_UNREADABLE',
+        '&& false) { return false; } // SUBSYSTEM_SAVE_NEVER_REPLACES_UNREADABLE',
+    ),
+    (
+        'n1_sub_save_guard_record_only',
+        'for (const FString& OnDisk : {Path, Temp})',
+        'for (const FString& OnDisk : {Path})',
+    ),
+    (
+        'n1_sub_save_writes_when_move_fails',
+        '&& QuarantineStartRecordFile(OnDisk).IsEmpty()) { return false; } // SUBSYSTEM_SAVE_NEVER_REPLACES_UNREADABLE',
+        '&& QuarantineStartRecordFile(OnDisk).IsEmpty()) { } // SUBSYSTEM_SAVE_NEVER_REPLACES_UNREADABLE',
+    ),
     (
         'm6_subsystem_status_ending_dropped',
         'View = StatusFailureEnding(View, RunStatus); // SUBSYSTEM_STATUS_TERMINAL_PLAYS_FAILURE_ENDING',
@@ -1237,8 +1415,10 @@ TARGETS = {
 # catch only when the KAT fails a name NOT in this set. Never add a name here to make a mutation "pass".
 KNOWN_BASELINE_FAILURES = {
     "flow": set(),
-    "client": {"restore_held_server_expiry_is_not_started", "restore_late_server_dispatch_wins"},
-    "subsystem": {"restore_held_server_expiry_is_not_started", "restore_late_server_dispatch_wins"},
+    # H1 (Skywalker 2026-10-30): the two restore_* names were a dangling string_view in Client.cpp, now fixed;
+    # the wrapper KAT must pass outright.
+    "client": set(),
+    "subsystem": set(),
 }
 
 
