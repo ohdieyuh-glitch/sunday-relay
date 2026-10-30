@@ -76,8 +76,36 @@ export type CursorFetch = (url: string, init: {
  */
 const GLOBAL_FETCH_AT_LOAD: typeof fetch | null = typeof globalThis.fetch === 'function' ? globalThis.fetch : null;
 const GLOBAL_RESPONSE_AT_LOAD: typeof Response | null = typeof globalThis.Response === 'function' ? globalThis.Response : null;
-/** True while `globalThis.fetch` is still the function captured at module load. */
-export const cursorGlobalFetchIntact = (): boolean => GLOBAL_FETCH_AT_LOAD !== null && globalThis.fetch === GLOBAL_FETCH_AT_LOAD;
+/**
+ * Skywalker N2b: THE DISPATCHER ROUTE. Node's fetch (undici) sends through the dispatcher stored in the process-wide slot
+ * `globalThis[Symbol.for('undici.globalDispatcher.1')]` (what undici's `setGlobalDispatcher` writes). Replacing it after load
+ * leaves `globalThis.fetch` untouched while every request, and every byte of every answer, goes wherever the new dispatcher
+ * says. So the slot is captured at load too and must be unchanged for the fetch to count as intact. Node creates the slot
+ * lazily on the first fetch; to capture it at load this module makes ONE local `data:` fetch at import (no network, no
+ * socket). If the slot is still empty after that (a runtime that is not Node's undici), nothing is ever "live".
+ *
+ * WHAT "live" MEANS, AND WHAT IT DOES NOT: "built over the fetch and dispatcher this process had when this module loaded,
+ * and neither has changed since". It is NEVER proof that a request reached api.cursor.com: code that ran before this module
+ * was imported (a fetch or dispatcher installed early), a patched Node, or a proxy the original dispatcher honours cannot be
+ * detected in-process. Downstream acceptance must keep treating `live` that way.
+ *
+ * N15, FAILS CLOSED BY DESIGN: monitoring code that wraps `globalThis.fetch` or sets a global dispatcher AFTER this module
+ * loads (APM, Sentry, OpenTelemetry fetch/undici instrumentation) makes every later call `not_sent` `transport_untrusted`
+ * and every transport "fake". Load such instrumentation before this module, or not at all, on a live host.
+ */
+const UNDICI_GLOBAL_DISPATCHER = Symbol.for('undici.globalDispatcher.1');
+const readGlobalDispatcher = (): unknown => (globalThis as unknown as Record<symbol, unknown>)[UNDICI_GLOBAL_DISPATCHER];
+const GLOBAL_DISPATCHER_AT_LOAD: unknown = (() => {
+  if (GLOBAL_FETCH_AT_LOAD === null) return undefined;
+  if (readGlobalDispatcher() === undefined) {
+    try { void GLOBAL_FETCH_AT_LOAD.call(globalThis, 'data:,').catch(() => undefined); } catch { /* a fetch that throws here is no fetch to trust */ }
+  }
+  return readGlobalDispatcher();
+})();
+/** True while `globalThis.fetch` is still the function captured at module load AND the undici global dispatcher is still the one captured then. */
+export const cursorGlobalFetchIntact = (): boolean =>
+  GLOBAL_FETCH_AT_LOAD !== null && globalThis.fetch === GLOBAL_FETCH_AT_LOAD
+  && GLOBAL_DISPATCHER_AT_LOAD !== undefined && GLOBAL_DISPATCHER_AT_LOAD !== null && readGlobalDispatcher() === GLOBAL_DISPATCHER_AT_LOAD;
 
 /** The process's global fetch (as captured at load), adapted. A transport built over exactly this function is the only one that can be "live". */
 export const cursorGlobalFetch: CursorFetch = async (url, init) => {

@@ -326,6 +326,40 @@ describe('F15/E8: the mode label and the receipt', () => {
     expect(cursorTransportMode({ transportKind: 'cursor_cloud_agents_v1' })).toBe('fake');
     expect(cursorTransportMode(null)).toBe('fake');
   });
+  it('Skywalker N2b: replacing undici\'s global dispatcher after load is a replacement too: nothing is sent through it and the transport is fake for good', async () => {
+    const SLOT = Symbol.for('undici.globalDispatcher.1');
+    const g = globalThis as unknown as Record<symbol, unknown>;
+    const original = g[SLOT];
+    expect(original).toBeDefined();
+    const live = createCursorCloudAgentsTransport({ fetch: cursorGlobalFetch, getApiKey: () => SENTINEL, now: () => 0, sleep: async () => undefined, requestTimeoutMs: 2_000 });
+    expect(cursorTransportMode(live)).toBe('live');
+    const dispatched: string[] = [];
+    const stub = {
+      dispatch(opts: { origin?: unknown; path?: unknown }, handler: { onError?: (e: Error) => void; onResponseError?: (c: unknown, e: Error) => void }) {
+        dispatched.push(`${String(opts.origin)}${String(opts.path)}`);
+        const e = new Error('stub dispatcher');
+        if (typeof handler.onResponseError === 'function') handler.onResponseError(null, e); else handler.onError?.(e);
+        return true;
+      },
+      close: async () => undefined, destroy: async () => undefined, on() { return this; }, off() { return this; }, once() { return this; }, emit: () => false,
+    };
+    g[SLOT] = stub;
+    let builtWhileReplaced: unknown;
+    try {
+      expect(cursorGlobalFetchIntact()).toBe(false);
+      expect(cursorTransportMode(live)).toBe('fake');
+      builtWhileReplaced = createCursorCloudAgentsTransport({ fetch: cursorGlobalFetch, getApiKey: () => SENTINEL });
+      expect(cursorTransportMode(builtWhileReplaced)).toBe('fake');
+      expect(await live.createRun(input)).toEqual({ kind: 'not_sent', cause: 'transport_untrusted' });
+      await expect(cursorGlobalFetch(`${CURSOR_API_ORIGIN}/v1/agents`, { method: 'GET', headers: {}, redirect: 'error' })).rejects.toThrow('cursor_global_fetch_replaced');
+      expect(dispatched).toEqual([]);
+    } finally {
+      g[SLOT] = original;
+    }
+    expect(cursorGlobalFetchIntact()).toBe(true);
+    expect(cursorTransportMode(live)).toBe('fake');
+    expect(cursorTransportMode(builtWhileReplaced)).toBe('fake');
+  });
   it('F7 part B (PILOT R5_liveStamp): a fake installed in globalThis.fetch is never called and never yields "live"', async () => {
     const spy: string[] = [];
     const orig = globalThis.fetch;
