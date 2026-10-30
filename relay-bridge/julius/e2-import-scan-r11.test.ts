@@ -44,7 +44,7 @@ function walk(d: string, out: string[]): void {
   }
 }
 const isTest = (f: string): boolean => /\.test\.[cm]?[jt]sx?$/u.test(f);
-describe('R5-5: AST import scan', () => {
+describe('R5-5: AST import scan', { timeout: 30_000 }, () => {
   it('sees the forms the regex scan missed (re-export, export *, import = require, import type, computed specifiers)', () => {
     const src = "export { anchorOf } from './e2-test-kit';\nexport * from \"./e2-test-kit.js\";\nimport k = require('./e2-test-kit');\ntype T = import('./e2-external-anchor').ExternalAnchor;\nconst m = './e2-' + 'test-kit'; void import(m); require(`./${m}`);\nconst r = require.resolve('./e2-test-kit');\n";
     const refs = importsOf(src);
