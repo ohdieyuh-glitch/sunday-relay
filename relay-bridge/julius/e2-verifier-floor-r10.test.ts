@@ -38,12 +38,12 @@ describe('R4-3: node --test vacuous passes', () => {
   it('a helper that exits 0 before any test runs is refused (exit 0 is not enough)', async () => {
     const r = await gate('exit0', 'process.exit(0);\n');
     expect(r.reexec?.commands[0]?.exitCode).toBe(0);
-    expect(r.reasons).toEqual(['e2_verifier_tests_below_minimum']);
+    expect(r.reasons).toEqual(['e2_verifier_tests_below_minimum', 'e2_verifier_synthetic_result']);
   }, 60_000);
   it('coder-controlled output printing a fake summary cannot raise the count or lower the floor', async () => {
     const r = await gate('fake', FAKE_SUMMARY);
     expect(r.reexec?.commands[0]?.testSummary?.tests).toBe(1);
-    expect(r.reasons).toEqual(['e2_verifier_tests_below_minimum']);
+    expect(r.reasons).toEqual(['e2_verifier_tests_below_minimum', 'e2_verifier_synthetic_result']);
   }, 60_000);
   it('the floor is max(1, mission minTests, base-pinned test count); a declared 0 cannot lower it', async () => {
     expect((await gate('m0', 'module.exports = 2;\n', { minTests: 0 })).spec.minTests).toEqual([2]);

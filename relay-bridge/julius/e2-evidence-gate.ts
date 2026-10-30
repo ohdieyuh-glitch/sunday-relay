@@ -253,6 +253,8 @@ export interface E2CommandRecord {
   readonly endedAt: string;
   /** Round 5 R4-3: the trailing node --test TAP summary of the captured stdout tail, or null (absent or not parseable). */
   readonly testSummary: E2TestSummary | null;
+  /** Round 6 R5-1: top-level TAP points named after a test file this command ran (node's synthetic file-level result). */
+  readonly fileLevelPoints: readonly string[];
 }
 export interface E2TestSummary { readonly tests: number; readonly pass: number; readonly fail: number }
 /** Bytes of stdout kept (as text) for the summary; the full stream is still only hashed. */
@@ -269,6 +271,24 @@ export function parseNodeTestSummary(text: string): E2TestSummary | null {
   if (m === null) return null;
   return Object.freeze({ tests: Number(m[1]), pass: Number(m[2]), fail: Number(m[3]) + Number(m[4]) });
 }
+/**
+ * Round 6 R5-1 (PILOT f4575efc): when a test file's process ends before node receives its test events (process.exit in
+ * a module it imports, an empty file), node --test reports ONE synthetic point named after the FILE (`ok 1 - t.test.js`)
+ * and `tests 1 pass 1`. Only top-level (unindented) points count: test-code output is escaped as `# ...` comments and
+ * nested points are indented. A real test that is itself named exactly like a run file is refused too (over-refusal).
+ * HONEST LIMIT: this does not stop a coder module that writes node's own child protocol (v8-serialized test events) to
+ * stdout and exits; node then reports those forged points as real (reproduced; see NOTES, round 6).
+ */
+export function fileLevelPoints(text: string, files: readonly string[]): string[] {
+  const names = new Set(files);
+  const out: string[] = [];
+  for (const line of text.split('\n')) {
+    const m = /^(?:not )?ok \d+ - (.*)$/u.exec(line);
+    if (m !== null && names.has(m[1] as string)) out.push(m[1] as string);
+  }
+  return out;
+}
+const testFilesOf = (argv: readonly string[]): string[] => (argv[1] === '--test' ? argv.slice(2).filter((a) => !a.startsWith('--')) : []);
 export interface E2ReexecEvidence {
   readonly label: typeof E2_JULIUS_LABEL | typeof E2_FAKE_LABEL; readonly cwd: string; readonly commands: readonly E2CommandRecord[];
   /** The mission spec the commands came from (null: the legacy free-argv form, refused by the gate). */
@@ -459,7 +479,7 @@ export async function recordVerifierReexec(input: {
   for (const argv of list) {
     const startedAt = new Date(now()).toISOString();
     const { tail, ...r } = await run(input.runner, argv, input.cwd);
-    commands.push(Object.freeze({ argv: Object.freeze([...argv]), ...r, startedAt, endedAt: new Date(now()).toISOString(), testSummary: parseNodeTestSummary(tail) }));
+    commands.push(Object.freeze({ argv: Object.freeze([...argv]), ...r, startedAt, endedAt: new Date(now()).toISOString(), testSummary: parseNodeTestSummary(tail), fileLevelPoints: Object.freeze(fileLevelPoints(tail, testFilesOf(argv))) }));
   }
   const ev: E2ReexecEvidence = Object.freeze({ label, cwd: input.cwd, commands: Object.freeze(commands), spec, refusal: null });
   RECORDED.add(ev);
@@ -519,7 +539,7 @@ export const E2_GATE_REASONS = Object.freeze([
   'e2_final_record_mismatch', 'e2_no_edit_calls', 'e2_diff_empty', 'e2_stream_mid_run_start', 'e2_model_unbound',
   'e2_diff_not_isolated', 'e2_edit_path_not_in_diff', 'e2_edit_path_unknown', 'e2_binding_remote_root_invalid',
   'e2_anchor_not_external', 'e2_verifier_spec_absent', 'e2_verifier_not_from_spec', 'e2_verifier_pin_changed',
-  'e2_tool_unknown', 'e2_edit_path_outside_workspace', 'e2_verifier_binary_untrusted', 'e2_verifier_tests_below_minimum',
+  'e2_tool_unknown', 'e2_edit_path_outside_workspace', 'e2_verifier_binary_untrusted', 'e2_verifier_tests_below_minimum', 'e2_verifier_synthetic_result',
 ] as const);
 export type E2GateReason = (typeof E2_GATE_REASONS)[number];
 
@@ -741,6 +761,7 @@ export function e2Gate(input: {
       const t = c.testSummary;
       return t === null || t.pass < floor || t.fail > 0;
     })) reasons.push('e2_verifier_tests_below_minimum');
+    if (reexec.commands.some((c) => !Array.isArray(c.fileLevelPoints) || c.fileLevelPoints.length > 0)) reasons.push('e2_verifier_synthetic_result');
   }
   const realDiff = diff !== null && diff !== undefined && RECORDED.has(diff);
   if (diff === null || diff === undefined) reasons.push('e2_diff_absent');
