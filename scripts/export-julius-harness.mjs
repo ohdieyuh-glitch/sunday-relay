@@ -109,6 +109,7 @@ const DECLARED_NOT_COMPOSED = [
   { path: 'relay-bridge/julius-mission-routes.ts', reason: 'the bridge\u2019s operator-only POST /julius/missions: the contract library\u2019s own parser (julius/mission-contract.ts, shared with the job rather than imported from the job\u2019s entry file, whose require.main guard is true inside the server bundle), the same compileBootstrapRequest and the same createLiveJuliusBootstrapPort the mission job uses, over the same PostgreSQL repositories \u2014 so a mission created here and one read from disk are one mission with one execution identity. Bootstrap only: it composes no provider, spends nothing and ticks nothing; the run lands durable in READY for the state routes to watch and the job to drive. Reached from the HTTP server, which is not a mission root' },
   { path: 'relay-bridge/julius-state-routes.ts', reason: 'the bridge\u2019s READ-ONLY mount of JuliusRuntimeApi for Wonderland \u2014 /julius/runs/<id>/<run|slots|tasks|evidence|verification|timeline>, operator-only, composed over the SAME createJuliusPostgresRuntimeStore the mission job writes through so there is one state authority. Reached from the HTTP server, which is a Relay surface and not a mission root, and never from a mission; it computes nothing about a run, every answer is the API\u2019s own. Also the first composition root for the subagent and lifecycle repositories' },
   { path: 'relay-bridge/julius-lifecycle-routes.ts', reason: 'the bridge’s operator-only POST /julius/runs/<id>/lifecycle {action: pause|resume|cancel, reason}: maps the action to JuliusRuntimeApi.pause/resume/cancel on the SAME api object the read routes serve (composeJuliusStateApi, over the same PostgreSQL store) and the kernel’s answer to a status. It records operator intent and drives nothing: no provider, no tick, no spend; the run loop in the mission job honours the recorded state. Reached from the HTTP server, which is not a mission root' },
+  { path: 'relay-bridge/julius/grok-bot-coding-provider.ts', reason: 'the Grok Bot coder: a Cursor Cloud Agent as another implementation of the Coding Agent port, behind an injected transport (cursor-cloud-agents-transport.ts). Built only when the J1 wiring is asked for the grok-bot-cloud-agent occupant, which no root does by default; it spends nothing until a reviewed change composes it' },
   { path: 'relay-bridge/julius-mission-evidence-reader.ts', reason: 'YUJI’s reader for one admitted mission: it matches the julius-run-spent.v1 tag to the Actions run and returns the typed evidence. Wonderland’s /missions/{wljRunId}/result and /progress routes call it; those routes are BRIDGE’s and are not mounted here. The live mission job does not call it, because that job is inside the run the reader reads and does not ask GitHub to describe itself' },
 ];
 
@@ -491,6 +492,9 @@ const FILE_RULES = [
   // observation carries. Replaced wholesale when the provider is swapped.
   ['relay-bridge/julius/claude-code-coding-provider.ts', 'CODING AGENT'],
   ['relay-bridge/julius/julius-final-message.ts', 'CODING AGENT'],
+  // The Grok Bot coder: a Cursor Cloud Agent as another implementation of the
+  // Coding Agent port, behind an injected transport. Opt-in in the J1 wiring.
+  ['relay-bridge/julius/grok-bot-coding-provider.ts', 'CODING AGENT'],
   // The spend-free organization gate the confirmed-live entrypoint runs
   // before it submits a Coding Agent call. It accepts only the closed line
   // from the path-loaded probe.
