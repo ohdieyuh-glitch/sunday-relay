@@ -1,6 +1,7 @@
 import { execFile, execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { lstatSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, normalize as normalizePath } from 'node:path';
 
 import { E2_STREAM_LABEL_LIVE, verifyEvidenceChain } from './cursor-run-stream-evidence';
@@ -34,7 +35,7 @@ export const E2_FAKE_LABEL = 'fake';
 /** What an injected runner may return: raw output (hashed here) or streamed hashes and byte counts. */
 export type VerifierRunResult =
   | { readonly exitCode: number | null; readonly stdout: Uint8Array | string; readonly stderr: Uint8Array | string }
-  | { readonly exitCode: number | null; readonly stdoutSha256: string; readonly stderrSha256: string; readonly stdoutBytes: number; readonly stderrBytes: number; readonly cause?: string; readonly stdoutTail?: string };
+  | { readonly exitCode: number | null; readonly stdoutSha256: string; readonly stderrSha256: string; readonly stdoutBytes: number; readonly stderrBytes: number; readonly cause?: string; readonly stdoutTail?: string; readonly stdoutTruncated?: boolean };
 export type VerifierRunner = (argv: readonly string[], cwd: string, extraEnv?: Readonly<Record<string, string>>) => Promise<VerifierRunResult>;
 
 const TRUSTED_RUNNERS = new WeakSet<VerifierRunner>();
@@ -200,7 +201,8 @@ export function spawnVerifierRunner(options: {
       const r = {
         exitCode: !failed && cause === null && s === null && typeof c === 'number' && c >= 0 ? c : null,
         stdoutSha256: out.digest('hex'), stderrSha256: err.digest('hex'), stdoutBytes: outBytes, stderrBytes: errBytes,
-        stdoutTail: tail.toString('utf8'),
+        stdoutTail: outBytes <= E2_TAP_MAX_BYTES ? Buffer.concat(full).toString('utf8') : tail.toString('utf8'),
+        stdoutTruncated: outBytes > E2_TAP_MAX_BYTES,
       };
       resolve(cause === null ? r : { ...r, cause });
     };
@@ -217,8 +219,11 @@ export function spawnVerifierRunner(options: {
     let grace: ReturnType<typeof setTimeout> | undefined;
     const over = (): void => { if (outBytes + errBytes > maxOutputBytes && cause === null) abandon('output_overrun'); };
     let tail = Buffer.alloc(0);
+    /* Round 6 R5-1: the whole stdout up to E2_TAP_MAX_BYTES is kept for the TAP checks (point names, point count). */
+    const full: Buffer[] = [];
     child.stdout?.on('data', (d: Buffer) => {
       if (settled) return; outBytes += d.byteLength; out.update(d);
+      if (outBytes <= E2_TAP_MAX_BYTES) full.push(d); else full.length = 0;
       tail = Buffer.concat([tail, d]); if (tail.byteLength > E2_STDOUT_TAIL_BYTES) tail = tail.subarray(tail.byteLength - E2_STDOUT_TAIL_BYTES);
       over();
     });
@@ -255,10 +260,16 @@ export interface E2CommandRecord {
   readonly testSummary: E2TestSummary | null;
   /** Round 6 R5-1: top-level TAP points named after a test file this command ran (node's synthetic file-level result). */
   readonly fileLevelPoints: readonly string[];
+  /** Round 6 R5-1: the number of `type: 'test'` TAP points in the whole stdout; must equal the summary's `tests`. */
+  readonly testPoints: number;
+  /** Round 6 R5-1: false when stdout exceeded E2_TAP_MAX_BYTES (the TAP checks cannot be made: refused). */
+  readonly tapComplete: boolean;
 }
 export interface E2TestSummary { readonly tests: number; readonly pass: number; readonly fail: number }
 /** Bytes of stdout kept (as text) for the summary; the full stream is still only hashed. */
 export const E2_STDOUT_TAIL_BYTES = 64 * 1024;
+/** Round 6 R5-1: stdout kept whole for the TAP checks; a node --test run with more stdout than this is refused. */
+export const E2_TAP_MAX_BYTES = 8 * 1024 * 1024;
 /**
  * Round 5 R4-3: the summary node's TAP (or spec, `ℹ`) reporter prints LAST. It must end the output: anything the test
  * code prints is escaped by the TAP reporter (`# \# tests 99`) and comes earlier, so it cannot stand in for this block.
@@ -288,6 +299,11 @@ export function fileLevelPoints(text: string, files: readonly string[]): string[
   }
   return out;
 }
+const TEST_POINT_TYPE = /^[ ]*type: 'test'$/gmu;
+/** Round 6 R5-1: the TAP facts the gate checks, over the whole stdout (`truncated`: more than E2_TAP_MAX_BYTES). */
+export function analyzeTap(text: string, files: readonly string[], truncated: boolean): { summary: E2TestSummary | null; fileLevelPoints: string[]; testPoints: number; complete: boolean } {
+  return { summary: parseNodeTestSummary(text), fileLevelPoints: fileLevelPoints(text, files), testPoints: (text.match(TEST_POINT_TYPE) ?? []).length, complete: !truncated };
+}
 const testFilesOf = (argv: readonly string[]): string[] => (argv[1] === '--test' ? argv.slice(2).filter((a) => !a.startsWith('--')) : []);
 export interface E2ReexecEvidence {
   readonly label: typeof E2_JULIUS_LABEL | typeof E2_FAKE_LABEL; readonly cwd: string; readonly commands: readonly E2CommandRecord[];
@@ -315,12 +331,12 @@ export interface E2DiffEvidence {
 const validArgv = (a: unknown): a is readonly string[] =>
   Array.isArray(a) && a.length > 0 && a.every((x) => typeof x === 'string' && !x.includes('\u0000')) && (a[0] as string) !== '';
 
-const normalize = (r: VerifierRunResult): { exitCode: number | 'unknown'; stdoutSha256: string; stderrSha256: string; stdoutBytes: number; stderrBytes: number; tail: string } => {
+const normalize = (r: VerifierRunResult): { exitCode: number | 'unknown'; stdoutSha256: string; stderrSha256: string; stdoutBytes: number; stderrBytes: number; tail: string; truncated: boolean } => {
   const exitCode = typeof r.exitCode === 'number' && Number.isInteger(r.exitCode) ? r.exitCode : 'unknown' as const;
-  if ('stdoutSha256' in r) return { exitCode, stdoutSha256: r.stdoutSha256, stderrSha256: r.stderrSha256, stdoutBytes: r.stdoutBytes, stderrBytes: r.stderrBytes, tail: typeof r.stdoutTail === 'string' ? r.stdoutTail : '' };
+  if ('stdoutSha256' in r) return { exitCode, stdoutSha256: r.stdoutSha256, stderrSha256: r.stderrSha256, stdoutBytes: r.stdoutBytes, stderrBytes: r.stderrBytes, tail: typeof r.stdoutTail === 'string' ? r.stdoutTail : '', truncated: r.stdoutTruncated !== false };
   const len = (b: Uint8Array | string): number => (typeof b === 'string' ? Buffer.byteLength(b) : b.byteLength);
   const buf = typeof r.stdout === 'string' ? Buffer.from(r.stdout) : Buffer.from(r.stdout);
-  return { exitCode, stdoutSha256: sha256(r.stdout), stderrSha256: sha256(r.stderr), stdoutBytes: len(r.stdout), stderrBytes: len(r.stderr), tail: buf.subarray(Math.max(0, buf.byteLength - E2_STDOUT_TAIL_BYTES)).toString('utf8') };
+  return { exitCode, stdoutSha256: sha256(r.stdout), stderrSha256: sha256(r.stderr), stdoutBytes: len(r.stdout), stderrBytes: len(r.stderr), tail: buf.byteLength <= E2_TAP_MAX_BYTES ? buf.toString('utf8') : buf.subarray(buf.byteLength - E2_STDOUT_TAIL_BYTES).toString('utf8'), truncated: buf.byteLength > E2_TAP_MAX_BYTES };
 };
 const run = async (runner: VerifierRunner, argv: readonly string[], cwd: string, env?: Readonly<Record<string, string>>): Promise<ReturnType<typeof normalize>> => {
   try { return normalize(await runner([...argv], cwd, env)); } catch { return normalize({ exitCode: null, stdout: '', stderr: '' }); }
@@ -357,11 +373,13 @@ export interface E2VerifierSpec {
    * calls in the base-pinned test files); null for `node <file>`. Never from run-time output or anything the coder wrote.
    */
   readonly minTests: readonly (number | null)[];
+  /** Round 6 R5-1: tests that registered per command in a Julius-observed run of the BASE tree (null: not measured or unusable). */
+  readonly baseRegistered: readonly (number | null)[];
   readonly extraKnownNonEditTools: readonly string[];
 }
 export type E2VerifierSpecRefusal =
   | 'spec_invalid' | 'spec_shell_syntax' | 'spec_base_invalid' | 'spec_workspace_invalid'
-  | E2VerifierShapeRefusal | 'spec_file_not_at_base';
+  | E2VerifierShapeRefusal | 'spec_file_not_at_base' | 'spec_base_run_untrusted' | 'spec_base_tree_unreadable';
 const SPECS = new WeakSet<object>();
 /** R4-3: test()/it() calls in a base-pinned test file (a static count; over-counting only raises the floor). */
 const BASE_TEST_CALL = /\b(?:test|it)\s*\(/gu;
@@ -431,9 +449,61 @@ export function pinVerifierSpec(input: E2MissionVerifierInput): E2VerifierSpec |
     minTests.push(argv[1] === '--test' ? Math.max(1, input.minTests ?? 0, atBase) : null);
     if (shape.configs) for (const f of TOOL_CONFIGS) { const blob = gitBlob(input.workspace, input.base, f); pins[f] = blob === null ? 'absent' : sha256(blob); }
   }
-  const spec: E2VerifierSpec = Object.freeze({ base: input.base, workspace: input.workspace, commands: Object.freeze(commands), pins: Object.freeze(pins), minTests: Object.freeze(minTests), extraKnownNonEditTools: Object.freeze([...(extra ?? [])]) });
+  const spec: E2VerifierSpec = Object.freeze({ base: input.base, workspace: input.workspace, commands: Object.freeze(commands), pins: Object.freeze(pins), minTests: Object.freeze(minTests), baseRegistered: Object.freeze(commands.map(() => null)), extraKnownNonEditTools: Object.freeze([...(extra ?? [])]) });
   SPECS.add(spec);
   return spec;
+}
+/** Round 6 R5-1: writes the base tree's regular files into a fresh directory (symlinks and submodules are skipped). */
+function materializeBase(workspace: string, base: string): string | null {
+  const bin = resolveProgram('git');
+  if (bin === null) return null;
+  let listing: string;
+  try {
+    listing = execFileSync(bin, [...GIT_PINS, ...safeDir(workspace), 'ls-tree', '-r', '-z', base], {
+      cwd: workspace, shell: false, stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024,
+      env: { LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...E2_GIT_ENV, GIT_NO_REPLACE_OBJECTS: '1', PATH: E2_VERIFIER_PATH },
+    }).toString('utf8');
+  } catch { return null; }
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'e2-base-run-')));
+  for (const entry of listing.split('\u0000')) {
+    const m = /^(100644|100755) blob [0-9a-f]{40}\t(.+)$/u.exec(entry);
+    if (m === null) continue;
+    const path = m[2] as string;
+    if (path.split('/').some((x) => x === '..' || x === '.' || x === '') || isAbsolute(path)) continue;
+    const blob = gitBlob(workspace, base, path);
+    if (blob === null) { rmSync(dir, { recursive: true, force: true }); return null; }
+    mkdirSync(dirname(join(dir, path)), { recursive: true });
+    writeFileSync(join(dir, path), blob);
+    if (m[1] === '100755') chmodSync(join(dir, path), 0o755);
+  }
+  return dir;
+}
+/**
+ * Round 6 R5-1 (Skywalker addendum): {@link pinVerifierSpec}, then each node --test command is run by the TRUSTED spawn
+ * runner on a fresh copy of the BASE tree (base code, base test files; nothing the coder wrote). The number of tests
+ * that REGISTERED there (TAP `type: 'test'` points, pass or fail, so placeholder tests that fail on purpose count) raises
+ * the floor. A base run that registers nothing usable (load error, synthetic file point, no summary, count mismatch)
+ * records null and the static/mission floor stands. Running base code is the mission's own trusted code.
+ */
+export async function pinVerifierSpecWithBaseRun(input: E2MissionVerifierInput, runner: VerifierRunner): Promise<E2VerifierSpec | { readonly refused: E2VerifierSpecRefusal }> {
+  const spec = pinVerifierSpec(input);
+  if ('refused' in spec) return spec;
+  if (!TRUSTED_RUNNERS.has(runner)) return Object.freeze({ refused: 'spec_base_run_untrusted' as const });
+  if (!spec.minTests.some((f) => f !== null)) return spec;
+  const dir = materializeBase(spec.workspace, spec.base);
+  if (dir === null) return Object.freeze({ refused: 'spec_base_tree_unreadable' as const });
+  const registered: (number | null)[] = [];
+  try {
+    for (const [i, argv] of spec.commands.entries()) {
+      if (spec.minTests[i] === null) { registered.push(null); continue; }
+      const { tail, truncated } = await run(runner, argv, dir);
+      const tap = analyzeTap(tail, testFilesOf(argv), truncated);
+      registered.push(tap.complete && tap.summary !== null && tap.fileLevelPoints.length === 0 && tap.testPoints === tap.summary.tests && tap.summary.tests > 0 ? tap.summary.tests : null);
+    }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+  const out: E2VerifierSpec = Object.freeze({ ...spec, minTests: Object.freeze(spec.minTests.map((f, i) => (f === null ? null : Math.max(f, registered[i] ?? 0)))), baseRegistered: Object.freeze(registered) });
+  SPECS.add(out);
+  return out;
 }
 const isSpec = (x: unknown): x is E2VerifierSpec => typeof x === 'object' && x !== null && SPECS.has(x);
 /** The workspace file still has its base content (a symlink, a missing file where one was pinned, or new content: false). */
@@ -478,8 +548,9 @@ export async function recordVerifierReexec(input: {
   const commands: E2CommandRecord[] = [];
   for (const argv of list) {
     const startedAt = new Date(now()).toISOString();
-    const { tail, ...r } = await run(input.runner, argv, input.cwd);
-    commands.push(Object.freeze({ argv: Object.freeze([...argv]), ...r, startedAt, endedAt: new Date(now()).toISOString(), testSummary: parseNodeTestSummary(tail), fileLevelPoints: Object.freeze(fileLevelPoints(tail, testFilesOf(argv))) }));
+    const { tail, truncated, ...r } = await run(input.runner, argv, input.cwd);
+    const tap = analyzeTap(tail, testFilesOf(argv), truncated);
+    commands.push(Object.freeze({ argv: Object.freeze([...argv]), ...r, startedAt, endedAt: new Date(now()).toISOString(), testSummary: tap.summary, fileLevelPoints: Object.freeze(tap.fileLevelPoints), testPoints: tap.testPoints, tapComplete: tap.complete }));
   }
   const ev: E2ReexecEvidence = Object.freeze({ label, cwd: input.cwd, commands: Object.freeze(commands), spec, refusal: null });
   RECORDED.add(ev);
@@ -487,6 +558,7 @@ export async function recordVerifierReexec(input: {
 }
 
 const SHA = /^[0-9a-f]{40}$/u;
+const safeDir = (_workspace: string): string[] => [];
 /** M-8: git configuration that would change the diff bytes is pinned; global and system config are not read. */
 export const E2_GIT_ENV = Object.freeze({ GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', GIT_ATTR_NOSYSTEM: '1' });
 const GIT_PINS = Object.freeze([
@@ -761,7 +833,10 @@ export function e2Gate(input: {
       const t = c.testSummary;
       return t === null || t.pass < floor || t.fail > 0;
     })) reasons.push('e2_verifier_tests_below_minimum');
-    if (reexec.commands.some((c) => !Array.isArray(c.fileLevelPoints) || c.fileLevelPoints.length > 0)) reasons.push('e2_verifier_synthetic_result');
+    /* Round 6 R5-1: node's file-level synthetic point, a summary count that is not the number of test points, or stdout
+       too large to check, is not a test result. */
+    if (reexec.commands.some((c, i) => !Array.isArray(c.fileLevelPoints) || c.fileLevelPoints.length > 0
+      || (floors[i] !== null && floors[i] !== undefined && (c.tapComplete !== true || c.testSummary === null || c.testPoints !== c.testSummary.tests)))) reasons.push('e2_verifier_synthetic_result');
   }
   const realDiff = diff !== null && diff !== undefined && RECORDED.has(diff);
   if (diff === null || diff === undefined) reasons.push('e2_diff_absent');

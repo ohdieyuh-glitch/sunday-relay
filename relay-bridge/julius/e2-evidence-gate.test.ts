@@ -28,8 +28,8 @@ describe('E2 part B: Julius re-runs the verifier commands', () => {
     expect(ev).toEqual({
       label: E2_JULIUS_LABEL, cwd: JS_DIR, spec: null, refusal: null,
       commands: [
-        { argv: [NODE, js('process.stdout.write("ok")')], exitCode: 0, stdoutSha256: sha('ok'), stderrSha256: sha(''), stdoutBytes: 2, stderrBytes: 0, startedAt: '2026-10-30T18:00:01.000Z', endedAt: '2026-10-30T18:00:02.000Z', testSummary: null, fileLevelPoints: [] },
-        { argv: [NODE, js('process.stderr.write("e");process.exit(3)')], exitCode: 3, stdoutSha256: sha(''), stderrSha256: sha('e'), stdoutBytes: 0, stderrBytes: 1, startedAt: '2026-10-30T18:00:03.000Z', endedAt: '2026-10-30T18:00:04.000Z', testSummary: null, fileLevelPoints: [] },
+        { argv: [NODE, js('process.stdout.write("ok")')], exitCode: 0, stdoutSha256: sha('ok'), stderrSha256: sha(''), stdoutBytes: 2, stderrBytes: 0, startedAt: '2026-10-30T18:00:01.000Z', endedAt: '2026-10-30T18:00:02.000Z', testSummary: null, fileLevelPoints: [], testPoints: 0, tapComplete: true },
+        { argv: [NODE, js('process.stderr.write("e");process.exit(3)')], exitCode: 3, stdoutSha256: sha(''), stderrSha256: sha('e'), stdoutBytes: 0, stderrBytes: 1, startedAt: '2026-10-30T18:00:03.000Z', endedAt: '2026-10-30T18:00:04.000Z', testSummary: null, fileLevelPoints: [], testPoints: 0, tapComplete: true },
       ],
     });
     expect(Object.isFrozen(ev)).toBe(true);
