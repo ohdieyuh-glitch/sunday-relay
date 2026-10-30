@@ -170,11 +170,45 @@ export function cursorKeyPatterns(key: string): readonly RegExp[] {
   return Object.freeze(cursorKeyForms(key).map((f) => new RegExp([...f].map(reEscape).join(KEY_SEPARATOR), 'giu')));
 }
 const REDACTED = '[REDACTED]';
-/** Every occurrence of the key, in any form {@link cursorKeyPatterns} matches, replaced by `[REDACTED]`. */
+/** What a whole text becomes when key characters survive the patterns (Skywalker N12). */
+const KEY_RESIDUE_REDACTED = '[REDACTED: key residue]';
+/** Skywalker N12: this many of the key's own characters in a row, after normalising, is treated as the key. */
+const KEY_RESIDUE_RUN = 6;
+const codePoint = (n: number): string => (Number.isInteger(n) && n >= 0 && n <= 0x10ffff ? String.fromCodePoint(n) : '');
+/**
+ * Skywalker N12: the text as a key-echo comparison sees it. JSON `\uXXXX` and HTML `&#NN;` / `&#xNN;` escapes decoded,
+ * invisible characters (`\p{Cf}`, e.g. ZWSP) and combining marks (`\p{M}`) deleted, NFKC (fullwidth to ASCII), lower case,
+ * and then ONLY letters and digits kept, so any separator (`  `, `_`, `.`, `,`) between the key's characters disappears.
+ */
+const keyMatchNormal = (text: string): string => text
+  .replace(/\\u([0-9a-f]{4})/giu, (_m, h: string) => codePoint(parseInt(h, 16)))
+  .replace(/&#x([0-9a-f]{1,6});?/giu, (_m, h: string) => codePoint(parseInt(h, 16)))
+  .replace(/&#([0-9]{1,7});?/gu, (_m, d: string) => codePoint(Number(d)))
+  .replace(/[\p{Cf}\p{M}]/gu, '').normalize('NFKC').replace(/[\p{Cf}\p{M}]/gu, '')
+  .toLowerCase().replace(/[^a-z0-9]/gu, '');
+/**
+ * Skywalker N12, FAIL CLOSED: true when {@link KEY_RESIDUE_RUN} or more of the key's letters and digits, in order or
+ * reversed, appear in a row in the normalised text: the echo forms the patterns cannot enumerate (wide separators, ZWSP,
+ * reversal, `\u` and HTML escapes, fullwidth, pieces of a split key). A key with fewer letters and digits than that is
+ * never matched this way (the patterns still apply).
+ */
+export function cursorKeyResidue(text: string, key: string): boolean {
+  const k = keyMatchNormal(key);
+  if (k.length < KEY_RESIDUE_RUN) return false;
+  const runs = new Set<string>();
+  for (const form of [k, [...k].reverse().join('')]) for (let i = 0; i + KEY_RESIDUE_RUN <= form.length; i += 1) runs.add(form.slice(i, i + KEY_RESIDUE_RUN));
+  const t = keyMatchNormal(text);
+  for (let i = 0; i + KEY_RESIDUE_RUN <= t.length; i += 1) if (runs.has(t.slice(i, i + KEY_RESIDUE_RUN))) return true;
+  return false;
+}
+/**
+ * Every occurrence of the key, in any form {@link cursorKeyPatterns} matches, replaced by `[REDACTED]`. Skywalker N12: if
+ * key characters still survive ({@link cursorKeyResidue}), the WHOLE text is replaced by `[REDACTED: key residue]`.
+ */
 export function scrubCursorKey(text: string, key: string): string {
   let out = text;
   for (const re of cursorKeyPatterns(key)) out = out.replace(re, REDACTED);
-  return out;
+  return cursorKeyResidue(out, key) ? KEY_RESIDUE_REDACTED : out;
 }
 /** A fragment this long of any key form, in any case, is treated as the key (a truncated or partial echo). */
 const KEY_FRAGMENT = 16;
@@ -186,6 +220,7 @@ const KEY_FRAGMENT = 16;
 export function carriesCursorKey(value: string, key: string): boolean {
   if (key === '') return false;
   if (cursorKeyPatterns(key).some((re) => { re.lastIndex = 0; return re.test(value); })) return true;
+  if (cursorKeyResidue(value, key)) return true;
   const v = value.toLowerCase();
   for (const form of cursorKeyForms(key)) {
     const f = form.toLowerCase();

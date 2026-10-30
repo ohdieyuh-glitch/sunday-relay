@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { CURSOR_API_KEY_ENV_NAME, CURSOR_API_ORIGIN, CURSOR_ATTESTED_MODEL_FIELD, createCursorCloudAgentsTransport, cursorGlobalFetch, carriesCursorKey, cursorGlobalFetchIntact, cursorKeyForms, cursorTransportMode, isRequestEchoField, readAttestedModelId, readCappedBody, type CursorFetch, type CursorFetchResponse } from './cursor-cloud-agents-transport';
+import { CURSOR_API_KEY_ENV_NAME, CURSOR_API_ORIGIN, CURSOR_ATTESTED_MODEL_FIELD, createCursorCloudAgentsTransport, cursorGlobalFetch, carriesCursorKey, cursorGlobalFetchIntact, cursorKeyForms, cursorKeyResidue, cursorTransportMode, isRequestEchoField, readAttestedModelId, readCappedBody, scrubCursorKey, type CursorFetch, type CursorFetchResponse } from './cursor-cloud-agents-transport';
 import { GROK_BOT_CODER_CONFIG_DEFAULTS, createGrokBotCodingAgentProvider, type CodingAgentCreateInput } from './grok-bot-coding-provider';
 import type { JuliusCodingAgentRequest } from '../../src/relay/mission/julius/julius-coding-agent';
 
@@ -608,8 +608,48 @@ describe('L4: service strings that reach evidence are bounded', () => {
       const r = await result({ result: `before ${echo} after` });
       expect(r.finalText, echo).toBe('before [REDACTED] after');
     }
-    /* never over-broad: ordinary text, and a mere prefix of the key in finalText, are kept */
-    expect((await result({ result: 'SENTINEL plain words 0123456789' })).finalText).toBe('SENTINEL plain words 0123456789');
+    /* never over-broad: ordinary text is kept. (Skywalker N12 changed one thing: text carrying a run of 6 or more of the
+     * key's characters, like the old 'SENTINEL plain words 0123456789' case, now fails closed; see the N12 test.) */
+    expect((await result({ result: 'plain words, 2026-10-30, nothing of it' })).finalText).toBe('plain words, 2026-10-30, nothing of it');
+  });
+  it('Skywalker N12: echo forms the patterns miss leave no run of 6 key characters: the text fails closed instead', async () => {
+    const K = SENTINEL;
+    const fw = (c: string): string => (/[!-~]/u.test(c) ? String.fromCharCode(c.charCodeAt(0) + 0xfee0) : c);
+    const echoes = [
+      K.split('').join('  '), K.split('').join('_'), K.split('').join('.'), K.split('').join(','), K.split('').join('\u200b'),
+      [...K].reverse().join(''), [...K].map((c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`).join(''),
+      [...K].map((c) => `&#${c.charCodeAt(0)};`).join(''), [...K].map((c) => `&#x${c.charCodeAt(0).toString(16)};`).join(''),
+      [...K].map(fw).join(''), K.split('').join('\u0301'), K.slice(0, 10), K.slice(10, 20), `${K.slice(0, 12)} ... ${K.slice(12)}`,
+      K.replace(/-/gu, ''), 'xx 456789 yy',
+      /* letters only, so no digit run hides a miss: combining marks on each letter, and the case flipped */
+      'SENTINEL'.split('').map((c) => `${c}\u0301`).join(''), 'sentinel'.split('').join('.'), 'NEVER_PRINT',
+    ];
+    const keyNorm = K.toLowerCase().replace(/[^a-z0-9]/gu, '');
+    const runs = new Set<string>();
+    for (const k of [keyNorm, [...keyNorm].reverse().join('')]) for (let i = 0; i + 6 <= k.length; i += 1) runs.add(k.slice(i, i + 6));
+    const residue = (text: string): boolean => {
+      const n = text.replace(/\\u([0-9a-f]{4})/giu, (_m, h: string) => String.fromCharCode(parseInt(h, 16))).replace(/&#x([0-9a-f]+);/giu, (_m, h: string) => String.fromCodePoint(parseInt(h, 16))).replace(/&#([0-9]+);/gu, (_m, d: string) => String.fromCodePoint(Number(d)))
+        .replace(/[\p{Cf}\p{M}]/gu, '').normalize('NFKC').toLowerCase().replace(/[^a-z0-9]/gu, '');
+      for (let i = 0; i + 6 <= n.length; i += 1) if (runs.has(n.slice(i, i + 6))) return true;
+      return false;
+    };
+    for (const echo of echoes) {
+      expect(residue(echo), `fixture ${echo}`).toBe(true);
+      const scrubbed = scrubCursorKey(`before ${echo} after`, K);
+      expect(residue(scrubbed), echo).toBe(false);
+      expect(scrubbed, echo).toBe('[REDACTED: key residue]');
+      expect(cursorKeyResidue(echo, K), echo).toBe(true);
+      expect(carriesCursorKey(`rq-${echo}`, K), echo).toBe(true);
+      const r = await result({ result: `before ${echo} after` });
+      expect(r.finalText, echo).toBe('[REDACTED: key residue]');
+    }
+    /* Five key characters, or ordinary text, are kept. */
+    for (const fine of ['plain words', '01234 and 56789', 'req_01HZX5Q7ABCDEF', 'tinel']) {
+      expect(cursorKeyResidue(fine, K), fine).toBe(false);
+      expect(scrubCursorKey(fine, K)).toBe(fine);
+    }
+    expect(cursorKeyResidue('anything', '')).toBe(false);
+    expect(cursorKeyResidue('SENTINEL', 'abc')).toBe(false);
   });
   it('Skywalker L3/P5: a request id carrying a TRUNCATED key echo (base64 or hex prefix, any case) is dropped; an ordinary one is kept', async () => {
     const b64 = Buffer.from(SENTINEL).toString('base64');
