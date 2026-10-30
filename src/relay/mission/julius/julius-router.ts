@@ -211,6 +211,41 @@ const safeInstant=(value:unknown):string|null=>typeof value==='string'&&INSTANT.
  * digest of a different algorithm, or a sentence about one.
  */
 const safeDigest=(value:unknown):string|null=>typeof value==='string'&&/^sha256:[0-9a-f]{64}$/.test(value)?value:null;
+/**
+ * A CLOUD CODING AGENT'S OWN IDENTIFIERS: its agent id, the branch it pushed,
+ * and the model id its API reported. They come from a remote service's JSON, so
+ * each is treated as hostile text: refused outright when oversized (never
+ * truncated into something else) or when it holds any line break (a forged
+ * log line); other C0/C1 controls, bidi overrides, zero-width and other invisible format characters are
+ * stripped, and what remains must FULL-match an ASCII grammar — so no
+ * whitespace, no newline, no `:` or `@` (no URL, let alone one carrying a
+ * credential) and no lookalike letter can pass. A value that still looks like
+ * a credential (a known key prefix in any segment, or a 32+ character
+ * unbroken alphanumeric run) is refused. Null always means "not known".
+ */
+const CLOUD_AGENT_INVISIBLE=/[\u0000-\u001F\u007F-\u009F\u00AD\u061C\u115F\u1160\u17B4\u17B5\u180B-\u180F\u200B-\u200F\u2028-\u202E\u2060-\u206F\u3164\uFE00-\uFE0F\uFEFF\uFFA0\uFFF9-\uFFFB]/gu;
+/** A line break is an attempt to forge a log line, not noise: the whole value is refused rather than stripped. */
+const CLOUD_AGENT_LINE_BREAK=/[\n\r\u000B\u000C\u0085\u2028\u2029]/u;
+const CLOUD_AGENT_KEY_SEGMENT=/(^|[/._-])(sk|xai|ghp|gho|ghu|ghs|ghr|github_pat|glpat|crsr|cursor_key|api_?key)[-_]/i;
+const CLOUD_AGENT_ID=/^bc-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const CLOUD_AGENT_BRANCH=/^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$/;
+const CLOUD_AGENT_MODEL=/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+const safeCloudAgentText=(value:unknown,max:number,shape:RegExp):string|null=>{
+ if(typeof value!=='string'||value.length>max*2||CLOUD_AGENT_LINE_BREAK.test(value))return null;
+ const s=value.replace(CLOUD_AGENT_INVISIBLE,'');
+ if(s.length===0||s.length>max||!shape.test(s))return null;
+ if(CREDENTIAL_SHAPED.test(s)||CLOUD_AGENT_KEY_SEGMENT.test(s)||/[A-Za-z0-9]{32,}/.test(s))return null;
+ return s;
+};
+/** Cursor's agent id shape, `bc-` and a UUID. */
+export const safeCloudAgentId=(value:unknown):string|null=>safeCloudAgentText(value,39,CLOUD_AGENT_ID);
+/** A git branch name in a conservative subset of git's ref rules: no `..`, `//`, `@{`, trailing `/`, `.` or `.lock`. */
+export const safeCloudAgentBranch=(value:unknown):string|null=>{
+ const s=safeCloudAgentText(value,200,CLOUD_AGENT_BRANCH);
+ return s===null||s.includes('..')||s.includes('//')||s.endsWith('/')||s.endsWith('.')||s.endsWith('.lock')?null:s;
+};
+/** The model id a cloud agent's API reported for the run, whatever the verdict on it. */
+export const safeCloudAgentModel=(value:unknown):string|null=>safeCloudAgentText(value,64,CLOUD_AGENT_MODEL);
 export type JuliusSafeDiagnostics=Readonly<Record<string,string|number|boolean|null>>;
 export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
  if(value===null||typeof value!=='object'||Array.isArray(value))return null;
@@ -442,6 +477,13 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   operatorActionRequired:safeNullableBool(v.operatorActionRequired),
   /** Which implementation of the Coding Agent port ran, as a machine token. */
   codingAgentProvider:safeToken(v.codingAgentProvider),
+  /* --- A CLOUD CODING AGENT'S IDENTIFIERS, so a run can be found again on the
+   * provider's side without a second paid call. `cursorServedModel` is what the
+   * provider REPORTED, beside (never instead of) the verdict; `servedModel`
+   * keeps meaning an attested model. See {@link safeCloudAgentText}. --- */
+  cursorAgentId:safeCloudAgentId(v.cursorAgentId),
+  agentBranch:safeCloudAgentBranch(v.agentBranch),
+  cursorServedModel:safeCloudAgentModel(v.cursorServedModel),
   /* --- Coding Agent cost, beside a refusal. Paid run 34037313976 was refused
    * for cost and the amount lived only in a message nothing persisted. --- */
   /** The runtime-reported cost in micro-dollars; null when the runtime reported none. */
