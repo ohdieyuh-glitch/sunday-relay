@@ -14,7 +14,7 @@ const REPO = join(__dirname, '..', '..');
 const ALLOWED = new Set(['relay-bridge/julius/e2-external-anchor.ts', `relay-bridge/julius/${A.E2_ANCHOR_WIRING_MODULE}.ts`]);
 function walk(d: string, out: string[]): void {
   for (const n of readdirSync(d)) {
-    if (n === 'node_modules' || n === '.git' || n === 'dist') continue;
+    if (/^(?:node_modules|\.git|dist.*)$/u.test(n)) continue; /* build output dirs skipped by pattern, not read */
     const p = join(d, n);
     const st = statSync(p);
     if (st.isDirectory()) walk(p, out); else if (/\.(?:[cm]?[jt]sx?)$/u.test(n)) out.push(p);
