@@ -414,17 +414,26 @@ export function createGrokBotCodingAgentProvider(input: {
         targetRepo: `${target.owner}/${target.repo}`,
         baseRevision: base.sha,
       };
-      /** Every ending after the create left: unknown spend, charged in full unless a fixed reservation is configured. Never $0. */
-      const costFacts = (): Record<string, unknown> => ({
+      /**
+       * Every ending after the create left: unknown spend, charged in full unless a fixed reservation is configured. Never $0.
+       * An ending whose outcome is unknown (outcome-unknown create, timeout, 409, agentId mismatch, poll failure) NEVER carries the
+       * fixed figure: what ran, and for how long, is not known, so the full reservation holds.
+       */
+      const costFacts = (unknownOutcome: boolean): Record<string, unknown> => ({
         costBasis: 'NOT_APPLICABLE', billingPath: 'SUBSCRIPTION', costSource: 'unavailable', spendVerified: false,
-        ...(fixed === null ? { chargedAs: 'FULL_RESERVATION' } : { executionCostUsdMicros: fixed, chargedAs: 'FIXED_PER_ATTEMPT_RESERVATION' }),
+        ...(fixed === null || unknownOutcome ? { chargedAs: 'FULL_RESERVATION' } : { executionCostUsdMicros: fixed, chargedAs: 'FIXED_PER_ATTEMPT_RESERVATION' }),
       });
       const started = (failure: JuliusCodingAgentFailure, providerFailureClass: string, safeMessage: string, extra: Record<string, unknown> = {}): JuliusCodingAgentProviderOutcome => {
         log(`grok-coder failed agent=${agentId} class=${providerFailureClass}`);
+        const unknownOutcome = extra.outcomeUnknown === true || extra.timedOut === true;
         return {
           kind: 'failed', failure, runtimeStarted: true, costUsdMicros: null, safeMessage, providerFailureClass,
-          diagnostics: { ...evidence, ...costFacts(), runtimeStarted: true, outcome: 'failed', ...extra },
+          diagnostics: { ...evidence, ...costFacts(unknownOutcome), runtimeStarted: true, outcome: 'failed', ...extra },
         };
+      };
+      /** Best effort: ask the service to stop a run Julius will not follow any further. Recorded, never retried, never fatal. */
+      const cancelBestEffort = async (r: CodingAgentRunRef): Promise<void> => {
+        evidence.cancelRequested = await transport.cancelRun(r).catch(() => 'failed' as const);
       };
 
       const prompt = renderJuliusCodingAgentPrompt(request, juliusCodingAgentCharter());
@@ -468,21 +477,23 @@ export function createGrokBotCodingAgentProvider(input: {
       const ref = created.ref;
       evidence.cursorRunId = ref.runId;
       if (ref.agentId !== agentId) {
+        await cancelBestEffort(ref);
         return started('MALFORMED_OUTPUT', 'coder_grok_agent_id_mismatch', 'The Cursor API answered with an agent id other than the one requested.', { outcomeUnknown: true });
       }
 
       const polled = await transport.pollUntilTerminal(ref, { deadlineAtMs: startedAtMs + (config.runDeadlineMs as number), ...(signal === undefined ? {} : { signal }) });
       evidence.polls = polled.polls;
       if (polled.kind === 'deadline' || polled.kind === 'aborted') {
-        const cancel = await transport.cancelRun(ref).catch(() => 'failed' as const);
-        evidence.cancelRequested = cancel;
+        await cancelBestEffort(ref);
         return polled.kind === 'deadline'
           ? started('TIMEOUT', 'coder_timed_out', 'The Grok Bot coder did not finish before the deadline.', { timedOut: true })
           : started('CANCELLED', 'coder_cancelled', 'The Grok Bot coder run was cancelled.');
       }
       if (polled.kind === 'poll_failed') {
+        // The run may still be going: ask it to stop (best effort), and treat the result as unknown either way.
+        await cancelBestEffort(ref);
         return polled.cause === 'authentication' || polled.cause === 'key_absent'
-          ? started('AUTHENTICATION', 'coder_grok_poll_unauthenticated', 'The Cursor API stopped accepting the key while the run was active.')
+          ? started('AUTHENTICATION', 'coder_grok_poll_unauthenticated', 'The Cursor API stopped accepting the key while the run was active; the outcome is unknown.', { outcomeUnknown: true })
           : started('INTERRUPTED', 'coder_grok_poll_failed', 'The run status could not be read; the outcome is unknown.', { outcomeUnknown: true });
       }
       evidence.providerStatus = polled.status.toLowerCase();
@@ -570,7 +581,7 @@ export function createGrokBotCodingAgentProvider(input: {
           outputTokens: result.usage?.outputTokens ?? null,
           costUsdMicros: null,
           costBasis: 'NOT_APPLICABLE',
-          diagnostics: { ...evidence, ...costFacts(), runtimeStarted: true, outcome: 'succeeded' },
+          diagnostics: { ...evidence, ...costFacts(false), runtimeStarted: true, outcome: 'succeeded' },
         },
       };
     },

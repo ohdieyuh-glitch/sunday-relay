@@ -151,6 +151,74 @@ describe('cost: unknown is never $0', () => {
   });
 });
 
+describe('H2: an ending whose outcome is unknown never carries the fixed reservation; the full reservation holds', () => {
+  const FIXED = 200_000;
+  const endings: readonly [string, () => ReturnType<typeof fakeTransport>][] = [
+    ['create timed out after sending', () => fakeTransport({ create: () => ({ kind: 'outcome_unknown', cause: 'timeout' }) })],
+    ['create sent without a confirmed answer', () => fakeTransport({ create: () => ({ kind: 'outcome_unknown', cause: 'network' }) })],
+    ['409 agent id conflict', () => fakeTransport({ create: () => ({ kind: 'conflict', status: 409 }) })],
+    ['agentId mismatch', () => fakeTransport({ create: () => ({ kind: 'created', ref: { agentId: 'bc-00000000-0000-4000-8000-000000000000', runId: 'run-x' } }) })],
+    ['poll failure', () => fakeTransport({ poll: { kind: 'poll_failed', cause: 'malformed_response', polls: 2 } })],
+    ['poll failure (authentication)', () => fakeTransport({ poll: { kind: 'poll_failed', cause: 'authentication', polls: 2 } })],
+    ['run deadline (timeout)', () => fakeTransport({ poll: { kind: 'deadline', polls: 9 } })],
+    ['run expired (timeout)', () => fakeTransport({ poll: { kind: 'terminal', status: 'EXPIRED', polls: 3 } })],
+  ];
+  for (const [name, make] of endings) {
+    it(name, async () => {
+      const f = failed((await run({ cfg: config({ fixedPerAttemptReservationUsdMicros: FIXED }), t: make() })).outcome);
+      expect(f.runtimeStarted).toBe(true);
+      expect(f.costUsdMicros).toBeNull();
+      expect(f.diagnostics).not.toHaveProperty('executionCostUsdMicros');
+      expect(f.diagnostics).toMatchObject({ chargedAs: 'FULL_RESERVATION', spendVerified: false });
+      expect(f.diagnostics.outcomeUnknown === true || f.diagnostics.timedOut === true).toBe(true);
+    });
+  }
+  it('a known ending (the run reported ERROR) still uses the configured fixed reservation', async () => {
+    const f = failed((await run({ cfg: config({ fixedPerAttemptReservationUsdMicros: FIXED }), t: fakeTransport({ poll: { kind: 'terminal', status: 'ERROR', polls: 1 } }) })).outcome);
+    expect(f.diagnostics).toMatchObject({ executionCostUsdMicros: FIXED, chargedAs: 'FIXED_PER_ATTEMPT_RESERVATION' });
+  });
+});
+
+describe('M2: a run Julius stops following is cancelled, best effort, and recorded', () => {
+  for (const cause of ['authentication', 'not_found', 'malformed_response', 'key_absent', 'unexpected_status'] as const) {
+    it(`poll failure (${cause}): cancel requested once, outcome unknown`, async () => {
+      const { outcome, t, w } = await run({ t: fakeTransport({ poll: { kind: 'poll_failed', cause, polls: 2 } }) });
+      const f = failed(outcome);
+      expect(t.calls.cancel).toBe(1);
+      expect(f.diagnostics).toMatchObject({ cancelRequested: 'cancelled', outcomeUnknown: true });
+      expect(w.calls).toEqual({ fetch: 0, apply: 0 });
+      expect(t.calls.result).toBe(0);
+    });
+  }
+  it('the authentication branch is outcome unknown and maps to an unknown handed outcome', async () => {
+    const { outcome } = await run({ t: fakeTransport({ poll: { kind: 'poll_failed', cause: 'authentication', polls: 1 } }) });
+    expect(failed(outcome).providerFailureClass).toBe('coder_grok_poll_unauthenticated');
+    expect(failed(outcome).diagnostics.outcomeUnknown).toBe(true);
+  });
+  it('agentId mismatch: the returned run is cancelled, not followed', async () => {
+    const t = fakeTransport({ create: () => ({ kind: 'created', ref: { agentId: 'bc-00000000-0000-4000-8000-000000000000', runId: 'run-x' } }) });
+    const { outcome } = await run({ t });
+    expect(t.calls.cancel).toBe(1);
+    expect(t.calls.poll).toBe(0);
+    expect(failed(outcome).diagnostics).toMatchObject({ cancelRequested: 'cancelled', outcomeUnknown: true });
+  });
+  it('a cancel that throws is recorded as failed and changes nothing else', async () => {
+    const t = fakeTransport({ poll: { kind: 'poll_failed', cause: 'malformed_response', polls: 2 } });
+    t.transport.cancelRun = async () => { t.calls.cancel += 1; throw new Error('boom'); };
+    const f = failed((await run({ t })).outcome);
+    expect(t.calls.cancel).toBe(1);
+    expect(f.diagnostics).toMatchObject({ cancelRequested: 'failed', outcomeUnknown: true });
+    expect(f.providerFailureClass).toBe('coder_grok_poll_failed');
+  });
+  it('a 409 and an outcome-unknown create have no run reference, so nothing is cancelled', async () => {
+    for (const create of [() => ({ kind: 'conflict', status: 409 }) as const, () => ({ kind: 'outcome_unknown', cause: 'timeout' }) as const]) {
+      const t = fakeTransport({ create });
+      await run({ t });
+      expect(t.calls.cancel).toBe(0);
+    }
+  });
+});
+
 describe('failure mapping, in the existing vocabulary', () => {
   it('did-not-start (refused or rejected) is runtimeStarted:false, and a 429 is proven unprocessed', async () => {
     for (const create of [
