@@ -23,7 +23,7 @@ const transport: CodingAgentTransport = {
   fetchResult: async () => ({ kind: 'unavailable', cause: 'x' }), cancelRun: async () => 'failed',
 };
 const workspace: GrokBotWorkspacePort = { baseRevision: async () => ({ ok: false, cause: 'x' }), fetchBranch: async () => ({ ok: false, cause: 'x' }), applyFetched: async () => ({ ok: false, cause: 'x' }) };
-const config = { ...GROK_BOT_CODER_CONFIG_DEFAULTS, pinnedModelId: 'fake-coder-1', coderModelFamily: 'a', reviewerModelFamily: 'b', reviewerModelId: 'fake-reviewer-model', targetRepoUrl: 'https://github.com/example-org/t', runDeadlineMs: 60_000 };
+const config = { ...GROK_BOT_CODER_CONFIG_DEFAULTS, pinnedModelId: 'fake-grok-coder-1', coderModelFamily: 'xai', reviewerModelFamily: 'openai', reviewerModelId: 'fake-gpt-reviewer-1', targetRepoUrl: 'https://github.com/example-org/t', runDeadlineMs: 60_000 };
 
 describe('the fetch allow-list: Cursor is off by default, and the default is byte-identical to main', () => {
   it('default j1PinnedFetchUrl answers every sample exactly as main does', () => {
@@ -51,15 +51,15 @@ describe('the coder occupant: Claude by default; the Grok Bot coder only when as
     expect(buildJ1CoderProviderFor({ occupant: 'claude-code-hosted' })({ PATH: '/bin' }, { requestedModel: 'm' }).providerKind).toBe('claude-code-hosted');
   });
   it('the grok occupant builds the Grok Bot provider from its deps', () => {
-    expect(buildJ1CoderProviderFor({ occupant: GROK_BOT_CODER_PROVIDER_KIND, grokBot: { config, transport, workspace } })({ PATH: '/bin' }, { requestedModel: 'fake-coder-1' }).providerKind).toBe(GROK_BOT_CODER_PROVIDER_KIND);
+    expect(buildJ1CoderProviderFor({ occupant: GROK_BOT_CODER_PROVIDER_KIND, grokBot: { config, transport, workspace } })({ PATH: '/bin' }, { requestedModel: 'fake-grok-coder-1' }).providerKind).toBe(GROK_BOT_CODER_PROVIDER_KIND);
   });
   it('refuses, never falling back to Claude: no deps, bad config, unpinned model, key-like env, unknown occupant', () => {
-    const b = (o: Parameters<typeof buildJ1CoderProviderFor>[0]) => () => buildJ1CoderProviderFor(o)({ PATH: '/bin' }, { requestedModel: 'fake-coder-1' });
+    const b = (o: Parameters<typeof buildJ1CoderProviderFor>[0]) => () => buildJ1CoderProviderFor(o)({ PATH: '/bin' }, { requestedModel: 'fake-grok-coder-1' });
     expect(b({ occupant: GROK_BOT_CODER_PROVIDER_KIND })).toThrow('coder_grok_bot_deps_absent');
     expect(b({ occupant: GROK_BOT_CODER_PROVIDER_KIND, grokBot: { config: GROK_BOT_CODER_CONFIG_DEFAULTS, transport, workspace } })).toThrow('coder_grok_config_model_absent');
     expect(b({ occupant: GROK_BOT_CODER_PROVIDER_KIND, grokBot: { config: { ...config, targetRepoUrl: 'https://github.com/ohdieyuh-glitch/sunday-relay' }, transport, workspace } })).toThrow('coder_grok_target_is_sunday_relay');
     expect(() => buildJ1CoderProviderFor({ occupant: GROK_BOT_CODER_PROVIDER_KIND, grokBot: { config, transport, workspace } })({ PATH: '/bin' }, { requestedModel: 'claude-opus-5-5' })).toThrow('coder_requested_model_not_pinned');
-    expect(() => buildJ1CoderProviderFor({ occupant: GROK_BOT_CODER_PROVIDER_KIND, grokBot: { config, transport, workspace } })({ CURSOR_API_KEY: 'x' }, { requestedModel: 'fake-coder-1' })).toThrow('coder_env_contains_secret_name');
+    expect(() => buildJ1CoderProviderFor({ occupant: GROK_BOT_CODER_PROVIDER_KIND, grokBot: { config, transport, workspace } })({ CURSOR_API_KEY: 'x' }, { requestedModel: 'fake-grok-coder-1' })).toThrow('coder_env_contains_secret_name');
     expect(b({ occupant: 'something-else' as never })).toThrow('coder_occupant_unknown');
   });
 });

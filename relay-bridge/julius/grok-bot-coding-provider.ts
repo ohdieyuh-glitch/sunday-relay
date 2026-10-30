@@ -324,6 +324,45 @@ export const familyFromModelId = (id: string): string | null => {
   return null;
 };
 
+/** The vendor families the reviewed table can name. An allowlist entry naming anything else is ignored. */
+const KNOWN_FAMILIES = new Set(['xai', 'anthropic', 'openai', 'cursor', 'google']);
+
+/**
+ * H1: THE EXPLICIT ALLOWLIST for model ids the reviewed table ({@link familyFromModelId}) cannot place, keyed by the
+ * normalised id ({@link normaliseModelId}) and naming the vendor family. Empty: an entry is added only by a reviewed code
+ * change, with the evidence for its family. An operator's `coderModelFamily` is never a substitute for an entry here.
+ */
+export const CODER_MODEL_FAMILY_ALLOWLIST: Readonly<Record<string, string>> = Object.freeze({});
+
+/**
+ * One spelling per model id, for comparisons only (never sent): NFKC, lower case, invisible characters removed, `.`, `_`,
+ * `:`, `@`, `/` and whitespace folded to `-`, and trailing version, date and channel suffixes removed (`-20261001`,
+ * `-2026-10-01`, `-v2`, `-1`, `-preview`, `-latest`). So `m-coder-20261001` and `M Coder` are both `m-coder`. Deliberately
+ * coarse: it can only make two ids compare equal, which refuses a pairing; it never admits one.
+ */
+export const normaliseModelId = (id: string): string => {
+  let v = id.normalize('NFKC').toLowerCase().replace(/[\u200b-\u200f\u2060\ufeff]/gu, '').trim()
+    .replace(/[\s._:@/]+/gu, '-').replace(/-+/gu, '-').replace(/^-|-$/gu, '');
+  for (;;) {
+    const next = v.replace(/-(?:v?\d+[a-z]?|preview|latest|beta|alpha|exp|experimental|rc\d*)$/u, '');
+    if (next === v || next === '') return v;
+    v = next;
+  }
+};
+
+/**
+ * The family a model id resolves to: the reviewed table first, then the explicit allowlist. Null means UNRECOGNISED,
+ * and an unrecognised id is refused; a family a person typed into config never stands in for this.
+ */
+export const resolveModelFamily = (id: string, allowlist: Readonly<Record<string, string>> = CODER_MODEL_FAMILY_ALLOWLIST): string | null => {
+  const derived = familyFromModelId(id);
+  if (derived !== null) return derived;
+  const entry = Object.prototype.hasOwnProperty.call(allowlist, normaliseModelId(id)) ? allowlist[normaliseModelId(id)] : undefined;
+  if (typeof entry !== 'string') return null;
+  const family = canonicalModelFamily(entry);
+  return KNOWN_FAMILIES.has(family) ? family : null;
+};
+
 type Refusal = { readonly failure: JuliusCodingAgentFailure; readonly providerFailureClass: string; readonly safeMessage: string };
 
 /** Validates the configuration. A refusal means nothing is sent. Exported so the wiring can refuse at construction. */
@@ -340,17 +379,24 @@ export function grokBotCoderConfigRefusal(config: GrokBotCoderConfig | null | un
   if (coderFamily === '' || reviewerFamily === '') return refuse('coder_grok_config_family_absent', 'The coder and reviewer model families are not both configured; nothing was dispatched.');
   const reviewerId = typeof config.reviewerModelId === 'string' ? config.reviewerModelId.trim() : '';
   if (reviewerId === '') return refuse('coder_grok_config_reviewer_model_absent', 'The reviewer\'s model id is not configured; independence cannot be checked, so nothing was dispatched.');
-  /* Never relaxable: the coder is never the reviewer's own model. */
-  if (reviewerId.toLowerCase() === model.trim().toLowerCase()) return refuse('coder_grok_same_model_as_reviewer', 'The coder model is the reviewer\'s own model; independence is refused.');
+  /* Never relaxable: the coder is never the reviewer's own model, compared after normalisation (case, spacing, separators,
+   * version and date suffixes), so `m-coder-20261001` is the reviewer's `m-coder`. */
+  if (normaliseModelId(reviewerId) === normaliseModelId(model)) return refuse('coder_grok_same_model_as_reviewer', 'The coder model is the reviewer\'s own model; independence is refused.');
   /* A family stated in config is a label; the model id is checked too, and either matching the reviewer's is the same family. */
-  const coderDerived = familyFromModelId(model);
-  const reviewerDerived = familyFromModelId(reviewerId);
+  const coderDerived = resolveModelFamily(model);
+  const reviewerDerived = resolveModelFamily(reviewerId);
   const coderFamilies = new Set([coderFamily, ...(coderDerived === null ? [] : [coderDerived])]);
   const reviewerFamilies = new Set([reviewerFamily, ...(reviewerDerived === null ? [] : [reviewerDerived])]);
   const sameFamily = [...coderFamilies].some((f) => reviewerFamilies.has(f));
   if (sameFamily) {
     return refuse('coder_grok_same_family_as_reviewer', 'The coder model family equals the reviewer\'s; independence is refused.');
   }
+  /* H1, FAIL CLOSED: independence rests on what the model ids resolve to, never on a declaration alone. An id the reviewed
+   * table and the allowlist cannot place (`code-supernova-1`, `fast-coder-1`) is refused, on either side; so is a stated
+   * family that disagrees with the resolved one. */
+  if (coderDerived === null) return refuse('coder_grok_model_family_unrecognised', 'The coder model id names no vendor family the reviewed table or allowlist knows; independence cannot be shown, so nothing was dispatched.');
+  if (reviewerDerived === null) return refuse('coder_grok_reviewer_family_unrecognised', 'The reviewer\'s model id names no vendor family the reviewed table or allowlist knows; independence cannot be shown, so nothing was dispatched.');
+  if (coderFamily !== coderDerived || reviewerFamily !== reviewerDerived) return refuse('coder_grok_family_declaration_mismatch', 'A stated model family disagrees with the family its model id resolves to; nothing was dispatched.');
   if (typeof config.targetRepoUrl !== 'string' || config.targetRepoUrl.trim() === '') return refuse('coder_grok_config_target_absent', 'No target repository is configured; nothing was dispatched.');
   if (isSundayRelayRepo(config.targetRepoUrl)) return refuse('coder_grok_target_is_sunday_relay', 'The Grok Bot coder never works on sunday-relay; nothing was dispatched.');
   if (parseGithubRepoUrl(config.targetRepoUrl) === null) return refuse('coder_grok_config_target_invalid', 'The target repository is not a github.com owner/repo URL; nothing was dispatched.');
