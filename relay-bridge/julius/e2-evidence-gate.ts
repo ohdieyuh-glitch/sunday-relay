@@ -2,7 +2,7 @@ import { execFile, execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, dirname, isAbsolute, join, normalize as normalizePath } from 'node:path';
+import { basename, dirname, isAbsolute, join, normalize as normalizePath, posix } from 'node:path';
 
 import { E2_STREAM_LABEL_LIVE, verifyEvidenceChain } from './cursor-run-stream-evidence';
 import { isWorkflowAnchor, type ExternalAnchor } from './e2-external-anchor';
@@ -305,12 +305,17 @@ export function parseNodeTestSummary(text: string): E2TestSummary | null {
  * HONEST LIMIT: this does not stop a coder module that writes node's own child protocol (v8-serialized test events) to
  * stdout and exits; node then reports those forged points as real (reproduced; see NOTES, round 6).
  */
+/** Round 7 R6-2: a test-file name as node prints it: `\` as `/`, duplicate separators and `.`/`..` segments folded, no leading `./`. */
+export function normalizeTestFileName(name: string): string {
+  const n = posix.normalize(name.replace(/\\/gu, '/'));
+  return n.startsWith('./') ? n.slice(2) : n;
+}
 export function fileLevelPoints(text: string, files: readonly string[]): string[] {
-  const names = new Set(files);
+  const names = new Set(files.map(normalizeTestFileName));
   const out: string[] = [];
   for (const line of text.split('\n')) {
     const m = /^(?:not )?ok \d+ - (.*)$/u.exec(line);
-    if (m !== null && names.has(m[1] as string)) out.push(m[1] as string);
+    if (m !== null && names.has(normalizeTestFileName(m[1] as string))) out.push(m[1] as string);
   }
   return out;
 }
