@@ -631,6 +631,11 @@ function materializeBase(workspace: string, base: string): string | null {
   }
   return dir;
 }
+/** Round 7 (PILOT BR3/BR4): what one base run registered, or null when it is not a usable count (incomplete/truncated
+ * TAP, no summary, a file-level synthetic point, points != summary, or zero tests). Exported for its kill tests. */
+export function baseRegisteredCount(tap: ReturnType<typeof analyzeTap>): number | null {
+  return tap.complete && tap.summary !== null && tap.fileLevelPoints.length === 0 && tap.testPoints === tap.summary.tests && tap.summary.tests > 0 ? tap.summary.tests : null;
+}
 /**
  * Round 6 R5-1 (Skywalker addendum): {@link pinVerifierSpec}, then each node --test command is run by the TRUSTED spawn
  * runner on a fresh copy of the BASE tree (base code, base test files; nothing the coder wrote). The number of tests
@@ -649,8 +654,7 @@ export async function pinVerifierSpecWithBaseRun(input: E2MissionVerifierInput, 
     for (const [i, argv] of spec.commands.entries()) {
       if (spec.minTests[i] === null) { registered.push(null); continue; }
       const { tail, truncated } = await run(runner, argv, dir);
-      const tap = analyzeTap(tail, testFilesOf(argv), truncated);
-      registered.push(tap.complete && tap.summary !== null && tap.fileLevelPoints.length === 0 && tap.testPoints === tap.summary.tests && tap.summary.tests > 0 ? tap.summary.tests : null);
+      registered.push(baseRegisteredCount(analyzeTap(tail, testFilesOf(argv), truncated)));
     }
   } finally { rmSync(dir, { recursive: true, force: true }); }
   const out: E2VerifierSpec = Object.freeze({ ...spec, minTests: Object.freeze(spec.minTests.map((f, i) => (f === null ? null : Math.max(f, registered[i] ?? 0)))), baseRegistered: Object.freeze(registered) });
