@@ -58,6 +58,9 @@ describe('PILOT 43b93a4e M-8: the diff bytes do not depend on repository config 
     writeFileSync(join(r.repo, '.git', 'info', 'attributes'), 'a.txt -diff\n');
     const d = await recordGitDiff({ ...r, cwd: r.repo, runner });
     expect(d?.isolated).toBe(false);
+    const s = await liveCapture('attrs.jsonl', stream({ name: 'edit_file', args: { path: 'a.txt' } }, { name: 'edit_file', args: { path: 'b.txt' } }));
+    const reexec = await recordVerifierReexec({ commands: [[process.execPath, join(root, 'ok.cjs')]], cwd: r.repo, runner });
+    expect(e2Gate({ streamLines: s.lines, anchor: s.anchor, reexec, diff: d, binding: { runId: RUN, base: r.base, head: r.head, workspace: r.repo }, modelId: MODEL })).toEqual({ ok: false, reasons: ['e2_diff_not_isolated'] });
     const clean = makeRepo('attrs-clean');
     expect((await recordGitDiff({ ...clean, cwd: clean.repo, runner }))?.isolated).toBe(true);
   });

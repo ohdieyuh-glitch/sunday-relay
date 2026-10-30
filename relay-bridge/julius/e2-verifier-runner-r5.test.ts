@@ -41,6 +41,11 @@ describe('PILOT N-3: the program allowlist', () => {
       expect(isVerifierCommandAllowed(a, dir), a.join(' ')).toBe(false);
     }
   });
+  it('node -e stays refused even when a file named -e exists in the cwd', () => {
+    writeFileSync(join(dir, '-e'), 'process.exit(0)\n');
+    expect(isVerifierCommandAllowed(['node', '-e', '0'], dir)).toBe(false);
+    expect(isVerifierCommandAllowed([NODE, '-e'], dir)).toBe(false);
+  });
   it('recordVerifierReexec refuses a non-allowlisted command before running anything', async () => {
     let ran = 0;
     const runner = async () => { ran += 1; return { exitCode: 0, stdout: '', stderr: '' }; };

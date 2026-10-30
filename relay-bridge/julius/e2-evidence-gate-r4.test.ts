@@ -96,6 +96,15 @@ describe('PILOT 43b93a4e N-1 / mutant M2: the gate recounts the final record fro
     const p = await parts();
     expect(reasons(e2Gate({ streamLines: forged, anchor: anchorOf(forged), ...p, modelId: MODEL }))).toContain('e2_final_record_mismatch');
   });
+  it('mutant M2: an ERROR run re-chained consistently (event and final both ERROR) is refused as not finished', async () => {
+    const { lines } = await liveCapture('m2b.jsonl', GOOD);
+    const forged = rechain(lines, (r) => {
+      if (r.kind === 'event' && r.event === 'result') r.data = JSON.stringify({ runId: RUN, status: 'ERROR', durationMs: 10 });
+      if (r.kind === 'final') r.terminal = { ...(r.terminal as object), status: 'ERROR' };
+    });
+    const p = await parts();
+    expect(reasons(e2Gate({ streamLines: forged, anchor: anchorOf(forged), ...p, modelId: MODEL }))).toEqual(['e2_stream_terminal_not_finished']);
+  });
   it('a tool_call event removed (final still counts it), or an unfinished call hidden, is refused', async () => {
     const { lines } = await liveCapture('n1.jsonl', GOOD);
     const p = await parts();
