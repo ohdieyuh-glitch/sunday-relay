@@ -320,6 +320,7 @@ export const E2_GATE_REASONS = Object.freeze([
   'e2_model_absent', 'e2_model_router', 'e2_model_claude', 'e2_model_unrecognised',
   'e2_final_record_mismatch', 'e2_no_edit_calls', 'e2_diff_empty', 'e2_stream_mid_run_start', 'e2_model_unbound',
   'e2_diff_not_isolated', 'e2_edit_path_not_in_diff', 'e2_edit_path_unknown',
+  'e2_anchor_not_external',
 ] as const);
 export type E2GateReason = (typeof E2_GATE_REASONS)[number];
 
@@ -327,13 +328,41 @@ export type E2GateReason = (typeof E2_GATE_REASONS)[number];
 export interface E2Binding { readonly runId: string; readonly base: string; readonly head: string; readonly workspace: string }
 /**
  * The final hash recorded OUTSIDE the capture (workflow output, ledger). The gate never takes it from the file.
- * PILOT 43b93a4e N-1: the anchor MUST come from a separate trust domain (a record the writer of the evidence file cannot
- * also rewrite). An anchor derived from the file itself, or kept next to it by the same writer, is NOT independent: whoever
- * can re-chain the file can recompute it. The gate cannot tell where an anchor came from; that is the caller's obligation.
- * The gate does recount every fact it grades from the events, so a re-chained file whose final record disagrees with its
- * own events is refused even with a matching anchor; a re-chained file whose events were also rewritten is not detectable.
+ * PILOT 5366ad30 R3-1: ENFORCED by type and by a module-private registry. The gate accepts only an {@link ExternalAnchor}
+ * made by {@link externalAnchor} with a source from the closed set {@link E2_EXTERNAL_ANCHOR_SOURCES}; a bare object, a
+ * string, a copy, or an anchor labelled `evidence_file` / `capturing_process` is refused with `e2_anchor_not_external`.
+ * {@link anchorFromEvidenceFile} and {@link anchorFromCapture} exist only so a caller that has nothing better gets a
+ * refusal with a name instead of a silent pass. HONEST LIMIT: the label is the caller's claim. A writer who controls the
+ * events, the final record AND the external anchor source still wins; the workflow side must hold the anchor (write it
+ * from the workflow right after capture and read it back from that output only). The gate cannot verify provenance.
  */
-export interface E2Anchor { readonly finalHash: string }
+export const E2_EXTERNAL_ANCHOR_SOURCES = Object.freeze(['workflow_output', 'ledger_hash'] as const);
+export type E2ExternalAnchorSource = (typeof E2_EXTERNAL_ANCHOR_SOURCES)[number];
+export type E2UntrustedAnchorSource = 'evidence_file' | 'capturing_process';
+declare const ANCHOR_BRAND: unique symbol;
+export interface ExternalAnchor { readonly finalHash: string; readonly source: E2ExternalAnchorSource | E2UntrustedAnchorSource; readonly [ANCHOR_BRAND]: true }
+/** @deprecated alias kept for callers; only branded anchors pass. */
+export type E2Anchor = ExternalAnchor;
+const ANCHORS = new WeakSet<object>();
+const mkAnchor = (source: E2ExternalAnchorSource | E2UntrustedAnchorSource, finalHash: unknown): ExternalAnchor => {
+  const a = Object.freeze({ finalHash: typeof finalHash === 'string' ? finalHash : '', source }) as ExternalAnchor;
+  ANCHORS.add(a);
+  return a;
+};
+/** The only way to make an anchor the gate can accept. An unknown source throws (no default, no coercion). */
+export function externalAnchor(source: E2ExternalAnchorSource, finalHash: string): ExternalAnchor {
+  if (!(E2_EXTERNAL_ANCHOR_SOURCES as readonly string[]).includes(source)) throw new TypeError(`e2: anchor source must be one of ${E2_EXTERNAL_ANCHOR_SOURCES.join(', ')}`);
+  return mkAnchor(source, finalHash);
+}
+/** An anchor read from the evidence file itself: always refused by the gate (`e2_anchor_not_external`). */
+export function anchorFromEvidenceFile(lines: readonly string[]): ExternalAnchor {
+  const c = verifyEvidenceChain(lines);
+  return mkAnchor('evidence_file', c.ok ? c.finalHash : '');
+}
+/** An anchor taken from the capturing process's own result object: always refused (`e2_anchor_not_external`). */
+export const anchorFromCapture = (evidence: { readonly finalHash: string }): ExternalAnchor => mkAnchor('capturing_process', evidence.finalHash);
+const isExternal = (a: unknown): a is ExternalAnchor => typeof a === 'object' && a !== null && ANCHORS.has(a)
+  && (E2_EXTERNAL_ANCHOR_SOURCES as readonly string[]).includes((a as ExternalAnchor).source);
 
 /**
  * Skywalker N1 (0774db05): model ids are compared after NFKC, trimming and the provider's lookalike folding, so `AUTO `,
@@ -414,7 +443,7 @@ function modelReason(modelId: unknown): E2GateReason | null {
 /** All three parts, all real, bound together and anchored, or refused with every reason. Never the diff alone. */
 export function e2Gate(input: {
   readonly streamLines: readonly string[] | null | undefined;
-  readonly anchor: E2Anchor | null | undefined;
+  readonly anchor: ExternalAnchor | null | undefined;
   readonly reexec: E2ReexecEvidence | null | undefined;
   readonly diff: E2DiffEvidence | null | undefined;
   readonly modelId: string | null | undefined;
@@ -431,8 +460,10 @@ export function e2Gate(input: {
     const chain = verifyEvidenceChain(streamLines);
     if (!chain.ok || chain.finalHash === '') reasons.push('e2_stream_chain_invalid');
     else {
-      const anchorHash = anchor !== null && anchor !== undefined && typeof anchor === 'object' ? anchor.finalHash : undefined;
-      if (typeof anchorHash !== 'string' || anchorHash === '') reasons.push('e2_anchor_absent');
+      const anchorHash = isExternal(anchor) ? anchor.finalHash : undefined;
+      if (anchor === null || anchor === undefined) reasons.push('e2_anchor_absent');
+      else if (!isExternal(anchor)) reasons.push('e2_anchor_not_external');
+      else if (typeof anchorHash !== 'string' || anchorHash === '') reasons.push('e2_anchor_absent');
       else if (anchorHash !== chain.finalHash) reasons.push('e2_anchor_mismatch');
       header = JSON.parse(streamLines[0] as string) as Record<string, unknown>;
       const fin = JSON.parse(streamLines[streamLines.length - 1] as string) as Record<string, unknown>;
