@@ -132,9 +132,9 @@ describe('E2 opener: the run stream through the existing transport', () => {
   it('the scrubber is bound to the key that was sent: patterns redact; surviving key characters are residue', async () => {
     const r = await openCursorRunStream(harness(() => ok()).transport, REF, null, { deadlineAtMs: 60_000 });
     if (r.kind !== 'opened') throw new Error('not opened');
-    expect(r.scrub('plain')).toEqual({ kind: 'clean', text: 'plain', scrubbed: false });
-    expect(r.scrub(`a ${KEY} b`)).toEqual({ kind: 'clean', text: 'a [REDACTED] b', scrubbed: true });
-    expect(r.scrub(`a ${Buffer.from(KEY).toString('base64')} b`)).toEqual({ kind: 'clean', text: 'a [REDACTED] b', scrubbed: true });
+    expect(r.scrub('plain')).toEqual({ kind: 'clean', text: 'plain', scrubbed: false, secrets: 0 });
+    expect(r.scrub(`a ${KEY} b`)).toEqual({ kind: 'clean', text: 'a [REDACTED] b', scrubbed: true, secrets: 0 });
+    expect(r.scrub(`a ${Buffer.from(KEY).toString('base64')} b`)).toEqual({ kind: 'clean', text: 'a [REDACTED] b', scrubbed: true, secrets: 0 });
     expect(r.scrub(KEY.split('').join('  '))).toEqual({ kind: 'residue' });
     expect(r.scrub([...KEY].reverse().join(''))).toEqual({ kind: 'residue' });
   });
