@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  GROK_BOT_CODER_CONFIG_DEFAULTS, GROK_BOT_CODER_PROVIDER_KIND, GROK_CODER_FOUNDER_AUTHORIZATION_TOKEN, GROK_CODER_REQUESTED_MODEL_UNATTESTED_EVIDENCE,
+  GROK_BOT_CODER_CONFIG_DEFAULTS, GROK_BOT_CODER_PROVIDER_KIND, canonicalModelFamily, familyFromModelId, GROK_CODER_FOUNDER_AUTHORIZATION_TOKEN, GROK_CODER_REQUESTED_MODEL_UNATTESTED_EVIDENCE,
   createGrokBotCodingAgentProvider, createShellGrokBotWorkspacePort, grokBotCoderConfigRefusal, grokCoderAgentId, grokCoderIdempotencyKey,
   isSafeBranchName, isSundayRelayRepo,
   type CodingAgentCreateInput, type CodingAgentCreateOutcome, type CodingAgentPollOutcome, type CodingAgentResultOutcome, type CodingAgentTransport,
@@ -32,7 +32,7 @@ const request = (over: Partial<{ budget: number | null; permittedPaths: string[]
 
 const config = (over: Partial<GrokBotCoderConfig> = {}): GrokBotCoderConfig => ({
   ...GROK_BOT_CODER_CONFIG_DEFAULTS,
-  pinnedModelId: MODEL, coderModelFamily: 'vendor-a', reviewerModelFamily: 'vendor-b', targetRepoUrl: TARGET, runDeadlineMs: 60_000,
+  pinnedModelId: MODEL, coderModelFamily: 'vendor-a', reviewerModelFamily: 'vendor-b', reviewerModelId: 'fake-reviewer-model', targetRepoUrl: TARGET, runDeadlineMs: 60_000,
   ...over,
 });
 
@@ -294,10 +294,45 @@ describe('configuration fails closed, before anything is sent', () => {
     expect(await refusedClass(config({ pinnedModelId: 'claude-opus-5-5' }))).toBe('coder_grok_model_claude_refused');
     expect(await refusedClass(config({ pinnedModelId: 'auto' }))).toBe('coder_grok_model_router_refused');
   });
-  it('same family as the reviewer is refused unless explicitly allowed', async () => {
+  it('same family as the reviewer is refused; the allow flag works only with the non-TODO founder pin', async () => {
     expect(await refusedClass(config({ coderModelFamily: 'xai', reviewerModelFamily: 'XAI ' }))).toBe('coder_grok_same_family_as_reviewer');
     expect(await refusedClass(config({ coderModelFamily: null }))).toBe('coder_grok_config_family_absent');
-    completed((await run({ cfg: config({ coderModelFamily: 'xai', reviewerModelFamily: 'xai', allowSameFamilyAsReviewer: true }) })).outcome);
+    expect(await refusedClass(config({ coderModelFamily: 'xai', reviewerModelFamily: 'xai', allowSameFamilyAsReviewer: true }))).toBe('coder_grok_same_family_as_reviewer');
+    expect(await refusedClass(config({ coderModelFamily: 'xai', reviewerModelFamily: 'xai', allowSameFamilyAsReviewer: true, founderAuthorizationToken: GROK_CODER_FOUNDER_AUTHORIZATION_TOKEN }))).toBe('coder_grok_same_family_as_reviewer');
+    const pin = 'founder-pin-test-0001';
+    expect(failed((await run({ cfg: config({ coderModelFamily: 'xai', reviewerModelFamily: 'xai', allowSameFamilyAsReviewer: true, founderAuthorizationToken: `${pin}x` }), pin })).outcome).providerFailureClass).toBe('coder_grok_same_family_as_reviewer');
+    completed((await run({ cfg: config({ coderModelFamily: 'xai', reviewerModelFamily: 'xai', allowSameFamilyAsReviewer: true, founderAuthorizationToken: pin }), pin })).outcome);
+  });
+  it('H1: aliases are one family, the family is also read from the model id, and the reviewer\'s own model is never the coder', async () => {
+    for (const [coder, reviewer] of [['xai', 'x.ai'], ['x-ai', 'XAI'], ['grok', 'xai'], ['x_ai', 'Grok '], ['anthropic', 'claude'], ['openai', 'gpt'], ['composer', 'cursor']]) {
+      expect(await refusedClass(config({ coderModelFamily: coder, reviewerModelFamily: reviewer })), `${coder}/${reviewer}`).toBe('coder_grok_same_family_as_reviewer');
+    }
+    /* Stated families differ, but both model ids name xAI. */
+    expect(await refusedClass(config({ pinnedModelId: 'grok-code-fast-1', coderModelFamily: 'vendor-a', reviewerModelFamily: 'vendor-b', reviewerModelId: 'grok-4' }))).toBe('coder_grok_same_family_as_reviewer');
+    expect(await refusedClass(config({ pinnedModelId: 'xai-coder-2', coderModelFamily: 'cursor', reviewerModelFamily: 'xai', reviewerModelId: 'fake-reviewer-model' }))).toBe('coder_grok_same_family_as_reviewer');
+    expect(await refusedClass(config({ pinnedModelId: 'fake-coder', coderModelFamily: 'xai', reviewerModelFamily: 'vendor-b', reviewerModelId: 'Grok-4.2' }))).toBe('coder_grok_same_family_as_reviewer');
+    /* The reviewer's own id, in any case: refused even with the founder pin and the allow flag. */
+    const pin = 'founder-pin-test-0002';
+    for (const id of [MODEL, MODEL.toUpperCase(), ` ${MODEL} `]) {
+      expect(failed((await run({ cfg: config({ reviewerModelId: id, allowSameFamilyAsReviewer: true, founderAuthorizationToken: pin }), pin })).outcome).providerFailureClass).toBe('coder_grok_same_model_as_reviewer');
+    }
+    expect(await refusedClass(config({ reviewerModelId: null }))).toBe('coder_grok_config_reviewer_model_absent');
+    expect(await refusedClass(config({ reviewerModelId: '  ' }))).toBe('coder_grok_config_reviewer_model_absent');
+    expect(canonicalModelFamily(' X.AI ')).toBe('xai');
+    expect(familyFromModelId('grok-code-fast-1')).toBe('xai');
+    expect(familyFromModelId('composer-1')).toBe('cursor');
+    expect(familyFromModelId('fake-coder-1')).toBeNull();
+  });
+  it('L1: router aliases and Claude lookalikes in any spelling are refused', async () => {
+    for (const id of ['auto', 'Auto', 'AUTO', 'cursor-auto', 'auto-smart', 'best', 'default', 'default-model', 'model.default', 'latest', 'router']) {
+      expect(await refusedClass(config({ pinnedModelId: id })), id).toBe('coder_grok_model_router_refused');
+    }
+    for (const id of ['c1aude-4', 'cl4ude-4', 'CLAUDE-4', 's0nnet-4', '0pus-5', 'Haiku-3']) {
+      expect(await refusedClass(config({ pinnedModelId: id })), id).toBe('coder_grok_model_claude_refused');
+    }
+    /* Non-ASCII spellings (fullwidth, zero-width) never pass the model-id shape. */
+    expect(await refusedClass(config({ pinnedModelId: 'claude\u200b-4' }))).not.toBeNull();
+    expect(await refusedClass(config({ pinnedModelId: 'ｃｌａｕｄｅ-4' }))).not.toBeNull();
   });
   it('the model id and family are pure config: a non-xAI coder (e.g. a Composer-style id) and an xAI coder both run against a different-family reviewer', async () => {
     const composer = fakeTransport({ result: goodResult({ reportedModelId: 'fake-composer-model' }) });

@@ -23,7 +23,7 @@ const transport: CodingAgentTransport = {
   fetchResult: async () => ({ kind: 'unavailable', cause: 'x' }), cancelRun: async () => 'failed',
 };
 const workspace: GrokBotWorkspacePort = { baseRevision: async () => ({ ok: false, cause: 'x' }), fetchBranch: async () => ({ ok: false, cause: 'x' }), applyFetched: async () => ({ ok: false, cause: 'x' }) };
-const config = { ...GROK_BOT_CODER_CONFIG_DEFAULTS, pinnedModelId: 'fake-coder-1', coderModelFamily: 'a', reviewerModelFamily: 'b', targetRepoUrl: 'https://github.com/example-org/t', runDeadlineMs: 60_000 };
+const config = { ...GROK_BOT_CODER_CONFIG_DEFAULTS, pinnedModelId: 'fake-coder-1', coderModelFamily: 'a', reviewerModelFamily: 'b', reviewerModelId: 'fake-reviewer-model', targetRepoUrl: 'https://github.com/example-org/t', runDeadlineMs: 60_000 };
 
 describe('the fetch allow-list: Cursor is off by default, and the default is byte-identical to main', () => {
   it('default j1PinnedFetchUrl answers every sample exactly as main does', () => {

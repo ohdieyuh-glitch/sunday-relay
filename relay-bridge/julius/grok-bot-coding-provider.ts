@@ -224,7 +224,9 @@ export interface GrokBotCoderConfig {
   readonly coderModelFamily: string | null;
   /** The reviewer's model family, stated by a person. No default. */
   readonly reviewerModelFamily: string | null;
-  /** Default false: a coder of the reviewer's family is refused. */
+  /** The reviewer's own model id. Required: the coder may never be the reviewer's model, and its family is derived from it. */
+  readonly reviewerModelId: string | null;
+  /** Default false: a coder of the reviewer's family is refused. Effective ONLY with the non-TODO founder pin (as the unattested relaxation). */
   readonly allowSameFamilyAsReviewer: boolean;
   /** Default false. Takes effect only with `founderAuthorizationToken` equal to a non-TODO founder constant. */
   readonly acceptRequestedModelUnattested: boolean;
@@ -241,6 +243,7 @@ export const GROK_BOT_CODER_CONFIG_DEFAULTS: GrokBotCoderConfig = Object.freeze(
   pinnedModelId: null,
   coderModelFamily: null,
   reviewerModelFamily: null,
+  reviewerModelId: null,
   allowSameFamilyAsReviewer: false,
   acceptRequestedModelUnattested: false,
   founderAuthorizationToken: null,
@@ -252,24 +255,62 @@ export const GROK_BOT_CODER_CONFIG_DEFAULTS: GrokBotCoderConfig = Object.freeze(
 const MAX_RUN_DEADLINE_MS = 6 * 60 * 60 * 1000;
 const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
 const CLAUDE_LIKE = /claude|anthropic|opus|sonnet|haiku/iu;
-const ROUTER_ALIASES = new Set(['auto', 'default', 'auto-smart', 'auto-fast']);
+const ROUTER_ALIASES = new Set(['auto', 'default', 'auto-smart', 'auto-fast', 'best', 'fast', 'smart', 'latest', 'router']);
+/** Any id with one of these as a dash/dot/underscore-delimited token is a router, not a pinned model (`cursor-auto`, `default-model`). */
+const ROUTER_TOKEN = /(^|[-._:])(auto|default|best|router|latest)($|[-._:])/u;
+/** Digit/letter lookalikes folded before the Claude and alias checks (`c1aude`, `0pus`, `s0nnet`). */
+const foldLookalikes = (v: string): string => v.toLowerCase().normalize('NFKC').replace(/[1|!]/gu, 'l').replace(/0/gu, 'o').replace(/3/gu, 'e').replace(/5/gu, 's').replace(/4/gu, 'a').replace(/[\u200b-\u200f\ufeff]/gu, '');
+
+/** One canonical family per vendor, whatever a person typed. Unknown labels stay as typed (lower-cased, trimmed). */
+const FAMILY_ALIASES: Readonly<Record<string, string>> = Object.freeze({
+  xai: 'xai', 'x.ai': 'xai', 'x-ai': 'xai', x_ai: 'xai', 'x ai': 'xai', grok: 'xai', 'xai-grok': 'xai',
+  anthropic: 'anthropic', claude: 'anthropic',
+  openai: 'openai', 'open-ai': 'openai', 'open ai': 'openai', gpt: 'openai', codex: 'openai',
+  cursor: 'cursor', composer: 'cursor', 'cursor-composer': 'cursor',
+  google: 'google', gemini: 'google', deepmind: 'google',
+});
+export const canonicalModelFamily = (label: string): string => {
+  const v = label.trim().toLowerCase();
+  return FAMILY_ALIASES[v] ?? v;
+};
+/** The family a model id itself names, or null when it names none this table knows. */
+export const familyFromModelId = (id: string): string | null => {
+  const v = foldLookalikes(id);
+  const raw = id.trim().toLowerCase();
+  if (/grok|xai/u.test(v) || /grok|xai/u.test(raw)) return 'xai';
+  if (/claude|anthropic|opus|sonnet|haiku/u.test(v)) return 'anthropic';
+  if (/gpt|openai|codex/u.test(v) || /(^|[-._])o[1-9]($|[-._])/u.test(raw)) return 'openai';
+  if (/gemini/u.test(v)) return 'google';
+  if (/composer|cursor/u.test(v)) return 'cursor';
+  return null;
+};
 
 type Refusal = { readonly failure: JuliusCodingAgentFailure; readonly providerFailureClass: string; readonly safeMessage: string };
 
 /** Validates the configuration. A refusal means nothing is sent. Exported so the wiring can refuse at construction. */
-export function grokBotCoderConfigRefusal(config: GrokBotCoderConfig | null | undefined): Refusal | null {
+export function grokBotCoderConfigRefusal(config: GrokBotCoderConfig | null | undefined, pin: string = GROK_CODER_FOUNDER_AUTHORIZATION_TOKEN): Refusal | null {
   const refuse = (providerFailureClass: string, safeMessage: string, failure: JuliusCodingAgentFailure = 'LAUNCH_FAILED'): Refusal =>
     ({ failure, providerFailureClass, safeMessage });
   if (config === null || config === undefined) return refuse('coder_grok_config_absent', 'The Grok Bot coder is not configured; nothing was dispatched.');
   const model = config.pinnedModelId;
   if (typeof model !== 'string' || !MODEL_ID.test(model)) return refuse('coder_grok_config_model_absent', 'No pinned Grok Bot coder model id is configured; nothing was dispatched.');
-  if (CLAUDE_LIKE.test(model)) return refuse('coder_grok_model_claude_refused', 'The Grok Bot coder refuses a Claude model; there is no Claude fallback.');
-  if (ROUTER_ALIASES.has(model.toLowerCase())) return refuse('coder_grok_model_router_refused', 'The Grok Bot coder refuses a router alias; the model must be pinned.');
-  const coderFamily = typeof config.coderModelFamily === 'string' ? config.coderModelFamily.trim().toLowerCase() : '';
-  const reviewerFamily = typeof config.reviewerModelFamily === 'string' ? config.reviewerModelFamily.trim().toLowerCase() : '';
+  if (CLAUDE_LIKE.test(model) || CLAUDE_LIKE.test(foldLookalikes(model))) return refuse('coder_grok_model_claude_refused', 'The Grok Bot coder refuses a Claude model; there is no Claude fallback.');
+  if (ROUTER_ALIASES.has(foldLookalikes(model)) || ROUTER_TOKEN.test(foldLookalikes(model))) return refuse('coder_grok_model_router_refused', 'The Grok Bot coder refuses a router alias; the model must be pinned.');
+  const coderFamily = typeof config.coderModelFamily === 'string' ? canonicalModelFamily(config.coderModelFamily) : '';
+  const reviewerFamily = typeof config.reviewerModelFamily === 'string' ? canonicalModelFamily(config.reviewerModelFamily) : '';
   if (coderFamily === '' || reviewerFamily === '') return refuse('coder_grok_config_family_absent', 'The coder and reviewer model families are not both configured; nothing was dispatched.');
-  if (coderFamily === reviewerFamily && config.allowSameFamilyAsReviewer !== true) {
-    return refuse('coder_grok_same_family_as_reviewer', 'The coder model family equals the reviewer\'s; independence is refused unless explicitly allowed.');
+  const reviewerId = typeof config.reviewerModelId === 'string' ? config.reviewerModelId.trim() : '';
+  if (reviewerId === '') return refuse('coder_grok_config_reviewer_model_absent', 'The reviewer\'s model id is not configured; independence cannot be checked, so nothing was dispatched.');
+  /* Never relaxable: the coder is never the reviewer's own model. */
+  if (reviewerId.toLowerCase() === model.trim().toLowerCase()) return refuse('coder_grok_same_model_as_reviewer', 'The coder model is the reviewer\'s own model; independence is refused.');
+  /* A family stated in config is a label; the model id is checked too, and either matching the reviewer's is the same family. */
+  const coderDerived = familyFromModelId(model);
+  const reviewerDerived = familyFromModelId(reviewerId);
+  const coderFamilies = new Set([coderFamily, ...(coderDerived === null ? [] : [coderDerived])]);
+  const reviewerFamilies = new Set([reviewerFamily, ...(reviewerDerived === null ? [] : [reviewerDerived])]);
+  const sameFamily = [...coderFamilies].some((f) => reviewerFamilies.has(f));
+  if (sameFamily && !(config.allowSameFamilyAsReviewer === true && founderPinValid(config, pin))) {
+    return refuse('coder_grok_same_family_as_reviewer', 'The coder model family equals the reviewer\'s; independence is refused unless the founder authorizes it.');
   }
   if (typeof config.targetRepoUrl !== 'string' || config.targetRepoUrl.trim() === '') return refuse('coder_grok_config_target_absent', 'No target repository is configured; nothing was dispatched.');
   if (isSundayRelayRepo(config.targetRepoUrl)) return refuse('coder_grok_target_is_sunday_relay', 'The Grok Bot coder never works on sunday-relay; nothing was dispatched.');
@@ -287,8 +328,12 @@ export function grokBotCoderConfigRefusal(config: GrokBotCoderConfig | null | un
 
 /** Whether the founder relaxation applies. A TODO-FOUNDER pin can never authorize anything. */
 export function grokCoderUnattestedRelaxationApplies(config: GrokBotCoderConfig, pin: string = GROK_CODER_FOUNDER_AUTHORIZATION_TOKEN): boolean {
-  return config.acceptRequestedModelUnattested === true
-    && typeof config.founderAuthorizationToken === 'string'
+  return config.acceptRequestedModelUnattested === true && founderPinValid(config, pin);
+}
+/** The config carries exactly the founder pin, and the pin is not a TODO placeholder. */
+function founderPinValid(config: GrokBotCoderConfig, pin: string): boolean {
+  return typeof config.founderAuthorizationToken === 'string'
+    && typeof pin === 'string' && pin.length > 0
     && !pin.startsWith(TODO_FOUNDER_PREFIX)
     && config.founderAuthorizationToken === pin;
 }
@@ -332,7 +377,7 @@ export function createGrokBotCodingAgentProvider(input: {
       const aborted = (): boolean => signal?.aborted === true;
       if (aborted()) return notStarted('CANCELLED', 'coder_cancelled_before_launch', 'The dispatch was cancelled before the Grok Bot coder was created.');
 
-      const refusal = grokBotCoderConfigRefusal(input.config);
+      const refusal = grokBotCoderConfigRefusal(input.config, pin);
       if (refusal !== null) return notStarted(refusal.failure, refusal.providerFailureClass, refusal.safeMessage);
       const config = input.config as GrokBotCoderConfig;
       const transport = input.transport;
