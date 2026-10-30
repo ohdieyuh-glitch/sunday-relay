@@ -422,7 +422,6 @@ void UWonderlandJuliusMissionSubsystem::SyncMissionContract()
 		ContractPhaseWord.Reset();
 		bContractReleased = false;
 		bContractSuspended = false;
-		bGradingReleased = false;
 		RunCompletedSeenUtcMs = 0;
 		bAwaitingVerdict = false;
 	}
@@ -448,7 +447,10 @@ void UWonderlandJuliusMissionSubsystem::SyncMissionContract()
 		&& ResultRead.AtUtcMs >= RunCompletedSeenUtcMs + VerdictReadSlackMs && VerdictNowMs >= RunCompletedSeenUtcMs + VerdictGraceMs;
 	Read.bOutcomeUnknown = Result.bOutcomeUnknown;
 	Read.OutcomeUnknownCause = Result.OutcomeUnknownCause;
-	const FExecutionView View = ExecutionViewFor(Host->LiveFeed, true, ToStd(StartWorkflowRunId), Read);
+	FExecutionView View = ExecutionViewFor(Host->LiveFeed, true, ToStd(StartWorkflowRunId), Read);
+	// SUCCESS NEEDS THE VERIFIED COMPLETION (founder + YUJI 2026-10-30): this run's /status must say completed + PASS +
+	// verified_completion before the success beat; until then the view stays a neutral grading wait.
+	View.Phase = SuccessGatedByStatus(View.Phase, StatusRunId == Run && Host->LastStatus.bOk ? &Host->LastStatus : nullptr); // SUBSYSTEM_SUCCESS_GATED_BY_STATUS
 	// Keep reading /result past the wrapper's final read while the run is over and no verdict has come.
 	bAwaitingVerdict = RunCompletedSeenUtcMs != 0 && View.Phase == EExecutionPhase::Grading;
 	// ...and after a stop that followed confirmed execution (#75): outcomeUnknown reaches /result only once the whole run
@@ -528,10 +530,10 @@ void UWonderlandJuliusMissionSubsystem::SyncMissionContract()
 			: UnknownCause == TEXT("HANDED_FAILURE_OUTCOME_UNKNOWN") ? FString(TEXT(" (connection failed)"))
 			: UnknownCause == TEXT("HANDED_OUTCOME_UNKNOWN") ? FString(TEXT(" (interrupted)")) : FString();
 		JuliusState.Value = View.Phase == EExecutionPhase::DidNotStart ? FString::Printf(TEXT("MISSION DID NOT START (%s)"), *ToF(View.Detail))
-			: View.Phase == EExecutionPhase::OutcomeUnknown ? FString::Printf(TEXT("Outcome unknown: Julius stopped this step and did not retry it%s"), *UnknownDetail)
+			: View.Phase == EExecutionPhase::OutcomeUnknown ? FString::Printf(TEXT("OUTCOME UNKNOWN - needs reconciliation (operator): Julius stopped this step and did not retry it%s"), *UnknownDetail)
 			: View.Phase == EExecutionPhase::Failed && (View.Detail.empty() || View.Detail == "Checker: FAIL") ? FString(TEXT("MISSION FAILED (Checker: FAIL)"))
 			: View.Phase == EExecutionPhase::Failed ? FString::Printf(TEXT("MISSION INTERRUPTED (%s)"), *ToF(View.Detail))
-			: View.Phase == EExecutionPhase::Grading ? FString(TEXT("GRADING - waiting for the pinned checker"))
+			: View.Phase == EExecutionPhase::Grading ? FString(TEXT("GRADING - the pinned checker is verifying (not a result yet)"))
 			: View.Phase == EExecutionPhase::FailedUnverified ? FString(TEXT("MISSION FAILED (no verdict; not verified)"))
 			: View.Phase == EExecutionPhase::Cancelled ? FString(TEXT("MISSION CANCELLED"))
 			: PhaseWord;
@@ -544,25 +546,22 @@ void UWonderlandJuliusMissionSubsystem::SyncMissionContract()
 		// THE OUTCOME LANDS ON A CLEARED STAGE. A run restored already complete replays run.started and run.completed in
 		// one tick; the completion beat carries no act, so without this the Dog kept performing PREPARATION. Live, the
 		// grading release has already cleared it, so this changes nothing there.
-		if (Beat.Type == "run.completed") { Contract->ReleaseRealRunBeat(); }
+		// The failure ending (Skywalker 2026-10-30) lands on a cleared stage the same way.
+		if (Beat.Type == "run.completed" || Beat.Type == "run.failed") { Contract->ReleaseRealRunBeat(); } // SUBSYSTEM_ENDING_ON_CLEARED_STAGE
 		const bool bApplied = Contract->OfferRealJuliusEvent(FName(*ToF(Beat.Type)), FName(*MissionId), FName(*Run),
 			ContractRole(Beat.Role), static_cast<int32>(Beat.RepairRound));
 		UE_LOG(LogJuliusJ1, Display, TEXT("{\"event\":\"contract_beat\",\"wlj_run_id\":\"%s\",\"type\":\"%s\",\"applied\":%s,\"beat\":\"%s\"}"),
 			*Run, *ToF(Beat.Type), bApplied ? TEXT("true") : TEXT("false"), *Contract->GetBeatLabel());
 	}
-	// GRADING IS NEUTRAL (MAIN JULIUS): the stage releases once so nothing loops; success, if it comes, re-shows it.
-	if (View.Phase == EExecutionPhase::Grading && !bGradingReleased)
-	{
-		bGradingReleased = true;
-		Contract->ReleaseRealRunBeat();
-	}
+	// GRADING IS NEVER A BLANK BEAT (Skywalker 2026-10-30): the task row shows VERIFICATION (ContractTaskStateFor) and
+	// the stage keeps what the backend last reported; nothing is released here.
 	if (ContractCursor->Released() && !bContractReleased)
 	{
-		// INTERRUPT AT ONCE (founder acceptance): no ending sequence, no loop, no success; the beat leaves the stage and
-		// the task is terminal, so the Dog returns to idle/follow. The message stays on the contract's task line.
+		// OUTCOME UNKNOWN (Skywalker 2026-10-30): no success and no failure animation. The stage clears and the task line
+		// carries the labelled "needs reconciliation" state. Failure endings play run.failed instead (above).
 		bContractReleased = true;
-		Contract->ReleaseRealRunBeat();
-		UE_LOG(LogJuliusJ1, Display, TEXT("{\"event\":\"contract_interrupted\",\"wlj_run_id\":\"%s\",\"phase\":\"%s\",\"beat\":\"%s\"}"),
+		Contract->ReleaseRealRunBeat(); // SUBSYSTEM_UNKNOWN_PLAYS_NO_ENDING
+		UE_LOG(LogJuliusJ1, Display, TEXT("{\"event\":\"contract_outcome_unknown\",\"wlj_run_id\":\"%s\",\"phase\":\"%s\",\"beat\":\"%s\"}"),
 			*Run, *PhaseWord, *Contract->GetBeatLabel());
 	}
 }
@@ -572,8 +571,9 @@ bool UWonderlandJuliusMissionSubsystem::IsStartOffered() const
 	if (Host == nullptr) { return false; }
 	const_cast<UWonderlandJuliusMissionSubsystem*>(this)->SyncStartRecord();
 	const bool bHasWorkflow = !StartWorkflowRunId.IsEmpty() || !Host->LiveFeed.WorkflowRunId().empty();
-	return WonderlandJuliusMissionFlow::StartGateFor(ToStd(UiStateToken()), HasNativeSession(), bHasWorkflow,
-		static_cast<WonderlandJuliusMissionFlow::EStartRecord>(StartRecord), false, std::string_view()).bOffer;
+	const bool bRecordedReplay = Host->LiveFeed.Source() == WonderlandJuliusMissionFlow::ELiveSource::GithubActionsRecorded;
+	return WonderlandJuliusMissionFlow::RecordedReplayGate(WonderlandJuliusMissionFlow::StartGateFor(ToStd(UiStateToken()), HasNativeSession(), bHasWorkflow,
+		static_cast<WonderlandJuliusMissionFlow::EStartRecord>(StartRecord), false, std::string_view()), bRecordedReplay).bOffer; // SUBSYSTEM_RECORDED_REPLAY_HIDES_START
 }
 
 bool UWonderlandJuliusMissionSubsystem::HasStartedRun() const
@@ -590,7 +590,9 @@ bool UWonderlandJuliusMissionSubsystem::StartPaidMission(const FString& Typed)
 	SyncStartRecord();
 	const bool bHasWorkflow = !StartWorkflowRunId.IsEmpty() || !Host->LiveFeed.WorkflowRunId().empty();
 	const std::string TypedStd = ToStd(Typed);
-	const FStartGate Gate = StartGateFor(ToStd(UiStateToken()), HasNativeSession(), bHasWorkflow, static_cast<EStartRecord>(StartRecord), true, TypedStd);
+	// R1 $0 seam (Skywalker 2026-10-30): while a recorded run is replayed, Start is hard-refused.
+	const bool bRecordedReplay = Host->LiveFeed.Source() == ELiveSource::GithubActionsRecorded;
+	const FStartGate Gate = RecordedReplayGate(StartGateFor(ToStd(UiStateToken()), HasNativeSession(), bHasWorkflow, static_cast<EStartRecord>(StartRecord), true, TypedStd), bRecordedReplay); // SUBSYSTEM_RECORDED_REPLAY_REFUSES_START
 	if (!Gate.bSend)
 	{
 		StartMessage = FString::Printf(TEXT("Not started: %s."), UTF8_TO_TCHAR(Gate.Why));

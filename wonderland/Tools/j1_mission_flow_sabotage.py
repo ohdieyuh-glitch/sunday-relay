@@ -533,10 +533,11 @@ MUTATIONS = [
         "if (View.bStale || View.Phase == EExecutionPhase::None || bEnded) { return Out; } // FLOW_CONTRACT_STALE_MOVES_NOTHING",
         "if (View.Phase == EExecutionPhase::None || bEnded) { return Out; } // FLOW_CONTRACT_STALE_MOVES_NOTHING",
     ),
+    # Retargeted by client lane C5 (Skywalker 2026-10-30): failure now plays run.failed; outcome-unknown releases.
     (
-        "contract_failure_plays_an_ending",
-        "bReleased = true; // FLOW_CONTRACT_FAILURE_INTERRUPTS",
-        "bReleased = false; // FLOW_CONTRACT_FAILURE_INTERRUPTS",
+        "contract_unknown_does_not_clear",
+        "bReleased = true; // FLOW_CONTRACT_UNKNOWN_PLAYS_NO_ENDING",
+        "bReleased = false; // FLOW_CONTRACT_UNKNOWN_PLAYS_NO_ENDING",
     ),
     (
         "contract_presents_before_execution",
@@ -864,6 +865,42 @@ MUTATIONS = [
         "const bool bStaleView = Feed.IsStale() || (Feed.IsLive() && MsSinceLastRead > LiveNoReadAfterMs); // FLOW_LIVE_SILENCE_IS_STALE",
         "const bool bStaleView = Feed.IsStale() || MsSinceLastRead > LiveNoReadAfterMs; // FLOW_LIVE_SILENCE_IS_STALE",
     ),
+    # CLIENT LANE C5 (Skywalker ruling 2, founder, YUJI steering 1, R1): endings follow backend state only.
+    (
+        "c5_failure_plays_no_ending",
+        'Out.push_back(FContractBeat{"run.failed", std::string(), 0}); // FLOW_CONTRACT_FAILURE_PLAYS_ENDING',
+        "bReleased = true; // FLOW_CONTRACT_FAILURE_PLAYS_ENDING",
+    ),
+    (
+        "c5_unknown_plays_failure_ending",
+        "bReleased = true; // FLOW_CONTRACT_UNKNOWN_PLAYS_NO_ENDING",
+        'Out.push_back(FContractBeat{"run.failed", std::string(), 0}); // FLOW_CONTRACT_UNKNOWN_PLAYS_NO_ENDING',
+    ),
+    (
+        "c5_grading_is_blank_wait",
+        'case EExecutionPhase::Grading: return "verification"; // FLOW_CONTRACT_GRADING_IS_VERIFICATION (never a blank beat)',
+        'case EExecutionPhase::Grading: return "waiting"; // FLOW_CONTRACT_GRADING_IS_VERIFICATION (never a blank beat)',
+    ),
+    (
+        "c5_unknown_shown_as_failed",
+        'case EExecutionPhase::OutcomeUnknown: return "waiting"; // FLOW_CONTRACT_UNKNOWN_IS_NEITHER',
+        'case EExecutionPhase::OutcomeUnknown: return "failed"; // FLOW_CONTRACT_UNKNOWN_IS_NEITHER',
+    ),
+    (
+        "c5_success_not_gated_by_status",
+        "return StatusIsVerifiedSuccess(*Status) ? Phase : EExecutionPhase::Grading; // FLOW_SUCCESS_GATED_BY_STATUS",
+        "return Phase; // FLOW_SUCCESS_GATED_BY_STATUS",
+    ),
+    (
+        "c5_completed_word_is_success",
+        "return StatusIsVerifiedSuccess(*Status) ? Phase : EExecutionPhase::Grading; // FLOW_SUCCESS_GATED_BY_STATUS",
+        "return Status->Phase == EMissionStatusPhase::Completed ? Phase : EExecutionPhase::Grading; // FLOW_SUCCESS_GATED_BY_STATUS",
+    ),
+    (
+        "c5_recorded_replay_sends",
+        "Out.bSend = false; // FLOW_RECORDED_REPLAY_REFUSES_START",
+        "Out.bSend = Gate.bSend; // FLOW_RECORDED_REPLAY_REFUSES_START",
+    ),
 ]
 
 
@@ -922,6 +959,27 @@ SUBSYSTEM_MUTATIONS = [
         "c3_resync_does_not_read_status",
         "NextStatusReadAtUtcMs = 0; // SUBSYSTEM_RESYNC_READS_STATUS",
         "// SUBSYSTEM_RESYNC_READS_STATUS",
+    ),
+    # CLIENT LANE C5: the UE contract follows backend state only (source-checked by julius_endings_follow_backend_state).
+    (
+        "c5_subsystem_recorded_replay_allows_start",
+        "const FStartGate Gate = RecordedReplayGate(StartGateFor(ToStd(UiStateToken()), HasNativeSession(), bHasWorkflow, static_cast<EStartRecord>(StartRecord), true, TypedStd), bRecordedReplay); // SUBSYSTEM_RECORDED_REPLAY_REFUSES_START",
+        "(void)bRecordedReplay; const FStartGate Gate = StartGateFor(ToStd(UiStateToken()), HasNativeSession(), bHasWorkflow, static_cast<EStartRecord>(StartRecord), true, TypedStd); // SUBSYSTEM_RECORDED_REPLAY_REFUSES_START",
+    ),
+    (
+        "c5_subsystem_success_not_gated",
+        "View.Phase = SuccessGatedByStatus(View.Phase, StatusRunId == Run && Host->LastStatus.bOk ? &Host->LastStatus : nullptr); // SUBSYSTEM_SUCCESS_GATED_BY_STATUS",
+        "// SUBSYSTEM_SUCCESS_GATED_BY_STATUS",
+    ),
+    (
+        "c5_subsystem_grading_releases_blank",
+        '{ Contract->ReleaseRealRunBeat(); } // SUBSYSTEM_ENDING_ON_CLEARED_STAGE',
+        '{ Contract->ReleaseRealRunBeat(); } if (View.Phase == EExecutionPhase::Grading) { Contract->ReleaseRealRunBeat(); } // SUBSYSTEM_ENDING_ON_CLEARED_STAGE',
+    ),
+    (
+        "c5_subsystem_timer_drives_ending",
+        "Contract->ReleaseRealRunBeat(); // SUBSYSTEM_UNKNOWN_PLAYS_NO_ENDING",
+        "Contract->ReleaseRealRunBeat(); FTimerHandle Later; (void)Later; // SUBSYSTEM_UNKNOWN_PLAYS_NO_ENDING",
     ),
 ]
 

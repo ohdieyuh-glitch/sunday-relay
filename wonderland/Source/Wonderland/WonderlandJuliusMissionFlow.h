@@ -795,8 +795,10 @@ namespace WonderlandJuliusMissionFlow
 	 * Turns execution views into the contract's events, each emitted ONCE and in order (founder acceptance 2026-10-26):
 	 * NOTHING while starting/committing (dispatch is not execution); run.started -- the existing activation sequence --
 	 * only once execution is CONFIRMED, then a role beat per new task sample (architect/coder/review/repair .started);
-	 * success ends with run.completed. Failure, did-not-start and cancel play NO ending: the cursor RELEASES, and the
-	 * caller interrupts the sequence at once (no beat, the Dog back to idle/follow). A stale view emits nothing.
+	 * success ends with run.completed. Skywalker ruling 2026-10-30 (supersedes the 10-26 "interrupt at once"): failure,
+	 * did-not-start and interrupted (cancelled) play the FAILURE ending, run.failed, once; outcome-unknown plays no ending
+	 * (no success, no failure): the cursor RELEASES and the caller shows the labelled "outcome unknown, needs
+	 * reconciliation" state. Grading never releases to a blank beat. A stale view emits nothing.
 	 */
 	class FContractCursor
 	{
@@ -804,7 +806,7 @@ namespace WonderlandJuliusMissionFlow
 		std::vector<FContractBeat> Advance(const FExecutionView& View);
 		bool Started() const { return bStarted; }
 		bool Ended() const { return bEnded; }
-		/** True once failure/did-not-start/cancel was seen: the caller interrupts the presentation immediately. */
+		/** True once outcome-unknown was seen: no ending is played; the caller clears the stage and labels the state. */
 		bool Released() const { return bReleased; }
 
 	private:
@@ -859,6 +861,18 @@ namespace WonderlandJuliusMissionFlow
 		std::uint64_t MsSinceRunCompleted, std::uint64_t GraceMs);
 
 	/** The contract task state word for a view ("queued", "preparation", "implementation", "review", "repair",
-	 *  "verification", "completed", "failed", "cancelled") or empty for none. */
+	 *  "verification", "completed", "failed", "cancelled", "waiting") or empty for none. Grading is "verification" (the
+	 *  checker is grading; never blank); outcome-unknown is "waiting" (neither success nor failure). */
 	const char* ContractTaskStateFor(const FExecutionView& View);
+
+	/**
+	 * SUCCESS NEEDS THE BRIDGE'S VERIFIED COMPLETION (founder 2026-10-30 + YUJI): a view that /result reads as Completed
+	 * stays a neutral Grading wait while this run's readable /status does not say StatusIsVerifiedSuccess. With no
+	 * readable /status the /result rule stands (PASS + its completion record). Never turns anything into success.
+	 */
+	EExecutionPhase SuccessGatedByStatus(EExecutionPhase Phase, const FMissionStatusRead* Status);
+
+	/** R1 $0 seam (Skywalker 2026-10-30): a recorded replay is read-only; Start is hard-refused while it is set. */
+	FStartGate RecordedReplayGate(const FStartGate& Gate, bool bRecordedReplay);
+	inline constexpr const char* RecordedReplayWhy = "RECORDED RUN, NOT LIVE: Start is refused while a recorded run is replayed";
 }

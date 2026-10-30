@@ -411,6 +411,40 @@ namespace
 		return bOk;
 	}
 
+	/**
+	 * C5 (Skywalker 2026-10-30, founder, YUJI): the contract is driven by backend state only. Every Start gate passes
+	 * through RecordedReplayGate (R1: a recorded replay refuses Start); the success beat is gated by this run's /status
+	 * before the cursor advances; the stage is cleared only on suspend, an ending, or outcome-unknown (never for grading,
+	 * never blank); and no timer drives the presentation.
+	 */
+	bool CheckEndingsFollowBackendState()
+	{
+		const std::string Text = SubsystemSource();
+		auto CountIn = [](const std::string& Hay, const std::string& Needle)
+		{
+			int N = 0;
+			for (std::size_t At = Hay.find(Needle); At != std::string::npos; At = Hay.find(Needle, At + 1)) { ++N; }
+			return N;
+		};
+		const std::size_t Def = Text.find("void UWonderlandJuliusMissionSubsystem::SyncMissionContract()");
+		const std::size_t End = Def == std::string::npos ? std::string::npos : Text.find("\n}\n", Def);
+		if (Def == std::string::npos || End == std::string::npos) { std::printf("ENDINGS CHECK FAIL: SyncMissionContract not found\n"); return false; }
+		const std::string Body = Text.substr(Def, End - Def);
+		const std::size_t View = Body.find("ExecutionViewFor(Host->LiveFeed");
+		const std::size_t Gated = Body.find("View.Phase = SuccessGatedByStatus(View.Phase,");
+		const std::size_t Advance = Body.find("ContractCursor->Advance(View)");
+		const bool bGates = CountIn(Text, "StartGateFor(") >= 1 && CountIn(Text, "StartGateFor(") == CountIn(Text, "RecordedReplayGate(");
+		const bool bSuccess = View != std::string::npos && Gated != std::string::npos && Advance != std::string::npos && View < Gated && Gated < Advance
+			&& CountIn(Body, "SuccessGatedByStatus(") == 1;
+		const bool bReleases = CountIn(Body, "ReleaseRealRunBeat()") == 3 && Body.find("bGradingReleased") == std::string::npos;
+		const bool bNoTimer = Body.find("SetTimer") == std::string::npos && Body.find("FTimerHandle") == std::string::npos;
+		if (!bGates) { std::printf("ENDINGS CHECK FAIL: a Start gate is not refused during a recorded replay\n"); }
+		if (!bSuccess) { std::printf("ENDINGS CHECK FAIL: the success beat is not gated by the verified /status\n"); }
+		if (!bReleases) { std::printf("ENDINGS CHECK FAIL: the stage is released outside suspend / ending / outcome-unknown\n"); }
+		if (!bNoTimer) { std::printf("ENDINGS CHECK FAIL: a timer drives the presentation\n"); }
+		return bGates && bSuccess && bReleases && bNoTimer;
+	}
+
 	bool CheckJuliusModuleRootIncludes()
 	{
 		namespace fs = std::filesystem;
@@ -1334,6 +1368,7 @@ int main()
 	Expect(CheckNoAutomaticStartResend(), "julius_no_automatic_start_resend");
 	Expect(CheckLiveResyncReadsStatus(), "julius_live_resync_reads_status");
 	Expect(CheckStartKeyReused(), "julius_start_key_and_trigger_reused");
+	Expect(CheckEndingsFollowBackendState(), "julius_endings_follow_backend_state");
 	Expect(CheckPlatformCryptoTypesInclude(), "platform_crypto_result_includes_types");
 
 	if (Failures == 0)

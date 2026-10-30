@@ -775,7 +775,7 @@ const ABSENT_PHASE = {
 		Expect(ViewOf(LiveBody(Top("in_progress", nullptr, true), Gates + "," + Step(4, PJ, LS, "completed", "cancelled"))).Phase == EExecutionPhase::Cancelled, "LIVE cancelled mid-run: interrupted now");
 		Expect(ViewOf(LiveBody(Top("in_progress", nullptr, true), Gates + "," + Step(4, PJ, LS, "completed", "timed_out"))).Phase == EExecutionPhase::Failed, "LIVE timed out: interrupted now");
 		Expect(ViewOf(LiveBody(Top("completed", "failure", false), Gates + "," + Step(4, PJ, LS, "in_progress", nullptr))).Phase == EExecutionPhase::Failed, "run ended without LIVE success: interrupted");
-		Expect(std::string(ContractTaskStateFor(ViewOf(LiveBody(Top("in_progress", nullptr, true), Ran)))) == "waiting", "grading is a neutral wait");
+		Expect(std::string(ContractTaskStateFor(ViewOf(LiveBody(Top("in_progress", nullptr, true), Ran)))) == "verification", "grading shows VERIFICATION (Skywalker 10-30: never a blank beat)");
 		Expect(ViewOf(LiveBody(Top("completed", "success", false), Ran)).Phase != EExecutionPhase::Completed, "a successful WORKFLOW is never mission success without the checker");
 		++ExecCases;
 		// 40258482240 exactly: paid-slot gate refused, LIVE skipped.
@@ -791,7 +791,7 @@ const ABSENT_PHASE = {
 		// the wait ends on PASS (success), FAIL (interrupt) or a NOT_RUN read after completion once the grace passed.
 		V = ViewOf(LiveBody(Top("completed", "success", false), Ran), ECheckerVerdict::NotRun, false, "40258482240", false);
 		Expect(V.Phase == EExecutionPhase::Grading, "completed + no /result read yet: GRADING, not failed");
-		Expect(std::string(ContractTaskStateFor(V)) == "waiting", "completed + awaiting verdict: neutral wait");
+		Expect(std::string(ContractTaskStateFor(V)) == "verification", "completed + awaiting verdict: verification, not blank");
 		Expect(ViewOf(LiveBody(Top("completed", "failure", false), Ran), ECheckerVerdict::NotRun, false, "40258482240", false).Phase == EExecutionPhase::Grading, "completed + stale pre-completion /result (NOT_RUN): GRADING");
 		Expect(ViewOf(LiveBody(Top("completed", "success", false), Ran), ECheckerVerdict::Pass, true, "40258482240", false).Phase == EExecutionPhase::Completed, "the wait ends on PASS: COMPLETED");
 		V = ViewOf(LiveBody(Top("completed", "failure", false), Ran), ECheckerVerdict::Fail, true, "40258482240", false);
@@ -811,7 +811,7 @@ const ABSENT_PHASE = {
 		// B7 OUTCOME UNKNOWN (#478 /result outcomeUnknown, any cause): interrupt, never success -- even over a PASS.
 		V = ViewOf(LiveBody(Top("completed", "failure", false), Gates + "," + Step(4, PJ, LS, "completed", "failure")), ECheckerVerdict::NotRun, false, "40258482240", false, "HANDED_TIMEOUT_OUTCOME_UNKNOWN");
 		Expect(V.Phase == EExecutionPhase::OutcomeUnknown && V.Detail == "HANDED_TIMEOUT_OUTCOME_UNKNOWN", "outcomeUnknown: OUTCOME_UNKNOWN with its cause");
-		Expect(std::string(ContractTaskStateFor(V)) == "failed", "outcomeUnknown is a terminal non-success state");
+		Expect(std::string(ContractTaskStateFor(V)) == "waiting", "outcomeUnknown is neither success nor failure (labelled waiting)");
 		Expect(ViewOf(LiveBody(Top("completed", "success", false), Ran), ECheckerVerdict::Pass, true, "40258482240", true, "SOME_FUTURE_CAUSE").Phase == EExecutionPhase::OutcomeUnknown, "any non-null outcomeUnknown wins over PASS");
 		Expect(ViewOf(LiveBody(Top("completed", "failure", false), Refused), ECheckerVerdict::NotRun, false, "40258482240", true, "HANDED_OUTCOME_UNKNOWN").Phase == EExecutionPhase::DidNotStart, "outcomeUnknown on a run Julius never started stays DID NOT START");
 		{
@@ -945,11 +945,14 @@ const ABSENT_PHASE = {
 			(void)Live.Advance(Running);
 			FExecutionView End; End.Phase = Bad;
 			const std::vector<FContractBeat> Ending = Live.Advance(End);
-			Expect(Ending.empty() && Live.Released() && Live.Ended(), "B3 failure/cancel: interrupt, no ending sequence, no success");
+			// Skywalker 2026-10-30 (supersedes "interrupt at once"): the failure ending plays, once, never success.
+			Expect(Ending.size() == 1 && Ending[0].Type == "run.failed" && !Live.Released() && Live.Ended(), "B3 failure/did-not-start/interrupted: the failure ending");
+			Expect(Live.Advance(End).empty() && Live.Advance(Running).empty(), "B3 the failure ending plays once and nothing follows");
 		}
 		FContractCursor Gate;
 		FExecutionView Dns; Dns.Phase = EExecutionPhase::DidNotStart;
-		Expect(Gate.Advance(Dns).empty() && !Gate.Started() && Gate.Released(), "B4 did not start: never live, never activated");
+		const std::vector<FContractBeat> DnsBeats = Gate.Advance(Dns);
+		Expect(DnsBeats.size() == 1 && DnsBeats[0].Type == "run.failed" && !Gate.Started() && !Gate.Released(), "B4 did not start: the failure ending, never activated");
 		FContractCursor Restored;
 		FExecutionView Done; Done.Phase = EExecutionPhase::Completed;
 		B = Restored.Advance(Done);
@@ -1749,6 +1752,57 @@ const ABSENT_PHASE = {
 		}
 	}
 
+	// C5 ENDINGS (Skywalker 2026-10-30 ruling 2, YUJI steering 1, R1): success only on a verified PASS; failure endings
+	// play; outcome-unknown plays none; grading is never blank; a recorded replay refuses Start.
+	int EndingCases = 0;
+	void EndingFixtures()
+	{
+		const FMissionStatusRead VerifiedPass = ParseMissionStatus(StatusWlj, 200, Completed("PASS", true));
+		Expect(SuccessGatedByStatus(EExecutionPhase::Completed, &VerifiedPass) == EExecutionPhase::Completed, "verified PASS keeps success");
+		Expect(SuccessGatedByStatus(EExecutionPhase::Completed, nullptr) == EExecutionPhase::Completed, "no /status read: the /result rule stands");
+		const FMissionStatusRead Unreadable = ParseMissionStatus(StatusWlj, 500, "{}");
+		Expect(SuccessGatedByStatus(EExecutionPhase::Completed, &Unreadable) == EExecutionPhase::Completed, "an unreadable /status is not a verdict");
+		for (const char* Verdict : {"FAIL", "NOT_RUN"})
+		{
+			// YUJI steering 1, beat side: completed FAIL/NOT_RUN never plays the success beat.
+			const FMissionStatusRead Read = ParseMissionStatus(StatusWlj, 200, Completed(Verdict, false));
+			const EExecutionPhase Gated = SuccessGatedByStatus(EExecutionPhase::Completed, &Read);
+			Expect(Read.bOk && Gated == EExecutionPhase::Grading, "completed alone never reaches the success beat");
+			FContractCursor Cursor;
+			FExecutionView V; V.Phase = EExecutionPhase::Executing; V.Role = "coder"; V.TaskType = "build";
+			(void)Cursor.Advance(V);
+			V.Phase = Gated;
+			for (const FContractBeat& Beat : Cursor.Advance(V)) { Expect(Beat.Type != "run.completed", "no run.completed without a verified PASS"); }
+			Expect(!Cursor.Ended(), "completed FAIL/NOT_RUN under /status stays a wait, never success");
+		}
+		const FMissionStatusRead UnverifiedPass = ParseMissionStatus(StatusWlj, 200, Completed("PASS", false));
+		Expect(SuccessGatedByStatus(EExecutionPhase::Completed, &UnverifiedPass) == EExecutionPhase::Grading, "PASS without verified completion is not the success beat");
+		Expect(SuccessGatedByStatus(EExecutionPhase::Failed, &VerifiedPass) == EExecutionPhase::Failed
+			&& SuccessGatedByStatus(EExecutionPhase::Executing, &VerifiedPass) == EExecutionPhase::Executing, "the gate never creates success or moves other phases");
+		++EndingCases;
+		{
+			FContractCursor Cursor;
+			FExecutionView V; V.Phase = EExecutionPhase::Executing; V.Role = "reviewer"; V.TaskType = "audit";
+			(void)Cursor.Advance(V);
+			V.Phase = EExecutionPhase::Grading;
+			Expect(Cursor.Advance(V).empty() && !Cursor.Released() && !Cursor.Ended(), "grading neither releases nor ends");
+			Expect(std::string(ContractTaskStateFor(V)) == "verification", "grading is shown as verification");
+			V.Phase = EExecutionPhase::OutcomeUnknown;
+			const std::vector<FContractBeat> B = Cursor.Advance(V);
+			Expect(B.empty() && Cursor.Released() && Cursor.Ended(), "outcome unknown: no ending, the stage clears");
+			Expect(std::string(ContractTaskStateFor(V)) != "failed" && std::string(ContractTaskStateFor(V)) != "completed", "outcome unknown is neither failure nor success");
+			++EndingCases;
+		}
+		{
+			FStartGate Open; Open.bOffer = true; Open.bSend = true; Open.Why = "";
+			const FStartGate Recorded = RecordedReplayGate(Open, true);
+			Expect(!Recorded.bOffer && !Recorded.bSend && std::string(Recorded.Why).find("RECORDED RUN, NOT LIVE") != std::string::npos, "R1: a recorded replay hard-refuses Start");
+			const FStartGate Live = RecordedReplayGate(Open, false);
+			Expect(Live.bOffer && Live.bSend, "R1 control: no replay leaves the gate as it was");
+			++EndingCases;
+		}
+	}
+
 	// YUJI M-b 2026-10-30: after a bridge restart start.requested is false and retryStartSafe true (journal only); only
 	// start.request reveals the saved intent. Neither is ever permission to send; interrupted is explicit, never resent.
 	int RestartCases = 0;
@@ -2124,6 +2178,7 @@ int main()
 	ResyncFixtures();
 	StatusPanelFixtures();
 	BridgeRestartFixtures();
+	EndingFixtures();
 
 	if (Failures != 0)
 	{
@@ -2131,7 +2186,7 @@ int main()
 		return 1;
 	}
 	std::printf(
-		"J1 MISSION FLOW KAT PASS meanings=%d route=%d result=%d flow=%d windows=%d bridge=%d phases=%d live=%d start=%d exec=%d ack=%d status=%d resync=%d panel=%d restart=%d\n",
-		Meanings, Routes, Results, FlowSteps, Windows, Bridge, PhaseCases, LiveCases, StartCases, ExecCases, AckCases, StatusCases, ResyncCases, PanelCases, RestartCases);
+		"J1 MISSION FLOW KAT PASS meanings=%d route=%d result=%d flow=%d windows=%d bridge=%d phases=%d live=%d start=%d exec=%d ack=%d status=%d resync=%d panel=%d restart=%d ending=%d\n",
+		Meanings, Routes, Results, FlowSteps, Windows, Bridge, PhaseCases, LiveCases, StartCases, ExecCases, AckCases, StatusCases, ResyncCases, PanelCases, RestartCases, EndingCases);
 	return 0;
 }

@@ -2285,9 +2285,13 @@ namespace WonderlandJuliusMissionFlow
 		case EExecutionPhase::FailedUnverified:
 		case EExecutionPhase::DidNotStart:
 		case EExecutionPhase::Cancelled:
+			// Skywalker 2026-10-30: failed, did-not-start and interrupted play the failure ending, once.
+			Out.push_back(FContractBeat{"run.failed", std::string(), 0}); // FLOW_CONTRACT_FAILURE_PLAYS_ENDING
+			bEnded = true;
+			return Out;
 		case EExecutionPhase::OutcomeUnknown:
-			// No ending is played, nothing finishes or loops: the presentation is interrupted by the caller.
-			bReleased = true; // FLOW_CONTRACT_FAILURE_INTERRUPTS
+			// No success and no failure animation: the stage clears and the state is labelled (needs reconciliation).
+			bReleased = true; // FLOW_CONTRACT_UNKNOWN_PLAYS_NO_ENDING
 			bEnded = true;
 			return Out;
 		case EExecutionPhase::Starting:
@@ -2391,14 +2395,30 @@ namespace WonderlandJuliusMissionFlow
 			if (View.Role == "reviewer") { return "review"; }
 			if (View.Role == "architect") { return "preparation"; }
 			return "implementation";
-		case EExecutionPhase::Grading: return "waiting"; // neutral: the Dog waits, nothing loops
+		case EExecutionPhase::Grading: return "verification"; // FLOW_CONTRACT_GRADING_IS_VERIFICATION (never a blank beat)
 		case EExecutionPhase::Completed: return "completed";
+		case EExecutionPhase::OutcomeUnknown: return "waiting"; // FLOW_CONTRACT_UNKNOWN_IS_NEITHER
 		case EExecutionPhase::Failed:
 		case EExecutionPhase::FailedUnverified:
-		case EExecutionPhase::OutcomeUnknown:
 		case EExecutionPhase::DidNotStart: return "failed";
 		case EExecutionPhase::Cancelled: return "cancelled";
 		default: return "";
 		}
+	}
+
+	EExecutionPhase SuccessGatedByStatus(EExecutionPhase Phase, const FMissionStatusRead* Status)
+	{
+		if (Phase != EExecutionPhase::Completed || Status == nullptr || !Status->bOk) { return Phase; }
+		return StatusIsVerifiedSuccess(*Status) ? Phase : EExecutionPhase::Grading; // FLOW_SUCCESS_GATED_BY_STATUS
+	}
+
+	FStartGate RecordedReplayGate(const FStartGate& Gate, bool bRecordedReplay)
+	{
+		if (!bRecordedReplay) { return Gate; }
+		FStartGate Out;
+		Out.bOffer = false;
+		Out.bSend = false; // FLOW_RECORDED_REPLAY_REFUSES_START
+		Out.Why = RecordedReplayWhy;
+		return Out;
 	}
 }
