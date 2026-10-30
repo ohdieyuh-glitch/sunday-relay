@@ -135,7 +135,11 @@ export interface GrokBotWorkspacePort {
   baseRevision(workspacePath: string, signal?: AbortSignal): Promise<{ readonly ok: true; readonly sha: string } | { readonly ok: false; readonly cause: string }>;
   /** Fetches the branch into a private ref and lists what it changed against `baseRevision`. Changes nothing in the working tree. */
   fetchBranch(input: { readonly workspacePath: string; readonly repoUrl: string; readonly branch: string; readonly baseRevision: string }, signal?: AbortSignal):
-    Promise<{ readonly ok: true; readonly headSha: string; readonly changes: readonly JuliusWorkspaceChange[] } | { readonly ok: false; readonly cause: string }>;
+    Promise<{
+      readonly ok: true; readonly headSha: string; readonly changes: readonly JuliusWorkspaceChange[];
+      /** Entries that are not plain file changes (a symlink or gitlink on either side, or a type change T). Any one refuses the patch. */
+      readonly unsafeEntries: number;
+    } | { readonly ok: false; readonly cause: string }>;
   applyFetched(input: { readonly workspacePath: string; readonly baseRevision: string; readonly headSha: string }, signal?: AbortSignal):
     Promise<{ readonly ok: true } | { readonly ok: false; readonly cause: string }>;
 }
@@ -159,7 +163,11 @@ export const isSundayRelayRepo = (raw: string): boolean => {
   return (parsed !== null && `${parsed.owner}/${parsed.repo}`.toLowerCase() === SUNDAY_RELAY_REPO) || loose.endsWith(`/${SUNDAY_RELAY_REPO}`) || loose.endsWith('/sunday-relay');
 };
 
-const STATUS_TO_CHANGE: Readonly<Record<string, JuliusWorkspaceChange['change']>> = { M: 'MODIFIED', A: 'ADDED', D: 'DELETED', T: 'MODIFIED' };
+const STATUS_TO_CHANGE: Readonly<Record<string, JuliusWorkspaceChange['change']>> = { M: 'MODIFIED', A: 'ADDED', D: 'DELETED' };
+/** One `git diff --raw --no-renames --no-abbrev` line: `:<old mode> <new mode> <old id> <new id> <status>\t<path>`. */
+const RAW_LINE = /^:([0-7]{6}) ([0-7]{6}) ([0-9a-f]{40}) ([0-9a-f]{40}) ([A-Z])\t([^\t"]+)$/u;
+/** Modes git writes for an absent side, a regular file, and an executable file. Anything else (120000 symlink, 160000 gitlink) is refused. */
+const PLAIN_MODES = new Set(['000000', '100644', '100755']);
 
 /**
  * The workspace port over the EXISTING shell port (`ShellEffectPort`). The J1 local shell port (julius-local-shell-port.ts)
@@ -195,13 +203,19 @@ export function createShellGrokBotWorkspacePort(input: {
       const head = /^HEAD ([0-9a-f]{40})$/u.exec(lines[0] ?? '')?.[1];
       if (head === undefined) return { ok: false, cause: 'fetch_output_malformed' };
       const changes: JuliusWorkspaceChange[] = [];
+      let unsafeEntries = 0;
       for (const line of lines.slice(1)) {
-        const m = /^([MADT])\t([^\t"]+)$/u.exec(line);
-        const kind = m?.[1] === undefined ? undefined : STATUS_TO_CHANGE[m[1]];
-        if (m === null || kind === undefined || m[2] === undefined) return { ok: false, cause: 'fetch_output_malformed' };
-        changes.push(Object.freeze({ path: m[2], change: kind }));
+        const m = RAW_LINE.exec(line);
+        if (m === null) return { ok: false, cause: 'fetch_output_malformed' };
+        const [, oldMode, newMode, , , status, path] = m;
+        if (oldMode === undefined || newMode === undefined || status === undefined || path === undefined) return { ok: false, cause: 'fetch_output_malformed' };
+        const kind = STATUS_TO_CHANGE[status];
+        // A type change, or a symlink/gitlink on either side, is never a plain patch: counted, and the provider refuses it.
+        if (status === 'T' || !PLAIN_MODES.has(oldMode) || !PLAIN_MODES.has(newMode)) unsafeEntries += 1;
+        else if (kind === undefined) return { ok: false, cause: 'fetch_output_malformed' };
+        changes.push(Object.freeze({ path, change: kind ?? 'MODIFIED' }));
       }
-      return { ok: true, headSha: head, changes: Object.freeze(changes) };
+      return { ok: true, headSha: head, changes: Object.freeze(changes), unsafeEntries };
     },
     async applyFetched({ baseRevision, headSha }) {
       if (!SHA40.test(baseRevision) || !SHA40.test(headSha)) return { ok: false, cause: 'apply_input_unsafe' };
@@ -560,8 +574,10 @@ export function createGrokBotCodingAgentProvider(input: {
         evidence.fetchedChangeCount = fetched.changes.length;
         const violations = juliusScopeViolations({ changes: fetched.changes, permittedPaths: request.permissions.permittedPaths, outOfScope: request.permissions.outOfScope });
         const gitInternal = fetched.changes.some((c) => c.path === '.git' || c.path.startsWith('.git/') || c.path.includes('/.git/'));
-        if (violations.length > 0 || gitInternal) {
-          return started('ENVELOPE_NOT_HONOURED', 'coder_grok_patch_out_of_scope', 'The agent changed paths outside the mission\'s permitted scope; nothing was applied.', { scopeViolationCount: violations.length });
+        // Fail closed: a port that does not report special entries is treated as reporting one.
+        const unsafeEntries = typeof fetched.unsafeEntries === 'number' && Number.isInteger(fetched.unsafeEntries) && fetched.unsafeEntries >= 0 ? fetched.unsafeEntries : 1;
+        if (violations.length > 0 || gitInternal || unsafeEntries > 0) {
+          return started('ENVELOPE_NOT_HONOURED', 'coder_grok_patch_out_of_scope', 'The agent changed paths outside the mission\'s permitted scope, or a symlink, submodule or file type; nothing was applied.', { scopeViolationCount: violations.length, unsafeEntryCount: unsafeEntries });
         }
         const applied = await workspace.applyFetched({ workspacePath: request.workspacePath, baseRevision: base.sha, headSha: fetched.headSha }, signal);
         if (!applied.ok) return started('TOOL_CRASH', 'coder_grok_patch_apply_failed', 'The agent\'s changes could not be applied to the workspace.', { applyRefusal: applied.cause });

@@ -42,7 +42,7 @@ function setup(sync: { owner: string; repo: string } | null = { owner: OWNER, re
     const c = args[1] ?? ''; ran.push(c);
     const stdout = c === J1_INDEX_HASH_COMMAND ? 'ABSENT\n' : c === J1_SEED_COMMAND ? `SEEDED ${HEAD}\n`
       : c === juliusAttemptStartCommand(null) ? `HEAD ${HEAD}\nBASE ${BASE}\nSTART ${START}\n`
-        : c === FETCH ? `HEAD ${AGENT_HEAD}\nM\tout/normalized.json\n` : c === APPLY ? 'APPLIED\n' : c === BASE_REV ? `${BASE}\n` : '';
+        : c === FETCH ? `HEAD ${AGENT_HEAD}\n:100644 100644 ${'1'.repeat(40)} ${'2'.repeat(40)} M\tout/normalized.json\n` : c === APPLY ? 'APPLIED\n' : c === BASE_REV ? `${BASE}\n` : '';
     return { exitCode: 0, stdout, stderr: '', timedOut: false };
   };
   const port = createLocalShellPort({ cwd: CWD, bashPath: BASH, bashSha256: sha(BASH_BYTES), readFileBytes: () => BASH_BYTES, gitDir: GIT_DIR, spawn, fs: memFs(), seedFiles: SEEDS, ...(sync === null ? {} : { cloudAgentSync: sync }) });

@@ -33,7 +33,9 @@ export const grokWorkspaceCommands = Object.freeze({
       `head="$(${GIT} rev-parse --verify '${GROK_FETCHED_REF}^{commit}')"`,
       `${GIT} merge-base --is-ancestor ${base} "$head"`,
       'printf \'HEAD %s\\n\' "$head"',
-      `${GIT} -c core.quotePath=true diff --no-renames --name-status ${base} "$head"`,
+      // --raw (with full object ids) carries both modes and the status, so a symlink (120000), a gitlink (160000) or a type
+      // change (T) is visible to the scope check, which refuses them; --no-renames keeps one path per line.
+      `${GIT} -c core.quotePath=true diff --raw --no-renames --no-abbrev ${base} "$head"`,
     ].join('\n');
   },
   applyFetched: (base: string, head: string): string => {

@@ -7,6 +7,7 @@ import {
   type CodingAgentCreateInput, type CodingAgentCreateOutcome, type CodingAgentPollOutcome, type CodingAgentResultOutcome, type CodingAgentTransport,
   type GrokBotCoderConfig, type GrokBotWorkspacePort,
 } from './grok-bot-coding-provider';
+import { grokWorkspaceCommands } from './grok-workspace-commands';
 import { juliusCodingAgentFailureDisposition, type JuliusCodingAgentProviderOutcome, type JuliusCodingAgentRequest } from '../../src/relay/mission/julius/julius-coding-agent';
 import { juliusHandedOutcomeUnknown } from '../../src/relay/mission/julius/julius-execution-coordinator';
 import { JuliusDispatchError, safeReviewDiagnostics } from '../../src/relay/mission/julius/julius-router';
@@ -59,11 +60,11 @@ function fakeTransport(script: {
   return { transport, calls };
 }
 
-function fakeWorkspace(over: Partial<{ changes: { path: string; change: 'MODIFIED' | 'ADDED' | 'DELETED' }[]; fetchOk: boolean; applyOk: boolean; baseOk: boolean }> = {}) {
+function fakeWorkspace(over: Partial<{ changes: { path: string; change: 'MODIFIED' | 'ADDED' | 'DELETED' }[]; fetchOk: boolean; applyOk: boolean; baseOk: boolean; unsafeEntries: number }> = {}) {
   const calls = { fetch: 0, apply: 0 };
   const workspace: GrokBotWorkspacePort = {
     async baseRevision() { return over.baseOk === false ? { ok: false, cause: 'x' } : { ok: true, sha: BASE }; },
-    async fetchBranch() { calls.fetch += 1; return over.fetchOk === false ? { ok: false, cause: 'fetch_failed' } : { ok: true, headSha: HEAD, changes: over.changes ?? [{ path: 'src/a.ts', change: 'MODIFIED' }] }; },
+    async fetchBranch() { calls.fetch += 1; return over.fetchOk === false ? { ok: false, cause: 'fetch_failed' } : { ok: true, headSha: HEAD, changes: over.changes ?? [{ path: 'src/a.ts', change: 'MODIFIED' }], unsafeEntries: over.unsafeEntries ?? 0 }; },
     async applyFetched() { calls.apply += 1; return over.applyOk === false ? { ok: false, cause: 'apply_failed' } : { ok: true }; },
   };
   return { workspace, calls };
@@ -465,7 +466,7 @@ describe('the shell-backed workspace port issues fixed commands: fetch into a pr
     const cmds: string[] = [];
     const port = createShellGrokBotWorkspacePort({
       ids: { runId: 'r', projectId: 'p', taskId: 't', workerId: 'w' },
-      shell: { run: async (i: { command: string }) => { cmds.push(i.command); return { status: 'SUCCEEDED', stdout: i.command.includes('fetch') ? `HEAD ${HEAD}\nM\tsrc/a.ts\n` : i.command.includes('apply') ? 'APPLIED' : BASE, stderr: '', exitCode: 0 }; } } as never,
+      shell: { run: async (i: { command: string }) => { cmds.push(i.command); return { status: 'SUCCEEDED', stdout: i.command.includes('fetch') ? `HEAD ${HEAD}\n:100644 100644 1111111111111111111111111111111111111111 2222222222222222222222222222222222222222 M\tsrc/a.ts\n` : i.command.includes('apply') ? 'APPLIED' : BASE, stderr: '', exitCode: 0 }; } } as never,
     });
     expect(await port.baseRevision('/w')).toEqual({ ok: true, sha: BASE });
     expect(await port.fetchBranch({ workspacePath: '/w', repoUrl: TARGET, branch: 'cursor/fix-1', baseRevision: BASE })).toMatchObject({ ok: true, headSha: HEAD });
@@ -475,6 +476,69 @@ describe('the shell-backed workspace port issues fixed commands: fetch into a pr
       expect(c).toContain('core.hooksPath=/dev/null');
       expect(c).not.toMatch(/\bgit\b[^\n]*\s(merge(?! ?-base)|checkout|push|commit|reset)\s/u);
     }
+  });
+});
+
+describe('M3: the scope check sees modes and type changes (git diff --raw --no-renames)', () => {
+  const Z = '0'.repeat(40);
+  const raw = (oldMode: string, newMode: string, status: string, path: string) => `:${oldMode} ${newMode} ${oldMode === '000000' ? Z : '1'.repeat(40)} ${newMode === '000000' ? Z : '2'.repeat(40)} ${status}\t${path}`;
+  const portWith = (lines: string[]) => createShellGrokBotWorkspacePort({
+    ids: { runId: 'r', projectId: 'p', taskId: 't', workerId: 'w' },
+    shell: { run: async (i: { command: string }) => ({ status: 'SUCCEEDED', stdout: i.command.includes('fetch') ? `HEAD ${HEAD}\n${lines.join('\n')}\n` : 'APPLIED', stderr: '', exitCode: 0 }) } as never,
+  });
+  const fetch = (lines: string[]) => portWith(lines).fetchBranch({ workspacePath: '/w', repoUrl: TARGET, branch: 'cursor/fix-1', baseRevision: BASE });
+
+  it('the fetch command lists with --raw --no-renames --no-abbrev, never --name-status', () => {
+    const cmd = grokWorkspaceCommands.fetchBranch('example-org', 'example-target', 'cursor/fix-1', BASE);
+    expect(cmd).toContain(`diff --raw --no-renames --no-abbrev ${BASE} "$head"`);
+    expect(cmd).not.toContain('--name-status');
+  });
+  it('plain modify, add, delete and an executable file are plain changes', async () => {
+    expect(await fetch([raw('100644', '100644', 'M', 'src/a.ts'), raw('000000', '100755', 'A', 'src/run.sh'), raw('100644', '000000', 'D', 'src/old.ts')]))
+      .toEqual({ ok: true, headSha: HEAD, unsafeEntries: 0, changes: [{ path: 'src/a.ts', change: 'MODIFIED' }, { path: 'src/run.sh', change: 'ADDED' }, { path: 'src/old.ts', change: 'DELETED' }] });
+  });
+  it('a symlink (120000), a gitlink (160000) or a type change (T), on either side, is counted unsafe', async () => {
+    for (const line of [raw('000000', '120000', 'A', 'src/link'), raw('100644', '120000', 'T', 'src/a.ts'), raw('120000', '100644', 'T', 'src/a.ts'), raw('000000', '160000', 'A', 'src/sub'), raw('160000', '160000', 'M', 'src/sub'), raw('120000', '000000', 'D', 'src/link'), raw('100644', '100755', 'T', 'src/x')]) {
+      const r = await fetch([raw('100644', '100644', 'M', 'src/a.ts'), line]);
+      expect(r, line).toMatchObject({ ok: true, unsafeEntries: 1 });
+    }
+  });
+  it('anything that is not a raw line is malformed: name-status, renames, abbreviated ids, quoted paths', async () => {
+    for (const line of ['M\tsrc/a.ts', `:100644 100644 ${'1'.repeat(40)} ${'2'.repeat(40)} R100\tsrc/a.ts\tsrc/b.ts`, ':100644 100644 1111111 2222222 M\tsrc/a.ts', `:100644 100644 ${'1'.repeat(40)} ${'2'.repeat(40)} M\t"src/\\303\\251.ts"`, `:100644 100644 ${'1'.repeat(40)} ${'2'.repeat(40)} X\tsrc/a.ts`]) {
+      expect(await fetch([line]), line).toEqual({ ok: false, cause: 'fetch_output_malformed' });
+    }
+  });
+  it('the provider refuses a patch with any unsafe entry, and a port that does not say is treated as unsafe; nothing is applied', async () => {
+    for (const unsafeEntries of [1, 3]) {
+      const w = fakeWorkspace({ unsafeEntries });
+      const f = failed((await run({ w })).outcome);
+      expect(f.providerFailureClass).toBe('coder_grok_patch_out_of_scope');
+      expect(f.diagnostics).toMatchObject({ unsafeEntryCount: unsafeEntries });
+      expect(w.calls.apply).toBe(0);
+    }
+    const silent = fakeWorkspace();
+    silent.workspace.fetchBranch = async () => ({ ok: true, headSha: HEAD, changes: [{ path: 'src/a.ts', change: 'MODIFIED' }] }) as never;
+    const f = failed((await run({ w: silent })).outcome);
+    expect(f.providerFailureClass).toBe('coder_grok_patch_out_of_scope');
+    expect(silent.calls.apply).toBe(0);
+  });
+});
+
+describe('M4: the founder pin must be equal, exactly', () => {
+  const unattested = () => fakeTransport({ result: goodResult({ reportedModelId: null }) });
+  const P = 'founder-pin-test-0003';
+  it('pin P with token P+"x", P without its last character, a null token, or a differently cased token: unattested', async () => {
+    for (const token of [`${P}x`, P.slice(0, -1), null, P.toUpperCase(), ` ${P}`]) {
+      const f = failed((await run({ cfg: config({ acceptRequestedModelUnattested: true, founderAuthorizationToken: token }), t: unattested(), pin: P })).outcome);
+      expect(f.providerFailureClass, String(token)).toBe('coder_served_model_unattested');
+    }
+  });
+  it('an empty pin never authorizes, even against an empty token', async () => {
+    const f = failed((await run({ cfg: config({ acceptRequestedModelUnattested: true, founderAuthorizationToken: '' }), t: unattested(), pin: '' })).outcome);
+    expect(f.providerFailureClass).toBe('coder_served_model_unattested');
+  });
+  it('the exact pin relaxes (control)', async () => {
+    completed((await run({ cfg: config({ acceptRequestedModelUnattested: true, founderAuthorizationToken: P }), t: unattested(), pin: P })).outcome);
   });
 });
 
