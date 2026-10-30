@@ -267,6 +267,18 @@ export function openCursorRunStream(transport: unknown, ref: CodingAgentRunRef, 
   const opener = typeof transport === 'object' && transport !== null ? STREAM_OPENERS.get(transport) : undefined;
   return opener === undefined ? Promise.resolve({ kind: 'not_sent', cause: 'transport_unknown' }) : opener(ref, lastEventId, opts);
 }
+/** Runs each transport created in this process, with the model id it asked for (agentId NUL runId -> modelId). */
+const CREATED_RUNS = new WeakMap<object, Map<string, string>>();
+/**
+ * PILOT 43b93a4e M-2 / Skywalker N2: the model id this transport sent when IT created the run, or null when it did not
+ * create it (a ref from elsewhere, another transport, a reattach). This is the REQUESTED model, not an attested served
+ * model, and it proves only that the run was created in this process, not that a stream opened before its first event.
+ */
+export function cursorRunCreatedBy(transport: unknown, ref: CodingAgentRunRef): { readonly modelId: string } | null {
+  const m = typeof transport === 'object' && transport !== null ? CREATED_RUNS.get(transport) : undefined;
+  const modelId = m?.get(`${ref.agentId}\u0000${ref.runId}`);
+  return modelId === undefined ? null : { modelId };
+}
 /** A Last-Event-ID we will send back: printable ASCII, no spaces, at most 256 characters (the docs call the id opaque). */
 const LAST_EVENT_ID = /^[\x21-\x7e]{1,256}$/u;
 const RETENTION_SECONDS = /^\d{1,9}$/u;
@@ -645,6 +657,7 @@ export function createCursorCloudAgentsTransport(options: CursorCloudAgentsTrans
           log('cursor-transport create outcome-unknown cause=id_carries_key');
           return { kind: 'outcome_unknown', cause: 'malformed_response' };
         }
+        CREATED_RUNS.get(transport)?.set(`${agentId}\u0000${runId}`, input.modelId);
         return { kind: 'created', ref: { agentId, runId } };
       }
       if (s === 409) return { kind: 'conflict', status: 409 };
@@ -848,6 +861,7 @@ export function createCursorCloudAgentsTransport(options: CursorCloudAgentsTrans
     }
   };
   STREAM_OPENERS.set(transport, openStream);
+  CREATED_RUNS.set(transport, new Map());
   // F15: only a transport over the real global fetch, built while it is intact, is "live"; every other instance (a fake
   // fetch, a hand-made object, one built after a replacement) is "fake".
   if (options.fetch === cursorGlobalFetch && cursorGlobalFetchIntact()) LIVE_TRANSPORTS.add(transport);

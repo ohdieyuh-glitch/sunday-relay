@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { constants as FS } from 'node:fs';
 import { open as openFile } from 'node:fs/promises';
 
-import { cursorTransportMode, openCursorRunStream, type CursorStreamOpen } from './cursor-cloud-agents-transport';
+import { cursorRunCreatedBy, cursorTransportMode, openCursorRunStream, type CursorStreamOpen } from './cursor-cloud-agents-transport';
 import type { CodingAgentRunRef } from './grok-bot-coding-provider';
 
 /**
@@ -116,6 +116,13 @@ export interface E2StreamEvidence {
   readonly secretsRedacted: number;
   readonly partialDiscarded: number;
   readonly terminal: { readonly status: string; readonly durationMs: number | 'not_provided' } | null;
+  /**
+   * PILOT M-2: `created_by_this_transport` when the transport that streamed also created the run in this process;
+   * otherwise `unproven` (a stream attached mid-run looks exactly like a start on the wire, so the gate refuses it).
+   */
+  readonly start: 'created_by_this_transport' | 'unproven';
+  /** Skywalker N2: the model id the creating transport asked for (requested, not attested), or null when unproven. */
+  readonly requestedModelId: string | null;
   readonly toolCalls: readonly E2ToolCall[];
   readonly perEventTimestamps: 'not_provided';
   readonly exitCodes: 'not_provided';
@@ -245,6 +252,10 @@ export async function captureCursorRunStream(input: {
   let terminal: E2StreamEvidence['terminal'] = null;
   let doneSeen = false;
   const seen = new Map<string, string>();
+  const idEvent = new Map<string, string>();
+  const created = cursorRunCreatedBy(input.transport, ref);
+  const start = created === null ? 'unproven' as const : 'created_by_this_transport' as const;
+  const requestedModelId = created?.modelId ?? null;
   const calls = new Map<string, E2ToolCall>();
 
   const finish = async (cause: E2StreamCause | null, writable: boolean): Promise<E2StreamEvidence> => {
@@ -268,14 +279,14 @@ export async function captureCursorRunStream(input: {
     const evidence: E2StreamEvidence = Object.freeze({
       label, mode, independentOfCursor: false as const, agentId: ref.agentId, runId: ref.runId, cause: finalCause,
       records: chain.count, finalHash, fileSha256, retentionSeconds: retention ?? 'not_provided', connections, duplicates, partialDiscarded, secretsRedacted,
-      terminal, toolCalls, perEventTimestamps: 'not_provided' as const, exitCodes: 'not_provided' as const,
+      terminal, start, requestedModelId, toolCalls, perEventTimestamps: 'not_provided' as const, exitCodes: 'not_provided' as const,
     });
     CAPTURED.add(evidence);
     return evidence;
   };
 
   try {
-    await chain.write({ kind: 'header', v: 1, source: E2_STREAM_SOURCE, agentId: ref.agentId, runId: ref.runId, startedAt: iso() });
+    await chain.write({ kind: 'header', v: 1, source: E2_STREAM_SOURCE, agentId: ref.agentId, runId: ref.runId, start, requestedModelId, startedAt: iso() });
   } catch { return finish('e2_evidence_write_failed', false); }
 
   try {
@@ -340,6 +351,13 @@ export async function captureCursorRunStream(input: {
           if (e.id !== null) {
             const k = `${e.id}\u0000${e.event}`;
             const prior = seen.get(k);
+            // PILOT N-7: an id names one event. The one documented reuse is `done` carrying the id of the result it closes.
+            const owner = idEvent.get(e.id);
+            if (owner !== undefined && owner !== e.event && !(e.event === 'done' && owner === 'result')) {
+              await writeEvent();
+              throw new Stop('e2_stream_conflicting_event');
+            }
+            if (owner === undefined) idEvent.set(e.id, e.event);
             const digest = sha256(e.data);
             lastId = e.id;
             if (prior === digest) {
