@@ -22,3 +22,6 @@
 486
 485 depends: 486
 489
+# R8 batch (founder-approved 2026-10-28): expires when the batch is complete; an entry grants nothing without REVIEW clearance bound to the exact PR number, head, tree and base.
+491
+493
