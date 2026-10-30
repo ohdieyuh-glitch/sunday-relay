@@ -380,6 +380,14 @@ describe('M1: the 2 MiB body cap holds while streaming, and an oversized body is
     expect(stats.textCalled).toBe(false);
   });
 
+  it('M1a: the declared length alone decides — a small, readable body under an oversized Content-Length is still refused', async () => {
+    const { res, stats } = streamed(100, { contentLength: String(CAP + 1) });
+    expect(await readCappedBody(res)).toBeNull();
+    expect(stats.pulled).toBe(0);
+    const honest = streamed(100, { contentLength: '100' });
+    expect(await readCappedBody(honest.res)).not.toBeNull();
+  });
+
   it('a body of exactly the cap is read and parsed; one byte more is not', async () => {
     const ok = streamed(CAP);
     const atCap = await readCappedBody(ok.res);
