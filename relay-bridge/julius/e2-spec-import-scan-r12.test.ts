@@ -81,3 +81,14 @@ describe('R6-1/R6-3: the spec refuses pinned test files that load anything but N
     expect(await gate({ 't.test.js': "process.exit(0);\n" }, {}, 'node t.test.js', 1)).not.toEqual(expect.objectContaining({ reasons: [] }));
   }, 120_000);
 });
+describe('Round 7 PILOT R6-7: the pinned-source scan refuses the AST-scan forms too', () => {
+  it('createRequire, module.require, mainModule.require, eval, Function, a case-changed builtin and a computed path are refused', () => {
+    const forms = [
+      "const { createRequire } = require('node:module'); createRequire(__filename)('x');",
+      "module.require('node:fs');", "process.mainModule.require('node:fs');", "eval('1');", "new Function('1');",
+      "require('Node:FS');", "const p = 'node:fs'; require(p);", "require('../outside/x.js');",
+    ];
+    for (const f of forms) expect(G.scanPinnedSource(f), f).not.toBeNull();
+    expect(G.scanPinnedSource("const test = require('node:test'); const assert = require('node:assert');")).toBeNull();
+  });
+});
