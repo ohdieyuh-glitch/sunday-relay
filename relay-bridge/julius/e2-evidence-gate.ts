@@ -1,51 +1,96 @@
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { realpathSync, statSync } from 'node:fs';
+import { basename, isAbsolute } from 'node:path';
 
-import { E2_STREAM_LABEL_LIVE, type E2StreamEvidence } from './cursor-run-stream-evidence';
-import { isRouterModelId } from './grok-bot-coding-provider';
+import { E2_STREAM_LABEL_LIVE, verifyEvidenceChain } from './cursor-run-stream-evidence';
+import { familyFromModelId, isRouterModelId } from './grok-bot-coding-provider';
 
 /**
  * E2 PARTS B AND C, AND THE GATE.
  *
- * (B) Julius re-runs the verifier commands itself and records, per command, the argv, exit code, sha256 of stdout and
- *     stderr, and start/end times. Labelled `julius_observed` only when run by {@link spawnVerifierRunner} (no shell);
- *     any injected runner is labelled `fake`.
- * (C) `git diff --no-ext-diff --no-textconv --binary base..head` on validated 40-hex SHAs, hashed, same labelling.
- * (A) is captureCursorRunStream (Cursor's own report, not independent of Cursor).
+ * (A) captureCursorRunStream writes a hash-chained JSONL file (Cursor's own report, not independent of Cursor).
+ * (B) Julius re-runs the verifier commands itself: argv, exit code, streamed sha256 and byte counts of stdout/stderr, times.
+ * (C) a config-pinned `git diff` of base..head on validated 40-hex SHAs, hashed, plus `merge-base --is-ancestor`.
  *
- * {@link e2Gate} admits E2 evidence only when ALL three are present and real: the stream is live-labelled, complete and
- * cause-free with at least one tool call; every re-run command was Julius-observed with exit code 0; the diff was
- * Julius-observed; and the model is pinned (no Auto/Router). It never falls back to the diff alone. Undocumented values
- * (per-event timestamps, Cursor-side exit codes) stay `not_provided` in part A and are never inferred here.
+ * {@link e2Gate} (PILOT H-3/H-4) grades from the FILE, not from an in-memory object: it re-verifies the chain from the
+ * lines, requires the recomputed final hash to be non-empty and equal to an ANCHOR the caller supplies from outside the
+ * capture (a workflow or ledger record of the final hash), reads every fact it grades from the chained final record, and
+ * binds runId, base, head and the workspace across the stream, the re-exec and the diff. Re-exec and diff objects count
+ * only if this module's own functions made them with the spawn runner (a module-private WeakSet, no exported setter).
+ *
+ * HONEST LIMITS. This is tamper-evident against hand-made objects, copied objects and rewritten evidence files (a rewrite
+ * with every hash recomputed no longer matches the anchor). It is NOT protection against a malicious Julius process: the
+ * anchor is only as trustworthy as whoever writes it, and if the process that captures also writes the anchor it can
+ * rewrite both. Cursor's report stays Cursor's report. The pre-import fetch/dispatcher residual (M-5) is unchanged.
  */
 
 export const E2_JULIUS_LABEL = 'julius_observed';
 export const E2_FAKE_LABEL = 'fake';
 
-export interface VerifierRunResult { readonly exitCode: number | null; readonly stdout: Uint8Array | string; readonly stderr: Uint8Array | string }
-export type VerifierRunner = (argv: readonly string[], cwd: string) => Promise<VerifierRunResult>;
+/** What an injected runner may return: raw output (hashed here) or streamed hashes and byte counts. */
+export type VerifierRunResult =
+  | { readonly exitCode: number | null; readonly stdout: Uint8Array | string; readonly stderr: Uint8Array | string }
+  | { readonly exitCode: number | null; readonly stdoutSha256: string; readonly stderrSha256: string; readonly stdoutBytes: number; readonly stderrBytes: number };
+export type VerifierRunner = (argv: readonly string[], cwd: string, extraEnv?: Readonly<Record<string, string>>) => Promise<VerifierRunResult>;
 
 const TRUSTED_RUNNERS = new WeakSet<VerifierRunner>();
+const RECORDED = new WeakSet<object>();
 const sha256 = (b: Uint8Array | string): string => createHash('sha256').update(b).digest('hex');
+const EMPTY_SHA = sha256('');
 
-/** The only runner whose records are `julius_observed`: spawn without a shell, bounded by a timeout (exit unknown on kill). */
-export function spawnVerifierRunner(options: { readonly timeoutMs?: number; readonly env?: NodeJS.ProcessEnv } = {}): VerifierRunner {
+/** M-7: program names that are a shell or a launcher of arbitrary commands; never run, never julius_observed. */
+const SHELLS = new Set(['sh', 'bash', 'dash', 'zsh', 'ksh', 'mksh', 'fish', 'csh', 'tcsh', 'ash', 'busybox', 'env', 'cmd', 'cmd.exe', 'powershell', 'pwsh', 'nohup', 'xargs', 'sudo', 'su', 'doas']);
+export const isShellProgram = (program: string): boolean => SHELLS.has(basename(program).toLowerCase());
+
+/** M-7: the cwd must be absolute, exist, be a directory, and already be its own realpath (no symlink, no `..`). */
+export function isCanonicalDir(cwd: string): boolean {
+  if (typeof cwd !== 'string' || !isAbsolute(cwd)) return false;
+  try { return statSync(cwd).isDirectory() && realpathSync(cwd) === cwd; } catch { return false; }
+}
+
+/**
+ * The only runner whose records are `julius_observed`. No shell; shell argv0 refused; cwd checked; the environment is an
+ * allowlist (PATH, C.UTF-8 locale, then `env`, then the per-call extras), never inherited; the child leads its own process
+ * group and a timeout or an output overrun kills the whole group (exit unknown); output is hashed while it streams.
+ */
+export function spawnVerifierRunner(options: { readonly timeoutMs?: number; readonly env?: Readonly<Record<string, string>>; readonly maxOutputBytes?: number } = {}): VerifierRunner {
   const timeoutMs = options.timeoutMs ?? 15 * 60 * 1000;
-  const runner: VerifierRunner = (argv, cwd) => new Promise((resolve) => {
-    const out: Buffer[] = [];
-    const err: Buffer[] = [];
+  const maxOutputBytes = options.maxOutputBytes ?? 1024 * 1024 * 1024;
+  const refused = { exitCode: null, stdoutSha256: EMPTY_SHA, stderrSha256: EMPTY_SHA, stdoutBytes: 0, stderrBytes: 0 } as const;
+  const runner: VerifierRunner = (argv, cwd, extraEnv) => new Promise((resolve) => {
+    if (!validArgv(argv) || isShellProgram(argv[0] as string) || !isCanonicalDir(cwd)) { resolve(refused); return; }
+    const env: Record<string, string> = { PATH: process.env.PATH ?? '/usr/bin:/bin', LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...options.env, ...extraEnv };
     let child;
     try {
-      child = spawn(argv[0] as string, argv.slice(1), { cwd, shell: false, env: options.env ?? process.env, stdio: ['ignore', 'pipe', 'pipe'] });
-    } catch { resolve({ exitCode: null, stdout: '', stderr: '' }); return; }
-    const timer = setTimeout(() => child.kill('SIGKILL'), timeoutMs);
-    child.stdout.on('data', (d: Buffer) => out.push(d));
-    child.stderr.on('data', (d: Buffer) => err.push(d));
+      child = spawn(argv[0] as string, argv.slice(1), { cwd, shell: false, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    } catch { resolve(refused); return; }
+    const out = createHash('sha256');
+    const err = createHash('sha256');
+    let outBytes = 0;
+    let errBytes = 0;
+    let killed = false;
     let failed = false;
+    const killGroup = (): void => {
+      try { if (child.pid !== undefined) process.kill(-child.pid, 'SIGKILL'); } catch { /* already gone */ }
+    };
+    const timer = setTimeout(() => { killed = true; killGroup(); }, timeoutMs);
+    const over = (): void => { if (outBytes + errBytes > maxOutputBytes && !killed) { killed = true; killGroup(); } };
+    child.stdout.on('data', (d: Buffer) => { outBytes += d.byteLength; out.update(d); over(); });
+    child.stderr.on('data', (d: Buffer) => { errBytes += d.byteLength; err.update(d); over(); });
     child.on('error', () => { failed = true; });
-    child.on('close', (code, sig) => {
+    let code: number | null = null;
+    let sig: NodeJS.Signals | null = null;
+    // A leader that exits leaves no reason for its group to keep the pipes open: stragglers are killed.
+    child.on('exit', (c, s) => { code = c; sig = s; killGroup(); });
+    child.on('close', (c, s) => {
       clearTimeout(timer);
-      resolve({ exitCode: !failed && sig === null && typeof code === 'number' && code >= 0 ? code : null, stdout: Buffer.concat(out), stderr: Buffer.concat(err) });
+      const fc = code ?? c;
+      const fs = sig ?? s;
+      resolve({
+        exitCode: !failed && !killed && fs === null && typeof fc === 'number' && fc >= 0 ? fc : null,
+        stdoutSha256: out.digest('hex'), stderrSha256: err.digest('hex'), stdoutBytes: outBytes, stderrBytes: errBytes,
+      });
     });
   });
   TRUSTED_RUNNERS.add(runner);
@@ -57,6 +102,8 @@ export interface E2CommandRecord {
   readonly exitCode: number | 'unknown';
   readonly stdoutSha256: string;
   readonly stderrSha256: string;
+  readonly stdoutBytes: number;
+  readonly stderrBytes: number;
   readonly startedAt: string;
   readonly endedAt: string;
 }
@@ -65,16 +112,29 @@ export interface E2DiffEvidence {
   readonly label: typeof E2_JULIUS_LABEL | typeof E2_FAKE_LABEL;
   readonly base: string;
   readonly head: string;
+  readonly cwd: string;
   readonly argv: readonly string[];
   readonly exitCode: number | 'unknown';
   readonly sha256: string;
   readonly bytes: number;
+  /** `git merge-base --is-ancestor base head` exited 0. */
+  readonly ancestry: boolean;
 }
 
 const validArgv = (a: unknown): a is readonly string[] =>
   Array.isArray(a) && a.length > 0 && a.every((x) => typeof x === 'string' && !x.includes('\u0000')) && (a[0] as string) !== '';
 
-/** (B) Re-runs each verifier command in order. Invalid argv lists are refused (null) before anything runs. */
+const normalize = (r: VerifierRunResult): { exitCode: number | 'unknown'; stdoutSha256: string; stderrSha256: string; stdoutBytes: number; stderrBytes: number } => {
+  const exitCode = typeof r.exitCode === 'number' && Number.isInteger(r.exitCode) ? r.exitCode : 'unknown' as const;
+  if ('stdoutSha256' in r) return { exitCode, stdoutSha256: r.stdoutSha256, stderrSha256: r.stderrSha256, stdoutBytes: r.stdoutBytes, stderrBytes: r.stderrBytes };
+  const len = (b: Uint8Array | string): number => (typeof b === 'string' ? Buffer.byteLength(b) : b.byteLength);
+  return { exitCode, stdoutSha256: sha256(r.stdout), stderrSha256: sha256(r.stderr), stdoutBytes: len(r.stdout), stderrBytes: len(r.stderr) };
+};
+const run = async (runner: VerifierRunner, argv: readonly string[], cwd: string, env?: Readonly<Record<string, string>>): Promise<ReturnType<typeof normalize>> => {
+  try { return normalize(await runner([...argv], cwd, env)); } catch { return normalize({ exitCode: null, stdout: '', stderr: '' }); }
+};
+
+/** (B) Re-runs each verifier command in order. Invalid argv, a shell program or a relative cwd is refused (null) before anything runs. */
 export async function recordVerifierReexec(input: {
   readonly commands: readonly (readonly string[])[];
   readonly cwd: string;
@@ -83,69 +143,138 @@ export async function recordVerifierReexec(input: {
 }): Promise<E2ReexecEvidence | null> {
   const now = input.now ?? Date.now;
   if (!Array.isArray(input.commands) || input.commands.length === 0 || !input.commands.every(validArgv)) return null;
+  if (input.commands.some((a) => isShellProgram(a[0] as string))) return null;
+  if (typeof input.cwd !== 'string' || !isAbsolute(input.cwd)) return null;
   const commands: E2CommandRecord[] = [];
   for (const argv of input.commands) {
     const startedAt = new Date(now()).toISOString();
-    let r: VerifierRunResult;
-    try { r = await input.runner([...argv], input.cwd); } catch { r = { exitCode: null, stdout: '', stderr: '' }; }
-    commands.push(Object.freeze({
-      argv: Object.freeze([...argv]),
-      exitCode: typeof r.exitCode === 'number' && Number.isInteger(r.exitCode) ? r.exitCode : 'unknown' as const,
-      stdoutSha256: sha256(r.stdout), stderrSha256: sha256(r.stderr), startedAt, endedAt: new Date(now()).toISOString(),
-    }));
+    const r = await run(input.runner, argv, input.cwd);
+    commands.push(Object.freeze({ argv: Object.freeze([...argv]), ...r, startedAt, endedAt: new Date(now()).toISOString() }));
   }
-  return Object.freeze({ label: TRUSTED_RUNNERS.has(input.runner) ? E2_JULIUS_LABEL : E2_FAKE_LABEL, cwd: input.cwd, commands: Object.freeze(commands) });
+  const ev: E2ReexecEvidence = Object.freeze({ label: TRUSTED_RUNNERS.has(input.runner) ? E2_JULIUS_LABEL : E2_FAKE_LABEL, cwd: input.cwd, commands: Object.freeze(commands) });
+  RECORDED.add(ev);
+  return ev;
 }
 
 const SHA = /^[0-9a-f]{40}$/u;
-/** (C) The diff between two full commit SHAs, no external diff drivers or textconv. Bad SHAs are refused (null). */
+/** M-8: git configuration that would change the diff bytes is pinned; global and system config are not read. */
+export const E2_GIT_ENV = Object.freeze({ GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' });
+const GIT_PINS = Object.freeze([
+  '-c', 'diff.noprefix=false', '-c', 'diff.renames=false', '-c', 'core.quotepath=false', '-c', 'diff.mnemonicPrefix=false',
+  '-c', 'color.ui=never', '-c', 'diff.relative=false', '-c', 'diff.suppressBlankEmpty=false', '-c', 'core.autocrlf=false',
+]);
+/** (C) The config-pinned diff between two full commit SHAs, and whether head descends from base. Bad SHAs are refused (null). */
 export async function recordGitDiff(input: { readonly base: string; readonly head: string; readonly cwd: string; readonly runner: VerifierRunner }): Promise<E2DiffEvidence | null> {
   if (!SHA.test(input.base) || !SHA.test(input.head)) return null;
-  const argv = Object.freeze(['git', 'diff', '--no-ext-diff', '--no-textconv', '--binary', `${input.base}..${input.head}`]);
-  let r: VerifierRunResult;
-  try { r = await input.runner([...argv], input.cwd); } catch { r = { exitCode: null, stdout: '', stderr: '' }; }
-  const bytes = typeof r.stdout === 'string' ? Buffer.byteLength(r.stdout) : r.stdout.byteLength;
-  return Object.freeze({
-    label: TRUSTED_RUNNERS.has(input.runner) ? E2_JULIUS_LABEL : E2_FAKE_LABEL, base: input.base, head: input.head, argv,
-    exitCode: typeof r.exitCode === 'number' && Number.isInteger(r.exitCode) ? r.exitCode : 'unknown' as const, sha256: sha256(r.stdout), bytes,
+  if (typeof input.cwd !== 'string' || !isAbsolute(input.cwd)) return null;
+  const argv = Object.freeze(['git', ...GIT_PINS, 'diff', '--no-ext-diff', '--no-textconv', '--binary', '--no-renames', '--no-color', '--full-index', `${input.base}..${input.head}`]);
+  const r = await run(input.runner, argv, input.cwd, E2_GIT_ENV);
+  const anc = await run(input.runner, ['git', 'merge-base', '--is-ancestor', input.base, input.head], input.cwd, E2_GIT_ENV);
+  const ev: E2DiffEvidence = Object.freeze({
+    label: TRUSTED_RUNNERS.has(input.runner) ? E2_JULIUS_LABEL : E2_FAKE_LABEL, base: input.base, head: input.head, cwd: input.cwd, argv,
+    exitCode: r.exitCode, sha256: r.stdoutSha256, bytes: r.stdoutBytes, ancestry: anc.exitCode === 0,
   });
+  RECORDED.add(ev);
+  return ev;
 }
 
 export const E2_GATE_REASONS = Object.freeze([
-  'e2_stream_absent', 'e2_stream_not_live', 'e2_stream_failed', 'e2_stream_no_terminal', 'e2_no_tool_calls',
-  'e2_reexec_absent', 'e2_reexec_fake', 'e2_reexec_failed', 'e2_reexec_exit_unknown',
-  'e2_diff_absent', 'e2_diff_fake', 'e2_diff_failed', 'e2_model_absent', 'e2_model_router',
+  'e2_stream_absent', 'e2_stream_chain_invalid', 'e2_anchor_absent', 'e2_anchor_mismatch',
+  'e2_stream_not_live', 'e2_stream_failed', 'e2_stream_no_terminal', 'e2_stream_terminal_not_finished', 'e2_stream_call_unfinished', 'e2_no_tool_calls',
+  'e2_reexec_absent', 'e2_reexec_forged', 'e2_reexec_fake', 'e2_reexec_failed', 'e2_reexec_exit_unknown',
+  'e2_diff_absent', 'e2_diff_forged', 'e2_diff_fake', 'e2_diff_failed',
+  'e2_binding_absent', 'e2_binding_run_mismatch', 'e2_binding_diff_mismatch', 'e2_diff_not_descendant', 'e2_binding_cwd_mismatch',
+  'e2_model_absent', 'e2_model_router', 'e2_model_claude', 'e2_model_unrecognised',
 ] as const);
 export type E2GateReason = (typeof E2_GATE_REASONS)[number];
 
-/** All three parts, all real, or refused with every reason. Never the diff alone. */
+/** What the gate needs to bind the three parts: the run, the commits and the workspace, all from the caller's own record. */
+export interface E2Binding { readonly runId: string; readonly base: string; readonly head: string; readonly workspace: string }
+/** The final hash recorded OUTSIDE the capture (workflow output, ledger). The gate never takes it from the file. */
+export interface E2Anchor { readonly finalHash: string }
+
+/**
+ * Skywalker N1 (0774db05): model ids are compared after NFKC, trimming and the provider's lookalike folding, so `AUTO `,
+ * `Аuto` (Cyrillic A) or full-width forms are routers. Only an id the reviewed table places in a family other than
+ * Anthropic passes; an id it cannot place is refused (no facts are invented about it).
+ */
+const CONFUSABLES: Readonly<Record<string, string>> = Object.freeze({
+  '\u0410': 'A', '\u0430': 'a', '\u0412': 'B', '\u0415': 'E', '\u0435': 'e', '\u041a': 'K', '\u043a': 'k', '\u041c': 'M', '\u041d': 'H',
+  '\u041e': 'O', '\u043e': 'o', '\u0420': 'P', '\u0440': 'p', '\u0421': 'C', '\u0441': 'c', '\u0422': 'T', '\u0423': 'Y', '\u0443': 'y',
+  '\u0425': 'X', '\u0445': 'x', '\u0456': 'i', '\u0406': 'I', '\u0458': 'j', '\u0455': 's', '\u0405': 'S', '\u0501': 'd',
+  '\u0391': 'A', '\u0392': 'B', '\u0395': 'E', '\u0397': 'H', '\u0399': 'I', '\u039a': 'K', '\u039c': 'M', '\u039d': 'N', '\u039f': 'O',
+  '\u03bf': 'o', '\u03a1': 'P', '\u03a4': 'T', '\u03a5': 'Y', '\u03a7': 'X', '\u03bd': 'v', '\u03c5': 'u', '\u0131': 'i',
+});
+const foldConfusables = (s: string): string => [...s].map((c) => CONFUSABLES[c] ?? c).join('');
+
+function modelReason(modelId: unknown): E2GateReason | null {
+  if (typeof modelId !== 'string') return 'e2_model_absent';
+  const m = foldConfusables(modelId.normalize('NFKC').replace(/[\u00ad\u200b-\u200f\u2060-\u2064\ufeff]/gu, '')).trim();
+  if (m === '') return 'e2_model_absent';
+  if (isRouterModelId(m) || isRouterModelId(modelId)) return 'e2_model_router';
+  const family = familyFromModelId(m);
+  if (family === 'anthropic') return 'e2_model_claude';
+  if (family === null) return 'e2_model_unrecognised';
+  return null;
+}
+
+/** All three parts, all real, bound together and anchored, or refused with every reason. Never the diff alone. */
 export function e2Gate(input: {
-  readonly stream: E2StreamEvidence | null | undefined;
+  readonly streamLines: readonly string[] | null | undefined;
+  readonly anchor: E2Anchor | null | undefined;
   readonly reexec: E2ReexecEvidence | null | undefined;
   readonly diff: E2DiffEvidence | null | undefined;
   readonly modelId: string | null | undefined;
+  readonly binding: E2Binding | null | undefined;
 }): { readonly ok: true } | { readonly ok: false; readonly reasons: readonly E2GateReason[] } {
   const reasons: E2GateReason[] = [];
-  const { stream, reexec, diff, modelId } = input;
-  if (stream === null || stream === undefined) reasons.push('e2_stream_absent');
+  const { streamLines, anchor, reexec, diff, modelId, binding } = input;
+  const bound = binding !== null && binding !== undefined && typeof binding === 'object'
+    && typeof binding.runId === 'string' && binding.runId !== '' && SHA.test(binding.base) && SHA.test(binding.head) && isCanonicalDir(binding.workspace);
+  let header: Record<string, unknown> | null = null;
+  if (!Array.isArray(streamLines)) reasons.push('e2_stream_absent');
   else {
-    if (stream.label !== E2_STREAM_LABEL_LIVE || stream.mode !== 'live') reasons.push('e2_stream_not_live');
-    if (stream.cause !== null) reasons.push('e2_stream_failed');
-    if (stream.terminal === null) reasons.push('e2_stream_no_terminal');
-    if (stream.toolCalls.length === 0) reasons.push('e2_no_tool_calls');
+    const chain = verifyEvidenceChain(streamLines);
+    if (!chain.ok || chain.finalHash === '') reasons.push('e2_stream_chain_invalid');
+    else {
+      const anchorHash = anchor !== null && anchor !== undefined && typeof anchor === 'object' ? anchor.finalHash : undefined;
+      if (typeof anchorHash !== 'string' || anchorHash === '') reasons.push('e2_anchor_absent');
+      else if (anchorHash !== chain.finalHash) reasons.push('e2_anchor_mismatch');
+      header = JSON.parse(streamLines[0] as string) as Record<string, unknown>;
+      const fin = JSON.parse(streamLines[streamLines.length - 1] as string) as Record<string, unknown>;
+      const terminal = fin.terminal as { status?: unknown } | null | undefined;
+      if (fin.label !== E2_STREAM_LABEL_LIVE || fin.mode !== 'live') reasons.push('e2_stream_not_live');
+      if (fin.cause !== null) reasons.push('e2_stream_failed');
+      if (terminal === null || terminal === undefined || typeof terminal !== 'object') reasons.push('e2_stream_no_terminal');
+      else if (terminal.status !== 'FINISHED') reasons.push('e2_stream_terminal_not_finished');
+      if (fin.unfinishedCalls !== 0) reasons.push('e2_stream_call_unfinished');
+      if (typeof fin.toolCallCount !== 'number' || fin.toolCallCount < 1) reasons.push('e2_no_tool_calls');
+    }
   }
-  if (reexec === null || reexec === undefined || reexec.commands.length === 0) reasons.push('e2_reexec_absent');
+  const realReexec = reexec !== null && reexec !== undefined && RECORDED.has(reexec);
+  if (reexec === null || reexec === undefined) reasons.push('e2_reexec_absent');
+  else if (!realReexec) reasons.push('e2_reexec_forged');
+  else if (reexec.commands.length === 0) reasons.push('e2_reexec_absent');
   else {
     if (reexec.label !== E2_JULIUS_LABEL) reasons.push('e2_reexec_fake');
     if (reexec.commands.some((c) => c.exitCode === 'unknown')) reasons.push('e2_reexec_exit_unknown');
     if (reexec.commands.some((c) => c.exitCode !== 0 && c.exitCode !== 'unknown')) reasons.push('e2_reexec_failed');
   }
+  const realDiff = diff !== null && diff !== undefined && RECORDED.has(diff);
   if (diff === null || diff === undefined) reasons.push('e2_diff_absent');
+  else if (!realDiff) reasons.push('e2_diff_forged');
   else {
     if (diff.label !== E2_JULIUS_LABEL) reasons.push('e2_diff_fake');
     if (diff.exitCode !== 0) reasons.push('e2_diff_failed');
   }
-  if (typeof modelId !== 'string' || modelId.trim() === '') reasons.push('e2_model_absent');
-  else if (isRouterModelId(modelId)) reasons.push('e2_model_router');
+  if (!bound) reasons.push('e2_binding_absent');
+  else {
+    if (header !== null && header.runId !== binding.runId) reasons.push('e2_binding_run_mismatch');
+    if (realDiff && (diff.base !== binding.base || diff.head !== binding.head)) reasons.push('e2_binding_diff_mismatch');
+    if (realDiff && !diff.ancestry) reasons.push('e2_diff_not_descendant');
+    if ((realReexec && reexec.cwd !== binding.workspace) || (realDiff && diff.cwd !== binding.workspace)) reasons.push('e2_binding_cwd_mismatch');
+  }
+  const m = modelReason(modelId);
+  if (m !== null) reasons.push(m);
   return reasons.length === 0 ? { ok: true } : { ok: false, reasons: Object.freeze(reasons) };
 }
