@@ -270,12 +270,12 @@ describe('four kinds of evidence, never conflated', () => {
     const { printAnthropicAcceptanceProbes } = await import('./live-workers');
     const lines: string[] = [];
     await printAnthropicAcceptanceProbes({
-      env: { ANTHROPIC_ARCHITECT_API_KEY: 'A', ANTHROPIC_API_KEY: 'C' }, architectOnAnthropic: true, architectModel: 'claude-opus-5-5', architectEffort: 'high', coderModel: 'claude-opus-5-5',
+      env: { ANTHROPIC_ARCHITECT_API_KEY: 'A', ANTHROPIC_API_KEY: 'C' }, architectOnAnthropic: true, architectModel: 'claude-opus-5-5', architectEffort: 'high',
       out: (line) => lines.push(line), fetch: fetchWith(() => ok()),
     });
     expect(lines).toContain('request_schema_check role=architect EV1=PASS optional=0 unions=1');
     expect(lines).toContain('request_evidence role=architect EV1_OFFLINE_SCHEMA_VALID=PASS EV2_TOKEN_COUNT_ACCEPTED=PASS EV3_MESSAGES_ACCEPTED=NOT_OBSERVED EV4_GENERATION_OK=NOT_OBSERVED token_count_only=not_proof_of_messages_acceptance');
-    expect(lines).toContain('request_evidence role=coder EV1_OFFLINE_SCHEMA_VALID=NOT_OBSERVED EV2_TOKEN_COUNT_ACCEPTED=PASS EV3_MESSAGES_ACCEPTED=NOT_OBSERVED EV4_GENERATION_OK=NOT_OBSERVED token_count_only=not_proof_of_messages_acceptance');
+    expect(lines.some((line) => line.includes('role=coder')), 'the coder is never probed').toBe(false);
     const parts = architectPlanProbeParts();
     const outcome = await runAnthropicArchitect(
       { apiKey: KEY, config: CONFIG, instructions: parts.instructions, input: 'x', schema: { name: 'plan', schema: parts.schema } },
@@ -494,7 +494,7 @@ describe('the observe-mode printer used by the live entrypoint preflight', () =>
     expect(J1_ROLE_CREDENTIALS.find((row) => row.role === 'CODING_AGENT')?.keyEnv).toBe(CODER_KEY_ENV);
   });
 
-  it('prints the architect matrix and the coder pair, a summary each, and sends each role its OWN key only', async () => {
+  it('MUTATION: prints the architect matrix only: 8 count_tokens calls (never more than 10), all with the architect key; the coder key is never read', async () => {
     const { printAnthropicAcceptanceProbes } = await import('./live-workers');
     const lines: string[] = [];
     const seen: Array<{ key: string; model: unknown }> = [];
@@ -502,19 +502,24 @@ describe('the observe-mode printer used by the live entrypoint preflight', () =>
       seen.push({ key: (call.init.headers as Record<string, string>)['x-api-key'] as string, model: (JSON.parse(String(call.init.body)) as { model: unknown }).model });
       return ok();
     });
+    const read: string[] = [];
+    const env = new Proxy({ ANTHROPIC_ARCHITECT_API_KEY: 'ARCH-KEY-NOTREAL', ANTHROPIC_API_KEY: 'CODER-KEY-NOTREAL' } as Record<string, string | undefined>, {
+      get: (target, prop) => { read.push(String(prop)); return target[String(prop)]; },
+    });
     await printAnthropicAcceptanceProbes({
-      env: { ANTHROPIC_ARCHITECT_API_KEY: 'ARCH-KEY-NOTREAL', ANTHROPIC_API_KEY: 'CODER-KEY-NOTREAL' },
-      architectOnAnthropic: true, architectModel: 'claude-opus-5-5', architectEffort: 'high', coderModel: 'claude-opus-5-5',
+      env, architectOnAnthropic: true, architectModel: 'claude-opus-5-5', architectEffort: 'high',
       out: (line) => lines.push(line), fetch: fetchImpl,
     });
-    expect(lines.filter((line) => line.startsWith('request_acceptance role=architect')).length).toBe(8);
-    expect(lines.filter((line) => line.startsWith('request_acceptance role=coder')).length).toBe(2);
+    expect(seen).toHaveLength(8);
+    expect(seen.length).toBeLessThanOrEqual(10);
+    expect(lines.filter((line) => line.startsWith('request_acceptance role=architect')).map((line) => /probe=(\S+)/u.exec(line)?.[1]))
+      .toEqual(['P0', 'P1', 'P2', 'P3', 'P4', 'P5', 'C1', 'C2']);
+    expect(lines.some((line) => line.includes('role=coder'))).toBe(false);
     expect(lines.filter((line) => line.startsWith('request_acceptance_summary'))).toEqual([
       'request_acceptance_summary role=architect mode=observe first_failing=none controls=C1:200,C2:200 token_count_only=not_proof_of_messages_acceptance',
-      'request_acceptance_summary role=coder mode=observe first_failing=none controls=C1:none,C2:200 token_count_only=not_proof_of_messages_acceptance',
     ]);
-    expect(seen.slice(0, 8).every((entry) => entry.key === 'ARCH-KEY-NOTREAL')).toBe(true);
-    expect(seen.slice(8).every((entry) => entry.key === 'CODER-KEY-NOTREAL')).toBe(true);
+    expect(seen.every((entry) => entry.key === 'ARCH-KEY-NOTREAL')).toBe(true);
+    expect(read, 'the coder key variable is never read').not.toContain('ANTHROPIC_API_KEY');
     expect(lines.join('\n')).not.toMatch(/KEY-NOTREAL/u);
   });
 
@@ -523,29 +528,37 @@ describe('the observe-mode printer used by the live entrypoint preflight', () =>
     const lines: string[] = [];
     await printAnthropicAcceptanceProbes({
       env: { ANTHROPIC_ARCHITECT_API_KEY: 'ARCH-KEY-NOTREAL' },
-      architectOnAnthropic: true, architectModel: 'claude-opus-5-5', architectEffort: undefined, coderModel: 'claude-opus-5-5',
+      architectOnAnthropic: true, architectModel: 'claude-opus-5-5', architectEffort: undefined,
       out: (line) => lines.push(line), fetch: fetchWith(() => bad('schema is too complex')),
     });
     expect(lines.some((line) => line.includes('first_failing=P0'))).toBe(true);
-    expect(lines).toContain('request_acceptance role=coder probe=none skipped=key_or_model_absent');
+    expect(lines.some((line) => line.includes('role=coder'))).toBe(false);
+    const absent: string[] = [];
+    await printAnthropicAcceptanceProbes({
+      env: {}, architectOnAnthropic: true, architectModel: 'claude-opus-5-5', architectEffort: undefined,
+      out: (line) => absent.push(line), fetch: () => { throw new Error('no key, no call'); },
+    });
+    expect(absent).toEqual(['request_acceptance role=architect probe=none skipped=key_or_model_absent']);
   });
 
   it('an unexpected error while preparing the probes is a printed skip, never a throw', async () => {
     const { printAnthropicAcceptanceProbes } = await import('./live-workers');
     const lines: string[] = [];
     const hostile = new Proxy({}, { get: () => { throw new Error('boom'); } }) as Record<string, string | undefined>;
-    await printAnthropicAcceptanceProbes({ env: hostile, architectOnAnthropic: true, architectModel: 'claude-opus-5-5', architectEffort: 'high', coderModel: 'claude-opus-5-5', out: (line) => lines.push(line) });
+    await printAnthropicAcceptanceProbes({ env: hostile, architectOnAnthropic: true, architectModel: 'claude-opus-5-5', architectEffort: 'high', out: (line) => lines.push(line) });
     expect(lines).toEqual([
       'request_acceptance role=architect probe=none skipped=probe_error',
-      'request_acceptance role=coder probe=none skipped=probe_error',
     ]);
   });
 
   it('an OpenAI architect prints no architect probes', async () => {
     const { printAnthropicAcceptanceProbes } = await import('./live-workers');
     const lines: string[] = [];
-    await printAnthropicAcceptanceProbes({ env: {}, architectOnAnthropic: false, architectModel: null, architectEffort: undefined, coderModel: null, out: (line) => lines.push(line) });
-    expect(lines.some((line) => line.includes('role=architect'))).toBe(false);
+    await printAnthropicAcceptanceProbes({
+      env: { ANTHROPIC_API_KEY: 'CODER-KEY-NOTREAL' }, architectOnAnthropic: false, architectModel: null, architectEffort: undefined,
+      out: (line) => lines.push(line), fetch: () => { throw new Error('nothing is probed'); },
+    });
+    expect(lines, 'an OpenAI architect and a coder key: nothing at all').toEqual([]);
   });
 });
 
@@ -572,7 +585,6 @@ describe('JULIUS_ANTHROPIC_ACCEPTANCE_PROBES is a strict opt-in', () => {
     architectOnAnthropic: true as const,
     architectModel: 'claude-opus-5-5',
     architectEffort: 'high',
-    coderModel: 'claude-opus-5-5',
   };
 
   it.each([undefined, '', 'true', '01', ' 1', '0'])(
@@ -653,8 +665,10 @@ describe('JULIUS_ANTHROPIC_ACCEPTANCE_PROBES is a strict opt-in', () => {
       fetch: fetchWith(() => ok(), calls),
     });
     expect(juliusAnthropicAcceptanceProbesEnabled({ JULIUS_ANTHROPIC_ACCEPTANCE_PROBES: '1' }, false)).toBe(true);
-    expect(calls.length).toBeGreaterThan(0);
+    expect(calls).toHaveLength(8);
     expect(calls.every((call) => call.url === ANTHROPIC_COUNT_TOKENS_URL)).toBe(true);
+    expect(calls.every((call) => (call.init.headers as Record<string, string>)['x-api-key'] === 'ARCH-KEY-NOTREAL')).toBe(true);
+    expect(lines.some((line) => line.includes('role=coder'))).toBe(false);
     expect(lines.some((line) => line.startsWith('request_acceptance_summary') && line.includes('mode=observe') && line.includes('token_count_only=not_proof_of_messages_acceptance'))).toBe(true);
   });
 });

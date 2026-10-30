@@ -51,7 +51,7 @@ import type { AnthropicRefusalEvidence, ArchitectRunOutcome, ArchitectRunner } f
 import {
   anthropicArchitectRequestBody, anthropicBodyShapeFragment, anthropicEvidenceLevels, anthropicEvidenceLine, anthropicProbeMatrix, anthropicSchemaLimitsCheck,
   anthropicStructuredOutputSchema, firstFailingAnthropicProbe, runAnthropicProbes,
-  type AnthropicProbe, type AnthropicProbeResult,
+  type AnthropicProbeResult,
 } from '../../src/relay/connectors/gpt-architect/anthropic-architect-runner';
 import { validateArchitectPlan, type ArchitectPlanReasonCode } from '../../src/relay/mission/prompt-architect/prompt-architect-plan';
 import { sanitizeJuliusGuidanceProposal } from '../../src/relay/mission/julius/julius-continuous-lifecycle';
@@ -1074,9 +1074,10 @@ export function architectPlanProbeParts(): { readonly instructions: string; read
  * `POST /v1/messages/count_tokens` is documented as free and takes the production fields, so the
  * architect's production body is checked BEFORE any spend. Observe mode prints one line per probe and a
  * summary and NEVER fails the preflight: the first trial calibrates what count_tokens accepts, and only
- * then does the production-body probe become a gate. The coder is the Claude Agent SDK, which builds its
- * own requests, so its key is probed with the two bodies we can state: a short message, and effort `low`.
- * Nothing here throws; a missing key is a printed skip.
+ * then does the production-body probe become a gate. ARCHITECT ONLY: the eight architect probes are the
+ * whole matrix (8 count_tokens calls, inside the 10 the preflight allows). The coder's key is never
+ * read and never probed here: the coder is the Claude Agent SDK, which builds its own requests, so a
+ * hand-built coder body proved nothing about them. Nothing here throws; a missing key is a printed skip.
  *
  * The live entrypoint calls this only when JULIUS_ANTHROPIC_ACCEPTANCE_PROBES is
  * the exact token `1`, and never on `--confirm-live`. This printer itself does
@@ -1091,12 +1092,11 @@ export async function printAnthropicAcceptanceProbes(input: {
   readonly architectOnAnthropic: boolean;
   readonly architectModel: string | null;
   readonly architectEffort: string | undefined;
-  readonly coderModel: string | null;
   readonly out: (line: string) => void;
   readonly fetch?: typeof fetch;
 }): Promise<void> {
   const { out } = input;
-  const summary = (role: 'architect' | 'coder', results: readonly AnthropicProbeResult[], schemaCheck: ReturnType<typeof anthropicSchemaLimitsCheck> | null): void => {
+  const summary = (role: 'architect', results: readonly AnthropicProbeResult[], schemaCheck: ReturnType<typeof anthropicSchemaLimitsCheck> | null): void => {
     const failing = firstFailingAnthropicProbe(results);
     const control = (id: string): string => String(results.find((entry) => entry.id === id)?.http ?? 'none');
     // EV3/EV4 are only ever set by a real Messages call: this printer never calls one, so they are NOT_OBSERVED here.
@@ -1125,22 +1125,6 @@ export async function printAnthropicAcceptanceProbes(input: {
     } catch {
       out('request_acceptance role=architect probe=none skipped=probe_error');
     }
-  }
-  try {
-    const key = input.env[CODER_KEY_ENV] ?? '';
-    if (key.trim() === '' || input.coderModel === null || input.coderModel === '') {
-      out('request_acceptance role=coder probe=none skipped=key_or_model_absent');
-    } else {
-      const probes: readonly AnthropicProbe[] = [
-        { id: 'P0', label: 'model + short message', body: { model: input.coderModel, messages: [{ role: 'user', content: 'ping' }] } },
-        { id: 'C2', label: 'control: effort low', body: { model: input.coderModel, messages: [{ role: 'user', content: 'ping' }], output_config: { effort: 'low' } } },
-      ];
-      const results = await runAnthropicProbes({ role: 'coder', apiKey: key, probes, ...(input.fetch === undefined ? {} : { fetch: input.fetch }) });
-      for (const result of results) out(result.line);
-      summary('coder', results, null);
-    }
-  } catch {
-    out('request_acceptance role=coder probe=none skipped=probe_error');
   }
 }
 

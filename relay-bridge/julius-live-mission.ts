@@ -871,7 +871,6 @@ export async function runJuliusAnthropicAcceptanceProbesIfOptedIn(input: {
   readonly architectOnAnthropic: boolean;
   readonly architectModel: string | null;
   readonly architectEffort: string | undefined;
-  readonly coderModel: string | null;
   readonly out: (line: string) => void;
   readonly fetch?: typeof fetch;
   readonly print?: typeof printAnthropicAcceptanceProbes;
@@ -882,7 +881,6 @@ export async function runJuliusAnthropicAcceptanceProbesIfOptedIn(input: {
     architectOnAnthropic: input.architectOnAnthropic,
     architectModel: input.architectModel,
     architectEffort: input.architectEffort,
-    coderModel: input.coderModel,
     out: input.out,
     ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
   });
@@ -1153,7 +1151,7 @@ async function main(argv: readonly string[]): Promise<number> {
     await runJuliusAnthropicAcceptanceProbesIfOptedIn({
       env, confirmLive: flag('confirm-live'),
       architectOnAnthropic, architectModel: preflight.requested.architectModel ?? null,
-      architectEffort: contract.limits?.architectEffort, coderModel: preflight.requested.codingModel ?? null, out,
+      architectEffort: contract.limits?.architectEffort, out,
     });
     out('Preflight is ready. This run will spend real provider money and mutate the mission workspace.');
     out('To proceed, re-run with --confirm-live (approval is never inferred).');
