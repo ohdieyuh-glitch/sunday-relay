@@ -27,8 +27,16 @@ import type {
  *
  * REFUSAL EVIDENCE. A non-2xx answer keeps only machine facts: the status, the
  * `error.type` token, the `request-id` header (or why it is unavailable) and the
- * `anthropic-ratelimit-*` counts. The provider's message is read for ONE
- * purpose, to recognise a credit-balance refusal, and is then dropped.
+ * `anthropic-ratelimit-*` counts. The provider's message decides ONE thing, a
+ * credit-balance refusal, and otherwise survives only as SANITIZED EVIDENCE
+ * (`providerMessage`): a closed category, the `error.details.error_code`
+ * token, the full message's UTF-8 byte length and sha256, and a printable-ASCII
+ * excerpt of at most 240 characters with key-shaped text, e-mail addresses,
+ * URLs, IPs, long digit runs and every 32+ character token redacted. The
+ * excerpt is OMITTED (the rest kept) when the message overlaps the prompt or
+ * anything credential- or contact-shaped survives redaction. Never the raw body, never a header. Run 40698923582's
+ * architect 400 (req_011CgUkJwRQ8wdpL8pi7TMHH) was undiagnosable because the
+ * message was dropped; the evidence changes no class, retry or spend decision.
  */
 
 export const ANTHROPIC_PINNED_ORIGIN = 'https://api.anthropic.com';
@@ -276,6 +284,46 @@ export interface AnthropicRateLimitEvidence {
   readonly outputTokensRemaining: number | null;
 }
 
+/**
+ * THE CLOSED CATEGORY of a provider message. Evidence only: the failure class
+ * is decided by `classifyAnthropicStatus` alone, exactly as before.
+ *   - `credit_too_low`: the same `credit balance is too low` text the class reads.
+ *   - `spend_limit`: "You have reached your specified (workspace) API usage
+ *     limits", a 400 `invalid_request_error` (docs: api/rate-limits, "Setting
+ *     your own spend limit"). Deliberately NOT a class change.
+ *   - `schema_too_complex`: "Schema is too complex for compilation".
+ *   - `workspace_header`: a message naming `anthropic-workspace-id`.
+ */
+export type AnthropicProviderMessageClass = 'spend_limit' | 'credit_too_low' | 'schema_too_complex' | 'workspace_header' | 'other';
+
+/** The provider's message as sanitized evidence. No field is the raw message. */
+export interface AnthropicProviderMessageEvidence {
+  readonly messageClass: AnthropicProviderMessageClass;
+  /** `error.details.error_code` when it is a safe token; null when absent. */
+  readonly errorCode: string | null;
+  /** True when `error.details.error_code` was present but not a safe token. */
+  readonly errorCodeUnusable: boolean;
+  /**
+   * Printable ASCII, single line, key-shaped text, e-mail addresses, URLs, IP
+   * addresses, long digit runs and 32+ character tokens redacted, at most 240
+   * characters. NULL when safe redaction cannot be guaranteed: see `excerptOmitted`.
+   */
+  readonly excerpt: string | null;
+  /**
+   * Why the excerpt was omitted, or null when it was kept.
+   *   - `prompt_overlap`: the message shares a run of text with the request's
+   *     system prompt or input, so it may quote prompt contents.
+   *   - `unsafe_residue`: after redaction the text still looks like a credential
+   *     or contact detail.
+   * The category, code, length and digest are kept either way.
+   */
+  readonly excerptOmitted: 'prompt_overlap' | 'unsafe_residue' | null;
+  /** The full message's UTF-8 byte length. */
+  readonly messageBytes: number;
+  /** The full message's sha256 (lowercase hex, over its UTF-8 bytes). */
+  readonly messageSha256: string;
+}
+
 export interface AnthropicRefusalEvidence {
   readonly httpStatus: number;
   /** The provider's `error.type`, a safe token, or null when absent or unusable. */
@@ -286,6 +334,12 @@ export interface AnthropicRefusalEvidence {
   /** Present exactly when `requestId` is null. */
   readonly requestIdUnavailableReason: 'request_id_header_absent' | 'request_id_header_unusable' | null;
   readonly rateLimit: AnthropicRateLimitEvidence;
+  /**
+   * The provider's message as sanitized evidence. Null when the body was not
+   * JSON with an `error` object (or exceeded the evidence bound). Absent from a
+   * refusal another runner built.
+   */
+  readonly providerMessage?: AnthropicProviderMessageEvidence | null;
 }
 
 export interface AnthropicArchitectSuccess extends GptRunSuccess {
@@ -320,6 +374,45 @@ const SAFE_MODEL = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u;
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/u;
 const CREDIT_TOO_LOW = /credit balance is too low/iu;
 const MAX_ERROR_BODY_CHARS = 8_192;
+/** How much of an error body the EVIDENCE parse reads. The class still reads only the first 8,192 characters. */
+const MAX_ERROR_EVIDENCE_CHARS = 65_536;
+export const PROVIDER_MESSAGE_EXCERPT_MAX = 240;
+const SPEND_LIMIT = /you have reached your specified (?:workspace )?api usage limits/iu;
+const SCHEMA_TOO_COMPLEX = /schema is too complex/iu;
+const WORKSPACE_HEADER = /anthropic-workspace-id/iu;
+const SAFE_ERROR_CODE = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$/u;
+/** Key-shaped text, redacted before the 32+ character rule (some keys are shorter). */
+const KEY_SHAPED: readonly RegExp[] = [
+  /\b(?:sk|xai|rk|pk)-[A-Za-z0-9_-]{6,}/giu,
+  /\bgh[pousr]_[A-Za-z0-9]{6,}/gu,
+  /\bgithub_pat_[A-Za-z0-9_]{6,}/gu,
+  /\bAKIA[0-9A-Z]{8,}/gu,
+  /\bbearer\s+\S+/giu,
+  /\b(?:x-api-key|authorization|api[_-]?key)\s*[:=]?\s*[^\s,;]+/giu,
+  /\b(?:token|secret|password|credential)\s*[:=]\s*\S+/giu,
+  /-----BEGIN[^-]*-----/gu,
+  /\bhttps?:\/\/\S+/giu,
+  /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/gu,
+  /\b\d{1,3}(?:\.\d{1,3}){3}\b/gu,
+  /\+?\d(?:[ ().\/-]{0,3}\d){8,}/gu,
+];
+/** What must not survive redaction; when it does, the excerpt is omitted rather than trusted. */
+const UNSAFE_RESIDUE: readonly RegExp[] = [
+  /@/u, /\b(?:sk|xai|rk|pk)-/iu, /\bgh[pousr]_/u, /github_pat_/iu, /\bAKIA/u, /-----BEGIN/u, /:\/\//u,
+  /\b(?:bearer|password|passwd|secret|token|credential|api[_-]?key|x-api-key|authorization)\b\s*[:=]/iu,
+  /\d(?:[^A-Za-z0-9]{0,3}\d){8,}/u,
+];
+/**
+ * Only this head of a message is ever sanitized or emitted, ending at the last
+ * whitespace inside it so no token is cut part-way. It bounds the regex work
+ * (some shapes are quadratic on a long run) and still leaves far more than 240
+ * characters to redact before the cut.
+ */
+const SANITIZE_WINDOW = 1_024;
+/** The shortest shared run that counts as quoting the prompt (normalized characters). */
+const PROMPT_OVERLAP_WINDOW = 16;
+const LONG_TOKEN = /\S{32,}/gu;
+const REDACTED = '[redacted]';
 
 const token = (raw: unknown): string | null => (typeof raw === 'string' && SAFE_TOKEN.test(raw) ? raw : null);
 
@@ -389,12 +482,125 @@ export function anthropicPinnedFetch(fetchImpl: typeof fetch, input: string, ini
 
 const isAbort = (error: unknown): boolean => (error as { name?: string } | null)?.name === 'AbortError';
 
-async function readErrorBody(response: Response): Promise<{ readonly type: unknown; readonly message: string } | null> {
+async function readErrorText(response: Response): Promise<string | null> {
+  try { return await response.text(); } catch { return null; }
+}
+
+/** THE CLASSIFYING READ, unchanged: the first 8,192 characters, parsed, or null. */
+function readErrorBody(raw: string | null): { readonly type: unknown; readonly message: string } | null {
+  if (raw === null) return null;
   try {
-    const text = (await response.text()).slice(0, MAX_ERROR_BODY_CHARS);
+    const text = raw.slice(0, MAX_ERROR_BODY_CHARS);
     const parsed = JSON.parse(text) as { error?: { type?: unknown; message?: unknown } };
     const message = typeof parsed?.error?.message === 'string' ? parsed.error.message : '';
     return { type: parsed?.error?.type, message };
+  } catch {
+    return null;
+  }
+}
+
+/** The closed category. Evidence only; it never feeds the class. */
+export function providerMessageClass(message: string): AnthropicProviderMessageClass {
+  if (CREDIT_TOO_LOW.test(message)) return 'credit_too_low';
+  if (SPEND_LIMIT.test(message)) return 'spend_limit';
+  if (SCHEMA_TOO_COMPLEX.test(message)) return 'schema_too_complex';
+  if (WORKSPACE_HEADER.test(message)) return 'workspace_header';
+  return 'other';
+}
+
+/**
+ * A provider message as a loggable excerpt: whitespace and control characters
+ * become one space, anything else outside printable ASCII becomes `?`,
+ * key-shaped text and then every 32+ character token become `[redacted]`
+ * (all before the cut, so no key survives by straddling it), and the result is
+ * at most {@link PROVIDER_MESSAGE_EXCERPT_MAX} characters.
+ */
+function messageHead(message: string): string {
+  return message.length <= SANITIZE_WINDOW ? message : message.slice(0, SANITIZE_WINDOW).replace(/\S*$/u, '');
+}
+
+export function sanitizeProviderExcerpt(message: string): string {
+  // eslint-disable-next-line no-control-regex
+  let text = messageHead(message).replace(/[\s\u0000-\u001f\u007f-\u009f\u2028\u2029]+/gu, ' ').replace(/[^\x20-\x7e]/gu, '?');
+  for (const shape of KEY_SHAPED) text = text.replace(shape, REDACTED);
+  text = text.replace(LONG_TOKEN, REDACTED).replace(/ {2,}/gu, ' ').trim();
+  return text.length <= PROVIDER_MESSAGE_EXCERPT_MAX ? text : `${text.slice(0, PROVIDER_MESSAGE_EXCERPT_MAX - 3)}...`;
+}
+
+function overlapText(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9]+/gu, ' ').trim();
+}
+
+/**
+ * True when the message shares a run of {@link PROMPT_OVERLAP_WINDOW} normalized
+ * characters with any prompt text (a prompt shorter than the window counts when
+ * it appears whole and is at least 8 characters). Erring towards true only
+ * omits an excerpt.
+ */
+export function messageQuotesPrompt(message: string, prompts: readonly string[]): boolean {
+  const said = overlapText(message);
+  if (said.length === 0) return false;
+  const windows = new Set<string>();
+  for (const prompt of prompts) {
+    const text = overlapText(prompt);
+    if (text.length < PROMPT_OVERLAP_WINDOW) {
+      if (text.length >= 8 && said.includes(text)) return true;
+      continue;
+    }
+    for (let i = 0; i + PROMPT_OVERLAP_WINDOW <= text.length; i += 1) windows.add(text.slice(i, i + PROMPT_OVERLAP_WINDOW));
+  }
+  for (let i = 0; i + PROMPT_OVERLAP_WINDOW <= said.length; i += 1) {
+    if (windows.has(said.slice(i, i + PROMPT_OVERLAP_WINDOW))) return true;
+  }
+  return false;
+}
+
+/** The excerpt, or why there is none. */
+export function providerMessageExcerpt(message: string, prompts: readonly string[]): {
+  readonly excerpt: string | null; readonly excerptOmitted: 'prompt_overlap' | 'unsafe_residue' | null;
+} {
+  if (messageQuotesPrompt(messageHead(message), prompts)) return { excerpt: null, excerptOmitted: 'prompt_overlap' };
+  const excerpt = sanitizeProviderExcerpt(message);
+  const scrubbed = excerpt.split(REDACTED).join(' ');
+  if (UNSAFE_RESIDUE.some((shape) => shape.test(scrubbed))) return { excerpt: null, excerptOmitted: 'unsafe_residue' };
+  return { excerpt, excerptOmitted: null };
+}
+
+async function sha256Hex(text: string): Promise<{ readonly bytes: number; readonly hex: string }> {
+  const data = new TextEncoder().encode(text);
+  const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', data));
+  return { bytes: data.byteLength, hex: Array.from(digest, (b) => b.toString(16).padStart(2, '0')).join('') };
+}
+
+/**
+ * THE EVIDENCE READ: the body up to {@link MAX_ERROR_EVIDENCE_CHARS}, so a long
+ * message still yields its full length and digest. Null when it is not JSON
+ * with an `error` object. Never throws; never returns raw text.
+ */
+export async function providerMessageEvidence(raw: string | null, prompts: readonly string[] = []): Promise<AnthropicProviderMessageEvidence | null> {
+  if (raw === null || raw.length > MAX_ERROR_EVIDENCE_CHARS) return null;
+  let error: { message?: unknown; details?: { error_code?: unknown } } | null;
+  try {
+    const parsed = JSON.parse(raw) as { error?: unknown };
+    error = parsed !== null && typeof parsed === 'object' && parsed.error !== null && typeof parsed.error === 'object'
+      ? parsed.error as { message?: unknown; details?: { error_code?: unknown } } : null;
+  } catch {
+    return null;
+  }
+  if (error === null) return null;
+  const message = typeof error.message === 'string' ? error.message : '';
+  const rawCode = error.details !== null && typeof error.details === 'object' ? error.details.error_code : undefined;
+  const errorCode = typeof rawCode === 'string' && SAFE_ERROR_CODE.test(rawCode) ? rawCode : null;
+  try {
+    const { bytes, hex } = await sha256Hex(message);
+    return {
+      messageClass: providerMessageClass(message),
+      errorCode,
+      errorCodeUnusable: rawCode !== undefined && rawCode !== null && errorCode === null,
+      ...providerMessageExcerpt(message, prompts),
+      messageBytes: bytes,
+      messageSha256: hex,
+    };
   } catch {
     return null;
   }
@@ -487,7 +693,8 @@ export async function runAnthropicArchitect(
     const requestFacts = { providerRequestId: requestId, providerRequestUnavailableReason: reason };
 
     if (!response.ok) {
-      const errorBody = await readErrorBody(response);
+      const errorText = await readErrorText(response);
+      const errorBody = readErrorBody(errorText);
       const errorType = token(errorBody?.type);
       const failureClass = classifyAnthropicStatus(response.status, errorType, CREDIT_TOO_LOW.test(errorBody?.message ?? ''));
       return {
@@ -501,6 +708,7 @@ export async function runAnthropicArchitect(
           requestId,
           requestIdUnavailableReason: reason,
           rateLimit: anthropicRateLimitEvidence(response.headers),
+          providerMessage: await providerMessageEvidence(errorText, [request.instructions, request.input]),
         },
       };
     }

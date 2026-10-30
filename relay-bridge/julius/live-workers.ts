@@ -1030,13 +1030,39 @@ export function architectRefusalFacts(outcome: ArchitectRunOutcome): Record<stri
   return facts;
 }
 
-/** THE ONE STDOUT LINE for a refused architect request. Every field is an integer or a safe token. */
+const REFUSAL_MESSAGE_CLASSES: ReadonlySet<string> = new Set(['spend_limit', 'credit_too_low', 'schema_too_complex', 'workspace_header', 'other']);
+
+/**
+ * THE ONE STDOUT LINE for a refused architect request. Every field is an
+ * integer or a safe token, except the LAST, `message="..."`: the runner's
+ * sanitized excerpt (printable ASCII, at most 240 characters, keys and 32+
+ * character tokens redacted), re-checked here, with `\` and `"` escaped so the
+ * line stays one line and the value ends at the closing quote. The message
+ * fields come after every field the line had before, so a reader of the old
+ * prefix is unaffected. `excerpt=kept|omitted_prompt_overlap|omitted_unsafe_residue|none`
+ * says whether the excerpt is there; when omitted, `message=""` and the class,
+ * code, length and digest still stand. `message_class=unavailable` (and
+ * `unknown` length and digest, `excerpt=none`, `message=""`) when the body was
+ * not JSON with an `error` object.
+ */
 export function architectProviderRefusalLine(provider: 'openai' | 'anthropic', refusal: AnthropicRefusalEvidence): string {
   const n = (value: number | null): string => (value === null ? 'unknown' : String(value));
+  const evidence = refusal.providerMessage ?? null;
+  const messageClass = evidence !== null && REFUSAL_MESSAGE_CLASSES.has(evidence.messageClass) ? evidence.messageClass : evidence === null ? 'unavailable' : 'other';
+  const errorCode = evidence === null || evidence.errorCode === null
+    ? (evidence?.errorCodeUnusable === true ? 'unusable' : 'none')
+    : /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$/u.test(evidence.errorCode) ? evidence.errorCode : 'unusable';
+  const bytes = evidence !== null && Number.isSafeInteger(evidence.messageBytes) && evidence.messageBytes >= 0 ? String(evidence.messageBytes) : 'unknown';
+  const digest = evidence !== null && /^[0-9a-f]{64}$/u.test(evidence.messageSha256) ? evidence.messageSha256 : 'unknown';
+  const excerptStatus = evidence === null ? 'none'
+    : evidence.excerptOmitted === 'prompt_overlap' || evidence.excerptOmitted === 'unsafe_residue' ? `omitted_${evidence.excerptOmitted}`
+      : typeof evidence.excerpt === 'string' ? 'kept' : 'omitted_unsafe_residue';
+  const excerpt = (excerptStatus === 'kept' ? evidence?.excerpt ?? '' : '').replace(/[^\x20-\x7e]/gu, '?').slice(0, 240).replace(/[\\"]/gu, (c) => `\\${c}`);
   return `provider_refusal role=PROMPT_ARCHITECT provider=${provider} http=${refusal.httpStatus} type=${refusal.errorType ?? 'unknown'}`
     + ` limit_tokens=${n(refusal.rateLimit.tokensLimit)} remaining_tokens=${n(refusal.rateLimit.tokensRemaining)}`
     + ` limit_requests=${n(refusal.rateLimit.requestsLimit)} remaining_requests=${n(refusal.rateLimit.requestsRemaining)}`
-    + ` request_id=${refusal.requestId ?? 'unavailable'}`;
+    + ` request_id=${refusal.requestId ?? 'unavailable'}`
+    + ` error_code=${errorCode} message_class=${messageClass} message_bytes=${bytes} message_sha256=${digest} excerpt=${excerptStatus} message="${excerpt}"`;
 }
 
 export function createLiveArchitectAdapter(input: {
