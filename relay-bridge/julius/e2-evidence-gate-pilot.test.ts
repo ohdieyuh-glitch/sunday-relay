@@ -18,6 +18,14 @@ import { E2_FAKE_LABEL, e2Gate, recordGitDiff, recordVerifierReexec, spawnVerifi
 
 const sha = (b: string | Uint8Array): string => createHash('sha256').update(b).digest('hex');
 const NODE = process.execPath;
+
+/* 43b93a4e N-3: the runner refuses `node -e`; inline verifier code is written to a script file (argv shifted to match -e). */
+const JS_DIR = realpathSync(mkdtempSync(join(tmpdir(), 'e2js-')));
+const js = (code: string): string => {
+  const f = join(JS_DIR, `${createHash('sha256').update(code).digest('hex').slice(0, 16)}.cjs`);
+  writeFileSync(f, `process.argv.splice(1, 1);\n${code}\n`);
+  return f;
+};
 const KEY = 'SENTINEL-KEY-0123456789-never-print';
 const REF = { agentId: 'bc-00000000-0000-4000-8000-000000000001', runId: 'run-00000000-0000-0000-0000-000000000001' };
 const ev = (event: string, data: unknown, id?: string): string => `${id === undefined ? '' : `id: ${id}\n`}event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
@@ -93,7 +101,7 @@ function rechain(lines: readonly string[], edit: (r: Record<string, unknown>, i:
 }
 async function parts() {
   const runner = spawnVerifierRunner({ timeoutMs: 30_000 });
-  const reexec = await recordVerifierReexec({ commands: [[NODE, '-e', '0']], cwd: repo, runner });
+  const reexec = await recordVerifierReexec({ commands: [[NODE, js('0')]], cwd: repo, runner });
   const diff = await recordGitDiff({ base, head, cwd: repo, runner });
   return { runner, reexec, diff, binding: { runId: REF.runId, base, head, workspace: repo }, modelId: 'grok-code-fast-1' };
 }
@@ -191,9 +199,9 @@ describe('PILOT 0774db05 H-4: run, base, head and workspace are bound across str
     expect(swapped?.ancestry).toBe(false);
     expect(reasons(e2Gate({ ...g, diff: swapped }))).toEqual(['e2_binding_diff_mismatch', 'e2_diff_not_descendant']);
     expect(reasons(e2Gate({ ...g, diff: swapped, binding: { ...p.binding, base: head, head: base } }))).toEqual(['e2_diff_not_descendant']);
-    const rootReexec = await recordVerifierReexec({ commands: [[NODE, '-e', '0']], cwd: '/', runner: p.runner });
+    const rootReexec = await recordVerifierReexec({ commands: [[NODE, js('0')]], cwd: '/', runner: p.runner });
     expect(reasons(e2Gate({ ...g, reexec: rootReexec }))).toEqual(['e2_binding_cwd_mismatch']);
-    expect(await recordVerifierReexec({ commands: [[NODE, '-e', '0']], cwd: '.', runner: p.runner })).toBeNull();
+    expect(await recordVerifierReexec({ commands: [[NODE, js('0')]], cwd: '.', runner: p.runner })).toBeNull();
   });
 });
 
@@ -201,7 +209,7 @@ describe('PILOT 0774db05 M-7: the verifier runner', () => {
   it('passes only an allowlisted environment: a parent variable does not leak', async () => {
     process.env.E2_PILOT_LEAK = 'leaked';
     try {
-      const r = await recordVerifierReexec({ commands: [[NODE, '-e', 'process.stdout.write(process.env.E2_PILOT_LEAK ?? "none")']], cwd: repo, runner: spawnVerifierRunner() });
+      const r = await recordVerifierReexec({ commands: [[NODE, js('process.stdout.write(process.env.E2_PILOT_LEAK ?? "none")')]], cwd: repo, runner: spawnVerifierRunner() });
       expect(r?.commands[0]?.stdoutSha256).toBe(sha('none'));
     } finally { delete process.env.E2_PILOT_LEAK; }
   });
@@ -215,7 +223,7 @@ describe('PILOT 0774db05 M-7: the verifier runner', () => {
   it('the timeout kills the whole process group: a grandchild holding the pipes dies too', async () => {
     const runner = spawnVerifierRunner({ timeoutMs: 300 });
     const t0 = Date.now();
-    const r = await recordVerifierReexec({ commands: [[NODE, '-e', "require('child_process').spawn('sleep',['3'],{stdio:'inherit'})"]], cwd: repo, runner });
+    const r = await recordVerifierReexec({ commands: [[NODE, js("require('child_process').spawn('sleep',['3'],{stdio:'inherit'})")]], cwd: repo, runner });
     expect(Date.now() - t0).toBeLessThan(2_000);
     expect(r?.commands[0]?.exitCode).toBe('unknown');
   });
@@ -223,11 +231,11 @@ describe('PILOT 0774db05 M-7: the verifier runner', () => {
     const runner = spawnVerifierRunner();
     const link = join(root, 'link');
     symlinkSync(repo, link);
-    for (const cwd of ['.', 'repo', join(root, 'missing'), link, join(repo, 'a.txt')]) expect((await runner([NODE, '-e', '0'], cwd)).exitCode, cwd).toBeNull();
-    expect((await runner([NODE, '-e', '0'], repo)).exitCode).toBe(0);
+    for (const cwd of ['.', 'repo', join(root, 'missing'), link, join(repo, 'a.txt')]) expect((await runner([NODE, js('0')], cwd)).exitCode, cwd).toBeNull();
+    expect((await runner([NODE, js('0')], repo)).exitCode).toBe(0);
   });
   it('output is hashed while streaming with byte counts, and an output cap makes the exit unknown', async () => {
-    const big = [NODE, '-e', 'process.stdout.write("x".repeat(3000000))'];
+    const big = [NODE, js('process.stdout.write("x".repeat(3000000))')];
     const r = await recordVerifierReexec({ commands: [big], cwd: repo, runner: spawnVerifierRunner() });
     expect(r?.commands[0]).toMatchObject({ exitCode: 0, stdoutSha256: sha('x'.repeat(3_000_000)), stdoutBytes: 3_000_000, stderrBytes: 0 });
     const capped = await recordVerifierReexec({ commands: [big], cwd: repo, runner: spawnVerifierRunner({ maxOutputBytes: 1_000 }) });

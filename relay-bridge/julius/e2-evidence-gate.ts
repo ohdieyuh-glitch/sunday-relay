@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { realpathSync, statSync } from 'node:fs';
-import { basename, isAbsolute } from 'node:path';
+import { basename, dirname, isAbsolute, join } from 'node:path';
 
 import { E2_STREAM_LABEL_LIVE, verifyEvidenceChain } from './cursor-run-stream-evidence';
 import { familyFromModelId, isRouterModelId } from './grok-bot-coding-provider';
@@ -31,7 +31,7 @@ export const E2_FAKE_LABEL = 'fake';
 /** What an injected runner may return: raw output (hashed here) or streamed hashes and byte counts. */
 export type VerifierRunResult =
   | { readonly exitCode: number | null; readonly stdout: Uint8Array | string; readonly stderr: Uint8Array | string }
-  | { readonly exitCode: number | null; readonly stdoutSha256: string; readonly stderrSha256: string; readonly stdoutBytes: number; readonly stderrBytes: number };
+  | { readonly exitCode: number | null; readonly stdoutSha256: string; readonly stderrSha256: string; readonly stdoutBytes: number; readonly stderrBytes: number; readonly cause?: string };
 export type VerifierRunner = (argv: readonly string[], cwd: string, extraEnv?: Readonly<Record<string, string>>) => Promise<VerifierRunResult>;
 
 const TRUSTED_RUNNERS = new WeakSet<VerifierRunner>();
@@ -50,48 +50,146 @@ export function isCanonicalDir(cwd: string): boolean {
 }
 
 /**
- * The only runner whose records are `julius_observed`. No shell; shell argv0 refused; cwd checked; the environment is an
- * allowlist (PATH, C.UTF-8 locale, then `env`, then the per-call extras), never inherited; the child leads its own process
- * group and a timeout or an output overrun kills the whole group (exit unknown); output is hashed while it streams.
+ * PILOT 43b93a4e N-3: the fixed PATH every verifier child gets. PATH is never taken from the parent, `options.env` or the
+ * per-call env; node's own directory comes first so npx/npm/tsc resolve beside the running node.
  */
-export function spawnVerifierRunner(options: { readonly timeoutMs?: number; readonly env?: Readonly<Record<string, string>>; readonly maxOutputBytes?: number } = {}): VerifierRunner {
-  const timeoutMs = options.timeoutMs ?? 15 * 60 * 1000;
-  const maxOutputBytes = options.maxOutputBytes ?? 1024 * 1024 * 1024;
+export const E2_VERIFIER_PATH = `${dirname(process.execPath)}:/usr/local/bin:/usr/bin:/bin`;
+/** Git subcommands a verifier (or this module's diff) may run; no -C, --exec-path, --git-dir or alias config. */
+const GIT_SUBCOMMANDS = new Set(['diff', 'merge-base', 'rev-parse', 'status', 'log', 'show', 'ls-files']);
+const isGitPin = (v: string): boolean => GIT_PIN_VALUES.has(v);
+const progName = (p: string): string => basename(p.replace(/\\/gu, '/')).toLowerCase();
+/** Resolves a program name to an absolute binary on the fixed PATH (node is process.execPath), or null. */
+function resolveProgram(program: string): string | null {
+  const name = progName(program);
+  if (name === 'node') return process.execPath;
+  for (const d of E2_VERIFIER_PATH.split(':')) {
+    const f = join(d, name);
+    try { if (statSync(f).isFile()) return realpathSync(f); } catch { /* next */ }
+  }
+  return null;
+}
+/**
+ * PILOT 43b93a4e N-3 / Skywalker N3: the closed program allowlist. node with a script FILE (no -e/-p/--eval/flags first),
+ * npx vitest|tsc, tsc, npm test (no --script-shell), git with a fixed subcommand and only this module's -c pins.
+ * Everything else, including wrappers (timeout, nice, setsid), interpreters with inline code, any shell under any spelling
+ * (bash.exe, wsl.exe, powershell.exe) and trivially-true commands (true, :, exit 0), is refused. An absolute argv0 must be
+ * the binary the fixed PATH resolves to.
+ */
+export function isVerifierCommandAllowed(argv: readonly string[], cwd: string): boolean {
+  if (!validArgv(argv)) return false;
+  const program = argv[0] as string;
+  const name = progName(program);
+  if (!['node', 'npx', 'npm', 'tsc', 'git'].includes(name) || program !== program.trim()) return false;
+  if (program.includes('/') || program.includes('\\')) {
+    const resolved = resolveProgram(name);
+    let real: string | null = null;
+    try { real = realpathSync(program); } catch { real = null; }
+    if (resolved === null || real !== resolved) return false;
+  }
+  const args = argv.slice(1);
+  if (args.some((x) => /^--?(script-shell|node-options|require|import|loader|experimental-loader|eval|print|call|package)\b/iu.test(x))) return false;
+  switch (name) {
+    case 'node': {
+      const script = args[0];
+      if (script === undefined || script.startsWith('-')) return false;
+      try { return statSync(isAbsolute(script) ? script : join(cwd, script)).isFile(); } catch { return false; }
+    }
+    case 'npx': return args[0] === 'vitest' || args[0] === 'tsc';
+    case 'npm': return args[0] === 'test';
+    case 'tsc': return true;
+    case 'git': {
+      let i = 0;
+      while (args[i] === '-c' && typeof args[i + 1] === 'string' && isGitPin(args[i + 1] as string)) i += 2;
+      return GIT_SUBCOMMANDS.has(args[i] ?? '') && !args.slice(i).some((x) => x === '-C' || x.startsWith('--exec-path') || x.startsWith('--git-dir') || x.startsWith('--work-tree') || x.startsWith('--output'));
+    }
+    default: return false;
+  }
+}
+
+/** What the spawn runner reports when it gave up: a refused argv, the hard deadline, or an output overrun. */
+export type VerifierRunCause = 'refused' | 'timeout' | 'output_overrun' | 'spawn_failed';
+
+/**
+ * The only runner whose records are `julius_observed`. No shell; only allowlisted programs, resolved on a fixed PATH;
+ * cwd checked; the environment is an allowlist (fixed PATH, C.UTF-8 locale, then `env`, then the per-call extras, with
+ * PATH dropped from both), never inherited. The child leads its own process group; when the leader exits the group is
+ * killed (stragglers), and a HARD deadline (timeoutMs) kills the group, destroys stdout/stderr and resolves with exit
+ * null and cause `timeout` even if an escaped process (setsid/new session) still holds the pipes. HONEST LIMIT: such an
+ * escapee is not killed, only abandoned. Where the leader exits but the pipes stay open, the runner waits a short grace
+ * then resolves the same way. On win32 the tree is killed with `taskkill /PID <pid> /T /F` — NOT PROVEN ON WINDOWS
+ * (unit-tested with an injected platform and spawn only).
+ */
+export function spawnVerifierRunner(options: {
+  readonly timeoutMs?: number; readonly env?: Readonly<Record<string, string>>; readonly maxOutputBytes?: number;
+  readonly platform?: NodeJS.Platform; readonly spawnImpl?: typeof spawn; readonly exitGraceMs?: number;
+} = {}): VerifierRunner {
+  const pos = (v: unknown, d: number): number => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : d);
+  const timeoutMs = pos(options.timeoutMs, 15 * 60 * 1000);
+  const maxOutputBytes = pos(options.maxOutputBytes, 1024 * 1024 * 1024);
+  const exitGraceMs = pos(options.exitGraceMs, 2000);
+  const platform = options.platform ?? process.platform;
+  const spawnImpl = options.spawnImpl ?? spawn;
   const refused = { exitCode: null, stdoutSha256: EMPTY_SHA, stderrSha256: EMPTY_SHA, stdoutBytes: 0, stderrBytes: 0 } as const;
+  const noPath = (e: Readonly<Record<string, string>> | undefined): Record<string, string> =>
+    Object.fromEntries(Object.entries(e ?? {}).filter(([k]) => k.toUpperCase() !== 'PATH'));
   const runner: VerifierRunner = (argv, cwd, extraEnv) => new Promise((resolve) => {
-    if (!validArgv(argv) || isShellProgram(argv[0] as string) || !isCanonicalDir(cwd)) { resolve(refused); return; }
-    const env: Record<string, string> = { PATH: process.env.PATH ?? '/usr/bin:/bin', LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...options.env, ...extraEnv };
-    let child;
+    if (!isCanonicalDir(cwd) || !isVerifierCommandAllowed(argv, cwd)) { resolve({ ...refused, cause: 'refused' }); return; }
+    const bin = resolveProgram(argv[0] as string);
+    if (bin === null) { resolve({ ...refused, cause: 'refused' }); return; }
+    const env: Record<string, string> = { LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...noPath(options.env), ...noPath(extraEnv), PATH: E2_VERIFIER_PATH };
+    let child: ReturnType<typeof spawn>;
     try {
-      child = spawn(argv[0] as string, argv.slice(1), { cwd, shell: false, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
-    } catch { resolve(refused); return; }
+      child = spawnImpl(bin, argv.slice(1), { cwd, shell: false, env, detached: platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'] });
+    } catch { resolve({ ...refused, cause: 'spawn_failed' }); return; }
     const out = createHash('sha256');
     const err = createHash('sha256');
     let outBytes = 0;
     let errBytes = 0;
-    let killed = false;
+    let cause: VerifierRunCause | null = null;
     let failed = false;
+    let settled = false;
     const killGroup = (): void => {
-      try { if (child.pid !== undefined) process.kill(-child.pid, 'SIGKILL'); } catch { /* already gone */ }
+      const pid = child.pid;
+      if (pid === undefined) return;
+      if (platform === 'win32') {
+        try { spawnImpl('taskkill', ['/PID', String(pid), '/T', '/F'], { shell: false, stdio: 'ignore', windowsHide: true }).unref?.(); } catch { /* best effort */ }
+        return;
+      }
+      try { process.kill(-pid, 'SIGKILL'); } catch { /* already gone */ }
     };
-    const timer = setTimeout(() => { killed = true; killGroup(); }, timeoutMs);
-    const over = (): void => { if (outBytes + errBytes > maxOutputBytes && !killed) { killed = true; killGroup(); } };
-    child.stdout.on('data', (d: Buffer) => { outBytes += d.byteLength; out.update(d); over(); });
-    child.stderr.on('data', (d: Buffer) => { errBytes += d.byteLength; err.update(d); over(); });
-    child.on('error', () => { failed = true; });
     let code: number | null = null;
     let sig: NodeJS.Signals | null = null;
-    // A leader that exits leaves no reason for its group to keep the pipes open: stragglers are killed.
-    child.on('exit', (c, s) => { code = c; sig = s; killGroup(); });
-    child.on('close', (c, s) => {
+    const finish = (c: number | null, s: NodeJS.Signals | null): void => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
-      const fc = code ?? c;
-      const fs = sig ?? s;
-      resolve({
-        exitCode: !failed && !killed && fs === null && typeof fc === 'number' && fc >= 0 ? fc : null,
+      if (grace !== undefined) clearTimeout(grace);
+      const r = {
+        exitCode: !failed && cause === null && s === null && typeof c === 'number' && c >= 0 ? c : null,
         stdoutSha256: out.digest('hex'), stderrSha256: err.digest('hex'), stdoutBytes: outBytes, stderrBytes: errBytes,
-      });
+      };
+      resolve(cause === null ? r : { ...r, cause });
+    };
+    /* Hard deadline: never waits for the pipes to close. */
+    const abandon = (why: VerifierRunCause): void => {
+      if (cause === null) cause = why;
+      killGroup();
+      child.stdout?.destroy();
+      child.stderr?.destroy();
+      finish(null, null);
+    };
+    const timer = setTimeout(() => abandon('timeout'), timeoutMs);
+    let grace: ReturnType<typeof setTimeout> | undefined;
+    const over = (): void => { if (outBytes + errBytes > maxOutputBytes && cause === null) abandon('output_overrun'); };
+    child.stdout?.on('data', (d: Buffer) => { if (settled) return; outBytes += d.byteLength; out.update(d); over(); });
+    child.stderr?.on('data', (d: Buffer) => { if (settled) return; errBytes += d.byteLength; err.update(d); over(); });
+    child.on('error', () => { failed = true; finish(null, null); });
+    // A leader that exits leaves no reason for its group to keep the pipes open: stragglers are killed (mutant M9).
+    child.on('exit', (c: number | null, s: NodeJS.Signals | null) => {
+      code = c; sig = s; killGroup();
+      grace = setTimeout(() => abandon('timeout'), exitGraceMs);
     });
+    child.on('close', (c: number | null, s: NodeJS.Signals | null) => finish(code ?? c, sig ?? s));
   });
   TRUSTED_RUNNERS.add(runner);
   return runner;
@@ -145,6 +243,8 @@ export async function recordVerifierReexec(input: {
   if (!Array.isArray(input.commands) || input.commands.length === 0 || !input.commands.every(validArgv)) return null;
   if (input.commands.some((a) => isShellProgram(a[0] as string))) return null;
   if (typeof input.cwd !== 'string' || !isAbsolute(input.cwd)) return null;
+  /* PILOT 43b93a4e N-3 / Skywalker N3: only allowlisted, non-trivial verifier programs, whatever runner is supplied. */
+  if (!input.commands.every((a) => isVerifierCommandAllowed(a, input.cwd))) return null;
   const commands: E2CommandRecord[] = [];
   for (const argv of input.commands) {
     const startedAt = new Date(now()).toISOString();
@@ -163,6 +263,7 @@ const GIT_PINS = Object.freeze([
   '-c', 'diff.noprefix=false', '-c', 'diff.renames=false', '-c', 'core.quotepath=false', '-c', 'diff.mnemonicPrefix=false',
   '-c', 'color.ui=never', '-c', 'diff.relative=false', '-c', 'diff.suppressBlankEmpty=false', '-c', 'core.autocrlf=false',
 ]);
+const GIT_PIN_VALUES: ReadonlySet<string> = new Set(GIT_PINS.filter((_, i) => i % 2 === 1));
 /** (C) The config-pinned diff between two full commit SHAs, and whether head descends from base. Bad SHAs are refused (null). */
 export async function recordGitDiff(input: { readonly base: string; readonly head: string; readonly cwd: string; readonly runner: VerifierRunner }): Promise<E2DiffEvidence | null> {
   if (!SHA.test(input.base) || !SHA.test(input.head)) return null;
