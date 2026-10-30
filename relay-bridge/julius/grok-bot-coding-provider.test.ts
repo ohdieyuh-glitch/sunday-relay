@@ -659,6 +659,17 @@ describe('F5/F6/F13: exec bits, protected paths, an empty permitted list, and th
     for (const path of ['src/a.ts', 'src/git/x', 'docs/.gitignore', 'src/.github-pages/x', 'my.git/x', 'husky/x']) expect(isProtectedRepoPath(path), path).toBe(false);
   });
 
+  it('N6: 8.3 short names (GIT~1), NTFS alternate data streams, .lfsconfig and .gitlab-ci.yml are protected too', () => {
+    for (const path of ['GIT~1/config', 'src/git~1/hooks/x', 'GITHUB~1/workflows/ci.yml', 'GITMOD~1', 'GITATT~2', 'HUSKY~1/pre-commit', 'LFSCON~1', 'GITLAB~1',
+      '.git::$INDEX_ALLOCATION/config', '.git:$DATA', '.gitmodules::$DATA', 'src/.github:stream/x', '.git.::$INDEX_ALLOCATION/x',
+      '.lfsconfig', 'sub/.LFSCONFIG', '.gitlab-ci.yml', '.GitLab-CI.yml', 'pkg/.gitlab-ci.yml']) {
+      expect(isProtectedRepoPath(path), path).toBe(true);
+    }
+    for (const path of ['src/progit~1', 'docs/abc~1', 'src/a~b', 'notes~1.md', 'git~x/y', 'src/lfsconfig.ts', 'gitlab-ci.yml', 'src/time:12', 'ci/.gitlab-ci.yml.bak']) {
+      expect(isProtectedRepoPath(path), path).toBe(false);
+    }
+  });
+
   it('F6: the provider refuses a protected path even inside a permitted prefix, and nothing is applied', async () => {
     for (const path of ['src/.GIT/hooks/post-checkout', '.github/workflows/x.yml', 'src/.gitattributes']) {
       const w = fakeWorkspace({ changes: [{ path, change: 'ADDED' }] });

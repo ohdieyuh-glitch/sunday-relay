@@ -184,12 +184,22 @@ const PLAIN_MODES = new Set(['000000', '100644', '100755']);
  * PATH COMPONENTS NO AGENT PATCH MAY TOUCH, compared case-insensitively (a case-insensitive checkout treats `.GIT` as
  * `.git`): git's own directory and hooks, the files that change how git reads the tree, CI workflows, and hook managers.
  */
-const PROTECTED_COMPONENTS = new Set(['.git', '.gitmodules', '.gitattributes', '.github', '.githooks', '.husky']);
+const PROTECTED_COMPONENTS = new Set(['.git', '.gitmodules', '.gitattributes', '.github', '.githooks', '.husky', '.lfsconfig', '.gitlab-ci.yml']);
+/** N6: an NTFS 8.3 short name (`GIT~1`, `GITHUB~1`, `LFSCON~1`): up to six leading characters of a protected name, without its dot. */
+const SHORT_NAME = /^([a-z0-9]{1,6})~[0-9]+$/u;
+const PROTECTED_STEMS = [...PROTECTED_COMPONENTS].map((name) => name.replace(/^\./u, '').replace(/[^a-z0-9]/gu, ''));
 export function isProtectedRepoPath(path: string): boolean {
-  // Trailing dots and spaces are dropped too: some filesystems open `.git.` or `.git ` as `.git`.
   return path.split(/[/\\]/u).some((part) => {
     const folded = part.normalize('NFKC').toLowerCase();
-    return PROTECTED_COMPONENTS.has(folded) || PROTECTED_COMPONENTS.has(folded.replace(/[. ]+$/u, ''));
+    // N6: everything from the first `:` is an NTFS alternate data stream (`.git::$INDEX_ALLOCATION` opens `.git`).
+    const stream = folded.split(':')[0] as string;
+    // Trailing dots and spaces are dropped too: some filesystems open `.git.` or `.git ` as `.git`.
+    const candidates = [folded, folded.replace(/[. ]+$/u, ''), stream, stream.replace(/[. ]+$/u, '')];
+    if (candidates.some((c) => PROTECTED_COMPONENTS.has(c))) return true;
+    return candidates.some((c) => {
+      const m = SHORT_NAME.exec(c);
+      return m !== null && PROTECTED_STEMS.some((stem) => stem.startsWith(m[1] as string));
+    });
   });
 }
 
