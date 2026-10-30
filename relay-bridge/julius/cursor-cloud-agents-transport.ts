@@ -148,13 +148,18 @@ const SECRET_PATTERNS: readonly RegExp[] = [
   /\borg-[A-Za-z0-9]{16,}/gu,
   /\b(?:Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}/giu,
   // Skywalker L1: an AWS secret access key named as such, and a password inside a URL's userinfo.
-  /aws_secret_access_key["']?\s{0,8}[=:]\s{0,8}["']?[A-Za-z0-9/+=]{40}/giu,
+  /(?:aws_secret_access_key|SecretAccessKey)["']?\s{0,8}[=:]\s{0,8}["']?[A-Za-z0-9/+=]{40}/giu,
+  // Round 4 R3-7: npm and Stripe tokens.
+  /\bnpm_[A-Za-z0-9]{30,}/gu,
+  /\b[rs]k_(?:live|test)_[A-Za-z0-9]{16,}/gu,
   /\b([a-z][a-z0-9+.-]{0,31}:\/\/[^\s/:@]{1,256}:)[^\s/@]{1,256}@/giu,
 ];
 /** Invisible format characters (ZWSP, ZWJ, BOM, soft hyphen...) are dropped before matching, so they cannot split a token. */
 const INVISIBLE = /[\u00ad\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff]/gu;
 const PEM_BEGIN = '-----BEGIN ';
-const PEM_TAG = /^[A-Z ]{0,40}PRIVATE KEY-----/u;
+const PEM_TAG = /^[A-Z ]{0,40}PRIVATE KEY-----/iu;
+/** ASCII-only lower-casing keeps indices aligned (String#toLowerCase can change length). */
+const asciiLower = (t: string): string => t.replace(/[A-Z]/gu, (c) => String.fromCharCode(c.charCodeAt(0) + 32));
 /**
  * PILOT N-2: PEM private keys by a linear scan (no backtracking regex). A BEGIN marker with no END line redacts to the end
  * of the text (a truncated key is still a key).
@@ -163,15 +168,16 @@ function redactPem(text: string): { text: string; count: number } {
   let out = '';
   let count = 0;
   let i = 0;
+  const low = asciiLower(text); // Round 4 R3-7: lowercase PEM armour
   for (;;) {
-    const b = text.indexOf(PEM_BEGIN, i);
+    const b = low.indexOf('-----begin ', i);
     if (b === -1) break;
     if (!PEM_TAG.test(text.slice(b + PEM_BEGIN.length, b + PEM_BEGIN.length + 60))) { out += text.slice(i, b + 1); i = b + 1; continue; }
     out += `${text.slice(i, b)}[REDACTED:secret]`;
     count += 1;
-    const e = text.indexOf('-----END ', b + PEM_BEGIN.length);
+    const e = low.indexOf('-----end ', b + PEM_BEGIN.length);
     if (e === -1) { i = text.length; break; }
-    const close = text.indexOf('-----', e + 9);
+    const close = low.indexOf('-----', e + 9);
     i = close === -1 ? text.length : close + 5;
   }
   return { text: out + text.slice(i), count };
@@ -188,7 +194,7 @@ const applyPatterns = (text: string): { text: string; count: number } => {
   }
   return { text: out, count };
 };
-const anyPattern = (text: string): boolean => text.includes(PEM_BEGIN) && redactPem(text).count > 0
+const anyPattern = (text: string): boolean => asciiLower(text).includes('-----begin ') && redactPem(text).count > 0
   || SECRET_PATTERNS.some((re) => { re.lastIndex = 0; const hit = re.test(text); re.lastIndex = 0; return hit; });
 const B64_TOKEN = /[A-Za-z0-9+/_-]{20,}={0,2}/gu;
 /**
@@ -197,16 +203,34 @@ const B64_TOKEN = /[A-Za-z0-9+/_-]{20,}={0,2}/gu;
  * base64 tokens decoded); a secret pattern matching any copy means a secret is still there in a form we cannot redact,
  * and the caller must not store the text. Each copy is one linear pass.
  */
-function secretSurvives(text: string): boolean {
+/** Round 4 M4: a reversed match counts only at a plausible token length (ordinary words ending in `-ks` are not keys). */
+const REVERSED_MIN = 24;
+const HEX_RUN = /\b(?:[0-9a-f]{2}){12,}\b/giu;
+function secretSurvives(raw: string): boolean {
+  /* Round 4 M4: our own markers are not secrets (a URL `user:[REDACTED:secret]@` must not re-trigger the userinfo pattern). */
+  const text = raw.replace(/\[REDACTED:secret\]/gu, ' ');
   const unescaped = text
+    /* Round 4 R3-8: HTML numeric entities. */
+    .replace(/&#x([0-9a-f]{1,6});/giu, (_m, h: string) => codePoint(parseInt(h, 16)))
+    .replace(/&#([0-9]{1,7});/gu, (_m, d: string) => codePoint(parseInt(d, 10)))
     .replace(/\\u([0-9a-f]{4})/giu, (_m, h: string) => codePoint(parseInt(h, 16)))
     .replace(/%([0-9a-f]{2})/giu, (_m, h: string) => String.fromCharCode(parseInt(h, 16)))
     .replace(INVISIBLE, '');
   const joined = unescaped.replace(/[\r\n]+/gu, '');
-  if (anyPattern(unescaped) || anyPattern(joined) || anyPattern([...joined].reverse().join(''))) return true;
+  if (anyPattern(unescaped) || anyPattern(joined)) return true;
+  /* Round 4 R3-8: fullwidth / compatibility forms (NFKC). */
+  const nfkc = joined.normalize('NFKC');
+  if (nfkc !== joined && anyPattern(nfkc)) return true;
+  const reversed = [...joined].reverse().join('');
+  if ([...allMatches(reversed)].some((m) => m.length >= REVERSED_MIN)) return true;
+  /* Round 4 R3-8: hex-encoded tokens. */
+  for (const m of joined.matchAll(HEX_RUN)) if (anyPattern(Buffer.from(m[0], 'hex').toString('latin1'))) return true;
+  /* base64, and base64 of base64 (one extra level only). */
+  const b64 = (t: string): string => Buffer.from(t.replace(/-/gu, '+').replace(/_/gu, '/'), 'base64').toString('latin1');
   for (const m of joined.matchAll(B64_TOKEN)) {
-    const decoded = Buffer.from(m[0].replace(/-/gu, '+').replace(/_/gu, '/'), 'base64').toString('latin1');
+    const decoded = b64(m[0]);
     if (anyPattern(decoded)) return true;
+    for (const n of decoded.matchAll(B64_TOKEN)) if (anyPattern(b64(n[0]))) return true;
   }
   return false;
 }
