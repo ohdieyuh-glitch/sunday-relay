@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { constants as FS } from 'node:fs';
-import { open as openFile } from 'node:fs/promises';
+import { lstat, open as openFile } from 'node:fs/promises';
 
 import { cursorRunCreatedBy, cursorTransportMode, openCursorRunStream, type CursorStreamOpen } from './cursor-cloud-agents-transport';
 import type { CodingAgentRunRef } from './grok-bot-coding-provider';
@@ -38,6 +38,33 @@ export const E2_STREAM_CAUSES = Object.freeze([
   'e2_stream_reconnect_limit', 'e2_stream_rate_budget', 'e2_stream_idle', 'e2_stream_secret_residue',
 ] as const);
 export type E2StreamCause = (typeof E2_STREAM_CAUSES)[number];
+/** Skywalker 43b93a4e: a plain explanation for every cause, so a fail-closed refusal says why (no cause is softened). */
+export const E2_STREAM_CAUSE_DETAIL: Readonly<Record<E2StreamCause, string>> = Object.freeze({
+  e2_stream_open_failed: 'the stream could not be opened',
+  e2_stream_no_start: 'the first connection ended before any event from the run',
+  e2_stream_gap: 'the stream ended without a terminal and could not be resumed',
+  e2_stream_expired: 'the capture deadline passed before the run finished',
+  e2_stream_no_terminal: 'no result for this run was seen before done or the end',
+  e2_stream_truncated_key_call: 'a non-read tool call was truncated',
+  e2_stream_key_residue: 'the Cursor key, or part of it, appeared in the stream',
+  e2_stream_malformed_event: 'an event was not the documented JSON shape',
+  e2_stream_run_mismatch: 'an event named another run',
+  e2_stream_error_event: 'the stream reported an error',
+  e2_stream_out_of_order: 'events arrived after result/done in an order the docs do not allow',
+  e2_stream_conflicting_event: 'one SSE id was reused with different content or another event name',
+  e2_stream_event_too_large: 'one event exceeded the per-event cap',
+  e2_stream_too_large: 'the stream exceeded the total byte cap',
+  e2_stream_aborted: 'the capture was aborted',
+  e2_evidence_write_failed: 'the evidence file could not be written',
+  e2_stream_resumed: 'the connection dropped and was resumed with Last-Event-ID; SSE ids are opaque, so events skipped on resume cannot be detected. This is not a failure of the run; the capture cannot prove completeness, so it is refused',
+  e2_stream_duplicate_event: 'an event was repeated',
+  e2_stream_terminal_not_finished: 'the run ended in a status other than FINISHED',
+  e2_stream_call_unfinished: 'a tool call never completed',
+  e2_stream_reconnect_limit: 'too many reconnects',
+  e2_stream_rate_budget: 'the 20 requests/minute budget was exhausted',
+  e2_stream_idle: 'no bytes arrived within the idle timeout',
+  e2_stream_secret_residue: 'a secret-like value survived redaction in an encoded or split form',
+});
 
 /** Where records go, one line at a time, in order. */
 export interface E2EvidenceSink { append(line: string): Promise<void>; close?(): Promise<void> }
@@ -51,19 +78,41 @@ export function createMemoryEvidenceSink(): E2EvidenceSink & { readonly lines: s
  * fails the write (L-5) instead of being followed. Each append is fsynced.
  */
 export function createFileEvidenceSink(path: string): E2EvidenceSink {
-  let identity: { dev: number; ino: number } | null = null;
+  /*
+   * PILOT 43b93a4e N-4: one fd, opened once (O_CREAT|O_EXCL|O_NOFOLLOW, then O_APPEND semantics through the same handle)
+   * and kept until close. A file unlinked and replaced at the path, even with a reused inode, is never written: every line
+   * goes to the file this sink created, and because the open fd pins the inode, a later dev/ino mismatch with the path is
+   * a real swap and the append fails (e2_evidence_write_failed in the capture).
+   */
+  let fh: Awaited<ReturnType<typeof openFile>> | null = null;
+  let closed = false;
+  let opening: Promise<Awaited<ReturnType<typeof openFile>>> | null = null;
+  const handle = async (): Promise<Awaited<ReturnType<typeof openFile>>> => {
+    if (closed) throw new Error('e2_evidence_sink_closed');
+    if (fh !== null) return fh;
+    opening ??= (async () => {
+      const h = await openFile(path, FS.O_WRONLY | FS.O_CREAT | FS.O_EXCL | FS.O_NOFOLLOW | FS.O_APPEND, 0o600);
+      if (!(await h.stat()).isFile()) { await h.close(); throw new Error('e2_evidence_not_a_file'); }
+      fh = h;
+      return h;
+    })();
+    return opening;
+  };
   return {
     async append(line) {
-      const flags = identity === null ? FS.O_WRONLY | FS.O_CREAT | FS.O_EXCL | FS.O_NOFOLLOW : FS.O_WRONLY | FS.O_APPEND | FS.O_NOFOLLOW;
-      const fh = await openFile(path, flags, 0o600);
-      try {
-        const st = await fh.stat();
-        if (!st.isFile()) throw new Error('e2_evidence_not_a_file');
-        if (identity !== null && (st.dev !== identity.dev || st.ino !== identity.ino)) throw new Error('e2_evidence_file_swapped');
-        identity = { dev: st.dev, ino: st.ino };
-        await fh.writeFile(`${line}\n`);
-        await fh.sync();
-      } finally { await fh.close(); }
+      const h = await handle();
+      await h.appendFile(`${line}\n`);
+      await h.sync();
+      /* While this fd is open its inode cannot be reused, so a dev/ino comparison with the path is now reliable. */
+      const [mine, there] = await Promise.all([h.stat(), lstat(path).catch(() => null)]);
+      if (there === null || !there.isFile() || there.dev !== mine.dev || there.ino !== mine.ino) throw new Error('e2_evidence_file_swapped');
+    },
+    async close() {
+      if (closed) return;
+      closed = true;
+      const h = fh ?? (opening === null ? null : await opening.catch(() => null));
+      fh = null;
+      if (h !== null) await h.close();
     },
   };
 }
