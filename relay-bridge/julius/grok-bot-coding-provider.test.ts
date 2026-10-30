@@ -660,6 +660,24 @@ describe('F14: the provider labels an abort during the result read as CANCELLED,
   });
 });
 
+describe('F15/E8: transportMode is stamped by the transport module, not claimed; the receipt is carried', () => {
+  it('a fake that calls itself the Cursor transport is labelled fake', async () => {
+    const t = fakeTransport();
+    (t.transport as { transportKind: string }).transportKind = 'cursor_cloud_agents_v1';
+    const c = completed((await run({ t })).outcome);
+    expect(c.observation.diagnostics).toMatchObject({ transportMode: 'fake' });
+  });
+  it('receipt fields reach the evidence; a mismatched run id is recorded as such', async () => {
+    const sha = 'e'.repeat(64);
+    const c = completed((await run({ t: fakeTransport({ result: goodResult({ receipt: { runId: 'run-x', createdAt: '2026-10-30T16:00:00Z', requestId: 'req_1', responseSha256: sha } }) }) })).outcome);
+    expect(c.observation.diagnostics).toMatchObject({ cursorRequestId: 'req_1', cursorRunCreatedAt: '2026-10-30T16:00:00Z', runResponseSha256: sha, receiptRunIdMatches: true });
+    const m = completed((await run({ t: fakeTransport({ result: goodResult({ receipt: { runId: 'run-other', createdAt: null, requestId: null, responseSha256: 'nothex' } }) }) })).outcome);
+    expect(m.observation.diagnostics).toMatchObject({ receiptRunIdMatches: false });
+    expect(m.observation.diagnostics).not.toHaveProperty('runResponseSha256');
+    expect(m.observation.toolInvocations).toBeNull();
+  });
+});
+
 describe('Grok Bot coder: identifiers reach the router diagnostics', () => {
   it('a MATCH run: cursorAgentId, agentBranch, cursorServedModel and servedModel all survive safeReviewDiagnostics', async () => {
     const { outcome, t } = await run();

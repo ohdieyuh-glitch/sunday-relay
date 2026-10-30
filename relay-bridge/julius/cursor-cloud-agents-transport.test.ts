@@ -1,6 +1,8 @@
+import { createHash } from 'node:crypto';
+
 import { describe, expect, it } from 'vitest';
 
-import { CURSOR_API_KEY_ENV_NAME, CURSOR_API_ORIGIN, CURSOR_ATTESTED_MODEL_FIELD, createCursorCloudAgentsTransport, cursorKeyForms, isRequestEchoField, readAttestedModelId, readCappedBody, type CursorFetch, type CursorFetchResponse } from './cursor-cloud-agents-transport';
+import { CURSOR_API_KEY_ENV_NAME, CURSOR_API_ORIGIN, CURSOR_ATTESTED_MODEL_FIELD, createCursorCloudAgentsTransport, cursorGlobalFetch, cursorKeyForms, cursorTransportMode, isRequestEchoField, readAttestedModelId, readCappedBody, type CursorFetch, type CursorFetchResponse } from './cursor-cloud-agents-transport';
 import { GROK_BOT_CODER_CONFIG_DEFAULTS, createGrokBotCodingAgentProvider, type CodingAgentCreateInput } from './grok-bot-coding-provider';
 import type { JuliusCodingAgentRequest } from '../../src/relay/mission/julius/julius-coding-agent';
 
@@ -15,7 +17,7 @@ const RUN = 'run-abc';
 const BASE = 'c'.repeat(40);
 
 type Call = { url: string; method: string; headers: Readonly<Record<string, string>>; body?: string; redirect: string };
-type Reply = { status: number; body?: unknown; retryAfter?: string } | 'throw' | 'hang';
+type Reply = { status: number; body?: unknown; retryAfter?: string; requestId?: string } | 'throw' | 'hang';
 
 function fakeFetch(route: (call: Call, n: number) => Reply) {
   const calls: Call[] = [];
@@ -29,7 +31,7 @@ function fakeFetch(route: (call: Call, n: number) => Reply) {
     }
     return {
       ok: r.status >= 200 && r.status < 300, status: r.status,
-      headers: { get: (n: string) => (n.toLowerCase() === 'retry-after' ? r.retryAfter ?? null : null) },
+      headers: { get: (n: string) => (n.toLowerCase() === 'retry-after' ? r.retryAfter ?? null : n.toLowerCase() === 'x-request-id' ? r.requestId ?? null : null) },
       text: async () => (r.body === undefined ? '' : JSON.stringify(r.body)),
     };
   };
@@ -278,6 +280,38 @@ describe('F14: timeouts, the run deadline and aborts are labelled as such', () =
     const p = make(() => 'hang', { requestTimeoutMs: 60_000 }).transport.fetchResult({ agentId: AGENT, runId: RUN }, mid.signal);
     setTimeout(() => mid.abort(), 5);
     expect(await p).toEqual({ kind: 'unavailable', cause: 'aborted' });
+  });
+});
+
+describe('F15/E8: the mode label and the receipt', () => {
+  it('only a transport over the real global fetch is live; constructing one sends nothing; it is frozen', () => {
+    const spy: string[] = [];
+    const orig = globalThis.fetch;
+    globalThis.fetch = (async (u: string) => { spy.push(String(u)); throw new Error('no network in tests'); }) as never;
+    try {
+      const live = createCursorCloudAgentsTransport({ fetch: cursorGlobalFetch, getApiKey: () => null });
+      expect(cursorTransportMode(live)).toBe('live');
+      expect(Object.isFrozen(live)).toBe(true);
+      expect(cursorTransportMode(make(() => created).transport)).toBe('fake');
+      expect(cursorTransportMode({ ...live })).toBe('fake');
+      expect(cursorTransportMode({ transportKind: 'cursor_cloud_agents_v1' })).toBe('fake');
+      expect(cursorTransportMode(null)).toBe('fake');
+      expect(spy).toEqual([]);
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+  it('the result carries run id, createdAt, a request id header and the response body sha256', async () => {
+    const runBody = { id: RUN, status: 'FINISHED', result: 'done', createdAt: '2026-10-30T16:00:00.000Z' };
+    const r = await make((call) => (call.url.includes('/usage') ? { status: 404 } : { status: 200, body: runBody, requestId: 'req_abc-123' })).transport.fetchResult({ agentId: AGENT, runId: RUN });
+    expect(r.kind === 'result' && r.receipt).toEqual({ runId: RUN, createdAt: '2026-10-30T16:00:00.000Z', requestId: 'req_abc-123', responseSha256: createHash('sha256').update(JSON.stringify(runBody)).digest('hex') });
+  });
+  it('a malformed request id, createdAt or run id is not carried; a request id holding the key is dropped', async () => {
+    const runBody = { id: '../x', status: 'FINISHED', result: 'done', createdAt: 'yesterday' };
+    for (const requestId of ['has space', `x${SENTINEL}`, 'a'.repeat(200)]) {
+      const r = await make((call) => (call.url.includes('/usage') ? { status: 404 } : { status: 200, body: runBody, requestId })).transport.fetchResult({ agentId: AGENT, runId: RUN });
+      expect(r.kind === 'result' && r.receipt, requestId).toMatchObject({ runId: null, createdAt: null, requestId: null });
+    }
   });
 });
 

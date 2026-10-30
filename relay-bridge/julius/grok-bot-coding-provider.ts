@@ -13,6 +13,7 @@ import {
   type JuliusWorkspaceChange,
 } from '../../src/relay/mission/julius/julius-coding-agent';
 import type { ShellEffectPort } from './executor-effects';
+import { cursorTransportMode } from './cursor-cloud-agents-transport';
 import { grokWorkspaceCommands, isSafeBranchName } from './grok-workspace-commands';
 
 /**
@@ -95,6 +96,18 @@ export interface CodingAgentUsage {
 
 export interface CodingAgentBranch { readonly repoUrl: string; readonly branch: string | null; readonly prUrl: string | null }
 
+/**
+ * WHAT TIES A RESULT TO ONE REAL RESPONSE (F15, E8): the run id and creation time the service returned, its request id
+ * header when it sent one, and the SHA-256 of the exact response body. Tool calls are not available: the public v1 API
+ * documents no per-run tool-call log, so `toolInvocations` stays null.
+ */
+export interface CodingAgentReceipt {
+  readonly runId: string | null;
+  readonly createdAt: string | null;
+  readonly requestId: string | null;
+  readonly responseSha256: string;
+}
+
 export type CodingAgentResultOutcome =
   | {
     readonly kind: 'result';
@@ -107,6 +120,8 @@ export type CodingAgentResultOutcome =
     /** The model id THE SERVICE reported for this run, from a configured documented field; null when it reported none. */
     readonly reportedModelId: string | null;
     readonly reportedModelSource: string | null;
+    /** Absent from fakes. */
+    readonly receipt?: CodingAgentReceipt | null;
   }
   | { readonly kind: 'unavailable'; readonly cause: string };
 
@@ -140,6 +155,7 @@ export interface GrokBotWorkspacePort {
 }
 
 const SHA40 = /^[0-9a-f]{40}$/u;
+const SHA256_HEX = /^[0-9a-f]{64}$/u;
 const SAFE_OWNER_REPO = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/u;
 export { isSafeBranchName, grokWorkspaceCommands };
 
@@ -409,6 +425,7 @@ export function createGrokBotCodingAgentProvider(input: {
       const evidence: Record<string, unknown> = {
         codingAgentProvider: GROK_BOT_CODER_PROVIDER_KIND,
         transport: transport.transportKind,
+        transportMode: cursorTransportMode(transport),
         requestedModel: modelId,
         cursorAgentId: agentId,
         idempotencyKeySha256: createHash('sha256').update(idempotencyKey).digest('hex'),
@@ -520,6 +537,13 @@ export function createGrokBotCodingAgentProvider(input: {
         });
       }
       if (result.durationMs !== null) evidence.providerDurationMs = result.durationMs;
+      const receipt = result.receipt ?? null;
+      if (receipt !== null && typeof receipt === 'object') {
+        if (typeof receipt.requestId === 'string') evidence.cursorRequestId = receipt.requestId;
+        if (typeof receipt.createdAt === 'string') evidence.cursorRunCreatedAt = receipt.createdAt;
+        if (typeof receipt.responseSha256 === 'string' && SHA256_HEX.test(receipt.responseSha256)) evidence.runResponseSha256 = receipt.responseSha256;
+        evidence.receiptRunIdMatches = receipt.runId === ref.runId;
+      }
 
       /**
        * THE SERVED MODEL IS WHAT THE CURSOR API REPORTS FOR THE RUN — never what the agent says about itself. The public

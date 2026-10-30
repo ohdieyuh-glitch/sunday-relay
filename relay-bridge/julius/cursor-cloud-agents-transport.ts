@@ -1,8 +1,11 @@
+import { createHash } from 'node:crypto';
+
 import type {
   CodingAgentBranch,
   CodingAgentCreateInput,
   CodingAgentCreateOutcome,
   CodingAgentPollOutcome,
+  CodingAgentReceipt,
   CodingAgentResultOutcome,
   CodingAgentRunRef,
   CodingAgentTerminalStatus,
@@ -58,6 +61,17 @@ export type CursorFetch = (url: string, init: {
   readonly redirect: 'error';
   readonly signal?: AbortSignal;
 }) => Promise<CursorFetchResponse>;
+
+/** The process's global fetch, adapted. A transport built over exactly this function is the only one labelled "live". */
+export const cursorGlobalFetch: CursorFetch = async (url, init) => {
+  const res = await globalThis.fetch(url, { method: init.method, headers: init.headers, redirect: 'error', ...(init.body === undefined ? {} : { body: init.body }), ...(init.signal === undefined ? {} : { signal: init.signal }) });
+  return { ok: res.ok, status: res.status, headers: res.headers, body: res.body, text: () => res.text() };
+};
+const LIVE_TRANSPORTS = new WeakSet<object>();
+/** F15: "live" only for a transport this module built over {@link cursorGlobalFetch}; anything else, whatever its transportKind, is "fake". */
+export function cursorTransportMode(transport: unknown): 'live' | 'fake' {
+  return typeof transport === 'object' && transport !== null && LIVE_TRANSPORTS.has(transport) ? 'live' : 'fake';
+}
 
 /**
  * EVERY FORM OF THE KEY A SERVICE MIGHT ECHO BACK (F12): as is, URL-encoded (both component and form encoding), and in
@@ -140,6 +154,8 @@ const MAX_FINAL_TEXT_CHARS = 16_000;
 const MAX_PR_URL_CHARS = 300;
 const PR_URL = /^https:\/\/github\.com\/[A-Za-z0-9._~\/%#?=&+-]+$/u;
 const REPORTED_MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
+const REQUEST_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
+const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/u;
 
 /**
  * Reads a response body, never past {@link MAX_BODY_BYTES}: a declared Content-Length over the cap is refused unread, and the
@@ -192,7 +208,7 @@ const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'obj
 const count = (v: unknown): number | null => (typeof v === 'number' && Number.isInteger(v) && v >= 0 ? v : null);
 
 type Sent =
-  | { readonly kind: 'response'; readonly status: number; readonly body: unknown; readonly retryAfterMs: number | null }
+  | { readonly kind: 'response'; readonly status: number; readonly body: unknown; readonly retryAfterMs: number | null; readonly requestId: string | null; readonly responseSha256: string }
   | { readonly kind: 'not_sent'; readonly cause: 'aborted' | 'key_absent' }
   | { readonly kind: 'failed_in_flight'; readonly cause: 'timeout' | 'network' | 'aborted_in_flight' };
 
@@ -242,7 +258,10 @@ export function createCursorCloudAgentsTransport(options: CursorCloudAgentsTrans
       if (text !== null && text.length > 0) { try { parsed = JSON.parse(text); } catch { parsed = null; } }
       const ra = res.headers?.get('retry-after') ?? null;
       const raSeconds = ra !== null && /^\d{1,6}$/u.test(ra.trim()) ? Number(ra.trim()) : null;
-      return { kind: 'response', status: res.status, body: parsed, retryAfterMs: raSeconds === null ? null : Math.min(raSeconds * 1000, MAX_RETRY_AFTER_MS), key };
+      const rid = res.headers?.get('x-request-id') ?? res.headers?.get('x-cursor-request-id') ?? null;
+      const requestId = rid !== null && REQUEST_ID.test(rid.trim()) && !rid.includes(key) ? rid.trim() : null;
+      const responseSha256 = createHash('sha256').update(text ?? '').digest('hex');
+      return { kind: 'response', status: res.status, body: parsed, retryAfterMs: raSeconds === null ? null : Math.min(raSeconds * 1000, MAX_RETRY_AFTER_MS), requestId, responseSha256, key };
     } catch {
       // Never the error itself: its message can carry a URL, a header or a body.
       if (isAborted(signal)) return { kind: 'failed_in_flight', cause: 'aborted_in_flight' };
@@ -270,7 +289,7 @@ export function createCursorCloudAgentsTransport(options: CursorCloudAgentsTrans
 
   const readModel = (record: unknown, key: string): string | null => readAttestedModelId(record, modelField, (v) => scrub(v, key));
 
-  return {
+  const transport: CodingAgentTransport = {
     transportKind: CURSOR_CLOUD_AGENTS_TRANSPORT_KIND,
 
     async createRun(input: CodingAgentCreateInput, signal?: AbortSignal): Promise<CodingAgentCreateOutcome> {
@@ -406,6 +425,12 @@ export function createCursorCloudAgentsTransport(options: CursorCloudAgentsTrans
       return {
         kind: 'result', finalText, finalTextTruncated, durationMs, branches: Object.freeze(branches), usage, reportedModelId,
         reportedModelSource: reportedModelId === null || modelField === null ? null : `${modelField.record}.${modelField.path.join('.')}`,
+        receipt: Object.freeze({
+          runId: typeof body.id === 'string' && SAFE_ID.test(body.id) ? body.id : null,
+          createdAt: typeof body.createdAt === 'string' && ISO_INSTANT.test(body.createdAt) ? body.createdAt : null,
+          requestId: run.requestId,
+          responseSha256: run.responseSha256,
+        }) as CodingAgentReceipt,
       };
     },
 
@@ -417,4 +442,7 @@ export function createCursorCloudAgentsTransport(options: CursorCloudAgentsTrans
       return r.status === 409 ? 'not_cancellable' : 'failed';
     },
   };
+  // F15: only a transport over the real global fetch is "live"; every other instance (a fake fetch, a hand-made object) is "fake".
+  if (options.fetch === cursorGlobalFetch) LIVE_TRANSPORTS.add(transport);
+  return Object.freeze(transport);
 }
