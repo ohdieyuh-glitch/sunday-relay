@@ -485,7 +485,30 @@ const WORKFLOW_HALTS = ['RUN_ID_ALREADY_SPENT', 'SPENT_TAG_UNVERIFIED'] as const
  * no run for its dispatch key, and no spent tag. The `gh workflow run` child
  * never reached GitHub (the bridge stopped first). It carries no workflow run.
  */
-const DISPATCH_ERRORS = ['gh_workflow_run_failed', 'SPENT_TAG_UNVERIFIED', 'workflow_run_unspent', 'workflow_run_absent'] as const;
+const DISPATCH_ERRORS = [
+  'gh_workflow_run_failed', 'SPENT_TAG_UNVERIFIED', 'workflow_run_unspent', 'workflow_run_absent',
+  'gh_workflow_run_timeout', 'gh_workflow_run_signal', 'gh_spawn_failed',
+] as const;
+/**
+ * The `gh workflow run` child did not give an answer: it was killed at the
+ * spawner's timeout (`gh_workflow_run_timeout`), killed by a signal
+ * (`gh_workflow_run_signal`), or could not be started or read
+ * (`gh_spawn_failed`). Whether GitHub accepted the dispatch is UNKNOWN, so
+ * the claim stays `dispatching`, with `dispatchAttempted: true` and one of
+ * these errors. It is in flight until `reconcile` resolves it from GitHub
+ * evidence (`dispatched`, or `dispatch_failed` with `workflow_run_unspent` or
+ * `workflow_run_absent`). An ordinary non-zero exit (GitHub refused the
+ * dispatch) is still `dispatch_failed` with `gh_workflow_run_failed`.
+ * Code older than this list reads any of them as corrupt: see the downgrade
+ * rule in docs/JULIUS_WONDERLAND_CONTRACT.md.
+ */
+export const DISPATCH_OUTCOME_UNKNOWN_ERRORS = ['gh_workflow_run_timeout', 'gh_workflow_run_signal', 'gh_spawn_failed'] as const;
+export type DispatchOutcomeUnknownError = (typeof DISPATCH_OUTCOME_UNKNOWN_ERRORS)[number];
+
+/** True for a `gh workflow run` child that was killed or never ran: GitHub may or may not have the dispatch. */
+export function isDispatchOutcomeUnknownError(error: unknown): error is DispatchOutcomeUnknownError {
+  return typeof error === 'string' && (DISPATCH_OUTCOME_UNKNOWN_ERRORS as readonly string[]).includes(error);
+}
 const JOURNAL_KEYS = ['schemaVersion', 'revision', 'claims', 'progress', 'owners'] as const;
 const OWNER_ID = /^[A-Za-z0-9_-]{1,128}$/;
 /**
@@ -499,12 +522,17 @@ const CLAIM_KEYS = [
   'wonderlandRunId', 'serverRunId', 'state', 'spentTag', 'spentTagState', 'at',
   'dispatchAttempted', 'dispatchError', 'halt', 'workflowRunId', 'githubDate',
   'acknowledgedRerun', 'priorAttempted', 'priorCompleted',
+  'startKeyHash', 'clientTriggerId',
 ] as const;
 /**
  * Keys a claim written before they existed may lack. Absent `workflowRunId`
  * and `githubDate` read as null; absent `acknowledgedRerun` reads as false.
  */
-const OPTIONAL_CLAIM_KEYS: readonly string[] = ['workflowRunId', 'githubDate', 'acknowledgedRerun', 'priorAttempted', 'priorCompleted'];
+const OPTIONAL_CLAIM_KEYS: readonly string[] = ['workflowRunId', 'githubDate', 'acknowledgedRerun', 'priorAttempted', 'priorCompleted', 'startKeyHash', 'clientTriggerId'];
+/** sha256 of the Start request's idempotency key, lowercase hex. */
+const START_KEY_HASH = /^[0-9a-f]{64}$/;
+/** The Start request's clientTriggerId (the admission contract's CLIENT_TRIGGER_ID shape). */
+const START_CLIENT_TRIGGER_ID = /^[A-Za-z0-9_-]{8,64}$/;
 /** GitHub's `Date:` header as ISO UTC, second precision. */
 const GITHUB_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 /** A GitHub Actions workflow run id. Null until dispatch learns one. */
@@ -562,6 +590,15 @@ export interface ClaimEvent {
    * main's recorded constant. Present exactly when `acknowledgedRerun` is.
    */
   readonly priorCompleted?: number;
+  /**
+   * The in-bridge Start request that made this claim: sha256 of its
+   * `x-relay-idempotency-key`, and its `clientTriggerId`. Both or neither.
+   * Absent on a CLI claim and on any claim written before the field existed.
+   * Set on the first event of a claim and carried unchanged by every later
+   * one. It is a link back to the request, never a gate.
+   */
+  readonly startKeyHash?: string;
+  readonly clientTriggerId?: string;
 }
 
 /** True for a decimal GitHub workflow run id that fits in a signed 64-bit integer. */
@@ -989,6 +1026,7 @@ function parseClaim(value: unknown, schemaVersion: OperatorJournal['schemaVersio
     : null;
   const githubDate = Object.hasOwn(claim, 'githubDate') ? storedGithubDate(claim.githubDate) : null;
   const rerun = storedRerun(claim);
+  const start = storedStart(claim);
   const identity = identifyAdmissionRun(claim.wonderlandRunId, claim.serverRunId);
   const form = schemaVersion === LEGACY_ADMISSION_SCHEMA_VERSION ? 'legacy' : 'wlj';
   if (!identity.ok || identity.form !== form) throw new AdmissionFileClosedError('corrupt');
@@ -1008,7 +1046,10 @@ function parseClaim(value: unknown, schemaVersion: OperatorJournal['schemaVersio
     throw new AdmissionFileClosedError('corrupt');
   }
   const recordedHalt = halt === null ? null : halt as WorkflowHalt;
-  if (state === 'dispatch_failed') {
+  if (state === 'dispatching' && claim.dispatchAttempted === true) {
+    // The child was spawned and gave no answer: outcome unknown, never an ordinary failure.
+    if (!isDispatchOutcomeUnknownError(error)) throw new AdmissionFileClosedError('corrupt');
+  } else if (state === 'dispatch_failed') {
     if (claim.dispatchAttempted !== true) throw new AdmissionFileClosedError('corrupt');
     if (recordedHalt === 'SPENT_TAG_UNVERIFIED') {
       if (error !== 'SPENT_TAG_UNVERIFIED') throw new AdmissionFileClosedError('corrupt');
@@ -1033,7 +1074,7 @@ function parseClaim(value: unknown, schemaVersion: OperatorJournal['schemaVersio
   // record) is not trusted as a dispatch: it is corrupt, not silently read.
   if (state === 'dispatched' && claim.dispatchAttempted !== true) throw new AdmissionFileClosedError('corrupt');
   if (state === 'dispatching') {
-    if (claim.dispatchAttempted !== false || recordedHalt !== null || claim.spentTagState !== 'absent' || workflowRunId !== null) {
+    if (typeof claim.dispatchAttempted !== 'boolean' || recordedHalt !== null || claim.spentTagState !== 'absent' || workflowRunId !== null) {
       throw new AdmissionFileClosedError('corrupt');
     }
   }
@@ -1041,7 +1082,7 @@ function parseClaim(value: unknown, schemaVersion: OperatorJournal['schemaVersio
     ? (recordedHalt === 'SPENT_TAG_UNVERIFIED'
       ? 'SPENT_TAG_UNVERIFIED'
       : error === 'workflow_run_unspent' || error === 'workflow_run_absent' ? error : 'gh_workflow_run_failed')
-    : null;
+    : state === 'dispatching' && claim.dispatchAttempted === true && isDispatchOutcomeUnknownError(error) ? error : null;
   return {
     wonderlandRunId: identity.wljRunId,
     serverRunId: identity.serverRunId,
@@ -1055,7 +1096,21 @@ function parseClaim(value: unknown, schemaVersion: OperatorJournal['schemaVersio
     workflowRunId,
     githubDate,
     ...rerun,
+    ...start,
   };
+}
+
+/** `startKeyHash` and `clientTriggerId` travel together, each in its shape, or are both absent. Anything else is corrupt. */
+function storedStart(claim: Record<string, unknown>): { readonly startKeyHash?: string; readonly clientTriggerId?: string } {
+  const hasKey = Object.hasOwn(claim, 'startKeyHash');
+  const hasTrigger = Object.hasOwn(claim, 'clientTriggerId');
+  if (!hasKey && !hasTrigger) return {};
+  const key = claim.startKeyHash;
+  const trigger = claim.clientTriggerId;
+  if (typeof key === 'string' && START_KEY_HASH.test(key) && typeof trigger === 'string' && START_CLIENT_TRIGGER_ID.test(trigger)) {
+    return { startKeyHash: key, clientTriggerId: trigger };
+  }
+  throw new AdmissionFileClosedError('corrupt');
 }
 
 /**

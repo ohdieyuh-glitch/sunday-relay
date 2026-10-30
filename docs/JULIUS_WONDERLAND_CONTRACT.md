@@ -325,7 +325,9 @@ The bridge stays running while the founder claims; the client keeps polling
    readable `Date:` it claims nothing (`github_clock_unreadable`). It records
    `dispatching` under the write lock, releases the lock, spawns `gh workflow run` once, and records
    the outcome under the write lock: `dispatched` only when that spawn
-   exited 0 with no halt, else `dispatch_failed` or `already_spent`. The
+   exited 0 with no halt, else `dispatch_failed` or `already_spent`, or,
+   when the child gave no exit code of its own, the outcome-unknown record
+   described below. The
    lock is never held across a `gh` spawn, so the bridge keeps admitting and
    answering `/status` during dispatch. The argv is
    `gh workflow run julius-first-live-mission.yml --repo <owner/name> --ref main -f mission=<slug> -f lane=<lane> -f dispatch_key=<key> -f 'confirm_live=RUN LIVE MISSION' -f run_id=<wlj_>`.
@@ -361,6 +363,25 @@ record:
 - otherwise the record stays `dispatching` and the tool prints what GitHub
   showed (`reconcile_indeterminate`, `spent_tag_unverified`, …).
 
+**A `gh workflow run` with no answer is outcome-unknown, not a failure.**
+When the child was killed at the spawner's timeout, killed by a signal, or
+could not be started (gh missing, a spawn error), GitHub may or may not have
+the dispatch. The claim tool then appends one more `dispatching` event,
+`dispatchAttempted: true`, with the journal error `gh_workflow_run_timeout`,
+`gh_workflow_run_signal` or `gh_spawn_failed`, and answers
+`dispatch_outcome_unknown`. `/status` keeps answering `dispatching` with no
+cause, and the in-bridge Start (`POST .../start`) answers 200 with
+`state: dispatching` and `replayed: false`. The record is not retried, a second Start of the same admission
+replays it, and it counts as in flight for the mission's in-flight guard, so
+a Start of another admission of the same mission is refused with
+`julius_paid_run_in_flight` before anything is written or dispatched. Only
+`reconcile` moves it, from GitHub evidence, exactly as for a stopped
+reservation: `dispatched`, or `dispatch_failed` with `workflow_run_unspent`
+or `workflow_run_absent` (no run for the key, no spent tag, and the
+reservation at least 15 minutes old on GitHub's clock), which frees the
+mission. An ordinary non-zero exit (GitHub refused the dispatch) is still
+`dispatch_failed` with `gh_workflow_run_failed`.
+
 The outcome keeps the reservation's time and `githubDate`. The workflow's own
 concurrency group is `julius-first-live-mission-${github.run_id}`, one per
 Actions run; `julius-paid-<32hex>` (the record's `concurrencyGroup`) is the
@@ -376,6 +397,21 @@ such a journal is a reviewed step, not an operator one: the journal also holds
 ownership and progress, so it is neither edited, deleted nor moved aside by
 hand. Claims written by this version carry `githubDate`; a claim without it
 still reads, but binds no completion.
+
+**Never downgrade over a journal this version wrote.** This version can write
+values a build without it does not know: the outcome-unknown errors above
+(`gh_workflow_run_timeout`, `gh_workflow_run_signal`, `gh_spawn_failed`, on a
+`dispatching` event with `dispatchAttempted: true`) and the Start binding
+keys `startKeyHash` and `clientTriggerId` (written only by the bridge's
+Start v2, behind its flag). The journal's `schemaVersion` is unchanged, so an
+older claim tool or bridge reads any such claim as `corrupt` and fails closed
+for the whole store: claim, status, reconcile, `/events` and `/result` all
+refuse, and nothing is written or lost. The rules:
+
+- once this version has run against a store, it is never reverted, and no
+  older claim tool or bridge is pointed at that store;
+- deploy this version everywhere (bridge and claim tool) first, and only then
+  turn on `JULIUS_WONDERLAND_START_V2`.
 
 A process that shuts down and opens that same file replays the pair. The
 `serverRunId`, the state, the model pins, and the caps are the ones in the

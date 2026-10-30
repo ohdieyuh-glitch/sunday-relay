@@ -21,8 +21,14 @@
  * `--confirm 'RUN LIVE MISSION'`. `--dispatch` plus the exact confirmation
  * `RUN LIVE MISSION` is the only path that spawns `gh`. That path first asks
  * `gh api` whether the spent tag exists. Present -> already_spent, and the
- * workflow is not started. A failed workflow spawn moves the record to
- * dispatch_failed. A visible workflow halt `RUN_ID_ALREADY_SPENT` is
+ * workflow is not started. A `gh workflow run` child that exits non-zero
+ * (GitHub refused the dispatch) moves the record to dispatch_failed. A child
+ * that was killed at the timeout, killed by a signal, or could not be
+ * started gave no answer: the record stays `dispatching`, marked
+ * `dispatchAttempted` with `gh_workflow_run_timeout`,
+ * `gh_workflow_run_signal` or `gh_spawn_failed`, and holds the mission's
+ * in-flight guard until `reconcile` resolves it from GitHub evidence. A
+ * visible workflow halt `RUN_ID_ALREADY_SPENT` is
  * already_spent, and `SPENT_TAG_UNVERIFIED` is dispatch_failed. Neither
  * state is ever written back to admitted, and nothing here retries.
  *
@@ -67,6 +73,7 @@ import type {
   AdmissionFileIo,
   ClaimEvent,
   DispatchError,
+  DispatchOutcomeUnknownError,
   OperatorDocument,
   StoredAdmission,
   StoredProgress,
@@ -74,6 +81,7 @@ import type {
 } from './admission-file';
 import {
   awaitingOperatorExpiryNote,
+  isDispatchOutcomeUnknownError,
   isStoredWorkflowRunId,
   openAdmissionFile,
   readAdmissionDocument,
@@ -280,12 +288,83 @@ export interface GhResult {
   readonly code: number;
   readonly stdout: string;
   readonly stderr: string;
+  /**
+   * Set only when the child gave no exit code of its own: killed at the
+   * spawner's timeout, killed by a signal, or not started (gh missing, spawn
+   * error). `code` is still non-zero then. Absent for an ordinary exit, zero
+   * or not. A `gh workflow run` with a `failure` is outcome-unknown, never
+   * an ordinary dispatch failure.
+   */
+  readonly failure?: GhSpawnFailure;
+}
+
+export type GhSpawnFailure = 'timeout' | 'signal' | 'spawn_failed';
+
+/** What a spawner whose child gave no answer records, by {@link GhSpawnFailure}. */
+export const DISPATCH_OUTCOME_UNKNOWN_BY_FAILURE: Readonly<Record<GhSpawnFailure, DispatchOutcomeUnknownError>> = {
+  timeout: 'gh_workflow_run_timeout',
+  signal: 'gh_workflow_run_signal',
+  spawn_failed: 'gh_spawn_failed',
+};
+
+/** The parts of a synchronous child-process answer {@link ghResultFromChildExit} reads. */
+export interface ChildExitAnswer {
+  readonly status: number | null;
+  readonly signal?: string | null;
+  readonly error?: (Error & { readonly code?: unknown }) | undefined;
+  readonly stdout?: unknown;
+  readonly stderr?: unknown;
+}
+
+/**
+ * A synchronous `gh` child's answer as a {@link GhResult}. A numeric status is
+ * the child's own exit. Otherwise the code is 1 as before (127 when the child
+ * was never started) and `failure` says why: `ETIMEDOUT` is the timeout, a
+ * spawn error with no signal (ENOENT, EACCES) is `spawn_failed`, and any
+ * other kill is `signal`.
+ */
+export function ghResultFromChildExit(result: ChildExitAnswer): GhResult {
+  const stdout = typeof result.stdout === 'string' ? result.stdout : '';
+  const stderr = typeof result.stderr === 'string' ? result.stderr : '';
+  if (typeof result.status === 'number' && (result.error === undefined || result.error === null)) {
+    return { code: result.status, stdout, stderr };
+  }
+  const code = result.error?.code;
+  if (code === 'ETIMEDOUT') return { code: 1, stdout, stderr, failure: 'timeout' };
+  if (result.error !== undefined && result.error !== null && (result.signal === null || result.signal === undefined)) {
+    return { code: typeof code === 'string' && code === 'ENOENT' ? 127 : 1, stdout, stderr, failure: 'spawn_failed' };
+  }
+  return { code: 1, stdout, stderr, failure: 'signal' };
 }
 
 /** The only process this tool is allowed to start. Tests pass a fake. */
 export interface GhSpawner {
   run(args: readonly string[]): GhResult;
 }
+
+/**
+ * A spawner whose `run` may answer later, so the bridge's event loop is not
+ * held while `gh` runs. The claim core awaits every call in the same order,
+ * with the same argv, as it does for a {@link GhSpawner}; a synchronous
+ * spawner is one of these too.
+ */
+export interface AwaitableGhSpawner {
+  run(args: readonly string[]): GhResult | Promise<GhResult>;
+}
+
+/**
+ * The Start request that led to a claim: sha256 of its
+ * `x-relay-idempotency-key` and its `clientTriggerId`. Only the in-bridge
+ * Start route sets it. It links the claim to the request; it opens no gate,
+ * changes no argv, and is never read back as permission to dispatch.
+ */
+export interface ClaimStartBinding {
+  readonly startKeyHash: string;
+  readonly clientTriggerId: string;
+}
+
+const START_KEY_HASH = /^[0-9a-f]{64}$/;
+const START_CLIENT_TRIGGER_ID = /^[A-Za-z0-9_-]{8,64}$/;
 
 export type OperatorViewState =
   | 'admitted'
@@ -318,6 +397,9 @@ export interface OperatorView {
   readonly claimedAt: string | null;
   /** GitHub Actions workflow run id, once dispatch has learned it. Null until then. */
   readonly workflowRunId: string | null;
+  /** Present only when the claim recorded a Start binding. */
+  readonly startKeyHash?: string;
+  readonly clientTriggerId?: string;
 }
 
 export interface ClaimInput {
@@ -335,6 +417,8 @@ export interface ClaimInput {
    * bridge proves a prior paid attempt; it never unlocks UNKNOWN.
    */
   readonly rerunConfirmation?: string | null;
+  /** The Start request's binding, recorded on the reservation before `gh workflow run`. Absent from the CLI. */
+  readonly start?: ClaimStartBinding | null;
 }
 
 /** Server clock. Tests inject this. Callers cannot pass it on a claim. */
@@ -763,7 +847,7 @@ export interface OperatorClaimTool {
 
 export function createOperatorClaimTool(
   file: AdmissionFile,
-  spawn: GhSpawner,
+  spawn: GhSpawner | AwaitableGhSpawner,
   clock: OperatorClaimClock = { nowIso: () => new Date().toISOString() },
   priorAttempts: PriorAttemptReader = UNWIRED_PRIOR_ATTEMPTS,
 ): OperatorClaimTool {
@@ -791,7 +875,7 @@ export function createOperatorClaimTool(
 
 export function openOperatorClaimTool(
   storePath: string,
-  spawn: GhSpawner,
+  spawn: GhSpawner | AwaitableGhSpawner,
   clock?: OperatorClaimClock,
   priorAttempts: PriorAttemptReader = UNWIRED_PRIOR_ATTEMPTS,
 ): OperatorClaimTool {
@@ -815,19 +899,19 @@ export function openOperatorClaimTool(
 async function claimPhased(
   file: AdmissionFile,
   input: ClaimInput,
-  spawn: GhSpawner,
+  spawn: AwaitableGhSpawner,
   clock: OperatorClaimClock,
   priorAttempts: PriorAttemptReader,
 ): Promise<ClaimResult> {
   const checked = await file.exclusive((io) => Promise.resolve(checkClaim(io, file.path, input, clock)));
   if (checked.kind === 'done') return checked.result;
-  const onMain = mainRefusal(spawn, input, checked.admission);
+  const onMain = await mainRefusal(spawn, input, checked.admission);
   if (!onMain.ok) return onMain.result;
   // THE IN-FLIGHT GUARD: another admission of this mission whose paid run may
   // not have uploaded its attempted marker yet would make the count read 0
   // too early. Refused before anything is read, written or dispatched.
   const peers = await file.exclusive((io) => Promise.resolve(inFlightPeers(io.read(), checked.admission)));
-  const unsettled = peers.length === 0 ? null : unsettledPeer(spawn, input.repo, peers);
+  const unsettled = peers.length === 0 ? null : unsettledPeerIn(await spawn.run(paidRunListArgs(input.repo)), peers);
   if (unsettled !== null) return inFlightRefusal(checked.admission, unsettled);
   const settledPeers: ReadonlySet<string> = new Set(peers.map(peerKey));
   // THE RERUN GATE, before any claim is written or anything dispatched: the
@@ -868,7 +952,7 @@ async function claimPhased(
     priorAttempted: rerun.priorAttempted,
     priorCompleted: rerun.priorCompleted,
   };
-  const tagRead = spawn.run(spentTagApiArgs(input.repo, checked.admission.serverRunId));
+  const tagRead = await spawn.run(spentTagApiArgs(input.repo, checked.admission.serverRunId));
   const tag = interpretSpentTagResponse(tagRead);
   if (tag === 'unreadable') {
     return fail(
@@ -887,7 +971,7 @@ async function claimPhased(
   }
   const reserved = await file.exclusive((io) => Promise.resolve(reserveClaim(io, file.path, input, clock, tag, githubDate, consent, settledPeers)));
   if (reserved.kind === 'done') return reserved.result;
-  const ran = spawn.run(reserved.liveArgs);
+  const ran = await spawn.run(reserved.liveArgs);
   return file.exclusive((io) => Promise.resolve(recordDispatchOutcome(io, input, reserved, ran)));
 }
 
@@ -898,25 +982,25 @@ async function claimPhased(
  * namespace (null when the contract names none it can be read for, which the
  * rerun gate then reads as UNKNOWN).
  */
-function mainRefusal(
-  spawn: GhSpawner,
+async function mainRefusal(
+  spawn: AwaitableGhSpawner,
   input: ClaimInput,
   admission: StoredAdmission,
-): { readonly ok: false; readonly result: ClaimResult } | { readonly ok: true; readonly workflow: string; readonly namespace: string } {
+): Promise<{ readonly ok: false; readonly result: ClaimResult } | { readonly ok: true; readonly workflow: string; readonly namespace: string }> {
   const refused = (result: ClaimResult) => ({ ok: false as const, result });
   const record = toView(admission, null);
-  const read = (path: string): string | null => {
-    const result = spawn.run(mainContentsArgs(input.repo, path));
+  const read = async (path: string): Promise<string | null> => {
+    const result = await spawn.run(mainContentsArgs(input.repo, path));
     return result.code === 0 && result.stdout.trim() !== '' ? result.stdout : null;
   };
-  const workflow = read(`.github/workflows/${PAID_WORKFLOW_FILE}`);
+  const workflow = await read(`.github/workflows/${PAID_WORKFLOW_FILE}`);
   if (workflow === null) {
     return refused(fail('main_workflow_unreadable', 'The paid workflow could not be read at main. Nothing was claimed or dispatched.', record));
   }
   const inputs = workflowInputsRefusal(workflow, admission);
   if (inputs !== null) return refused(inputs);
-  const contract = read(missionContractPath(admission.missionId ?? ''));
-  const checker = contract === null ? null : read(LANE_GRANT_SOURCE);
+  const contract = await read(missionContractPath(admission.missionId ?? ''));
+  const checker = contract === null ? null : await read(LANE_GRANT_SOURCE);
   const grants = checker === null ? null : parseLaneGrants(checker);
   const granted = contract === null || grants === null ? null : grantedLanes(contract, grants);
   if (contract === null || granted === null) {
@@ -995,6 +1079,15 @@ export function rerunConsentBinds(
     && decided.priorCompleted === consent.priorCompleted;
 }
 
+/** What every event of one claim carries when the Start route bound it: both or neither. */
+type StartFields = { readonly startKeyHash?: string; readonly clientTriggerId?: string };
+
+function startFields(start: { readonly startKeyHash?: string | undefined; readonly clientTriggerId?: string | undefined } | null | undefined): StartFields {
+  return start !== null && start !== undefined && typeof start.startKeyHash === 'string' && typeof start.clientTriggerId === 'string'
+    ? { startKeyHash: start.startKeyHash, clientTriggerId: start.clientTriggerId }
+    : {};
+}
+
 /** What every event of one claim carries: present only for an acknowledged rerun. */
 type RerunFields = { readonly acknowledgedRerun?: true; readonly priorAttempted?: number; readonly priorCompleted?: number };
 
@@ -1007,20 +1100,34 @@ function rerunFields(acknowledged: boolean, priorAttempted: number | undefined, 
 /** Latest claim states after which that admission's paid run may still be running, or about to tag or mark. */
 const IN_FLIGHT_CLAIM_STATES: ReadonlySet<string> = new Set(['dispatching', 'dispatched']);
 
+/**
+ * Whether a claim's paid run may be running. `dispatching` (a reservation, or
+ * a `gh workflow run` that timed out, was killed or never started, so GitHub
+ * may have the dispatch) and `dispatched` may. `dispatch_failed` and
+ * `already_spent` may not. An outcome-unknown claim is named here on its own
+ * so that no later change to the state list frees it by accident.
+ */
+export function claimMayBeRunning(claim: ClaimEvent): boolean {
+  if (claim.state === 'dispatching' && isDispatchOutcomeUnknownError(claim.dispatchError)) return true;
+  return IN_FLIGHT_CLAIM_STATES.has(claim.state);
+}
+
 const peerKey = (peer: StoredAdmission): string => `${peer.runId}\0${peer.serverRunId}`;
 
 /**
- * The OTHER admissions of the same mission whose latest claim is
- * `dispatching` or `dispatched` and whose journal holds no terminal progress
- * note (`isWonderlandStatusTerminal`). `dispatch_failed` and `already_spent`
- * are terminal claim states and never in flight. Journal only.
+ * The OTHER admissions of the same mission whose latest claim may still be
+ * running ({@link claimMayBeRunning}: `dispatching`, including a
+ * `gh workflow run` whose outcome is unknown, or `dispatched`) and whose
+ * journal holds no terminal progress note (`isWonderlandStatusTerminal`).
+ * `dispatch_failed` and `already_spent` are terminal claim states and never
+ * in flight. Journal only.
  */
 export function inFlightPeers(document: OperatorDocument, admission: StoredAdmission): StoredAdmission[] {
   return document.admissions.filter((row) => {
     if (row.runId === admission.runId && row.serverRunId === admission.serverRunId) return false;
     if (row.missionId === null || row.missionId !== admission.missionId) return false;
     const latest = latestClaim(document, row.runId, row.serverRunId);
-    if (latest === null || !IN_FLIGHT_CLAIM_STATES.has(latest.state)) return false;
+    if (latest === null || !claimMayBeRunning(latest)) return false;
     const note = [...(document.progress ?? [])].reverse().find((entry) => entry.serverRunId === row.serverRunId) ?? null;
     return !(note !== null && isWonderlandStatusState(note.state) && isWonderlandStatusTerminal(note.state));
   });
@@ -1035,7 +1142,11 @@ export function inFlightPeers(document: OperatorDocument, admission: StoredAdmis
  * that cannot be read, or shows no run for the key, is not settled.
  */
 export function unsettledPeer(spawn: GhSpawner, repo: string, peers: readonly StoredAdmission[]): StoredAdmission | null {
-  const listing = spawn.run(paidRunListArgs(repo));
+  return unsettledPeerIn(spawn.run(paidRunListArgs(repo)), peers);
+}
+
+/** {@link unsettledPeer} over a run list already read. */
+function unsettledPeerIn(listing: GhResult, peers: readonly StoredAdmission[]): StoredAdmission | null {
   for (const peer of peers) {
     const runs = runsForDispatchKey(listing, peer.keyHash);
     if (runs === null || runs.length === 0 || runs.some((run) => run.status !== 'completed')) return peer;
@@ -1072,6 +1183,7 @@ interface Reservation {
   readonly liveArgs: readonly string[];
   readonly command: string;
   readonly rerun: RerunFields;
+  readonly start: StartFields;
 }
 
 type Reserved = { readonly kind: 'done'; readonly result: ClaimResult } | Reservation;
@@ -1199,6 +1311,7 @@ function reserveClaim(
     };
   }
   const rerun = rerunFields(consent.acknowledgedRerun, consent.priorAttempted, consent.priorCompleted);
+  const start = startFields(input.start);
   const document = io.read();
   if (sealedExpiry(storePath, document, admission.serverRunId) !== null) {
     return { kind: 'done', result: expiredRefusal(admission) };
@@ -1212,6 +1325,7 @@ function reserveClaim(
       halt: 'RUN_ID_ALREADY_SPENT',
       githubDate,
       rerun,
+      start,
     });
     io.write(appendClaim(document, event));
     if (!claimWasRecorded(storePath, event)) return { kind: 'done', result: expiredRefusal(admission) };
@@ -1232,6 +1346,7 @@ function reserveClaim(
     halt: null,
     githubDate,
     rerun,
+    start,
   });
   io.write(appendClaim(document, reservation));
   if (!claimWasRecorded(storePath, reservation)) return { kind: 'done', result: expiredRefusal(admission) };
@@ -1247,13 +1362,16 @@ function reserveClaim(
     storePath,
   });
   if (liveArgs === null) return { kind: 'done', result: expiredRefusal(admission) };
-  return { kind: 'reserved', admission, at: nowIso, githubDate, liveArgs, command, rerun };
+  return { kind: 'reserved', admission, at: nowIso, githubDate, liveArgs, command, rerun, start };
 }
 
 /**
  * The outcome of the one `gh workflow run` child. `dispatched` only for a
- * zero exit with no halt. Every event keeps the reservation's timestamp, which
- * was read before the child was spawned.
+ * zero exit with no halt. A child with no answer of its own (timeout, signal,
+ * not started) is outcome-unknown: the claim stays `dispatching`, now
+ * `dispatchAttempted` with the distinct error, in flight until `reconcile`.
+ * Every event keeps the reservation's timestamp, which was read before the
+ * child was spawned.
  */
 function recordDispatchOutcome(
   io: AdmissionFileIo,
@@ -1261,8 +1379,27 @@ function recordDispatchOutcome(
   reserved: Reservation,
   ran: GhResult,
 ): ClaimResult {
-  const { admission, at, githubDate, command, rerun } = reserved;
+  const { admission, at, githubDate, command, rerun, start } = reserved;
   const document = io.read();
+  if (ran.failure !== undefined) {
+    const dispatchError = DISPATCH_OUTCOME_UNKNOWN_BY_FAILURE[ran.failure];
+    const unknown = baseEvent(admission, at, {
+      state: 'dispatching',
+      spentTagState: 'absent',
+      dispatchAttempted: true,
+      dispatchError,
+      halt: null,
+      githubDate,
+      rerun,
+      start,
+    });
+    io.write(appendClaim(document, unknown));
+    return fail(
+      'dispatch_outcome_unknown',
+      `The gh workflow run child gave no answer (${dispatchError}). Whether GitHub started the paid run is unknown, so the record stays dispatching and this mission is in flight. It is not retried; only reconcile, from GitHub evidence, moves it.`,
+      toView(admission, unknown),
+    );
+  }
   const halt = interpretWorkflowHalt(ran);
   const workflowRunId = learnWorkflowRunId(ran, input.repo);
   if (halt === 'RUN_ID_ALREADY_SPENT') {
@@ -1275,6 +1412,7 @@ function recordDispatchOutcome(
       workflowRunId,
       githubDate,
       rerun,
+      start,
     });
     io.write(appendClaim(document, spent));
     return fail(
@@ -1294,6 +1432,7 @@ function recordDispatchOutcome(
       workflowRunId,
       githubDate,
       rerun,
+      start,
     });
     io.write(appendClaim(document, failed));
     return fail(
@@ -1313,6 +1452,7 @@ function recordDispatchOutcome(
     workflowRunId,
     githubDate,
     rerun,
+    start,
   });
   io.write(appendClaim(document, dispatched));
   return {
@@ -1376,18 +1516,18 @@ type ReconcileChecked =
  * what GitHub showed. The outcome keeps the reservation's timestamp and GitHub
  * clock. Nothing is deleted or rewritten.
  */
-async function reconcilePhased(file: AdmissionFile, input: ReconcileInput, spawn: GhSpawner): Promise<ReconcileResult> {
+async function reconcilePhased(file: AdmissionFile, input: ReconcileInput, spawn: AwaitableGhSpawner): Promise<ReconcileResult> {
   const checked = await file.exclusive((io) => Promise.resolve(checkReconcile(io, input)));
   if (checked.kind === 'done') return checked.result;
   const { admission, reservation } = checked;
   const record = toView(admission, reservation);
   const refused = (kind: string, message: string, evidence: ReconcileEvidence | null): ReconcileResult =>
     ({ ok: false, kind, message, record, evidence });
-  const matchedRuns = runsForDispatchKey(spawn.run(paidRunListArgs(input.repo)), admission.keyHash);
+  const matchedRuns = runsForDispatchKey(await spawn.run(paidRunListArgs(input.repo)), admission.keyHash);
   if (matchedRuns === null) {
     return refused('workflow_runs_unreadable', 'The paid workflow runs could not be listed. The record stays dispatching.', null);
   }
-  const tagRead = spawn.run(spentTagApiArgs(input.repo, admission.serverRunId));
+  const tagRead = await spawn.run(spentTagApiArgs(input.repo, admission.serverRunId));
   const tag = interpretSpentTagResponse(tagRead);
   if (tag === 'unreadable') return refused('spent_tag_unreadable', 'The spent tag could not be read. The record stays dispatching.', null);
   let tagWorkflowRunId: string | null = null;
@@ -1395,7 +1535,7 @@ async function reconcilePhased(file: AdmissionFile, input: ReconcileInput, spawn
     const objectSha = spentTagObjectSha(tagRead);
     tagWorkflowRunId = objectSha === null
       ? null
-      : spentTagWorkflowRunId(spawn.run(['api', `repos/${input.repo}/git/tags/${objectSha}`]), admission.serverRunId);
+      : spentTagWorkflowRunId(await spawn.run(['api', `repos/${input.repo}/git/tags/${objectSha}`]), admission.serverRunId);
     if (tagWorkflowRunId === null) {
       return refused(
         'spent_tag_unverified',
@@ -1418,6 +1558,7 @@ async function reconcilePhased(file: AdmissionFile, input: ReconcileInput, spawn
       workflowRunId: firstAttempt.workflowRunId,
       githubDate: reservation.githubDate,
       rerun: rerunFields(reservation.acknowledgedRerun === true, reservation.priorAttempted, reservation.priorCompleted),
+      start: startFields(reservation),
     });
   } else if (tag === 'absent' && matchedRuns.length === 0 && reservationOutlivedGrace(reservation.githubDate, githubDateFromResponse(tagRead))) {
     outcome = baseEvent(admission, reservation.at, {
@@ -1429,6 +1570,7 @@ async function reconcilePhased(file: AdmissionFile, input: ReconcileInput, spawn
       workflowRunId: null,
       githubDate: reservation.githubDate,
       rerun: rerunFields(reservation.acknowledgedRerun === true, reservation.priorAttempted, reservation.priorCompleted),
+      start: startFields(reservation),
     });
   } else if (tag === 'absent' && firstAttempt !== null && firstAttempt.status === 'completed' && firstAttempt.conclusion !== 'success') {
     outcome = baseEvent(admission, reservation.at, {
@@ -1440,6 +1582,7 @@ async function reconcilePhased(file: AdmissionFile, input: ReconcileInput, spawn
       workflowRunId: firstAttempt.workflowRunId,
       githubDate: reservation.githubDate,
       rerun: rerunFields(reservation.acknowledgedRerun === true, reservation.priorAttempted, reservation.priorCompleted),
+      start: startFields(reservation),
     });
   }
   if (outcome === null) {
@@ -1631,7 +1774,9 @@ function claimWasRecorded(storePath: string, reserved: ClaimEvent): boolean {
     && event.dispatchAttempted === reserved.dispatchAttempted
     && (event.acknowledgedRerun === true) === (reserved.acknowledgedRerun === true)
     && event.priorAttempted === reserved.priorAttempted
-    && event.priorCompleted === reserved.priorCompleted);
+    && event.priorCompleted === reserved.priorCompleted
+    && event.startKeyHash === reserved.startKeyHash
+    && event.clientTriggerId === reserved.clientTriggerId);
 }
 
 function replay(record: OperatorView): ClaimResult {
@@ -1673,6 +1818,11 @@ function validateShape(input: ClaimInput): ClaimResult | null {
   if (!isRepo(input.repo)) return fail('repo_invalid', 'The GitHub repo must be owner/name.', null);
   if (!OPERATOR_LANES.includes(input.lane as OperatorLane)) {
     return fail('lane_invalid', 'The lane must be qualification, qualification-repair, lab, or regression.', null);
+  }
+  if (input.start !== undefined && input.start !== null
+    && (typeof input.start.startKeyHash !== 'string' || !START_KEY_HASH.test(input.start.startKeyHash)
+      || typeof input.start.clientTriggerId !== 'string' || !START_CLIENT_TRIGGER_ID.test(input.start.clientTriggerId))) {
+    return fail('start_binding_invalid', 'The Start binding must be a sha256 key hash and a clientTriggerId. Nothing was claimed or dispatched.', null);
   }
   return null;
 }
@@ -1736,9 +1886,15 @@ export function legalTransition(prior: ClaimEvent | null, event: ClaimEvent): bo
   } else if (event.halt === 'RUN_ID_ALREADY_SPENT') {
     return false;
   }
-  if ((event.state === 'dispatched' || event.state === 'dispatching') && (event.halt !== null || event.dispatchError !== null)) return false;
+  if (event.state === 'dispatched' && (event.halt !== null || event.dispatchError !== null)) return false;
+  if (event.state === 'dispatching') {
+    // A reservation carries no error; an outcome-unknown dispatch carries exactly one of its own.
+    if (event.halt !== null || event.workflowRunId !== null || event.spentTagState !== 'absent') return false;
+    if (event.dispatchAttempted ? !isDispatchOutcomeUnknownError(event.dispatchError) : event.dispatchError !== null) return false;
+  }
   if (event.halt === 'SPENT_TAG_UNVERIFIED' && event.state !== 'dispatch_failed') return false;
   if (!validRerunFields(event)) return false;
+  if ((event.startKeyHash === undefined) !== (event.clientTriggerId === undefined)) return false;
   if (prior === null) {
     if (event.state === 'dispatching') return !event.dispatchAttempted && event.spentTagState === 'absent';
     if (event.state === 'already_spent') return !event.dispatchAttempted;
@@ -1746,12 +1902,21 @@ export function legalTransition(prior: ClaimEvent | null, event: ClaimEvent): bo
   }
   if (prior.state !== 'dispatching') return false;
   if (!event.dispatchAttempted) return false;
+  // Outcome-unknown follows the reservation only, once: after it, only GitHub evidence (reconcile) moves the record.
+  if (event.state === 'dispatching' && prior.dispatchAttempted) return false;
+  // After an outcome-unknown dispatch the child's own answer is gone: only reconcile's evidence outcomes follow it.
+  if (prior.dispatchAttempted && !(event.state === 'dispatched'
+    || (event.state === 'dispatch_failed' && (event.dispatchError === 'workflow_run_unspent' || event.dispatchError === 'workflow_run_absent')))) return false;
   // The rerun consent is the reservation's: an outcome can neither add it, drop it, nor change its count.
   if ((event.acknowledgedRerun === true) !== (prior.acknowledgedRerun === true)
     || event.priorAttempted !== prior.priorAttempted || event.priorCompleted !== prior.priorCompleted) return false;
   // The outcome keeps the reservation's GitHub clock: it is the dispatch's, not the outcome write's.
   if (event.githubDate !== prior.githubDate) return false;
+  // The Start binding is the reservation's too: an outcome carries it unchanged.
+  if (event.startKeyHash !== prior.startKeyHash || event.clientTriggerId !== prior.clientTriggerId) return false;
   if (event.state === 'already_spent') return true;
+  // Outcome-unknown: its error and the reservation it follows were checked above.
+  if (event.state === 'dispatching') return true;
   if (event.state === 'dispatch_failed') {
     if (event.halt === 'SPENT_TAG_UNVERIFIED') return event.dispatchError === 'SPENT_TAG_UNVERIFIED';
     return event.halt === null
@@ -1771,6 +1936,7 @@ function baseEvent(admission: StoredAdmission, at: string, fields: {
   readonly workflowRunId?: string | null;
   readonly githubDate: string | null;
   readonly rerun?: RerunFields;
+  readonly start?: StartFields;
 }): ClaimEvent {
   return {
     wonderlandRunId: admission.runId,
@@ -1785,6 +1951,7 @@ function baseEvent(admission: StoredAdmission, at: string, fields: {
     workflowRunId: fields.workflowRunId ?? null,
     githubDate: fields.githubDate,
     ...rerunFields(fields.rerun?.acknowledgedRerun === true, fields.rerun?.priorAttempted, fields.rerun?.priorCompleted),
+    ...startFields(fields.start),
   };
 }
 
@@ -1803,6 +1970,7 @@ function viewFromClaim(claim: ClaimEvent): OperatorView {
     concurrencyGroup: concurrencyGroupName(claim.serverRunId),
     claimedAt: claim.at,
     workflowRunId: claim.workflowRunId,
+    ...startFields(claim),
   };
 }
 
@@ -1826,6 +1994,7 @@ function toView(admission: StoredAdmission, claim: ClaimEvent | null): OperatorV
     concurrencyGroup: concurrencyGroupName(admission.serverRunId),
     claimedAt: claim?.at ?? null,
     workflowRunId: claim?.workflowRunId ?? null,
+    ...startFields(claim),
   };
 }
 

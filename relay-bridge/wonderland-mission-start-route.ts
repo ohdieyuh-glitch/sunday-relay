@@ -45,6 +45,7 @@ import { spawnSync } from 'node:child_process';
 import { CANONICAL_UUID_V4, CLIENT_TRIGGER_ID, J1_IDEMPOTENCY_KEY } from '../src/relay/integration/wonderland-admission';
 import { parseJuliusAdmissionRunId } from '../src/relay/integration/wonderland-admission/admission-run-id';
 import {
+  ghResultFromChildExit,
   OPERATOR_DISPATCH_CONFIRMATION,
   OPERATOR_LANES,
   openOperatorClaimTool,
@@ -95,13 +96,10 @@ export const ghClaimSpawner: GhSpawner = {
         timeout: GH_CLAIM_TIMEOUT_MS,
         windowsHide: true,
       });
-      return {
-        code: typeof result.status === 'number' ? result.status : 1,
-        stdout: typeof result.stdout === 'string' ? result.stdout : '',
-        stderr: typeof result.stderr === 'string' ? result.stderr : '',
-      };
+      // A timeout, a signal kill or a failed spawn is reported as such, never as an ordinary non-zero exit.
+      return ghResultFromChildExit(result);
     } catch {
-      return { code: 127, stdout: '', stderr: '' };
+      return { code: 127, stdout: '', stderr: '', failure: 'spawn_failed' };
     }
   },
 };
@@ -231,7 +229,8 @@ export function startHttp(wljRunId: string, result: ClaimResult): { status: numb
     return { status: 409, body: { error: { kind: 'julius_start_not_dispatched', message: 'The admission was not dispatched.' }, ...startBody(wljRunId, result.record, result.replayed) } };
   }
   if (result.record !== null && STARTED_STATES.has(result.record.state)) {
-    return { status: 200, body: startBody(wljRunId, result.record, true) };
+    // `dispatch_outcome_unknown`: this Start's own `gh workflow run` gave no answer. Not a replay; the record says `dispatching`.
+    return { status: 200, body: startBody(wljRunId, result.record, result.kind !== 'dispatch_outcome_unknown') };
   }
   // A paid run of the same mission still in flight is the one refusal the founder can retry, once it has finished.
   const body: Record<string, unknown> = { error: { kind: result.kind, message: result.message }, retry: result.kind === 'julius_paid_run_in_flight' };
