@@ -465,7 +465,9 @@ export function createGrokBotCodingAgentProvider(input: {
        */
       const verdict = juliusServedModelVerdict(modelId, result.reportedModelId);
       evidence.servedModelVerdict = verdict;
-      if (result.reportedModelId !== null) evidence.servedModel = result.reportedModelId;
+      /* `cursorServedModel` is what the API reported, whatever the verdict; `servedModel` keeps the router's meaning (attested only). */
+      if (result.reportedModelId !== null) evidence.cursorServedModel = result.reportedModelId;
+      if (verdict === 'MATCH' && result.reportedModelId !== null) evidence.servedModel = result.reportedModelId;
       if (result.reportedModelSource !== null) evidence.servedModelSource = result.reportedModelSource;
       if (verdict === 'MISMATCH') {
         return started('SERVED_MODEL_MISMATCH', 'coder_served_model_mismatch', 'The Cursor API reported a model other than the one pinned; the dispatch stops rather than accept a substitute.');
