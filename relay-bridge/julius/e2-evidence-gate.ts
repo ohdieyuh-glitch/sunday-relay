@@ -702,6 +702,9 @@ const GIT_PINS = Object.freeze([
   /* PILOT 43b93a4e M-8: everything else in the repo's own config that shapes the bytes. */
   '-c', 'diff.context=3', '-c', 'diff.interHunkContext=0', '-c', 'diff.orderFile=/dev/null', '-c', 'diff.srcPrefix=a/', '-c', 'diff.dstPrefix=b/',
   '-c', 'diff.algorithm=myers', '-c', 'diff.indentHeuristic=true', '-c', 'core.attributesFile=/dev/null', '-c', 'diff.wsErrorHighlight=none',
+  /* Round 7 R6-7 (Skywalker 70f96cfe): the workspace .git/config is coder-writable; nothing it names may execute. */
+  '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'core.sshCommand=/bin/false', '-c', 'protocol.allow=never',
+  '-c', 'core.pager=cat', '-c', 'diff.external=',
 ]);
 /** M-8: the same settings as explicit flags (a flag beats config). */
 const DIFF_FLAGS = Object.freeze(['-U3', '--inter-hunk-context=0', '-O/dev/null', '--src-prefix=a/', '--dst-prefix=b/', '--diff-algorithm=myers', '--indent-heuristic']);
