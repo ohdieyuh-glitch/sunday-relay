@@ -99,7 +99,8 @@ export function cursorTransportMode(transport: unknown): 'live' | 'fake' {
 }
 
 /**
- * EVERY FORM OF THE KEY A SERVICE MIGHT ECHO BACK (F12): as is, URL-encoded (both component and form encoding), and in
+ * EVERY FORM OF THE KEY A SERVICE MIGHT ECHO BACK (F12): as is, URL-encoded (both component and form encoding), in hex
+ * (lower and upper case, bare and percent-escaped), and in
  * base64 and base64url at each of the three byte alignments a key can sit at inside a longer encoded string (only the
  * characters that depend on key bytes alone, so a match is the key whatever surrounds it). Longest first; forms shorter
  * than 8 characters are dropped so a short key cannot erase ordinary text.
@@ -118,6 +119,14 @@ export function cursorKeyForms(key: string): readonly string[] {
   }
   forms.add(bytes.toString('base64'));
   forms.add(bytes.toString('base64url'));
+  /* PILOT Low 9: hex, lower and upper case, bare and as `%XX` for every byte. Hex is byte-local (each byte is its own
+   * two characters), so unlike base64 the key's hex is the same substring at every byte alignment inside a longer hex
+   * string: one form per case covers the three alignments the base64 forms handle. */
+  const hex = bytes.toString('hex');
+  for (const h of hex.length >= 8 ? [hex, hex.toUpperCase()] : []) {
+    forms.add(h);
+    forms.add(h.replace(/(..)/gu, '%$1'));
+  }
   return Object.freeze([...forms].filter((f) => f.length >= 8).sort((x, y) => y.length - x.length));
 }
 
@@ -293,7 +302,7 @@ export function createCursorCloudAgentsTransport(options: CursorCloudAgentsTrans
       const ra = res.headers?.get('retry-after') ?? null;
       const raSeconds = ra !== null && /^\d{1,6}$/u.test(ra.trim()) ? Number(ra.trim()) : null;
       const rid = res.headers?.get('x-request-id') ?? res.headers?.get('x-cursor-request-id') ?? null;
-      const requestId = rid !== null && REQUEST_ID.test(rid.trim()) && !rid.includes(key) ? rid.trim() : null;
+      const requestId = rid !== null && REQUEST_ID.test(rid.trim()) && !rid.includes(key) && !cursorKeyForms(key).some((f) => rid.includes(f)) ? rid.trim() : null;
       const responseSha256 = createHash('sha256').update(text ?? '').digest('hex');
       return { kind: 'response', status: res.status, body: parsed, retryAfterMs: raSeconds === null ? null : Math.min(raSeconds * 1000, MAX_RETRY_AFTER_MS), requestId, responseSha256, key };
     } catch {

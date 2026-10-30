@@ -516,6 +516,30 @@ describe('L4: service strings that reach evidence are bounded', () => {
     expect(cursorKeyForms('abc')).toEqual([]);
   });
 
+  it('PILOT Low 9: the key echoed in hex (lower, upper, %XX), at every byte alignment inside a longer hex string, is scrubbed', async () => {
+    const hex = Buffer.from(SENTINEL).toString('hex');
+    const echoes: string[] = [];
+    for (const pad of [0, 1, 2]) {
+      const raw = Buffer.from(`${'p'.repeat(pad)}${SENTINEL}tail`).toString('hex');
+      echoes.push(raw, raw.toUpperCase(), raw.replace(/(..)/gu, '%$1'), raw.toUpperCase().replace(/(..)/gu, '%$1'));
+    }
+    echoes.push(hex, hex.toUpperCase());
+    for (const echo of echoes) {
+      const r = await result({ result: `before ${echo} after` });
+      expect(r.finalText, echo).toContain('[REDACTED]');
+      expect((r.finalText ?? '').toLowerCase(), echo).not.toContain(hex);
+      const decoded = (r.finalText ?? '').split(' ').map((w) => Buffer.from(w.replace(/%/gu, ''), 'hex').toString('latin1')).join(' ');
+      expect(decoded, echo).not.toContain(SENTINEL);
+      expect(decoded, echo).not.toContain(SENTINEL.slice(0, 16));
+    }
+    expect(cursorKeyForms(SENTINEL)).toEqual(expect.arrayContaining([hex, hex.toUpperCase(), hex.replace(/(..)/gu, '%$1'), hex.toUpperCase().replace(/(..)/gu, '%$1')]));
+  });
+  it('PILOT Low 9: a request-id header carrying the key in hex is dropped', async () => {
+    const hexKey = Buffer.from(SENTINEL).toString('hex');
+    const runBody = { id: RUN, status: 'FINISHED', result: 'done' };
+    const r = await make((call) => (call.url.includes('/usage') ? { status: 404 } : { status: 200, body: runBody, requestId: `req-${hexKey}` })).transport.fetchResult({ agentId: AGENT, runId: RUN });
+    expect(r.kind === 'result' && r.receipt?.requestId).toBeNull();
+  });
   it('F12: with a key whose encodings differ from it (reserved characters, + and / in base64), every form is scrubbed', async () => {
     const KEY = 'K3y?>~/&=+\u00fc-sentinel-0123456789';
     for (const pad of [0, 1, 2]) expect(/[+/]/u.test(Buffer.concat([Buffer.alloc(pad), Buffer.from(KEY)]).toString('base64')), `pad ${pad}`).toBe(true);
