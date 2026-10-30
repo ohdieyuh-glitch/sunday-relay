@@ -411,6 +411,32 @@ const SPECS = new WeakSet<object>();
  * Regex literals are not lexed (a `test(` inside one still counts: over-counting only raises the floor). Calls made
  * through an alias or in a loop are under-counted; the base run (pinVerifierSpecWithBaseRun) covers those.
  */
+/**
+ * Round 7 (PILOT R6-8): a `/` starts a regex literal when the code before it cannot end an expression (an operator,
+ * an opening bracket, a separator, a keyword such as `return`, or nothing). Looks back at most 64 chars (linear).
+ * HONEST LIMIT: `) /re/` (after an `if (...)`) is read as division, which is what a bracket-free lexer can do.
+ */
+function regexAllowed(out: string): boolean {
+  let k = out.length - 1; const stop = Math.max(0, out.length - 64);
+  while (k >= stop && /\s/u.test(out[k] as string)) k -= 1;
+  if (k < stop) return true;
+  const ch = out[k] as string;
+  if ('(,=:[!&|?{};+-*%<>~^'.includes(ch)) return true;
+  const word = /[A-Za-z_$][\w$]*$/u.exec(out.slice(Math.max(stop, k - 12), k + 1));
+  return word !== null && /^(?:return|typeof|case|do|else|in|of|new|delete|void|throw|yield|await|instanceof)$/u.test(word[0]);
+}
+/** End index (exclusive, flags included) of the regex literal starting at `i`; stops at a newline when unterminated. */
+function regexEnd(src: string, i: number): number {
+  let j = i + 1; let cls = false;
+  while (j < src.length) {
+    const ch = src[j] as string;
+    if (ch === '\\') { j += 2; continue; }
+    if (ch === '\n') return j;
+    if (cls) { if (ch === ']') cls = false; } else if (ch === '[') cls = true; else if (ch === '/') { j += 1; while (j < src.length && /[a-z]/u.test(src[j] as string)) j += 1; return j; }
+    j += 1;
+  }
+  return j;
+}
 const BASE_TEST_CALL = /(?<![.\w$])(?:test|it)\s*\(/gu;
 export function stripJsNoise(src: string): string {
   let out = '';
@@ -419,6 +445,7 @@ export function stripJsNoise(src: string): string {
     const c = src[i] as string; const d = src[i + 1];
     if (c === '/' && d === '/') { const j = src.indexOf('\n', i); i = j === -1 ? src.length : j; out += ' '; continue; }
     if (c === '/' && d === '*') { const j = src.indexOf('*/', i + 2); i = j === -1 ? src.length : j + 2; out += ' '; continue; }
+    if (c === '/' && regexAllowed(out)) { i = regexEnd(src, i); out += ' 0 '; continue; }
     if (c === "'" || c === '"' || c === '`') {
       let j = i + 1;
       while (j < src.length && src[j] !== c && !(c !== '`' && src[j] === '\n')) j += src[j] === '\\' ? 2 : 1;
@@ -445,6 +472,7 @@ function lexJs(src: string): { readonly code: string; readonly lits: readonly st
       if (c === '{') depth += 1; else if (c === '}') depth -= 1;
       if (c === '/' && d === '/') { const j = src.indexOf('\n', i); i = j === -1 ? src.length : j; out += ' '; continue; }
       if (c === '/' && d === '*') { const j = src.indexOf('*/', i + 2); i = j === -1 ? src.length : j + 2; out += ' '; continue; }
+      if (c === '/' && regexAllowed(out)) { i = regexEnd(src, i); out += ' 0 '; continue; }
       if (c === "'" || c === '"') {
         let j = i + 1;
         while (j < src.length && src[j] !== c && src[j] !== '\n') j += src[j] === '\\' ? 2 : 1;
