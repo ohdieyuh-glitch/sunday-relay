@@ -55,6 +55,8 @@ export function isCanonicalDir(cwd: string): boolean {
  * PILOT 43b93a4e N-3: the fixed PATH every verifier child gets. PATH is never taken from the parent, `options.env` or the
  * per-call env; node's own directory comes first so npx/npm/tsc resolve beside the running node.
  */
+/** R3-3: the only caller-supplied env keys a verifier child receives (PATH is fixed separately). */
+export const E2_VERIFIER_ENV_KEYS: readonly string[] = Object.freeze(['LANG', 'LC_ALL', 'CI', 'TZ', 'NODE_ENV']);
 export const E2_VERIFIER_PATH = `${dirname(process.execPath)}:/usr/local/bin:/usr/bin:/bin`;
 const progName = (p: string): string => basename(p.replace(/\\/gu, '/')).toLowerCase();
 /** Resolves a program name to an absolute binary on the fixed PATH (node is process.execPath), or null. */
@@ -163,13 +165,17 @@ export function spawnVerifierRunner(options: {
   const platform = options.platform ?? process.platform;
   const spawnImpl = options.spawnImpl ?? spawn;
   const refused = { exitCode: null, stdoutSha256: EMPTY_SHA, stderrSha256: EMPTY_SHA, stdoutBytes: 0, stderrBytes: 0 } as const;
+  /* R3-3: a key allowlist, not a denylist. NODE_OPTIONS, GIT_*, HOME, LD_*, npm_config_* and PATH never pass. */
   const noPath = (e: Readonly<Record<string, string>> | undefined): Record<string, string> =>
-    Object.fromEntries(Object.entries(e ?? {}).filter(([k]) => k.toUpperCase() !== 'PATH'));
+    Object.fromEntries(Object.entries(e ?? {}).filter(([k, v]) => E2_VERIFIER_ENV_KEYS.includes(k) && typeof v === 'string'));
   const runner: VerifierRunner = (argv, cwd, extraEnv) => new Promise((resolve) => {
     if (!validArgv(argv) || !isCanonicalDir(cwd) || !(isVerifierCommandAllowed(argv, cwd) || isModuleGit(argv))) { resolve({ ...refused, cause: 'refused' }); return; }
     const bin = resolveProgram(argv[0] as string);
     if (bin === null) { resolve({ ...refused, cause: 'refused' }); return; }
-    const env: Record<string, string> = { LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...noPath(options.env), ...noPath(extraEnv), PATH: E2_VERIFIER_PATH };
+    /* Module git gets only its own fixed env (R3-3/L2); caller env never reaches git. */
+    const env: Record<string, string> = isModuleGit(argv)
+      ? { LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...E2_GIT_ENV, GIT_NO_REPLACE_OBJECTS: '1', PATH: E2_VERIFIER_PATH }
+      : { LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...noPath(options.env), ...noPath(extraEnv), PATH: E2_VERIFIER_PATH };
     let child: ReturnType<typeof spawn>;
     try {
       child = spawnImpl(bin, argv.slice(1), { cwd, shell: false, env, detached: platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'] });
@@ -225,12 +231,12 @@ export function spawnVerifierRunner(options: {
     child.on('close', (c: number | null, s: NodeJS.Signals | null) => finish(code ?? c, sig ?? s));
   });
   TRUSTED_RUNNERS.add(runner);
-  CAPTURE.set(runner, (argv, cwd, extra) => new Promise((resolve) => {
+  CAPTURE.set(runner, (argv, cwd) => new Promise((resolve) => {
     if (!isCanonicalDir(cwd) || !isModuleGit(argv)) { resolve(null); return; }
     const bin = resolveProgram('git');
     if (bin === null) { resolve(null); return; }
     execFile(bin, argv.slice(1), { cwd, shell: false, encoding: 'buffer', maxBuffer: 64 * 1024 * 1024, timeout: timeoutMs, killSignal: 'SIGKILL',
-      env: { LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...noPath(extra), PATH: E2_VERIFIER_PATH } }, (e, out) => resolve(e === null ? out : null));
+      env: { LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...E2_GIT_ENV, GIT_NO_REPLACE_OBJECTS: '1', PATH: E2_VERIFIER_PATH } }, (e, out) => resolve(e === null ? out : null));
   }));
   return runner;
 }
