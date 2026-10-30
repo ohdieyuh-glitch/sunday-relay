@@ -93,6 +93,27 @@ describe('N1: the reviewer the grok coder must be independent of is the WIRED re
     /* The pin's own family must agree with its id. */
     expect(() => grok(bare)({ PATH: '/bin' }, { requestedModel: 'composer-1', reviewer: { modelId: 'grok-build-0.1', modelFamily: 'openai' } })).toThrow('coder_grok_family_declaration_mismatch');
   });
+  it('Skywalker N14 (kills K37): the provider is handed the very pin the wiring checked, and its own check reads that pin', async () => {
+    let reads = 0;
+    let id = 'grok-build-0.1';
+    const pin = { get modelId() { reads += 1; return id; }, get modelFamily() { reads += 1; return 'xai'; } };
+    const bare = { ...config, pinnedModelId: 'composer-1', coderModelFamily: 'cursor', reviewerModelId: null, reviewerModelFamily: null };
+    const seen: string[] = [];
+    const ws: GrokBotWorkspacePort = { ...workspace, baseRevision: async () => { seen.push('base'); return { ok: false, cause: 'x' }; } };
+    const provider = buildJ1CoderProviderFor({ occupant: GROK_BOT_CODER_PROVIDER_KIND, grokBot: { config: bare, transport, workspace: ws } })({ PATH: '/bin' }, { requestedModel: 'composer-1', reviewer: pin });
+    expect(reads).toBeGreaterThan(0);
+    const request = { workspacePath: '/tmp/ws', budget: { usdMicros: null } } as never;
+    reads = 0;
+    const ok = await provider.execute(request);
+    expect(reads, 'the provider re-checks the wired pin object itself').toBeGreaterThan(0);
+    expect(seen).toEqual(['base']);
+    expect(ok.kind === 'failed' ? ok.providerFailureClass : ok.kind).toBe('coder_grok_base_revision_unreadable');
+    /* The same pin object, now naming a Cursor model: the provider's outcome follows the pin it was handed. */
+    id = 'composer-1';
+    const after = await provider.execute(request);
+    expect(after.kind === 'failed' ? after.providerFailureClass : after.kind).toBe('coder_grok_same_model_as_reviewer');
+    expect(seen).toEqual(['base']);
+  });
   it('the Claude occupant ignores the reviewer field, so passing it changes nothing for main\'s path', () => {
     expect(buildJ1CoderProviderFor()({ PATH: '/bin' }, { requestedModel: 'm', reviewer: { modelId: 'grok-build-0.1', modelFamily: 'xai' } }).providerKind).toBe('claude-code-hosted');
   });
