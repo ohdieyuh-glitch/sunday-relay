@@ -213,7 +213,19 @@ const CONFUSABLE_MAP: Readonly<Record<string, string>> = Object.freeze({
   '\u0441': 'c', '\u0421': 'C', '\u0445': 'x', '\u0425': 'X', '\u0443': 'y', '\u0456': 'i', '\u0406': 'I', '\u0458': 'j', '\u0455': 's', '\u0405': 'S',
   '\u03bf': 'o', '\u039f': 'O', '\u03a7': 'X', '\u0391': 'A', '\u0392': 'B', '\u0395': 'E', '\u039a': 'K', '\u03a1': 'P', '\u03a4': 'T', '\u0131': 'i',
 });
-const foldConfusables = (s: string): string => s.replace(/[\u0370-\u04ff\u0131]/gu, (c) => CONFUSABLE_MAP[c] ?? c);
+/**
+ * Round 6 PILOT R5-8: Armenian letters that pass for Latin ones. Some have two readings (`ո` reads as n or u, `ս` as u),
+ * so a second fold with the alternate readings is also checked (two linear passes).
+ */
+const ARMENIAN_MAP: Readonly<Record<string, string>> = Object.freeze({
+  '\u0578': 'n', '\u057d': 'u', '\u0585': 'o', '\u0570': 'h', '\u0581': 'g', '\u0566': 'q', '\u0561': 'w', '\u0575': 'j', '\u0573': 'n', '\u0574': 'u', '\u057c': 'n',
+});
+const ARMENIAN_ALT: Readonly<Record<string, string>> = Object.freeze({ '\u0578': 'u', '\u057c': 'n', '\u0574': 'u' });
+const foldConfusables = (s: string, alt = false): string => s.replace(/[\u0370-\u04ff\u0131\u0531-\u058f]/gu, (c) => (alt ? ARMENIAN_ALT[c] : undefined) ?? CONFUSABLE_MAP[c] ?? ARMENIAN_MAP[c] ?? c);
+/** Round 6 R5-8: hex bytes joined by colons (`67:68:70`) or written as `0x67,` / `0x67 ` lists. */
+const COLON_HEX_RUN = /\b[0-9a-f]{2}(?::[0-9a-f]{2}){11,}\b/giu;
+const OX_HEX_RUN = /(?:0x[0-9a-f]{2}[,;]? ?){12,}/giu;
+const rot13 = (t: string): string => t.replace(/[a-z]/giu, (c) => { const b = c <= 'Z' ? 65 : 97; return String.fromCharCode(b + ((c.charCodeAt(0) - b + 13) % 26)); });
 function secretSurvives(raw: string): boolean {
   /* Round 4 M4: our own markers are not secrets (a URL `user:[REDACTED:secret]@` must not re-trigger the userinfo pattern). */
   const text = raw.replace(/\[REDACTED:secret\]/gu, ' ');
@@ -234,16 +246,27 @@ function secretSurvives(raw: string): boolean {
   /* PILOT 44c062b9 R4-7: Cyrillic/Greek homoglyphs (`хai-`), folded through a small confusables map. */
   const folded = foldConfusables(nfkc);
   if (folded !== nfkc && anyPattern(folded)) return true;
+  const foldedAlt = foldConfusables(nfkc, true);
+  if (foldedAlt !== folded && anyPattern(foldedAlt)) return true;
+  /* Round 6 R5-8: rot13 of the whole text (one pass). */
+  if (anyPattern(rot13(joined))) return true;
+  for (const m of joined.matchAll(COLON_HEX_RUN)) if (anyPattern(Buffer.from(m[0].replace(/:/gu, ''), 'hex').toString('latin1'))) return true;
+  for (const m of joined.matchAll(OX_HEX_RUN)) if (anyPattern(Buffer.from(m[0].replace(/0x|[,; ]/giu, ''), 'hex').toString('latin1'))) return true;
   /* Round 4 R3-8: hex-encoded tokens; R4-7: also space-separated hex bytes. */
   for (const m of joined.matchAll(HEX_RUN)) if (anyPattern(Buffer.from(m[0], 'hex').toString('latin1'))) return true;
   for (const m of joined.matchAll(SPACED_HEX_RUN)) if (anyPattern(Buffer.from(m[0].replace(/ /gu, ''), 'hex').toString('latin1'))) return true;
-  /* base64, and base64 of base64 (one extra level only). */
+  /* base64 up to three levels (Round 6 R5-8; each level is 3/4 the size of the one above, so the total stays linear);
+     a decoded copy with its NUL bytes removed catches UTF-16LE text. */
   const b64 = (t: string): string => Buffer.from(t.replace(/-/gu, '+').replace(/_/gu, '/'), 'base64').toString('latin1');
-  for (const m of joined.matchAll(B64_TOKEN)) {
-    const decoded = b64(m[0]);
-    if (anyPattern(decoded)) return true;
-    for (const n of decoded.matchAll(B64_TOKEN)) if (anyPattern(b64(n[0]))) return true;
-  }
+  const hit = (d: string): boolean => anyPattern(d) || (d.includes('\u0000') && anyPattern(d.replace(/\u0000/gu, '')));
+  const level = (t: string, depth: number): boolean => {
+    for (const m of t.matchAll(B64_TOKEN)) {
+      const decoded = b64(m[0]);
+      if (hit(decoded) || (depth < 3 && level(decoded, depth + 1))) return true;
+    }
+    return false;
+  };
+  if (level(joined, 1)) return true;
   return false;
 }
 /** Non-Cursor secrets redacted in place (linear time). `residue` is true when a secret survives in an encoded form. */
