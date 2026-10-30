@@ -689,6 +689,77 @@ MUTATIONS = [
         "Out.Why = \"the bridge accepted the Start request; waiting for /status to report the dispatch\";\n\t\t\treturn Out; // FLOW_START_ACCEPTED_NOT_REOFFERED",
         "Out.Why = \"the bridge accepted the Start request; waiting for /status to report the dispatch\"; // FLOW_START_ACCEPTED_NOT_REOFFERED",
     ),
+    # CLIENT LANE C2 (A-9 /status, founder ruling: outcome-unknown keeps Start blocked).
+    (
+        'c2_status_schema_unchecked',
+        "if (!IsExactString(Field(Root, \"schema\"), MissionStatusSchema)) { return StatusRefused(Out, \"schema\"); } // FLOW_STATUS_SCHEMA_EXACT",
+        "// FLOW_STATUS_SCHEMA_EXACT",
+    ),
+    (
+        'c2_status_any_run',
+        "if (!Run.bKnown || !SameText(Run.Text, WljRunId)) { return StatusRefused(Out, \"other_run\"); } // FLOW_STATUS_OWN_RUN_ONLY",
+        "// FLOW_STATUS_OWN_RUN_ONLY",
+    ),
+    (
+        'c2_status_phase_open_set',
+        "if (!bPhaseKnown) { return StatusRefused(Out, \"phase\"); } // FLOW_STATUS_PHASE_CLOSED_SET",
+        "// FLOW_STATUS_PHASE_CLOSED_SET",
+    ),
+    (
+        'c2_status_terminal_unchecked',
+        "if (Out.bTerminal != StatusPhaseTerminal(Out.Phase)) { return StatusRefused(Out, \"terminal_mismatch\"); } // FLOW_STATUS_TERMINAL_MATCHES_PHASE",
+        "// FLOW_STATUS_TERMINAL_MATCHES_PHASE",
+    ),
+    (
+        'c2_status_unreadable_outcome_is_known',
+        "if (!LiveBool(Field(*Result, \"outcomeUnknown\"), Out.bOutcomeUnknown)) { bResultOk = false; Out.bOutcomeUnknown = true; } // FLOW_STATUS_UNREADABLE_OUTCOME_IS_UNKNOWN",
+        "if (!LiveBool(Field(*Result, \"outcomeUnknown\"), Out.bOutcomeUnknown)) { bResultOk = false; Out.bOutcomeUnknown = false; } // FLOW_STATUS_UNREADABLE_OUTCOME_IS_UNKNOWN",
+    ),
+    (
+        'c2_status_bad_field_drops_page',
+        "Out.Skipped.push_back(\"progress\"); // FLOW_STATUS_BAD_FIELD_KEEPS_PAGE",
+        "return StatusRefused(Out, \"progress\"); // FLOW_STATUS_BAD_FIELD_KEEPS_PAGE",
+    ),
+    (
+        'c2_reconcile_claim_without_record_offered',
+        "const bool bOpen = bBlocking || Current == R::NotStarted || (Current == R::None && Status.bRequested); // FLOW_RECONCILE_CLAIM_WITHOUT_RECORD",
+        "const bool bOpen = bBlocking || Current == R::NotStarted; // FLOW_RECONCILE_CLAIM_WITHOUT_RECORD",
+    ),
+    (
+        'c2_reconcile_dispatch_not_started',
+        "Out.Record = R::Started; // FLOW_RECONCILE_DISPATCH_IS_STARTED",
+        "Out.Record = Waiting; // FLOW_RECONCILE_DISPATCH_IS_STARTED",
+    ),
+    (
+        'c2_outcome_unknown_releases_start',
+        "Out.Record = Waiting; // FLOW_RECONCILE_UNKNOWN_STAYS_BLOCKED",
+        "Out.Record = R::NotStarted; // FLOW_RECONCILE_UNKNOWN_STAYS_BLOCKED",
+    ),
+    (
+        'c2_interrupted_reoffers_start',
+        "Out.Record = R::Refused; // FLOW_RECONCILE_INTERRUPTED_IS_REFUSED",
+        "Out.Record = R::NotStarted; // FLOW_RECONCILE_INTERRUPTED_IS_REFUSED",
+    ),
+    (
+        'c2_terminal_without_dispatch_reoffers',
+        "Out.Record = R::Refused; // FLOW_RECONCILE_TERMINAL_WITHOUT_DISPATCH_IS_REFUSED",
+        "Out.Record = R::NotStarted; // FLOW_RECONCILE_TERMINAL_WITHOUT_DISPATCH_IS_REFUSED",
+    ),
+    (
+        'c2_live_request_releases_start',
+        "Out.Record = R::Accepted; // FLOW_RECONCILE_LIVE_REQUEST_BLOCKS",
+        "Out.Record = R::NotStarted; // FLOW_RECONCILE_LIVE_REQUEST_BLOCKS",
+    ),
+    (
+        'c2_claim_releases_start',
+        "Out.Record = Waiting; // FLOW_RECONCILE_CLAIM_BLOCKS",
+        "Out.Record = R::NotStarted; // FLOW_RECONCILE_CLAIM_BLOCKS",
+    ),
+    (
+        'c2_nothing_held_never_releases',
+        "Out.Record = R::NotStarted; // FLOW_RECONCILE_NOTHING_HELD_RELEASES",
+        "Out.Record = Waiting; // FLOW_RECONCILE_NOTHING_HELD_RELEASES",
+    ),
 ]
 
 
@@ -716,6 +787,23 @@ CLIENT_MUTATIONS = [
         "if (!bTriggerOk) { Outcome.Detail = \"client trigger id is malformed\"; return Outcome; } // CLIENT_START_TRIGGER_WELL_FORMED",
         "(void)bTriggerOk; // CLIENT_START_TRIGGER_WELL_FORMED",
     ),
+    # CLIENT LANE C2: the client polls the A-9 /status route.
+    (
+        "c2_client_status_wrong_route",
+        'Outcome.Request.Url += "/status?projectId="; // CLIENT_STATUS_ROUTE',
+        'Outcome.Request.Url += "/progress?projectId="; // CLIENT_STATUS_ROUTE',
+    ),
+]
+
+# SUBSYSTEM MUTATIONS (client lane C2, founder ruling 2026-10-30): the UE subsystem is not compiled here; the wrapper
+# KAT's source check is what must fail when a status read (or anything else in the subsystem) re-sends a Start.
+SUBSYSTEM = "wonderland/Source/Wonderland/Julius/WonderlandJuliusMissionSubsystem.cpp"
+SUBSYSTEM_MUTATIONS = [
+    (
+        "c2_status_read_auto_resends_start",
+        "SaveStartRecord(); // SUBSYSTEM_STATUS_READ_NEVER_SENDS",
+        "SaveStartRecord(); if (StartRecord == 4) { (void)StartPaidMission(TEXT(\"RUN LIVE MISSION\")); } // SUBSYSTEM_STATUS_READ_NEVER_SENDS",
+    ),
 ]
 
 TARGETS = {
@@ -730,6 +818,10 @@ TARGETS = {
                [CLIENT, "wonderland/Source/Wonderland/WonderlandJuliusMissionProgress.cpp",
                 "wonderland/Source/Wonderland/WonderlandJuliusMissionLogic.cpp"],
                ["wonderland/Source/Wonderland", "wonderland/Source"], True),
+    "subsystem": (SUBSYSTEM, "wonderland/Tools/j1_wrapper_kat.cpp",
+                  [CLIENT, "wonderland/Source/Wonderland/WonderlandJuliusMissionProgress.cpp",
+                   "wonderland/Source/Wonderland/WonderlandJuliusMissionLogic.cpp"],
+                  ["wonderland/Source/Wonderland", "wonderland/Source"], True),
 }
 
 
@@ -739,6 +831,7 @@ TARGETS = {
 KNOWN_BASELINE_FAILURES = {
     "flow": set(),
     "client": {"restore_held_server_expiry_is_not_started", "restore_late_server_dispatch_wins"},
+    "subsystem": {"restore_held_server_expiry_is_not_started", "restore_late_server_dispatch_wins"},
 }
 
 
@@ -808,7 +901,8 @@ def main():
         print(f"SABOTAGE SAFETY FAIL: {'; '.join(hits)}")
         return 2
     print("SABOTAGE SAFETY PASS no start/dispatch/resend console command in Tools")
-    plan = [("flow", m) for m in MUTATIONS] + [("client", m) for m in CLIENT_MUTATIONS]
+    plan = ([("flow", m) for m in MUTATIONS] + [("client", m) for m in CLIENT_MUTATIONS]
+            + [("subsystem", m) for m in SUBSYSTEM_MUTATIONS])
     for target, (name, old, _new) in plan:
         source = open(os.path.join(ROOT, TARGETS[target][0]), encoding="utf-8").read()
         count = source.count(old)

@@ -601,6 +601,81 @@ namespace WonderlandJuliusMissionFlow
 		bool bExplicitClick, std::string_view Typed);
 
 	// ---------------------------------------------------------------------------------------------------------------
+	// MISSION STATUS (A-9 route GET {prefix}{wljRunId}/status, schema wonderland-mission-status.v1). The ONE answer the
+	// client reconciles a Start against. Strict on what decides state (schema, run, phase, terminal, start.*); tolerant
+	// per field on what is only shown (progress, workflowProgress, result, nextPollMs): a bad display field is dropped
+	// and named in Skipped, never the whole read.
+	// ---------------------------------------------------------------------------------------------------------------
+	inline constexpr const char* MissionStatusSchema = "wonderland-mission-status.v1";
+	inline constexpr const char* WorkflowProgressLabel = "GitHub workflow steps (not mission progress)";
+	inline constexpr int StatusPollMinMs = 1000;
+	inline constexpr int StatusPollMaxMs = 30000;
+	inline constexpr int StatusPollDefaultMs = 2000;
+
+	enum class EMissionStatusPhase : std::uint8_t
+	{
+		Unknown, Admitted, Starting, Dispatching, Dispatched, Queued, Executing, Grading, Completed, Failed, DidNotStart,
+		Interrupted, Expired,
+	};
+
+	struct FMissionStatusRead
+	{
+		bool bOk = false;
+		int HttpStatus = 0;
+		/** Why the read was refused (bOk false), for the log. */
+		std::string Why;
+		EMissionStatusPhase Phase = EMissionStatusPhase::Unknown;
+		std::string PhaseWord;
+		bool bTerminal = false;
+		/** start.requested: the journal holds a claim, or this bridge process is running a Start. */
+		bool bRequested = false;
+		std::string WorkflowRunId;
+		/** start.request.state (ACK only): "", "accepted", "claiming", "settled" or "interrupted". */
+		std::string RequestState;
+		bool bRequestUnreadable = false;
+		/** run: present when the bridge bound a GitHub Actions run. */
+		bool bRunPresent = false;
+		bool bRunLive = false;
+		bool bRunStale = false;
+		/** progress (MISSION progress): -1 = null (no percent shown). */
+		int ProgressPercent = -1;
+		std::string ProgressBasis;
+		/** workflowProgress: shown only with its exact label; -1 = null. */
+		bool bWorkflowLabelOk = false;
+		int WorkflowPercent = -1;
+		int WorkflowStepsCompleted = -1;
+		int WorkflowStepsTotal = -1;
+		/** result.checkerVerdict ("" = null) and result.outcomeUnknown. */
+		std::string CheckerVerdict;
+		bool bOutcomeUnknown = false;
+		/** nextPollMs clamped to StatusPollMinMs..StatusPollMaxMs; 0 = null (terminal: stop polling). */
+		int NextPollMs = StatusPollDefaultMs;
+		std::string EventsCursor;
+		/** Display fields dropped as unreadable (tolerant per field). */
+		std::vector<std::string> Skipped;
+	};
+
+	FMissionStatusRead ParseMissionStatus(std::string_view WljRunId, int HttpStatus, std::string_view Json);
+	const char* MissionStatusPhaseWord(EMissionStatusPhase Phase);
+
+	struct FStartReconcile
+	{
+		EStartRecord Record = EStartRecord::None;
+		bool bChanged = false;
+		/** Shown with the (blocked or released) Start control; never empty when Record blocks Start. */
+		const char* Why = "";
+	};
+
+	/**
+	 * Founder ruling 2026-10-30: a Start that crashed, timed out or is outcome-unknown (Sending), or was only
+	 * acknowledged (Accepted), stays blocked until /status says what happened. Started only on dispatch evidence;
+	 * Refused when the bridge settled it terminal without a dispatch or interrupted the request; NotStarted (offered
+	 * again, on a click only, same key and trigger) only when the bridge holds no claim, runs no Start, and keeps no
+	 * live request. phase "unknown" / outcomeUnknown / an unreadable request change nothing. Never sends anything.
+	 */
+	FStartReconcile StartRecordFromStatus(EStartRecord Current, const FMissionStatusRead& Status);
+
+	// ---------------------------------------------------------------------------------------------------------------
 	// EXECUTION STATE (founder P0 2026-10-26: the mission contract follows Julius's ACTUAL execution, not "a workflow
 	// is running"). MAIN JULIUS's contract, verbatim: /events `live` means queued/in_progress INCLUDING the gates and is
 	// never "executing"; EXECUTING is the first of the LIVE step in_progress or a non-marker phase sample; the outcome

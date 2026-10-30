@@ -1535,6 +1535,118 @@ const ABSENT_PHASE = {
 		Expect(ClientTriggerIdOk(std::string(32, 'f')) && !ClientTriggerIdOk(std::string(32, 'F')) && !ClientTriggerIdOk(std::string(31, 'f')), "trigger id is 32 lowercase hex");
 		++AckCases;
 	}
+
+	// CLIENT LANE C2 (A-9 /status; founder ruling 2026-10-30): /status decides the Start record; outcome-unknown keeps
+	// Start blocked; nothing reconciles into a send.
+	const char* const StatusWlj = "wlj_0f8fad5b-d9cb-469f-a165-70867728950e";
+	std::string StatusBody(const std::string& Phase, bool bTerminal, const std::string& Start, const std::string& Run = "null",
+		const std::string& Result = "{\"checkerVerdict\":null,\"outcomeUnknown\":false}", const std::string& NextPoll = "2000")
+	{
+		return std::string("{\"schema\":\"wonderland-mission-status.v1\",\"wljRunId\":\"") + StatusWlj + "\",\"serverRunId\":\"srv-1\",\"phase\":\"" + Phase +
+			"\",\"terminal\":" + (bTerminal ? "true" : "false") +
+			",\"admission\":{\"state\":\"awaiting_operator\",\"cause\":null,\"updatedAt\":null},\"start\":" + Start + ",\"run\":" + Run +
+			",\"stage\":null,\"progress\":{\"percent\":null,\"basis\":\"none\"},\"workflowProgress\":{\"label\":\"GitHub workflow steps (not mission progress)\",\"percent\":null,\"basis\":\"none\",\"stepsCompleted\":null,\"stepsTotal\":null}"
+			",\"result\":" + Result + ",\"eventsCursor\":null,\"nextPollMs\":" + NextPoll + ",\"serverTime\":\"2026-10-30T18:00:00.000Z\"}";
+	}
+	std::string StartObj(bool bRequested, const std::string& Workflow = "null", const std::string& Request = "")
+	{
+		return std::string("{\"requested\":") + (bRequested ? "true" : "false") + ",\"startKeyHash\":null,\"clientTriggerId\":null,\"dispatchedAt\":null,\"workflowRunId\":" +
+			Workflow + ",\"workflowRunIdSource\":null,\"retryStartSafe\":" + (bRequested ? "true" : "false") + ",\"recovery\":\"none\"" +
+			(Request.empty() ? std::string() : ",\"request\":" + Request) + "}";
+	}
+	std::string RequestObj(const char* State)
+	{
+		return std::string("{\"state\":\"") + State + "\",\"startKeyHash\":\"" + std::string(64, 'a') + "\",\"acceptedAt\":\"2026-10-30T18:00:00.000Z\",\"outcome\":null,\"resumed\":false,\"resumedAt\":null}";
+	}
+	const char* const BoundRun = "{\"status\":\"in_progress\",\"conclusion\":null,\"live\":true,\"execution\":\"executing\",\"executionStartedAt\":null,\"stoppedAt\":null,\"stale\":false,\"fetchedAt\":null}";
+
+	int StatusCases = 0;
+	void StatusFixtures()
+	{
+		using R = EStartRecord;
+		const char* const W = StatusWlj;
+		FMissionStatusRead S = ParseMissionStatus(W, 200, StatusBody("admitted", false, StartObj(false)));
+		Expect(S.bOk && S.Phase == EMissionStatusPhase::Admitted && !S.bTerminal && !S.bRequested && S.NextPollMs == 2000 && S.Skipped.empty(), "status admitted reads");
+		Expect(!ParseMissionStatus(W, 200, Swap(StatusBody("admitted", false, StartObj(false)), "wonderland-mission-status.v1", "wonderland-mission-status.v2")).bOk, "status schema is exact");
+		Expect(!ParseMissionStatus("wlj_11111111-2222-4333-8444-555555555555", 200, StatusBody("admitted", false, StartObj(false))).bOk, "another run's status is refused");
+		Expect(!ParseMissionStatus(W, 200, StatusBody("running", false, StartObj(false))).bOk, "status phase is a closed set");
+		Expect(!ParseMissionStatus(W, 200, StatusBody("failed", false, StartObj(false))).bOk, "terminal must match the phase (failed)");
+		Expect(!ParseMissionStatus(W, 200, StatusBody("executing", true, StartObj(true), BoundRun)).bOk, "terminal must match the phase (executing)");
+		Expect(!ParseMissionStatus(W, 503, StatusBody("admitted", false, StartObj(false))).bOk, "status needs 200");
+		Expect(!ParseMissionStatus(W, 200, StatusBody("admitted", false, StartObj(false, "\"40x\""))).bOk, "status workflow run id is digits");
+		Expect(!ParseMissionStatus(W, 200, StatusBody("admitted", false, StartObj(false, "null", RequestObj("pending")))).bOk, "status request state is a closed set");
+		Expect(!ParseMissionStatus(W, 200, Swap(StatusBody("admitted", false, StartObj(false)), "\"requested\":false", "\"requested\":0")).bOk, "start.requested is a bool");
+		++StatusCases;
+
+		// Tolerant per field: one bad display field never drops the page.
+		S = ParseMissionStatus(W, 200, Swap(StatusBody("admitted", false, StartObj(false)), "\"progress\":{\"percent\":null,\"basis\":\"none\"}", "\"progress\":{\"percent\":\"12%\",\"basis\":\"guess\"}"));
+		Expect(S.bOk && S.ProgressPercent == -1 && S.Skipped.size() == 1 && S.Skipped[0] == "progress", "a bad progress field is dropped, not the page");
+		S = ParseMissionStatus(W, 200, Swap(StatusBody("admitted", false, StartObj(false)), "\"progress\":{\"percent\":null,\"basis\":\"none\"}", "\"progress\":{\"percent\":100,\"basis\":\"none\"}"));
+		Expect(S.bOk && S.ProgressPercent == -1, "100 without verified_completion is not shown");
+		S = ParseMissionStatus(W, 200, Swap(StatusBody("admitted", false, StartObj(false)), "GitHub workflow steps (not mission progress)", "Progress"));
+		Expect(S.bOk && !S.bWorkflowLabelOk, "workflow steps without the exact label are not shown");
+		S = ParseMissionStatus(W, 200, StatusBody("admitted", false, StartObj(false), "null", "{\"checkerVerdict\":7,\"outcomeUnknown\":\"no\"}"));
+		Expect(S.bOk && S.CheckerVerdict.empty() && S.bOutcomeUnknown, "an unreadable result is treated as outcome-unknown");
+		S = ParseMissionStatus(W, 200, StatusBody("admitted", false, StartObj(false), "null", "{\"checkerVerdict\":null,\"outcomeUnknown\":false}", "50"));
+		Expect(S.bOk && S.NextPollMs == StatusPollMinMs, "nextPollMs is clamped up");
+		S = ParseMissionStatus(W, 200, StatusBody("admitted", false, StartObj(false), "null", "{\"checkerVerdict\":null,\"outcomeUnknown\":false}", "600000"));
+		Expect(S.bOk && S.NextPollMs == StatusPollMaxMs, "nextPollMs is clamped down");
+		S = ParseMissionStatus(W, 200, StatusBody("admitted", false, StartObj(false), "null", "{\"checkerVerdict\":null,\"outcomeUnknown\":false}", "null"));
+		Expect(S.bOk && S.NextPollMs == StatusPollDefaultMs, "null nextPollMs on a live phase keeps polling");
+		S = ParseMissionStatus(W, 200, StatusBody("failed", true, StartObj(false), "null", "{\"checkerVerdict\":null,\"outcomeUnknown\":false}", "null"));
+		Expect(S.bOk && S.NextPollMs == 0, "null nextPollMs on a terminal phase stops polling");
+		++StatusCases;
+
+		// Reconcile: dispatch evidence -> Started.
+		for (const R From : {R::Sending, R::Accepted, R::NotStarted})
+		{
+			Expect(StartRecordFromStatus(From, ParseMissionStatus(W, 200, StatusBody("dispatched", false, StartObj(true, "\"40242149156\"")))).Record == R::Started, "dispatched reconciles to Started");
+			Expect(StartRecordFromStatus(From, ParseMissionStatus(W, 200, StatusBody("executing", false, StartObj(true), BoundRun))).Record == R::Started, "a bound run reconciles to Started");
+		}
+		++StatusCases;
+
+		// FOUNDER RULING: outcome-unknown -> Start stays blocked; no automatic resend path.
+		const char* const Ok = "RUN LIVE MISSION";
+		const FMissionStatusRead Unknown = ParseMissionStatus(W, 200, StatusBody("unknown", false, StartObj(true)));
+		const FMissionStatusRead UnknownFlag = ParseMissionStatus(W, 200, StatusBody("admitted", false, StartObj(false), "null", "{\"checkerVerdict\":null,\"outcomeUnknown\":true}"));
+		const FMissionStatusRead Unreadable = ParseMissionStatus(W, 200, Swap(StatusBody("admitted", false, StartObj(false)), "\"recovery\":\"none\"", "\"recovery\":\"none\",\"requestUnreadable\":true"));
+		Expect(Unknown.bOk && UnknownFlag.bOk && Unreadable.bOk && Unreadable.bRequestUnreadable, "the unknown fixtures read");
+		for (const FMissionStatusRead* Read : {&Unknown, &UnknownFlag, &Unreadable})
+		{
+			R Record = StartRecordAfterAnswer(EStartOutcome::Uncertain, 200);
+			for (int Poll = 0; Poll < 5; ++Poll)
+			{
+				const FStartReconcile Rec = StartRecordFromStatus(Record, *Read);
+				Record = Rec.Record;
+				Expect(Record == R::Sending && Rec.Why != nullptr && std::strstr(Rec.Why, "outcome unknown, needs reconciliation") != nullptr, "outcome-unknown keeps Start blocked, with the reason");
+				Expect(!StartGateFor("admitted_waiting", true, false, Record, false, Ok).bSend, "no automatic resend (no click)");
+				Expect(!StartGateFor("admitted_waiting", true, false, Record, true, Ok).bSend, "no resend even on a click while unreconciled");
+			}
+			// A transient not-started must also re-block when /status says unknown.
+			Expect(StartRecordFromStatus(R::NotStarted, *Read).Record == R::Sending, "unknown re-blocks a not-started record");
+		}
+		Expect(StartRecordFromStatus(R::Sending, ParseMissionStatus(W, 503, "")).Record == R::Sending, "an unreadable /status changes nothing");
+		++StatusCases;
+
+		// Operator reconcile reflected as settled.
+		const FMissionStatusRead Settled = ParseMissionStatus(W, 200, StatusBody("admitted", false, StartObj(false, "null", RequestObj("settled"))));
+		const FStartReconcile Released = StartRecordFromStatus(R::Sending, Settled);
+		Expect(Released.Record == R::NotStarted && Released.bChanged, "settled with nothing held releases Start");
+		Expect(!StartGateFor("admitted_waiting", true, false, Released.Record, false, Ok).bSend && StartGateFor("admitted_waiting", true, false, Released.Record, true, Ok).bSend,
+			"a released Start sends only on the founder's click");
+		Expect(StartRecordFromStatus(R::Sending, ParseMissionStatus(W, 200, StatusBody("admitted", false, StartObj(false)))).Record == R::NotStarted, "nothing held (V2) releases Start");
+		Expect(StartRecordFromStatus(R::Sending, ParseMissionStatus(W, 200, StatusBody("admitted", false, StartObj(false, "null", RequestObj("accepted"))))).Record == R::Accepted, "a live accepted request blocks");
+		Expect(StartRecordFromStatus(R::NotStarted, ParseMissionStatus(W, 200, StatusBody("admitted", false, StartObj(false, "null", RequestObj("claiming"))))).Record == R::Accepted, "a claiming request blocks");
+		Expect(StartRecordFromStatus(R::Sending, ParseMissionStatus(W, 200, StatusBody("starting", false, StartObj(true)))).Record == R::Sending, "a Start running on the bridge blocks");
+		Expect(StartRecordFromStatus(R::Accepted, ParseMissionStatus(W, 200, StatusBody("dispatching", false, StartObj(true)))).Record == R::Accepted, "dispatching keeps an ack blocked");
+		Expect(StartRecordFromStatus(R::Sending, ParseMissionStatus(W, 200, StatusBody("admitted", false, StartObj(false, "null", RequestObj("interrupted"))))).Record == R::Refused, "an interrupted request is refused (no auto new key)");
+		Expect(StartRecordFromStatus(R::Sending, ParseMissionStatus(W, 200, StatusBody("expired", true, StartObj(false), "null", "{\"checkerVerdict\":null,\"outcomeUnknown\":false}", "null"))).Record == R::Refused, "terminal without dispatch is refused");
+		Expect(StartRecordFromStatus(R::None, ParseMissionStatus(W, 200, StatusBody("dispatching", false, StartObj(true)))).Record == R::Sending, "a claim with no local record is never offered");
+		Expect(StartRecordFromStatus(R::None, ParseMissionStatus(W, 200, StatusBody("admitted", false, StartObj(false)))).Record == R::None, "no claim, no record: unchanged");
+		Expect(StartRecordFromStatus(R::Started, ParseMissionStatus(W, 200, StatusBody("admitted", false, StartObj(false)))).Record == R::Started, "a Started record never regresses");
+		Expect(StartRecordFromStatus(R::Refused, Settled).Record == R::Refused, "a Refused record never re-opens");
+		++StatusCases;
+	}
 }
 
 int main()
@@ -1776,6 +1888,7 @@ int main()
 	StartFixtures();
 	ExecFixtures();
 	StartAckFixtures();
+	StatusFixtures();
 
 	if (Failures != 0)
 	{
@@ -1783,7 +1896,7 @@ int main()
 		return 1;
 	}
 	std::printf(
-		"J1 MISSION FLOW KAT PASS meanings=%d route=%d result=%d flow=%d windows=%d bridge=%d phases=%d live=%d start=%d exec=%d ack=%d\n",
-		Meanings, Routes, Results, FlowSteps, Windows, Bridge, PhaseCases, LiveCases, StartCases, ExecCases, AckCases);
+		"J1 MISSION FLOW KAT PASS meanings=%d route=%d result=%d flow=%d windows=%d bridge=%d phases=%d live=%d start=%d exec=%d ack=%d status=%d\n",
+		Meanings, Routes, Results, FlowSteps, Windows, Bridge, PhaseCases, LiveCases, StartCases, ExecCases, AckCases, StatusCases);
 	return 0;
 }

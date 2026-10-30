@@ -1812,6 +1812,254 @@ namespace WonderlandJuliusMissionFlow
 		return Out;
 	}
 
+	namespace
+	{
+		struct FPhaseName
+		{
+			const char* Word;
+			EMissionStatusPhase Phase;
+		};
+		constexpr FPhaseName PhaseNames[] = {
+			{"unknown", EMissionStatusPhase::Unknown}, {"admitted", EMissionStatusPhase::Admitted},
+			{"starting", EMissionStatusPhase::Starting}, {"dispatching", EMissionStatusPhase::Dispatching},
+			{"dispatched", EMissionStatusPhase::Dispatched}, {"queued", EMissionStatusPhase::Queued},
+			{"executing", EMissionStatusPhase::Executing}, {"grading", EMissionStatusPhase::Grading},
+			{"completed", EMissionStatusPhase::Completed}, {"failed", EMissionStatusPhase::Failed},
+			{"did_not_start", EMissionStatusPhase::DidNotStart}, {"interrupted", EMissionStatusPhase::Interrupted},
+			{"expired", EMissionStatusPhase::Expired},
+		};
+
+		/** The bridge's TERMINAL_PHASES. */
+		bool StatusPhaseTerminal(EMissionStatusPhase Phase)
+		{
+			return Phase == EMissionStatusPhase::Completed || Phase == EMissionStatusPhase::Failed || Phase == EMissionStatusPhase::DidNotStart
+				|| Phase == EMissionStatusPhase::Interrupted || Phase == EMissionStatusPhase::Expired;
+		}
+
+		/** null -> -1; an integer in Min..Max -> it; anything else -> false. */
+		bool StatusNullableInt(const FJson* Node, std::int64_t Min, std::int64_t Max, int& Out)
+		{
+			if (Node != nullptr && Node->Kind == EJsonKind::Null) { Out = -1; return true; }
+			std::int64_t Value = 0;
+			if (!LiveInt(Node, Min, Max, Value)) { return false; }
+			Out = static_cast<int>(Value);
+			return true;
+		}
+
+		/** A checker verdict word: "PASS", "FAIL", "NOT_RUN"... uppercase letters and '_', 1..16. */
+		bool StatusVerdictWord(const FJson* Node, std::string& Out)
+		{
+			if (Node == nullptr || Node->Kind != EJsonKind::String || Node->Text.empty() || Node->Text.size() > 16) { return false; }
+			for (const char Ch : Node->Text)
+			{
+				if (!((Ch >= 'A' && Ch <= 'Z') || Ch == '_')) { return false; }
+			}
+			Out = Node->Text;
+			return true;
+		}
+
+		FMissionStatusRead StatusRefused(FMissionStatusRead Out, const char* Why)
+		{
+			Out.bOk = false;
+			Out.Why = Why;
+			return Out;
+		}
+	}
+
+	const char* MissionStatusPhaseWord(EMissionStatusPhase Phase)
+	{
+		for (const FPhaseName& Name : PhaseNames)
+		{
+			if (Name.Phase == Phase) { return Name.Word; }
+		}
+		return "unknown";
+	}
+
+	FMissionStatusRead ParseMissionStatus(std::string_view WljRunId, int HttpStatus, std::string_view Json)
+	{
+		FMissionStatusRead Out;
+		Out.HttpStatus = HttpStatus;
+		if (HttpStatus != 200) { return StatusRefused(Out, "not_200"); }
+		if (!WonderlandJuliusMissionLogic::IsClientMintedRunId(WljRunId)) { return StatusRefused(Out, "no_run"); }
+		FJson Root;
+		if (!ParseJson(Json, Root) || Root.Kind != EJsonKind::Object) { return StatusRefused(Out, "not_json"); }
+		if (!IsExactString(Field(Root, "schema"), MissionStatusSchema)) { return StatusRefused(Out, "schema"); } // FLOW_STATUS_SCHEMA_EXACT
+		const FReportedString Run = ReadString(&Root, "wljRunId");
+		if (!Run.bKnown || !SameText(Run.Text, WljRunId)) { return StatusRefused(Out, "other_run"); } // FLOW_STATUS_OWN_RUN_ONLY
+
+		// Strict: what decides the Start record and the ending.
+		std::string PhaseWord;
+		if (!LiveWord(Field(Root, "phase"), PhaseWord)) { return StatusRefused(Out, "phase"); }
+		bool bPhaseKnown = false;
+		for (const FPhaseName& Name : PhaseNames)
+		{
+			if (PhaseWord == Name.Word) { Out.Phase = Name.Phase; bPhaseKnown = true; }
+		}
+		if (!bPhaseKnown) { return StatusRefused(Out, "phase"); } // FLOW_STATUS_PHASE_CLOSED_SET
+		Out.PhaseWord = PhaseWord;
+		if (!LiveBool(Field(Root, "terminal"), Out.bTerminal)) { return StatusRefused(Out, "terminal"); }
+		if (Out.bTerminal != StatusPhaseTerminal(Out.Phase)) { return StatusRefused(Out, "terminal_mismatch"); } // FLOW_STATUS_TERMINAL_MATCHES_PHASE
+		const FJson* Start = Field(Root, "start");
+		if (Start == nullptr || Start->Kind != EJsonKind::Object) { return StatusRefused(Out, "start"); }
+		if (!LiveBool(Field(*Start, "requested"), Out.bRequested)) { return StatusRefused(Out, "start.requested"); }
+		const FJson* Workflow = Field(*Start, "workflowRunId");
+		if (Workflow == nullptr || (Workflow->Kind != EJsonKind::Null && (Workflow->Kind != EJsonKind::String || !Digits(Workflow->Text))))
+		{
+			return StatusRefused(Out, "start.workflowRunId");
+		}
+		if (Workflow->Kind == EJsonKind::String) { Out.WorkflowRunId = Workflow->Text; }
+		const FJson* Request = Field(*Start, "request");
+		if (Request != nullptr && Request->Kind != EJsonKind::Null)
+		{
+			const FJson* RequestState = Request->Kind == EJsonKind::Object ? Field(*Request, "state") : nullptr;
+			if (!IsExactString(RequestState, "accepted") && !IsExactString(RequestState, "claiming") && !IsExactString(RequestState, "settled")
+				&& !IsExactString(RequestState, "interrupted"))
+			{
+				return StatusRefused(Out, "start.request.state");
+			}
+			Out.RequestState = RequestState->Text;
+		}
+		const FJson* Unreadable = Field(*Start, "requestUnreadable");
+		if (Unreadable != nullptr && !LiveBool(Unreadable, Out.bRequestUnreadable)) { return StatusRefused(Out, "start.requestUnreadable"); }
+		const FJson* RunNode = Field(Root, "run");
+		if (RunNode == nullptr || (RunNode->Kind != EJsonKind::Null && RunNode->Kind != EJsonKind::Object)) { return StatusRefused(Out, "run"); }
+		if (RunNode->Kind == EJsonKind::Object)
+		{
+			Out.bRunPresent = true;
+			if (!LiveBool(Field(*RunNode, "live"), Out.bRunLive) || !LiveBool(Field(*RunNode, "stale"), Out.bRunStale)) { return StatusRefused(Out, "run.flags"); }
+		}
+
+		// Tolerant per field: what is only shown. A bad field is dropped (and named), never the page.
+		const FJson* Result = Field(Root, "result");
+		bool bResultOk = Result != nullptr && Result->Kind == EJsonKind::Object;
+		if (bResultOk)
+		{
+			const FJson* Verdict = Field(*Result, "checkerVerdict");
+			if (Verdict == nullptr || (Verdict->Kind != EJsonKind::Null && !StatusVerdictWord(Verdict, Out.CheckerVerdict))) { Out.CheckerVerdict.clear(); bResultOk = false; }
+			if (!LiveBool(Field(*Result, "outcomeUnknown"), Out.bOutcomeUnknown)) { bResultOk = false; Out.bOutcomeUnknown = true; } // FLOW_STATUS_UNREADABLE_OUTCOME_IS_UNKNOWN
+		}
+		else
+		{
+			Out.bOutcomeUnknown = true;
+		}
+		if (!bResultOk) { Out.Skipped.push_back("result"); }
+		const FJson* Progress = Field(Root, "progress");
+		int Percent = -1;
+		const bool bProgressOk = Progress != nullptr && Progress->Kind == EJsonKind::Object && StatusNullableInt(Field(*Progress, "percent"), 0, 100, Percent)
+			&& (IsExactString(Field(*Progress, "basis"), "verified_completion") || IsExactString(Field(*Progress, "basis"), "none"))
+			&& (Percent < 0 || IsExactString(Field(*Progress, "basis"), "verified_completion"));
+		if (bProgressOk)
+		{
+			Out.ProgressPercent = Percent;
+			Out.ProgressBasis = Field(*Progress, "basis")->Text;
+		}
+		else
+		{
+			Out.Skipped.push_back("progress"); // FLOW_STATUS_BAD_FIELD_KEEPS_PAGE
+		}
+		const FJson* Steps = Field(Root, "workflowProgress");
+		int WfPercent = -1;
+		int WfDone = -1;
+		int WfTotal = -1;
+		const bool bStepsOk = Steps != nullptr && Steps->Kind == EJsonKind::Object && IsExactString(Field(*Steps, "label"), WorkflowProgressLabel)
+			&& StatusNullableInt(Field(*Steps, "percent"), 0, 100, WfPercent) && StatusNullableInt(Field(*Steps, "stepsCompleted"), 0, 100000, WfDone)
+			&& StatusNullableInt(Field(*Steps, "stepsTotal"), 0, 100000, WfTotal) && (WfDone < 0 || WfTotal < 0 || WfDone <= WfTotal);
+		if (bStepsOk)
+		{
+			Out.bWorkflowLabelOk = true;
+			Out.WorkflowPercent = WfPercent;
+			Out.WorkflowStepsCompleted = WfDone;
+			Out.WorkflowStepsTotal = WfTotal;
+		}
+		else
+		{
+			Out.Skipped.push_back("workflowProgress");
+		}
+		const FJson* Poll = Field(Root, "nextPollMs");
+		std::int64_t PollMs = 0;
+		if (Poll != nullptr && Poll->Kind == EJsonKind::Null && Out.bTerminal)
+		{
+			Out.NextPollMs = 0; // terminal: the bridge says stop
+		}
+		else if (LiveInt(Poll, 0, INT64_MAX, PollMs))
+		{
+			Out.NextPollMs = static_cast<int>(PollMs < StatusPollMinMs ? StatusPollMinMs : PollMs > StatusPollMaxMs ? StatusPollMaxMs : PollMs);
+		}
+		else
+		{
+			Out.NextPollMs = Out.bTerminal ? 0 : StatusPollDefaultMs;
+			Out.Skipped.push_back("nextPollMs");
+		}
+		const FJson* Cursor = Field(Root, "eventsCursor");
+		if (Cursor != nullptr && Cursor->Kind != EJsonKind::Null && !LivePlainText(Cursor, 64, false, Out.EventsCursor))
+		{
+			Out.EventsCursor.clear();
+			Out.Skipped.push_back("eventsCursor");
+		}
+		Out.bOk = true;
+		return Out;
+	}
+
+	FStartReconcile StartRecordFromStatus(EStartRecord Current, const FMissionStatusRead& Status)
+	{
+		using R = EStartRecord;
+		using P = EMissionStatusPhase;
+		FStartReconcile Out;
+		Out.Record = Current;
+		const bool bBlocking = Current == R::Sending || Current == R::Accepted;
+		if (!Status.bOk)
+		{
+			if (bBlocking) { Out.Why = "the bridge's /status was not readable; Start stays blocked"; }
+			return Out;
+		}
+		// A run with no local record that the bridge already holds a claim for (another client, a lost save) is never
+		// offered: it reconciles like a lost answer.
+		const bool bOpen = bBlocking || Current == R::NotStarted || (Current == R::None && Status.bRequested); // FLOW_RECONCILE_CLAIM_WITHOUT_RECORD
+		if (!bOpen) { return Out; }
+		const R Waiting = Current == R::Accepted ? R::Accepted : R::Sending;
+		const P Ph = Status.Phase;
+		const bool bDispatched = Status.bRunPresent || !Status.WorkflowRunId.empty() || Ph == P::Dispatched || Ph == P::Queued
+			|| Ph == P::Executing || Ph == P::Grading || Ph == P::Completed;
+		if (bDispatched)
+		{
+			Out.Record = R::Started; // FLOW_RECONCILE_DISPATCH_IS_STARTED
+			Out.Why = "the bridge reports the dispatch";
+		}
+		else if (Ph == P::Unknown || Status.bOutcomeUnknown || Status.bRequestUnreadable)
+		{
+			Out.Record = Waiting; // FLOW_RECONCILE_UNKNOWN_STAYS_BLOCKED
+			Out.Why = "outcome unknown, needs reconciliation (operator); Start stays blocked and nothing is resent";
+		}
+		else if (Status.RequestState == "interrupted")
+		{
+			Out.Record = R::Refused; // FLOW_RECONCILE_INTERRUPTED_IS_REFUSED
+			Out.Why = "the bridge interrupted this Start request and will not resume it; a new Start needs a new key (never sent automatically)";
+		}
+		else if (StatusPhaseTerminal(Ph))
+		{
+			Out.Record = R::Refused; // FLOW_RECONCILE_TERMINAL_WITHOUT_DISPATCH_IS_REFUSED
+			Out.Why = "the bridge settled this run without a dispatch";
+		}
+		else if (Status.RequestState == "accepted" || Status.RequestState == "claiming")
+		{
+			Out.Record = R::Accepted; // FLOW_RECONCILE_LIVE_REQUEST_BLOCKS
+			Out.Why = "the bridge accepted the Start request; waiting for /status to report the dispatch";
+		}
+		else if (Status.bRequested || Ph != P::Admitted)
+		{
+			Out.Record = Waiting; // FLOW_RECONCILE_CLAIM_BLOCKS
+			Out.Why = "the bridge is still starting this run; waiting for /status";
+		}
+		else
+		{
+			// Admitted, no claim, no Start running, no live request: nothing was dispatched. Offered again on a click only.
+			Out.Record = R::NotStarted; // FLOW_RECONCILE_NOTHING_HELD_RELEASES
+			Out.Why = "the bridge holds no Start for this run; Start may be pressed again (it re-sends the same authorisation)";
+		}
+		Out.bChanged = Out.Record != Current;
+		return Out;
+	}
+
 	const char* ExecutionPhaseWord(EExecutionPhase Phase)
 	{
 		switch (Phase)

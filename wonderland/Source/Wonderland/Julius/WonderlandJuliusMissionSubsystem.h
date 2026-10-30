@@ -115,6 +115,8 @@ public:
 	 */
 	bool LatestLivePanel(bool& bOutLive, FString& OutHeader, TArray<FString>& OutLines) const;
 	void CompleteLiveRead(const FString& ForRunId, bool bConnected, const TSharedPtr<IHttpResponse, ESPMode::ThreadSafe>& Response);
+	/** A-9: one /status answer for the current wlj_ run; reconciles the Start record against it. Never sends a Start. */
+	void CompleteStatusRead(const FString& ForRunId, bool bConnected, const TSharedPtr<IHttpResponse, ESPMode::ThreadSafe>& Response);
 
 	/**
 	 * FORGE calls this when replicated mission state arrives. client_role=observer,
@@ -206,6 +208,13 @@ private:
 	void PollMissionReads();
 	void SendMissionRead(bool bProgress);
 	void PollLiveEvents();
+	/** A-9: polls /status at the bridge's nextPollMs (stops when it says null: terminal). Reads only. */
+	void PollMissionStatus();
+	FString StatusRunId;
+	bool bStatusInFlight = false;
+	bool bStatusStopped = false;
+	uint64 NextStatusReadAtUtcMs = 0;
+	int32 StatusReadFailures = 0;
 	void ApplyConfiguredEndpoint();
 	void NoteDetail(const FString& Detail) const;
 };

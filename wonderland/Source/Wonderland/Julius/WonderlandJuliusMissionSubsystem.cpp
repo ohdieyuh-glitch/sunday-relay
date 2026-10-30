@@ -163,6 +163,8 @@ struct UWonderlandJuliusMissionSubsystem::FHost
 	WonderlandJuliusMissionClient::FJuliusMissionSession Session;
 	/** The live /events stream of the current run (pure core: dedup by seq, cursor, server live/stale flags). */
 	WonderlandJuliusMissionFlow::FLiveFeed LiveFeed;
+	/** The last READABLE /status answer of StatusRunId (A-9); bOk false until one arrives. */
+	WonderlandJuliusMissionFlow::FMissionStatusRead LastStatus;
 
 	explicit FHost(const FString& SavedDir)
 		: Trace(SavedDir)
@@ -783,6 +785,7 @@ bool UWonderlandJuliusMissionSubsystem::HandleTick(float DeltaSeconds)
 	const WonderlandJuliusMissionClient::FTickOutcome Outcome = Host->Session.Tick();
 	if (Outcome.bSend) { (void)FJuliusJ1Transport::Send(*this, Outcome.Request); }
 	PollMissionReads();
+	PollMissionStatus();
 	PollLiveEvents();
 	SyncMissionContract();
 	if (!bAdoptedToken && !bLoggedNotConnected && !ClientRunId().IsEmpty() && !CanStartNewMission())
@@ -1103,6 +1106,108 @@ void UWonderlandJuliusMissionSubsystem::CompleteLiveRead(
 			Feed.IsStale() ? TEXT("true") : TEXT("false"), static_cast<int32>(Read.Events.size()),
 			static_cast<int32>(Feed.Events().size()), *JsonEscaped(ToF(Feed.Cursor())));
 	}
+}
+
+void UWonderlandJuliusMissionSubsystem::PollMissionStatus()
+{
+	using namespace WonderlandJuliusMissionFlow;
+	if (Host == nullptr) { return; }
+	const FString RunId = ClientRunId();
+	if (RunId.IsEmpty()) { return; }
+	if (RunId != StatusRunId)
+	{
+		// A new attempt: the previous run's status is never read as this one's.
+		StatusRunId = RunId;
+		Host->LastStatus = FMissionStatusRead();
+		bStatusInFlight = false;
+		bStatusStopped = false;
+		NextStatusReadAtUtcMs = 0;
+		StatusReadFailures = 0;
+	}
+	if (bStatusInFlight || bStatusStopped) { return; }
+	const uint64 NowMs = Host->Clock.NowUtcMs();
+	if (NowMs < NextStatusReadAtUtcMs) { return; }
+	const uint64 Backoff = static_cast<uint64>(StatusPollDefaultMs) << FMath::Min(StatusReadFailures, 4);
+	NextStatusReadAtUtcMs = NowMs + FMath::Min<uint64>(Backoff, StatusPollMaxMs);
+	const WonderlandJuliusMissionClient::FCommandOutcome Outcome = Host->Session.MissionStatusRequest();
+	if (!Outcome.bSent) { return; }
+	ClampHttpLogging();
+	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Http = FHttpModule::Get().CreateRequest();
+	Http->SetVerb(ToF(Outcome.Request.Method));
+	Http->SetURL(ToF(Outcome.Request.Url));
+	for (const std::pair<std::string, std::string>& Header : Outcome.Request.Headers)
+	{
+		Http->SetHeader(ToF(Header.first), ToF(Header.second));
+	}
+	Http->SetDelegateThreadPolicy(EHttpRequestDelegateThreadPolicy::CompleteOnGameThread);
+	const FString ForRunId = StatusRunId;
+	TWeakObjectPtr<UWonderlandJuliusMissionSubsystem> Weak(this);
+	Http->OnProcessRequestComplete().BindLambda(
+		[Weak, ForRunId](FHttpRequestPtr /*Request*/, FHttpResponsePtr Response, bool bConnected)
+		{
+			if (!Weak.IsValid()) { return; }
+			Weak->CompleteStatusRead(ForRunId, bConnected, Response);
+		});
+	bStatusInFlight = Http->ProcessRequest();
+}
+
+void UWonderlandJuliusMissionSubsystem::CompleteStatusRead(
+	const FString& ForRunId,
+	bool bConnected,
+	const TSharedPtr<IHttpResponse, ESPMode::ThreadSafe>& Response)
+{
+	using namespace WonderlandJuliusMissionFlow;
+	if (Host == nullptr || ForRunId != StatusRunId) { return; }
+	bStatusInFlight = false;
+	const int32 Status = bConnected && Response.IsValid() ? Response->GetResponseCode() : 0;
+	if (Status == 401)
+	{
+		DropAdoptedSession(TEXT("bridge answered 401 on a status read"));
+		UGameInstance* Instance = GetGameInstance();
+		if (UWonderlandJuliusStreamSubsystem* Stream = Instance != nullptr ? Instance->GetSubsystem<UWonderlandJuliusStreamSubsystem>() : nullptr)
+		{
+			Stream->NoteSessionRefused();
+		}
+	}
+	std::string Body;
+	if (bConnected && Response.IsValid() && Response->GetContent().Num() <= MissionReadMaxBytes)
+	{
+		const TArray<uint8>& Content = Response->GetContent();
+		Body.assign(reinterpret_cast<const char*>(Content.GetData()), static_cast<std::size_t>(Content.Num()));
+	}
+	const FMissionStatusRead Read = ParseMissionStatus(ToStd(ForRunId), Status, Body);
+	SyncStartRecord();
+	if (!Read.bOk)
+	{
+		++StatusReadFailures;
+		UE_LOG(LogJuliusJ1, Display, TEXT("{\"event\":\"status_read_refused\",\"wlj_run_id\":\"%s\",\"status\":%d,\"why\":\"%s\"}"),
+			*ForRunId, Status, *ToF(Read.Why));
+		return;
+	}
+	StatusReadFailures = 0;
+	Host->LastStatus = Read;
+	if (Read.NextPollMs == 0) { bStatusStopped = true; }
+	else { NextStatusReadAtUtcMs = Host->Clock.NowUtcMs() + static_cast<uint64>(Read.NextPollMs); }
+	if (StartRunId == ForRunId)
+	{
+		const FStartReconcile Reconciled = StartRecordFromStatus(static_cast<EStartRecord>(StartRecord), Read);
+		if (Reconciled.bChanged)
+		{
+			StartRecord = static_cast<uint8>(Reconciled.Record);
+			if (Reconciled.Record == EStartRecord::Started && StartWorkflowRunId.IsEmpty()) { StartWorkflowRunId = ToF(Read.WorkflowRunId); }
+			StartMessage = FString::Printf(TEXT("Start reconciled from /status: %s."), UTF8_TO_TCHAR(Reconciled.Why));
+			SaveStartRecord(); // SUBSYSTEM_STATUS_READ_NEVER_SENDS
+			UE_LOG(LogJuliusJ1, Display, TEXT("{\"event\":\"start_reconciled\",\"wlj_run_id\":\"%s\",\"record\":\"%s\",\"phase\":\"%s\",\"workflow_run_id\":\"%s\"}"),
+				*ForRunId, StartRecordWord(StartRecord), *ToF(Read.PhaseWord), *StartWorkflowRunId);
+		}
+		else if (*Reconciled.Why != 0 && (Reconciled.Record == EStartRecord::Sending || Reconciled.Record == EStartRecord::Accepted))
+		{
+			StartMessage = FString::Printf(TEXT("Start blocked: %s."), UTF8_TO_TCHAR(Reconciled.Why));
+		}
+	}
+	UE_LOG(LogJuliusJ1, Display, TEXT("{\"event\":\"status_read\",\"wlj_run_id\":\"%s\",\"phase\":\"%s\",\"terminal\":%s,\"requested\":%s,\"request_state\":\"%s\",\"record\":\"%s\",\"next_poll_ms\":%d,\"skipped\":%d}"),
+		*ForRunId, *ToF(Read.PhaseWord), Read.bTerminal ? TEXT("true") : TEXT("false"), Read.bRequested ? TEXT("true") : TEXT("false"),
+		*ToF(Read.RequestState), StartRecordWord(StartRecord), Read.NextPollMs, static_cast<int32>(Read.Skipped.size()));
 }
 
 bool UWonderlandJuliusMissionSubsystem::LatestLivePanel(bool& bOutLive, FString& OutHeader, TArray<FString>& OutLines) const

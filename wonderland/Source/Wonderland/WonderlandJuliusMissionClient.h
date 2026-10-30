@@ -255,6 +255,11 @@ namespace WonderlandJuliusMissionClient
 		 */
 		FCommandOutcome LiveEventsRequest(const std::string& Cursor) const;
 		/**
+		 * A-9: GET of the mission's /status route (schema wonderland-mission-status.v1) under the current wlj_ run id: the
+		 * answer a Start is reconciled against. Same refusals as MissionReadRequest. Reads only.
+		 */
+		FCommandOutcome MissionStatusRequest() const;
+		/**
 		 * IN-WONDERLAND START. A fresh canonical UUIDv4 from the platform crypto source for the START idempotency key
 		 * (one per admitted run; the caller persists it and re-uses it for any resend). False when no random is available.
 		 */

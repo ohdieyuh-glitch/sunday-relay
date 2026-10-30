@@ -1101,6 +1101,17 @@ namespace WonderlandJuliusMissionClient
 		return Outcome;
 	}
 
+	FCommandOutcome FJuliusMissionSession::MissionStatusRequest() const
+	{
+		FCommandOutcome Outcome = MissionReadRequest(false); // the same run, session and loopback refusals as every read
+		if (!Outcome.bSent) { return Outcome; }
+		Outcome.Request.Url = JoinBase(BaseUrl, MissionReadRelativePrefix);
+		Outcome.Request.Url += PercentEncode(CurrentRunId);
+		Outcome.Request.Url += "/status?projectId="; // CLIENT_STATUS_ROUTE
+		Outcome.Request.Url += PercentEncode(ProjectId);
+		return Outcome;
+	}
+
 	FCommandOutcome FJuliusMissionSession::SendOpenPair(bool bFromSchedule)
 	{
 		FCommandOutcome Outcome;

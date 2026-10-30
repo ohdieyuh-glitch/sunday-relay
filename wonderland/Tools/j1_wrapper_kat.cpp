@@ -316,6 +316,38 @@ namespace
 		return true;
 	}
 
+	/**
+	 * Founder ruling 2026-10-30 (no automatic resend path): in the Julius subsystem the Start request is built in ONE
+	 * place, StartPaidMission, and nothing in the subsystem calls StartPaidMission (only the founder's click, from the
+	 * widget, does). A reconcile, poll, tick or restore that re-sent a Start would break this.
+	 */
+	bool CheckNoAutomaticStartResend()
+	{
+		namespace fs = std::filesystem;
+		fs::path Root;
+		for (fs::path Dir = fs::current_path();; Dir = Dir.parent_path())
+		{
+			if (fs::is_regular_file(Dir / "wonderland/Source/Wonderland/Julius/WonderlandJuliusMissionSubsystem.cpp")) { Root = Dir; break; }
+			if (!Dir.has_parent_path() || Dir.parent_path() == Dir) { break; }
+		}
+		if (Root.empty()) { std::printf("START RESEND CHECK FAIL: subsystem source not found\n"); return false; }
+		std::ifstream In(Root / "wonderland/Source/Wonderland/Julius/WonderlandJuliusMissionSubsystem.cpp");
+		const std::string Text((std::istreambuf_iterator<char>(In)), std::istreambuf_iterator<char>());
+		auto Count = [&Text](const std::string& Needle)
+		{
+			int N = 0;
+			for (std::size_t At = Text.find(Needle); At != std::string::npos; At = Text.find(Needle, At + 1)) { ++N; }
+			return N;
+		};
+		const std::size_t Def = Text.find("bool UWonderlandJuliusMissionSubsystem::StartPaidMission(");
+		const std::size_t End = Def == std::string::npos ? std::string::npos : Text.find("\n}\n", Def);
+		const std::size_t Send = Text.find("StartRequest(");
+		const bool bOk = Def != std::string::npos && End != std::string::npos && Count("StartRequest(") == 1 && Send > Def && Send < End
+			&& Count("StartPaidMission(") == 1;
+		if (!bOk) { std::printf("START RESEND CHECK FAIL: a Start is built or sent outside the founder's click\n"); }
+		return bOk;
+	}
+
 	bool CheckJuliusModuleRootIncludes()
 	{
 		namespace fs = std::filesystem;
@@ -1182,6 +1214,22 @@ int main()
 	}
 
 	{
+		// A-9 /status: a GET under the current run, with the same refusals as every read.
+		FRig Rig(3);
+		Expect(!Rig.Session.MissionStatusRequest().bSent, "status_needs_a_run");
+		Expect(Rig.Session.Dispatch("demo-mission", "").bSent, "status_dispatch");
+		const std::string Run = Rig.Session.RunId();
+		const FCommandOutcome Status = Rig.Session.MissionStatusRequest();
+		Expect(Status.bSent && Status.Request.Method == "GET" && Status.Request.Body.empty(), "status_is_a_get");
+		Expect(Contains(Status.Request.Url, "/relay-api/wonderland/julius/missions/" + Run + "/status?projectId=proj-1"), "status_route");
+		Rig.Session.SetNativeSessionToken("");
+		Expect(!Rig.Session.MissionStatusRequest().bSent, "status_needs_a_session");
+		Rig.Session.SetNativeSessionToken("SECRET_TOKEN_VALUE");
+		(void)Rig.Session.SetBaseUrl("http://example.com");
+		Expect(!Rig.Session.MissionStatusRequest().bSent, "status_loopback_only");
+	}
+
+	{
 		// IN-WONDERLAND START: the request carries only the authorisation; nothing about spend or dispatch targets.
 		FRig Rig(3);
 		std::string Key;
@@ -1220,6 +1268,7 @@ int main()
 	}
 
 	Expect(CheckJuliusModuleRootIncludes(), "julius_no_bare_module_root_include");
+	Expect(CheckNoAutomaticStartResend(), "julius_no_automatic_start_resend");
 	Expect(CheckPlatformCryptoTypesInclude(), "platform_crypto_result_includes_types");
 
 	if (Failures == 0)
