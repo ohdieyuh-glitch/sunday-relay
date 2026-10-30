@@ -558,12 +558,17 @@ describe('count only real spend: each prior run is NOT_EXECUTED, EXECUTED_CHARGE
     expect(otherRun.audit[0]).toMatchObject({ classification: 'UNKNOWN', counted: true });
   });
 
-  it('counted priors still refuse a third run; zero-proved ones do not', async () => {
+  it('counted priors still refuse a run past the J1 grant (3 runs since 2026-10-30); zero-proved ones do not', async () => {
     const mixed = await classify([run40242149156(), run40258482240(), run40278849833({ 'tasks.tsv': 'task_id\nplan-1\n(1 row)\n' })]);
     expect(mixed.ledger.readable && mixed.ledger.priorRuns.length).toBe(1);
     expect(authorizeJuliusLiveSpend({ namespace: J1, spendUsd: 30, repairCycles: 3, ledger: mixed.ledger })).toMatchObject({ authorized: true });
+    // Two UNKNOWN priors count at $30 each: the founder's third J1 run fits exactly at $90.
     const unknownBoth = await classify([run40242149156(), run40258482240()], { fail: (url) => url.includes('/jobs') });
-    expect(authorizeJuliusLiveSpend({ namespace: J1, spendUsd: 30, repairCycles: 3, ledger: unknownBoth.ledger }))
+    expect(unknownBoth.ledger.readable && unknownBoth.ledger.priorRuns.length).toBe(2);
+    expect(authorizeJuliusLiveSpend({ namespace: J1, spendUsd: 30, repairCycles: 3, ledger: unknownBoth.ledger })).toMatchObject({ authorized: true });
+    const unknownThree = await classify([run40242149156(), run40258482240(), run40278849833()], { fail: (url) => url.includes('/jobs') });
+    expect(unknownThree.ledger.readable && unknownThree.ledger.priorRuns.length).toBe(3);
+    expect(authorizeJuliusLiveSpend({ namespace: J1, spendUsd: 30, repairCycles: 3, ledger: unknownThree.ledger }))
       .toMatchObject({ authorized: false, reasonCode: 'qualifying_pair_third_run_refused' });
   });
 
@@ -748,8 +753,11 @@ describe('the two pre-marker commands the paid workflow runs', () => {
     expect(lines.join('\n'), 'the token is never printed').not.toContain(TOKEN);
   });
 
-  it('authorize-spend refuses, exit 1, when two priors are UNKNOWN, and when the ledger is unreadable', async () => {
-    const unknown = await command(authorizeSpendCommand, [run40242149156(), run40258482240()], { fail: (url) => url.includes('/jobs') });
+  it('authorize-spend refuses, exit 1, when three priors are UNKNOWN (J1 grant: 3 runs), and when the ledger is unreadable', async () => {
+    const two = await command(authorizeSpendCommand, [run40242149156(), run40258482240()], { fail: (url) => url.includes('/jobs') });
+    expect(two.code).toBe(0);
+    expect(two.lines.at(-1)).toBe('spend_pre_marker=authorized namespace=julius-inworld-data-1 spend_ceiling_usd_micros=30000000 max_repair_rounds=3');
+    const unknown = await command(authorizeSpendCommand, [run40242149156(), run40258482240(), run40278849833()], { fail: (url) => url.includes('/jobs') });
     expect(unknown.code).toBe(1);
     expect(unknown.lines.at(-1)).toContain('qualifying_pair_third_run_refused');
     const unreadable = await command(authorizeSpendCommand, [run40242149156()], { fail: (url) => url.includes('matching-refs') });

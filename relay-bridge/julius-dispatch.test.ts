@@ -1267,7 +1267,8 @@ describe('the durable cap is authorizeJuliusLiveSpend, in both directions', () =
     const spendLedger = createDurableStandInSpendLedger();
     await spendLedger.record('run:cccccccccccccccccccccccc', {
       taskId: 'run:cccccccccccccccccccccccc:coder', role: 'CODING_AGENT', basis: 'PROVIDER_REPORTED',
-      usdMicros: 30_000_001, estimatedUsdMicros: null, billingPath: 'API_BILLED',
+      // $60.000001 known plus this $30 is over J1's $90 combined cap (founder ruling 2026-10-30).
+      usdMicros: 60_000_001, estimatedUsdMicros: null, billingPath: 'API_BILLED',
     });
     const h = harness({ frozen: inworld, spendLedger });
     const out = await h.controller.dispatch(input());
@@ -1597,10 +1598,10 @@ describe('canonical wlj_ spend key; legacy run: is read-only', () => {
     expect(h.calls).toHaveLength(0);
   });
 
-  it('a legacy spend row still counts toward the $60 cap, and presenting it does not claim again', async () => {
+  it('a legacy spend row still counts toward the J1 $90 cap, and presenting it does not claim again', async () => {
     const spendLedger = createDurableStandInSpendLedger();
     await spendLedger.record(LEGACY, {
-      taskId: `${LEGACY}:coder`, role: 'CODING_AGENT', basis: 'PROVIDER_REPORTED', usdMicros: 30_000_001, estimatedUsdMicros: null, billingPath: 'API_BILLED',
+      taskId: `${LEGACY}:coder`, role: 'CODING_AGENT', basis: 'PROVIDER_REPORTED', usdMicros: 60_000_001, estimatedUsdMicros: null, billingPath: 'API_BILLED',
     });
     const frozen: FrozenMission = { ...FROZEN, markerNamespace: 'julius-inworld-data-1', spendUsd: 30, repairCycles: 3 };
     const h = harness({ frozen, spendLedger });

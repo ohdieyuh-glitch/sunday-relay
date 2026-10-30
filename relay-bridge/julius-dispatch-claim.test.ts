@@ -74,7 +74,8 @@ describe('one spend ledger, both directions', () => {
   it('a settlement the J1 port records is the spend authorizeJuliusLiveSpend refuses on', async () => {
     const ledger = createDurableStandInSpendLedger();
     const runId = 'run:aaaaaaaaaaaaaaaaaaaaaaaa';
-    await ledger.record(runId, fact(runId, 30_000_001));
+    // J1's combined cap is $90 since the founder ruling of 2026-10-30: $60.000001 known plus this $30 is over it.
+    await ledger.record(runId, fact(runId, 60_000_001));
     const read = await ledger.readPrior({ missionId: 'julius-inworld-data-1', projectId: 'proj-1' });
     const again = authorizeJuliusLiveSpend({
       namespace: 'julius-inworld-data-1', spendUsd: 30, repairCycles: 3, ledger: read,

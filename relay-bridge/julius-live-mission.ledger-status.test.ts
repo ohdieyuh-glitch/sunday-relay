@@ -32,6 +32,8 @@ interface FakeRun {
 const EXECUTED: FakeRun = { wlj: 'wlj_0c96b0f9-2879-4426-b464-fb132ae658fa', runId: 40299692757, executed: true, log: 'missing' };
 const REFUSED: FakeRun = { wlj: 'wlj_7dd5ad76-ed4f-47c3-b3a6-5a2d9b38636a', runId: 40520432789, log: 'refusal' };
 const REFUSED_NO_LOG: FakeRun = { ...REFUSED, log: 'missing' };
+// The run of 2026-10-28 that reached the provider: executed, its evidence never uploaded.
+const EXECUTED_2: FakeRun = { wlj: 'wlj_92f24bfc-3e6a-4e5f-a807-6c214fc19a42', runId: 40698923582, executed: true, log: 'missing' };
 
 function jobsFor(run: FakeRun): unknown {
   const copy = JSON.parse(JSON.stringify(JOBS)) as { total_count: number; jobs: Record<string, unknown>[] };
@@ -119,8 +121,8 @@ describe('ledger-status: does another paid run fit under the pair cap?', () => {
     expect(hashOf((await status(github([EXECUTED, REFUSED], [], () => 'throw'))).lines)).toBe('UNKNOWN');
   });
 
-  it('FULL as the ledger stood after the failure: without the log proof the refused run is UNKNOWN at $30, so two counted runs fill the pair', async () => {
-    const { code, lines } = await status(github([EXECUTED, REFUSED_NO_LOG]));
+  it('FULL once the J1 grant is used: without the log proof the refused run is UNKNOWN at $30, so with 40698923582 three counted runs fill the 3-run grant (founder ruling 2026-10-30)', async () => {
+    const { code, lines } = await status(github([EXECUTED, REFUSED_NO_LOG, EXECUTED_2]));
     expect(code).toBe(1);
     expect(verdict(lines)).toContain('ledger_verdict=FULL reads=3 consistent=yes reason=qualifying_pair_third_run_refused');
   });
