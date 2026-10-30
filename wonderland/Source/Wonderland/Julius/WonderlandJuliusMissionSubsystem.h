@@ -114,6 +114,8 @@ public:
 	 * flow core (header + lines). bOutLive is the SERVER's live flag. False when there is nothing to show yet.
 	 */
 	bool LatestLivePanel(bool& bOutLive, FString& OutHeader, TArray<FString>& OutLines) const;
+	/** The last readable /status of this run as a panel (C4): header + lines; bOutSuccess only for verified PASS. */
+	bool LatestStatusPanel(bool& bOutSuccess, FString& OutHeader, TArray<FString>& OutLines) const;
 	void CompleteLiveRead(const FString& ForRunId, bool bConnected, const TSharedPtr<IHttpResponse, ESPMode::ThreadSafe>& Response);
 	/** A-9: one /status answer for the current wlj_ run; reconciles the Start record against it. Never sends a Start. */
 	void CompleteStatusRead(const FString& ForRunId, bool bConnected, const TSharedPtr<IHttpResponse, ESPMode::ThreadSafe>& Response);

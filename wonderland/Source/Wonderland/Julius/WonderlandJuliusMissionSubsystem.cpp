@@ -1250,6 +1250,20 @@ bool UWonderlandJuliusMissionSubsystem::LatestLivePanel(bool& bOutLive, FString&
 	return true;
 }
 
+bool UWonderlandJuliusMissionSubsystem::LatestStatusPanel(bool& bOutSuccess, FString& OutHeader, TArray<FString>& OutLines) const
+{
+	bOutSuccess = false;
+	OutHeader.Reset();
+	OutLines.Reset();
+	if (Host == nullptr || StatusRunId.IsEmpty() || StatusRunId != ClientRunId()) { return false; }
+	const WonderlandJuliusMissionFlow::FStatusPanel Panel = WonderlandJuliusMissionFlow::StatusPanelFor(Host->LastStatus);
+	if (!Panel.bShow) { return false; }
+	bOutSuccess = Panel.bSuccess;
+	OutHeader = ToF(Panel.Header);
+	for (const std::string& Line : Panel.Lines) { OutLines.Add(ToF(Line)); }
+	return true;
+}
+
 void UWonderlandJuliusMissionSubsystem::CompleteHttp(
 	bool bStatusPoll,
 	bool bResend,

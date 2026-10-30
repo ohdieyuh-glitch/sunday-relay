@@ -760,6 +760,47 @@ MUTATIONS = [
         "Out.Record = R::NotStarted; // FLOW_RECONCILE_NOTHING_HELD_RELEASES",
         "Out.Record = Waiting; // FLOW_RECONCILE_NOTHING_HELD_RELEASES",
     ),
+    # CLIENT LANE C4 (founder rulings + YUJI: percent only verified, workflow steps labelled, completed is not success).
+    (
+        "c4_success_any_verdict",
+        "&& Status.CheckerVerdict == \"PASS\" // FLOW_SUCCESS_NEEDS_PASS",
+        "// FLOW_SUCCESS_NEEDS_PASS",
+    ),
+    (
+        "c4_success_without_verified_completion",
+        "&& Status.ProgressBasis == \"verified_completion\" && Status.ProgressPercent == 100 // FLOW_SUCCESS_NEEDS_VERIFIED_COMPLETION",
+        "// FLOW_SUCCESS_NEEDS_VERIFIED_COMPLETION",
+    ),
+    (
+        "c4_success_before_completed",
+        "return Status.bOk && Status.Phase == EMissionStatusPhase::Completed // FLOW_SUCCESS_NEEDS_COMPLETED",
+        "return Status.bOk // FLOW_SUCCESS_NEEDS_COMPLETED",
+    ),
+    (
+        "c4_completed_worded_as_success",
+        "Out.Header = \"Mission run finished -- not a success (checker verdict: \" + Verdict + \")\"; // FLOW_STATUS_PANEL_COMPLETED_IS_NOT_SUCCESS",
+        "Out.Header = \"Mission completed\"; // FLOW_STATUS_PANEL_COMPLETED_IS_NOT_SUCCESS",
+    ),
+    (
+        "c4_unknown_unlabelled",
+        "Out.Header = \"Outcome unknown -- needs reconciliation (operator)\"; // FLOW_STATUS_PANEL_UNKNOWN_IS_LABELLED",
+        "Out.Header = \"Mission status: unknown\"; // FLOW_STATUS_PANEL_UNKNOWN_IS_LABELLED",
+    ),
+    (
+        "c4_percent_from_any_progress",
+        "if (Out.bSuccess) // FLOW_STATUS_PANEL_PERCENT_GATE",
+        "if (Status.ProgressPercent >= 0) // FLOW_STATUS_PANEL_PERCENT_GATE",
+    ),
+    (
+        "c4_status_steps_unlabelled",
+        "Out.Lines.push_back(std::string(WorkflowProgressLabel) + \": \" + std::to_string(Status.WorkflowStepsCompleted)",
+        "Out.Lines.push_back(std::string(\"steps: \") + std::to_string(Status.WorkflowStepsCompleted)",
+    ),
+    (
+        "c4_live_steps_unlabelled",
+        "Out.Lines.push_back(std::string(WorkflowProgressLabel) + \": \" + std::to_string(Finished)",
+        "Out.Lines.push_back(std::string(\"steps: \") + std::to_string(Finished)",
+    ),
     # CLIENT LANE C3 (founder ruling 2026-10-30: a seq gap or reset:true clears the latches and resyncs from /status;
     # never a stale "running"; live_view_unconfigured is a known reason; one bad event field never drops the page).
     (

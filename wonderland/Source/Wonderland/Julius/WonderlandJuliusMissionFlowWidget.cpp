@@ -394,6 +394,10 @@ void SWonderlandJuliusMissionFlow::Rebuild()
 	FString LiveHeader;
 	TArray<FString> LiveLines;
 	const bool bShowLive = View.bShowProgress && Live != nullptr && Live->LatestLivePanel(bLiveRun, LiveHeader, LiveLines);
+	bool bStatusSuccess = false;
+	FString StatusHeader;
+	TArray<FString> StatusLines;
+	const bool bShowStatus = (View.bShowProgress || View.bShowResult) && Live != nullptr && Live->LatestStatusPanel(bStatusSuccess, StatusHeader, StatusLines);
 	FString Reported;
 	for (const std::string& Line : View.Result.Lines)
 	{
@@ -414,7 +418,8 @@ void SWonderlandJuliusMissionFlow::Rebuild()
 		View.Result.bFinished ? 1 : 0,
 		*Reported) + TEXT("|") + Notice + (bCanStartAgain ? TEXT("|again") : TEXT(""))
 		+ TEXT("|") + JuliusLine
-		+ (bShowLive ? FString::Printf(TEXT("|live%d|%s|%s"), bLiveRun ? 1 : 0, *LiveHeader, *FString::Join(LiveLines, TEXT("\n"))) : FString());
+		+ (bShowLive ? FString::Printf(TEXT("|live%d|%s|%s"), bLiveRun ? 1 : 0, *LiveHeader, *FString::Join(LiveLines, TEXT("\n"))) : FString())
+		+ (bShowStatus ? FString::Printf(TEXT("|status%d|%s|%s"), bStatusSuccess ? 1 : 0, *StatusHeader, *FString::Join(StatusLines, TEXT("\n"))) : FString());
 	if (Key == ShownKey) { return; }
 	ShownKey = Key;
 
@@ -500,6 +505,13 @@ void SWonderlandJuliusMissionFlow::Rebuild()
 	{
 		AddText(TEXT("Progress"));
 		AddText(ProgressLine);
+	}
+
+	if (bShowStatus)
+	{
+		// The bridge's /status (A-9) decides the state; lines are only what it emitted (no model, no cost).
+		AddText(StatusHeader);
+		for (const FString& Line : StatusLines) { AddText(Line); }
 	}
 
 	if (bShowLive)

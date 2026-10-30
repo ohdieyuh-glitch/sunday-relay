@@ -455,7 +455,7 @@ const ABSENT_PHASE = {
 		Expect(PanelHas(Panel, "now: coder / repair_build -- active (repair cycle 1 of 3)"), "now line from the latest sample");
 		Expect(PanelHas(Panel, "sampled every ~10 s"), "phases are labelled as samples");
 		Expect(PanelHas(Panel, "now running: Preflight, then the live mission / LIVE: run the first real Julius mission"), "real step names");
-		Expect(PanelHas(Panel, "steps: 0 of 1 finished"), "step count");
+		Expect(PanelHas(Panel, "GitHub workflow steps (not mission progress): 0 of 1 finished"), "step count");
 		Expect(Feed.Cursor() == "c7", "cursor kept");
 		++LiveCases;
 
@@ -578,7 +578,7 @@ const ABSENT_PHASE = {
 			const std::string Step = Swap(LiveStep, "\"status\":\"in_progress\"", std::string("\"status\":\"") + Word + "\"");
 			FLiveFeed Waiting;
 			Waiting.Apply(ParseLiveEvents(LiveWlj, 200, LiveBody(Top, Step)));
-			Expect(Waiting.IsLive() && PanelHas(LivePanelFor(Waiting, 0), "steps: 0 of 1 finished"), Word);
+			Expect(Waiting.IsLive() && PanelHas(LivePanelFor(Waiting, 0), "GitHub workflow steps (not mission progress): 0 of 1 finished"), Word);
 		}
 		Expect(!ParseLiveEvents(LiveWlj, 200, Swap(Good, "\"runStatus\":\"in_progress\"", "\"runStatus\":\"running\"")).bParsed, "unknown run status");
 		++LiveCases;
@@ -590,13 +590,13 @@ const ABSENT_PHASE = {
 			FLiveFeed Steps;
 			Steps.Apply(ParseLiveEvents(LiveWlj, 200, LiveBody(LiveTop, Pending)));
 			FLivePanel P = LivePanelFor(Steps, 0);
-			Expect(PanelHas(P, "now running: J / A") && PanelHas(P, "steps: 0 of 2 finished") && !PanelHas(P, "J / B"), "running step first, pending counted");
+			Expect(PanelHas(P, "now running: J / A") && PanelHas(P, "GitHub workflow steps (not mission progress): 0 of 2 finished") && !PanelHas(P, "J / B"), "running step first, pending counted");
 			Steps.Apply(ParseLiveEvents(LiveWlj, 200, LiveBody(Swap(LiveTop, "\"c7\"", "\"c9\""),
 				"{\"seq\":4,\"at\":\"2026-10-25T18:00:09Z\",\"kind\":\"step\",\"job\":\"J\",\"name\":\"A\",\"status\":\"completed\",\"conclusion\":\"success\"},"
 				"{\"seq\":5,\"at\":\"2026-10-25T18:00:09Z\",\"kind\":\"step\",\"job\":\"J\",\"name\":\"B\",\"status\":\"in_progress\",\"conclusion\":null}")));
 			P = LivePanelFor(Steps, 0);
 			Expect(PanelHas(P, "now running: J / B") && !PanelHas(P, "now running: J / A"), "now running moves on");
-			Expect(PanelHas(P, "steps: 1 of 2 finished") && PanelHas(P, "  done: J / A (success)"), "finished step listed once");
+			Expect(PanelHas(P, "GitHub workflow steps (not mission progress): 1 of 2 finished") && PanelHas(P, "  done: J / A (success)"), "finished step listed once");
 			++LiveCases;
 		}
 		// A full page: 500 events parse (the shared 64-element JSON cap refused a real 106-event page), 501 do not.
@@ -1656,6 +1656,99 @@ const ABSENT_PHASE = {
 		++StatusCases;
 	}
 
+	// C4 (founder rulings 2026-10-30) + YUJI: percent only from status.progress and only as the verified 100; the
+	// workflow's steps always carry their label; phase "completed" alone is never success; nothing un-emitted shown.
+	int PanelCases = 0;
+	bool StatusPanelHas(const FStatusPanel& Panel, const char* Piece)
+	{
+		if (Panel.Header.find(Piece) != std::string::npos) { return true; }
+		for (const std::string& Line : Panel.Lines)
+		{
+			if (Line.find(Piece) != std::string::npos) { return true; }
+		}
+		return false;
+	}
+	bool StatusPanelInventsNothing(const FStatusPanel& Panel)
+	{
+		for (const char* Word : {"cost", "Cost", "model", "Model", "$", "USD", "usd", "token"})
+		{
+			if (StatusPanelHas(Panel, Word)) { return false; }
+		}
+		return true;
+	}
+	std::string StatusResult(const char* Verdict, bool bUnknown = false)
+	{
+		return std::string("{\"checkerVerdict\":") + (Verdict == nullptr ? std::string("null") : std::string("\"") + Verdict + "\"")
+			+ ",\"outcomeUnknown\":" + (bUnknown ? "true" : "false") + "}";
+	}
+	const char* const VerifiedProgress = "\"progress\":{\"percent\":100,\"basis\":\"verified_completion\"}";
+	const char* const NoProgress = "\"progress\":{\"percent\":null,\"basis\":\"none\"}";
+	std::string Completed(const char* Verdict, bool bVerified)
+	{
+		const std::string Body = StatusBody("completed", true, StartObj(true, "\"18733051234\""), BoundRun, StatusResult(Verdict), "null");
+		return bVerified ? Swap(Body, NoProgress, VerifiedProgress) : Body;
+	}
+	void StatusPanelFixtures()
+	{
+		{
+			const FMissionStatusRead Pass = ParseMissionStatus(StatusWlj, 200, Completed("PASS", true));
+			const FStatusPanel Panel = StatusPanelFor(Pass);
+			Expect(Pass.bOk && StatusIsVerifiedSuccess(Pass) && Panel.bSuccess, "completed + PASS + verified completion is success");
+			Expect(StatusPanelHas(Panel, "Mission progress: 100% (verified completion)") && StatusPanelHas(Panel, "PASS"), "only the verified success shows 100%");
+			Expect(StatusPanelInventsNothing(Panel), "success shows no model or cost");
+			++PanelCases;
+		}
+		{
+			// YUJI 2026-10-30: phase "completed" covers FAIL and NOT_RUN too.
+			for (const char* Verdict : {"FAIL", "NOT_RUN"})
+			{
+				const FMissionStatusRead Read = ParseMissionStatus(StatusWlj, 200, Completed(Verdict, false));
+				const FStatusPanel Panel = StatusPanelFor(Read);
+				Expect(Read.bOk && Read.Phase == EMissionStatusPhase::Completed, Verdict);
+				Expect(!StatusIsVerifiedSuccess(Read) && !Panel.bSuccess, "completed alone is never success");
+				Expect(StatusPanelHas(Panel, "not a success") && StatusPanelHas(Panel, Verdict) && !StatusPanelHas(Panel, "%") && !StatusPanelHas(Panel, "Mission completed"), "completed FAIL/NOT_RUN is worded as not a success");
+			}
+			const FMissionStatusRead Unverified = ParseMissionStatus(StatusWlj, 200, Completed("PASS", false));
+			Expect(Unverified.bOk && !StatusIsVerifiedSuccess(Unverified) && !StatusPanelFor(Unverified).bSuccess, "PASS without verified completion is not success");
+			const FMissionStatusRead Mixed = ParseMissionStatus(StatusWlj, 200, Completed("FAIL", true));
+			Expect(Mixed.bOk && !StatusIsVerifiedSuccess(Mixed) && !StatusPanelHas(StatusPanelFor(Mixed), "100%"), "verified 100 with FAIL is not success");
+			const FMissionStatusRead Grading = ParseMissionStatus(StatusWlj, 200, Swap(Swap(Completed("PASS", true), "\"phase\":\"completed\"", "\"phase\":\"grading\""), "\"terminal\":true", "\"terminal\":false"));
+			Expect(!StatusIsVerifiedSuccess(Grading) && !StatusPanelFor(Grading).bSuccess, "PASS before completed is not success");
+			++PanelCases;
+		}
+		{
+			const std::string Executing = Swap(StatusBody("executing", false, StartObj(true, "\"18733051234\""), BoundRun),
+				"\"stepsCompleted\":null,\"stepsTotal\":null", "\"stepsCompleted\":3,\"stepsTotal\":7");
+			const FStatusPanel Panel = StatusPanelFor(ParseMissionStatus(StatusWlj, 200, Executing));
+			Expect(Panel.bShow && !Panel.bSuccess && StatusPanelHas(Panel, "Mission status: executing"), "executing says executing");
+			Expect(StatusPanelHas(Panel, "GitHub workflow steps (not mission progress): 3 of 7 finished") && !StatusPanelHas(Panel, "Mission progress"), "workflow steps carry their label; no mission percent");
+			const std::string WrongLabel = Swap(Executing, "GitHub workflow steps (not mission progress)", "progress");
+			const FMissionStatusRead Wrong = ParseMissionStatus(StatusWlj, 200, WrongLabel);
+			Expect(Wrong.bOk && !StatusPanelHas(StatusPanelFor(Wrong), "3 of 7"), "an unlabelled workflow percent is never shown");
+			Expect(StatusPanelInventsNothing(Panel), "executing shows no model or cost");
+			++PanelCases;
+		}
+		{
+			const FMissionStatusRead Unknown = ParseMissionStatus(StatusWlj, 200,
+				StatusBody("dispatching", false, StartObj(true), "null", StatusResult(nullptr, true)));
+			const FStatusPanel Panel = StatusPanelFor(Unknown);
+			Expect(Panel.bOutcomeUnknown && !Panel.bSuccess && StatusPanelHas(Panel, "Outcome unknown -- needs reconciliation"), "outcome unknown is labelled");
+			Expect(!StatusPanelHas(Panel, "did not succeed") && !StatusPanelHas(Panel, "%"), "outcome unknown is neither success nor failure");
+			const FStatusPanel Failed = StatusPanelFor(ParseMissionStatus(StatusWlj, 200, StatusBody("did_not_start", true, StartObj(false), "null", StatusResult(nullptr), "null")));
+			Expect(!Failed.bSuccess && StatusPanelHas(Failed, "Mission did not succeed -- did_not_start"), "did_not_start is a failure ending");
+			Expect(!StatusPanelFor(ParseMissionStatus(StatusWlj, 500, "{}")).bShow, "an unreadable /status shows no panel");
+			++PanelCases;
+		}
+		{
+			FLiveFeed Feed;
+			Feed.Apply(ParseLiveEvents(LiveWlj, 200, LiveBody(LiveTop, LiveStep)));
+			const FLivePanel Panel = LivePanelFor(Feed, 0);
+			Expect(PanelHas(Panel, "GitHub workflow steps (not mission progress): 0 of 1 finished"), "live step count is labelled workflow steps");
+			for (const std::string& Line : Panel.Lines) { Expect(Line.rfind("steps: ", 0) != 0, "no unlabelled steps line"); }
+			++PanelCases;
+		}
+	}
+
 	// C3 (founder ruling 2026-10-30): a seq gap or reset:true clears the latches and resyncs from /status (never a stale
 	// "running"); live_view_unconfigured is a known reason; one bad event field never drops the whole page.
 	int ResyncCases = 0;
@@ -1979,6 +2072,7 @@ int main()
 	StartAckFixtures();
 	StatusFixtures();
 	ResyncFixtures();
+	StatusPanelFixtures();
 
 	if (Failures != 0)
 	{
@@ -1986,7 +2080,7 @@ int main()
 		return 1;
 	}
 	std::printf(
-		"J1 MISSION FLOW KAT PASS meanings=%d route=%d result=%d flow=%d windows=%d bridge=%d phases=%d live=%d start=%d exec=%d ack=%d status=%d resync=%d\n",
-		Meanings, Routes, Results, FlowSteps, Windows, Bridge, PhaseCases, LiveCases, StartCases, ExecCases, AckCases, StatusCases, ResyncCases);
+		"J1 MISSION FLOW KAT PASS meanings=%d route=%d result=%d flow=%d windows=%d bridge=%d phases=%d live=%d start=%d exec=%d ack=%d status=%d resync=%d panel=%d\n",
+		Meanings, Routes, Results, FlowSteps, Windows, Bridge, PhaseCases, LiveCases, StartCases, ExecCases, AckCases, StatusCases, ResyncCases, PanelCases);
 	return 0;
 }

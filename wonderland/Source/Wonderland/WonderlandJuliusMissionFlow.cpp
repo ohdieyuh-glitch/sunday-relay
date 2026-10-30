@@ -1716,7 +1716,7 @@ namespace WonderlandJuliusMissionFlow
 		}
 		if (StepCount > 0)
 		{
-			Out.Lines.push_back("steps: " + std::to_string(Finished) + " of " + std::to_string(StepCount) + " finished");
+			Out.Lines.push_back(std::string(WorkflowProgressLabel) + ": " + std::to_string(Finished) + " of " + std::to_string(StepCount) + " finished"); // FLOW_LIVE_STEPS_ARE_WORKFLOW_STEPS
 		}
 		std::sort(Done.begin(), Done.end(), [](const FLiveEvent* A, const FLiveEvent* B) { return A->Seq < B->Seq; });
 		const std::size_t FirstDone = Done.size() > LivePanelLines ? Done.size() - LivePanelLines : 0;
@@ -2058,6 +2058,68 @@ namespace WonderlandJuliusMissionFlow
 			Out.Skipped.push_back("eventsCursor");
 		}
 		Out.bOk = true;
+		return Out;
+	}
+
+	bool StatusIsVerifiedSuccess(const FMissionStatusRead& Status)
+	{
+		return Status.bOk && Status.Phase == EMissionStatusPhase::Completed // FLOW_SUCCESS_NEEDS_COMPLETED
+			&& Status.CheckerVerdict == "PASS" // FLOW_SUCCESS_NEEDS_PASS
+			&& Status.ProgressBasis == "verified_completion" && Status.ProgressPercent == 100 // FLOW_SUCCESS_NEEDS_VERIFIED_COMPLETION
+			&& !Status.bOutcomeUnknown;
+	}
+
+	FStatusPanel StatusPanelFor(const FMissionStatusRead& Status)
+	{
+		FStatusPanel Out;
+		if (!Status.bOk) { return Out; }
+		Out.bShow = true;
+		Out.bSuccess = StatusIsVerifiedSuccess(Status);
+		const std::string Verdict = Status.CheckerVerdict.empty() ? std::string("not reported") : Status.CheckerVerdict;
+		if (Out.bSuccess)
+		{
+			Out.Header = "Mission completed -- checker verdict PASS (verified completion)";
+		}
+		else if (Status.bOutcomeUnknown || Status.Phase == EMissionStatusPhase::Unknown)
+		{
+			Out.bOutcomeUnknown = true;
+			Out.Header = "Outcome unknown -- needs reconciliation (operator)"; // FLOW_STATUS_PANEL_UNKNOWN_IS_LABELLED
+		}
+		else if (Status.Phase == EMissionStatusPhase::Completed)
+		{
+			// The run finished but did not pass: never worded or coloured as a success.
+			Out.Header = "Mission run finished -- not a success (checker verdict: " + Verdict + ")"; // FLOW_STATUS_PANEL_COMPLETED_IS_NOT_SUCCESS
+		}
+		else if (Status.bTerminal)
+		{
+			Out.Header = std::string("Mission did not succeed -- ") + MissionStatusPhaseWord(Status.Phase);
+		}
+		else
+		{
+			Out.Header = std::string("Mission status: ") + MissionStatusPhaseWord(Status.Phase);
+		}
+		// Mission percent ONLY from status.progress, and only as the verified 100 (null = no percent at all).
+		if (Out.bSuccess) // FLOW_STATUS_PANEL_PERCENT_GATE
+		{
+			Out.Lines.push_back("Mission progress: 100% (verified completion)"); // FLOW_STATUS_PANEL_PERCENT_ONLY_VERIFIED
+		}
+		if (Status.bWorkflowLabelOk) // FLOW_STATUS_PANEL_WORKFLOW_LABELLED
+		{
+			if (Status.WorkflowStepsCompleted >= 0 && Status.WorkflowStepsTotal > 0)
+			{
+				Out.Lines.push_back(std::string(WorkflowProgressLabel) + ": " + std::to_string(Status.WorkflowStepsCompleted) + " of "
+					+ std::to_string(Status.WorkflowStepsTotal) + " finished");
+			}
+			else if (Status.WorkflowPercent >= 0)
+			{
+				Out.Lines.push_back(std::string(WorkflowProgressLabel) + ": " + std::to_string(Status.WorkflowPercent) + "%");
+			}
+		}
+		if (Status.bRunStale) { Out.Lines.push_back("GitHub run state is STALE (last known, not live)"); }
+		if (!Status.bOutcomeUnknown && !Status.CheckerVerdict.empty() && !Out.bSuccess)
+		{
+			Out.Lines.push_back("checker verdict: " + Status.CheckerVerdict);
+		}
 		return Out;
 	}
 

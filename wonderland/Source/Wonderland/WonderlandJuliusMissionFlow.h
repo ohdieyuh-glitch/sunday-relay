@@ -698,6 +698,25 @@ namespace WonderlandJuliusMissionFlow
 	 */
 	FStartReconcile StartRecordFromStatus(EStartRecord Current, const FMissionStatusRead& Status);
 
+	/**
+	 * YUJI / founder 2026-10-30: phase "completed" also covers a completed FAIL or NOT_RUN run, so it is NEVER success
+	 * by itself. Success = phase completed AND checkerVerdict PASS AND progress basis verified_completion (100).
+	 */
+	bool StatusIsVerifiedSuccess(const FMissionStatusRead& Status);
+
+	/** The /status panel (C4). Lines carry only what the bridge emitted: no model, no cost, no invented percent. */
+	struct FStatusPanel
+	{
+		bool bShow = false;
+		/** True only for StatusIsVerifiedSuccess (the only state that may be shown as a success). */
+		bool bSuccess = false;
+		/** outcome unknown: labelled, no success or failure animation. */
+		bool bOutcomeUnknown = false;
+		std::string Header;
+		std::vector<std::string> Lines;
+	};
+	FStatusPanel StatusPanelFor(const FMissionStatusRead& Status);
+
 	// ---------------------------------------------------------------------------------------------------------------
 	// EXECUTION STATE (founder P0 2026-10-26: the mission contract follows Julius's ACTUAL execution, not "a workflow
 	// is running"). MAIN JULIUS's contract, verbatim: /events `live` means queued/in_progress INCLUDING the gates and is
