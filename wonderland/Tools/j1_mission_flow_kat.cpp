@@ -1944,6 +1944,9 @@ const ABSENT_PHASE = {
 				// The old sentence with a non-allowed or missing code.
 				Err("service_unavailable", "Nothing was claimed or dispatched."),
 				Err("julius_dispatch_unavailable", "Wonderland admission store is not available. Nothing was reserved."),
+				// Skywalker F2 2026-10-30 (A02 / A05): the dispatch route's before-claim codes are NOT Start's.
+				Err("julius_dispatch_disabled", "Nothing was claimed or dispatched."),
+				Err("julius_dispatch_not_configured", "Nothing was claimed or dispatched."),
 				"{\"error\":{\"message\":\"Nothing was claimed or dispatched.\"}}",
 				"{\"error\":{\"kind\":\"\",\"message\":\"Nothing was claimed or dispatched.\"}}",
 				"{\"error\":{\"kind\":null,\"message\":\"Nothing was claimed or dispatched.\"}}",
@@ -2054,6 +2057,30 @@ const ABSENT_PHASE = {
 			const FSavedStartRecord NotStartedRec = ParseSavedStartRecord(true, true, FormatSavedStartRecord(Run, "k", R::NotStarted, "", "t"), Run);
 			Expect(StartRecordFromDisk(StartedRec, true) == R::Started && StartRecordFromDisk(NotStartedRec, false) == R::NotStarted, "n1: this run's readable record is taken as saved");
 			Expect(!StartGateFor("admitted_waiting", true, false, StartRecordFromDisk(AbsentRec, true), true, Ok).bSend, "n1: the gate refuses while a record is moved aside");
+			// Skywalker F1 2026-10-30: a moved-aside record blocks Start for every record except this run's readable Started
+			// one. The failing case: a Sending record corrupted and moved aside, restart, and this run's record reads NotStarted
+			// or None -- a new key would be a second paid run.
+			auto Quarantined = [](const FStartGate& Gate) { return std::strstr(Gate.Why, "start.v1.corrupt-*") != nullptr; };
+			for (const bool bClick : {false, true})
+			{
+				const FStartGate NotStartedQ = StartGateFor("admitted_waiting", true, false, StartRecordFromDisk(NotStartedRec, true), bClick, Ok, true);
+				const FStartGate NoneQ = StartGateFor("admitted_waiting", true, false, StartRecordFromDisk(AbsentRec, false), bClick, Ok, true);
+				Expect(!NotStartedQ.bSend && !NotStartedQ.bOffer && Quarantined(NotStartedQ), "F1: NotStarted + quarantine blocks Start (not offered, not sent)");
+				Expect(!NoneQ.bSend && !NoneQ.bOffer && Quarantined(NoneQ), "F1: None + quarantine blocks Start (not offered, not sent)");
+			}
+			Expect(StartRecordFromDisk(NotStartedRec, true) == R::NotStarted && StartGateFor("admitted_waiting", true, false, R::NotStarted, true, Ok, false).bSend
+				&& StartGateFor("admitted_waiting", true, false, R::None, true, Ok, false).bSend, "F1 control: without a quarantine file NotStarted / None send on a click");
+			for (const R Record : {R::None, R::Sending, R::Refused, R::NotStarted, R::Accepted, R::Unreadable})
+			{
+				const FStartGate Gate = StartGateFor("admitted_waiting", true, false, Record, true, Ok, true);
+				Expect(!Gate.bSend && !Gate.bOffer && Quarantined(Gate), "F1: with a quarantine file only a readable Started record is exempt");
+			}
+			{
+				// Control: this run's readable Started record is not blocked BY the quarantine (it is blocked as already started).
+				const FStartGate StartedQ = StartGateFor("admitted_waiting", true, false, StartRecordFromDisk(StartedRec, true), true, Ok, true);
+				Expect(StartRecordFromDisk(StartedRec, true) == R::Started && !StartedQ.bSend && !Quarantined(StartedQ)
+					&& std::string(StartedQ.Why) == StartGateFor("admitted_waiting", true, false, R::Started, true, Ok, false).Why, "F1 control: a readable Started record is exempt from the quarantine block");
+			}
 			++M2Cases;
 		}
 		{

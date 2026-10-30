@@ -597,6 +597,12 @@ namespace
 	bool CheckCorruptRecordMovedAside()
 	{
 		const std::string Text = SubsystemSource();
+		auto CountIn = [](const std::string& Hay, const std::string& Needle)
+		{
+			int N = 0;
+			for (std::size_t At = Hay.find(Needle); At != std::string::npos; At = Hay.find(Needle, At + 1)) { ++N; }
+			return N;
+		};
 		const std::string Quarantine = FunctionBody(Text, "\tFString QuarantineStartRecordFile(const FString& File)");
 		const bool bMove = Quarantine.find("QuarantinedStartRecordName(ToStd(StartRecordPath()), ToStd(Stamp))") != std::string::npos
 			&& Quarantine.find("if (Name.empty()) { return FString(); }") != std::string::npos
@@ -618,18 +624,32 @@ namespace
 			&& HeldEnd != std::string::npos && HeldEnd < Taken && Taken != std::string::npos;
 		const std::string Save = FunctionBody(Text, "bool UWonderlandJuliusMissionSubsystem::SaveStartRecord() const");
 		const std::size_t Guard = Save.find("for (const FString& OnDisk : {Path, Temp})");
-		const std::size_t May = Save.find("if (!SavedStartRecordMayBeReplaced(ParseSavedStartRecord(true, bLoaded, ToStd(Existing), ToStd(StartRunId)).Read)");
-		const std::size_t Refuse = Save.find("&& QuarantineStartRecordFile(OnDisk).IsEmpty()) { return false; }");
+		const std::size_t May = Save.find("if (SavedStartRecordMayBeReplaced(ParseSavedStartRecord(true, bLoaded, ToStd(Existing), ToStd(StartRunId)).Read)");
+		// Skywalker F1 2026-10-30: a replaceable file is skipped; an unreadable one is moved aside and the save FAILS
+		// (writes nothing), so the pre-send save can never send in the click that quarantined a file.
+		const std::size_t Skip = Save.find(".Read)) { continue; }");
+		const std::size_t Refuse = Save.find("const FString Aside = QuarantineStartRecordFile(OnDisk);");
+		const std::size_t Fails = Save.find("\t\treturn false; // SUBSYSTEM_SAVE_FAILS_AFTER_MOVE_ASIDE\n\t}");
 		const std::size_t Write = Save.find("SaveStringToFile(");
-		const bool bSave = Guard != std::string::npos && May != std::string::npos && Refuse != std::string::npos && Write != std::string::npos
-			&& Guard < May && May < Refuse && Refuse < Write;
+		const bool bSave = Guard != std::string::npos && May != std::string::npos && Skip != std::string::npos && Refuse != std::string::npos
+			&& Fails != std::string::npos && Write != std::string::npos && Guard < May && May < Skip && Skip < Refuse && Refuse < Fails && Fails < Write
+			&& Save.find("return", Refuse) == Fails + 2 && CountIn(Save, "QuarantineStartRecordFile(") == 1;
+		// Skywalker F1: the Start click is gated on a fresh quarantine scan; only this run's readable Started record is exempt
+		// (the pure StartGateFor rule, flow KAT).
+		const std::string Start = FunctionBody(Text, "bool UWonderlandJuliusMissionSubsystem::StartPaidMission(");
+		const std::size_t Scan = Start.find("const bool bQuarantined = StartRecordQuarantined();");
+		const std::size_t Gate = Start.find("static_cast<EStartRecord>(StartRecord), true, TypedStd, bQuarantined), bRecordedReplay);");
+		const std::size_t Synced = Start.find("SyncStartRecord();");
+		const bool bGate = Synced != std::string::npos && Scan != std::string::npos && Gate != std::string::npos && Synced < Scan && Scan < Gate
+			&& Start.find("if (!Gate.bSend)", Gate) != std::string::npos && CountIn(Start, "StartGateFor(") == 1;
 		const bool bNoDelete = Text.find(".Delete(") == std::string::npos && Text.find("->Delete(") == std::string::npos && Text.find("DeleteFile(") == std::string::npos;
 		if (!bMove) { std::printf("CORRUPT RECORD CHECK FAIL: the unreadable record is not moved aside without replacing\n"); }
 		if (!bFinds) { std::printf("CORRUPT RECORD CHECK FAIL: a moved-aside record is not found\n"); }
 		if (!bSync) { std::printf("CORRUPT RECORD CHECK FAIL: an unreadable or moved-aside record does not keep Start blocked\n"); }
-		if (!bSave) { std::printf("CORRUPT RECORD CHECK FAIL: a save can write over an unreadable record\n"); }
+		if (!bSave) { std::printf("CORRUPT RECORD CHECK FAIL: a save can write over an unreadable record, or sends after moving one aside\n"); }
+		if (!bGate) { std::printf("CORRUPT RECORD CHECK FAIL: Start is not gated on a fresh quarantine scan\n"); }
 		if (!bNoDelete) { std::printf("CORRUPT RECORD CHECK FAIL: a record file can be deleted\n"); }
-		return bMove && bFinds && bSync && bSave && bNoDelete;
+		return bMove && bFinds && bSync && bSave && bNoDelete && bGate;
 	}
 
 	/**

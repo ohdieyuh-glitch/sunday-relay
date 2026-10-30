@@ -1969,9 +1969,17 @@ namespace WonderlandJuliusMissionFlow
 	}
 
 	FStartGate StartGateFor(std::string_view WrapperToken, bool bHasSession, bool bHasWorkflowRun, EStartRecord Record,
-		bool bExplicitClick, std::string_view Typed)
+		bool bExplicitClick, std::string_view Typed, bool bQuarantineExists)
 	{
 		FStartGate Out;
+		if (bQuarantineExists && Record != EStartRecord::Started)
+		{
+			// Skywalker F1 / YUJI n1 2026-10-30: a moved-aside unreadable record may be a Start the bridge claimed. Its key
+			// is lost, so any new Start (a new key) could be a second paid run. Blocked until an operator checks /status and
+			// archives it; only this run's readable Started record is exempt (and that is blocked below as already started).
+			Out.Why = "a quarantined Start record (start.v1.corrupt-*) is present; an operator must check /status and archive it (nothing is sent)";
+			return Out; // FLOW_START_QUARANTINE_BLOCKS
+		}
 		if (WrapperToken != "admitted_waiting") { Out.Why = "the run is not waiting for the operator"; return Out; } // FLOW_START_ONLY_WHILE_AWAITING
 		if (bHasWorkflowRun) { Out.Why = "this run already has a GitHub Actions run"; return Out; } // FLOW_START_NEVER_AFTER_DISPATCH
 		if (Record == EStartRecord::Sending)

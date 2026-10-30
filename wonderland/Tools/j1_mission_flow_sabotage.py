@@ -995,6 +995,48 @@ MUTATIONS = [
         'if (HttpStatus >= 400 && HttpStatus < 500) { Out.Outcome = EStartOutcome::Refused; }',
         'if (HttpStatus >= 400 && HttpStatus <= 500) { Out.Outcome = EStartOutcome::Refused; }',
     ),
+    # Skywalker F1 2026-10-30: a quarantine file blocks Start unless this run's record is a readable Started one.
+    (
+        'f1_quarantine_check_removed',
+        'if (bQuarantineExists && Record != EStartRecord::Started)',
+        'if (false && bQuarantineExists && Record != EStartRecord::Started)',
+    ),
+    (
+        'f1_quarantine_exempts_readable_records',
+        'if (bQuarantineExists && Record != EStartRecord::Started)',
+        'if (bQuarantineExists && Record == EStartRecord::Unreadable)',
+    ),
+    (
+        'f1_quarantine_exempts_not_started',
+        'if (bQuarantineExists && Record != EStartRecord::Started)',
+        'if (bQuarantineExists && Record != EStartRecord::Started && Record != EStartRecord::NotStarted)',
+    ),
+    (
+        'f1_quarantine_exempts_none',
+        'if (bQuarantineExists && Record != EStartRecord::Started)',
+        'if (bQuarantineExists && Record != EStartRecord::Started && Record != EStartRecord::None)',
+    ),
+    (
+        'f1_quarantine_blocks_started_too',
+        'if (bQuarantineExists && Record != EStartRecord::Started)',
+        'if (bQuarantineExists)',
+    ),
+    # Skywalker F2 2026-10-30 (A02 / A05): the dispatch route's codes never release a Start 503.
+    (
+        'f2_503_dispatch_disabled_released',
+        '|| Kind == "julius_start_not_configured"; // FLOW_START_503_BEFORE_CLAIM_NOT_CONFIGURED',
+        '|| Kind == "julius_start_not_configured" || Kind == "julius_dispatch_disabled"; // FLOW_START_503_BEFORE_CLAIM_NOT_CONFIGURED',
+    ),
+    (
+        'f2_503_dispatch_not_configured_released',
+        '|| Kind == "julius_start_not_configured"; // FLOW_START_503_BEFORE_CLAIM_NOT_CONFIGURED',
+        '|| Kind == "julius_start_not_configured" || Kind == "julius_dispatch_not_configured"; // FLOW_START_503_BEFORE_CLAIM_NOT_CONFIGURED',
+    ),
+    (
+        'f2_503_suffix_match_released',
+        '|| Kind == "julius_start_not_configured"; // FLOW_START_503_BEFORE_CLAIM_NOT_CONFIGURED',
+        '|| Kind == "julius_start_not_configured" || (Kind.size() > 9 && Kind.compare(Kind.size() - 9, 9, "_disabled") == 0) || (Kind.size() > 15 && Kind.compare(Kind.size() - 15, 15, "_not_configured") == 0); // FLOW_START_503_BEFORE_CLAIM_NOT_CONFIGURED',
+    ),
     # n1 (YUJI 2026-10-30): the pure moved-aside rules (flow KAT n1 cases).
     (
         'n1_quarantine_stamp_unchecked',
@@ -1179,8 +1221,8 @@ SUBSYSTEM_MUTATIONS = [
     # CLIENT LANE C5: the UE contract follows backend state only (source-checked by julius_endings_follow_backend_state).
     (
         "c5_subsystem_recorded_replay_allows_start",
-        "const FStartGate Gate = RecordedReplayGate(StartGateFor(ToStd(UiStateToken()), HasNativeSession(), bHasWorkflow, static_cast<EStartRecord>(StartRecord), true, TypedStd), bRecordedReplay); // SUBSYSTEM_RECORDED_REPLAY_REFUSES_START",
-        "(void)bRecordedReplay; const FStartGate Gate = StartGateFor(ToStd(UiStateToken()), HasNativeSession(), bHasWorkflow, static_cast<EStartRecord>(StartRecord), true, TypedStd); // SUBSYSTEM_RECORDED_REPLAY_REFUSES_START",
+        "const FStartGate Gate = RecordedReplayGate(StartGateFor(ToStd(UiStateToken()), HasNativeSession(), bHasWorkflow, static_cast<EStartRecord>(StartRecord), true, TypedStd, bQuarantined), bRecordedReplay); // SUBSYSTEM_RECORDED_REPLAY_REFUSES_START",
+        "(void)bRecordedReplay; const FStartGate Gate = StartGateFor(ToStd(UiStateToken()), HasNativeSession(), bHasWorkflow, static_cast<EStartRecord>(StartRecord), true, TypedStd, bQuarantined); // SUBSYSTEM_RECORDED_REPLAY_REFUSES_START",
     ),
     (
         "c5_subsystem_success_not_gated",
@@ -1356,8 +1398,8 @@ SUBSYSTEM_MUTATIONS = [
     ),
     (
         'n1_sub_save_overwrites_unreadable',
-        '&& QuarantineStartRecordFile(OnDisk).IsEmpty()) { return false; } // SUBSYSTEM_SAVE_NEVER_REPLACES_UNREADABLE',
-        '&& false) { return false; } // SUBSYSTEM_SAVE_NEVER_REPLACES_UNREADABLE',
+        'if (SavedStartRecordMayBeReplaced(ParseSavedStartRecord(true, bLoaded, ToStd(Existing), ToStd(StartRunId)).Read)) { continue; }',
+        'if (true) { continue; }',
     ),
     (
         'n1_sub_save_guard_record_only',
@@ -1366,8 +1408,29 @@ SUBSYSTEM_MUTATIONS = [
     ),
     (
         'n1_sub_save_writes_when_move_fails',
-        '&& QuarantineStartRecordFile(OnDisk).IsEmpty()) { return false; } // SUBSYSTEM_SAVE_NEVER_REPLACES_UNREADABLE',
-        '&& QuarantineStartRecordFile(OnDisk).IsEmpty()) { } // SUBSYSTEM_SAVE_NEVER_REPLACES_UNREADABLE',
+        '\t\treturn false; // SUBSYSTEM_SAVE_FAILS_AFTER_MOVE_ASIDE',
+        '\t\tif (Aside.IsEmpty()) { continue; } return false; // SUBSYSTEM_SAVE_FAILS_AFTER_MOVE_ASIDE',
+    ),
+    # Skywalker F1 2026-10-30: source-checked by julius_corrupt_record_moved_aside.
+    (
+        'f1_sub_save_sends_after_move_aside',
+        '\t\treturn false; // SUBSYSTEM_SAVE_FAILS_AFTER_MOVE_ASIDE',
+        '\t\tif (!Aside.IsEmpty()) { continue; } return false; // SUBSYSTEM_SAVE_FAILS_AFTER_MOVE_ASIDE',
+    ),
+    (
+        'f1_sub_save_falls_through_after_move',
+        '\t\treturn false; // SUBSYSTEM_SAVE_FAILS_AFTER_MOVE_ASIDE',
+        '\t\tcontinue; // SUBSYSTEM_SAVE_FAILS_AFTER_MOVE_ASIDE',
+    ),
+    (
+        'f1_sub_start_ignores_quarantine',
+        'const bool bQuarantined = StartRecordQuarantined(); // SUBSYSTEM_START_SCANS_QUARANTINE',
+        'const bool bQuarantined = false; // SUBSYSTEM_START_SCANS_QUARANTINE',
+    ),
+    (
+        'f1_sub_start_gate_drops_quarantine',
+        'true, TypedStd, bQuarantined), bRecordedReplay);',
+        'true, TypedStd), bRecordedReplay); (void)bQuarantined;',
     ),
     (
         'm6_subsystem_status_ending_dropped',

@@ -628,8 +628,10 @@ namespace WonderlandJuliusMissionFlow
 	/**
 	 * YUJI n1 2026-10-30: an unreadable saved record is evidence of a Start whose outcome is unknown. It is moved aside to
 	 * "<record path>.corrupt-<UTC stamp>" (never written over, never deleted), and Start stays blocked while any moved-aside
-	 * record exists, until an operator inspects and removes it. A /status that later shows the dispatch makes the record
-	 * Started (still blocked) and the new record is written next to the moved-aside one, never over it.
+	 * record exists, until an operator checks /status and archives it. Skywalker F1 2026-10-30: the ONLY exception is this
+	 * run's readable Started record (Start is then blocked as already started); NotStarted, None or any other record with a
+	 * moved-aside file present blocks Start (StartGateFor's bQuarantineExists, scanned fresh on every click). A save that
+	 * has to move a file aside writes nothing and fails, so that click sends nothing.
 	 */
 	inline constexpr std::string_view StartRecordQuarantineSuffix = ".corrupt-";
 	/** The moved-aside name; empty (do not move) when the stamp is empty or not only digits, 'T' and 'Z'. */
@@ -637,7 +639,8 @@ namespace WonderlandJuliusMissionFlow
 	/** A save may replace a file on disk only when it is absent or readable (Ok / OtherRun); never an unreadable one. */
 	bool SavedStartRecordMayBeReplaced(ESavedStartRead OnDisk);
 	/** The record a sync takes: this run's readable record; else Unreadable (blocked) while a moved-aside record exists;
-	 *  else the parse (None for absent or another run's, Unreadable for unreadable). */
+	 *  else the parse (None for absent or another run's, Unreadable for unreadable). This run's readable record is kept
+	 *  (key and trigger for /status reconcile); Start itself is blocked by StartGateFor's bQuarantineExists. */
 	EStartRecord StartRecordFromDisk(const FSavedStartRecord& Saved, bool bQuarantineExists);
 
 	/**
@@ -664,9 +667,11 @@ namespace WonderlandJuliusMissionFlow
 	 * THE ONE START DECISION. Offered only for an admitted run still waiting for the operator, with a paired session, no
 	 * bound workflow run and no recorded start (a transient NotStarted may be retried, by the same key). Sent only from an
 	 * explicit founder click with the exact typed phrase: never from open, poll, reconnect or restore.
+	 * Skywalker F1 / YUJI n1 2026-10-30: bQuarantineExists (any start.v1.corrupt-* file is present) blocks Start for every
+	 * record except this run's readable Started record. The subsystem passes it from a fresh directory scan.
 	 */
 	FStartGate StartGateFor(std::string_view WrapperToken, bool bHasSession, bool bHasWorkflowRun, EStartRecord Record,
-		bool bExplicitClick, std::string_view Typed);
+		bool bExplicitClick, std::string_view Typed, bool bQuarantineExists = false);
 
 	// ---------------------------------------------------------------------------------------------------------------
 	// MISSION STATUS (A-9 route GET {prefix}{wljRunId}/status, schema wonderland-mission-status.v1). The ONE answer the

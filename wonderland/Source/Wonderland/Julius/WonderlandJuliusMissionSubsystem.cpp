@@ -426,8 +426,13 @@ bool UWonderlandJuliusMissionSubsystem::SaveStartRecord() const
 		if (!IFileManager::Get().FileExists(*OnDisk)) { continue; }
 		FString Existing;
 		const bool bLoaded = FFileHelper::LoadFileToString(Existing, *OnDisk);
-		if (!SavedStartRecordMayBeReplaced(ParseSavedStartRecord(true, bLoaded, ToStd(Existing), ToStd(StartRunId)).Read)
-			&& QuarantineStartRecordFile(OnDisk).IsEmpty()) { return false; } // SUBSYSTEM_SAVE_NEVER_REPLACES_UNREADABLE
+		if (SavedStartRecordMayBeReplaced(ParseSavedStartRecord(true, bLoaded, ToStd(Existing), ToStd(StartRunId)).Read)) { continue; }
+		// Skywalker F1 2026-10-30: an unreadable file is moved aside (or left where it is when it cannot be moved) and this
+		// save writes nothing and FAILS, so a pre-send save never sends in the same click; the quarantine then blocks Start.
+		const FString Aside = QuarantineStartRecordFile(OnDisk); // SUBSYSTEM_SAVE_NEVER_REPLACES_UNREADABLE
+		UE_LOG(LogJuliusJ1, Warning, TEXT("{\"event\":\"start_record_save_moved_aside\",\"wlj_run_id\":\"%s\",\"moved_aside\":%s,\"saved\":false}"),
+			*StartRunId, Aside.IsEmpty() ? TEXT("false") : TEXT("true"));
+		return false; // SUBSYSTEM_SAVE_FAILS_AFTER_MOVE_ASIDE
 	}
 	const std::string Text = FormatSavedStartRecord(ToStd(StartRunId), ToStd(StartKey), static_cast<EStartRecord>(StartRecord),
 		ToStd(StartWorkflowRunId), ToStd(StartTriggerId));
@@ -680,7 +685,9 @@ bool UWonderlandJuliusMissionSubsystem::StartPaidMission(const FString& Typed)
 	const std::string TypedStd = ToStd(Typed);
 	// R1 $0 seam (Skywalker 2026-10-30): while a recorded run is replayed, Start is hard-refused.
 	const bool bRecordedReplay = Host->LiveFeed.Source() == ELiveSource::GithubActionsRecorded;
-	const FStartGate Gate = RecordedReplayGate(StartGateFor(ToStd(UiStateToken()), HasNativeSession(), bHasWorkflow, static_cast<EStartRecord>(StartRecord), true, TypedStd), bRecordedReplay); // SUBSYSTEM_RECORDED_REPLAY_REFUSES_START
+	// Skywalker F1 2026-10-30: the quarantine is scanned fresh on the click (SyncStartRecord returns early for the same run).
+	const bool bQuarantined = StartRecordQuarantined(); // SUBSYSTEM_START_SCANS_QUARANTINE
+	const FStartGate Gate = RecordedReplayGate(StartGateFor(ToStd(UiStateToken()), HasNativeSession(), bHasWorkflow, static_cast<EStartRecord>(StartRecord), true, TypedStd, bQuarantined), bRecordedReplay); // SUBSYSTEM_RECORDED_REPLAY_REFUSES_START
 	if (!Gate.bSend)
 	{
 		StartMessage = FString::Printf(TEXT("Not started: %s."), UTF8_TO_TCHAR(Gate.Why));
@@ -713,7 +720,9 @@ bool UWonderlandJuliusMissionSubsystem::StartPaidMission(const FString& Typed)
 	if (!SaveStartRecord()) // SUBSYSTEM_SAVE_BEFORE_SEND
 	{
 		StartRecord = RecordBeforeSend;
-		StartMessage = TEXT("Not started: the Start record could not be saved, so nothing was sent. Check the disk and press Start again.");
+		StartMessage = StartRecordQuarantined()
+			? TEXT("Not started: an unreadable Start record was moved aside (start.v1.corrupt-*), so nothing was sent. An operator must check /status and archive it.")
+			: TEXT("Not started: the Start record could not be saved, so nothing was sent. Check the disk and press Start again.");
 		UE_LOG(LogJuliusJ1, Warning, TEXT("{\"event\":\"start_record_save_failed\",\"wlj_run_id\":\"%s\",\"when\":\"before_send\",\"sent\":false}"), *StartRunId);
 		return false;
 	}
