@@ -14,13 +14,13 @@ const W = (p: string, c: string): void => { mkdirSync(dirname(p), { recursive: t
 beforeAll(() => {
   root = realpathSync(mkdtempSync(join(tmpdir(), 'e2r10u-')));
   repo = join(root, 'r'); mkdirSync(repo);
-  ({ base, head } = makeRepo(repo, { 'a.txt': '1\n', 'ok.mjs': 'process.exit(0)\n' }, { 'a.txt': '2\n' }, W));
+  ({ base, head } = makeRepo(repo, { 'a.txt': '1\n', 'ok.mjs': "import test from 'node:test'; test('ok', () => {});\n" }, { 'a.txt': '2\n' }, W));
 });
 afterAll(() => { rmSync(root, { recursive: true, force: true }); });
 
 async function run(names: string[], extra?: readonly string[]) {
   const runner = G.spawnVerifierRunner({ timeoutMs: 30_000 });
-  const spec = G.pinVerifierSpec({ testCommand: 'node ok.mjs', workspace: repo, base, ...(extra === undefined ? {} : { extraKnownNonEditTools: extra }) }) as G.E2VerifierSpec;
+  const spec = G.pinVerifierSpec({ testCommand: 'node ok.mjs', minTests: 1, workspace: repo, base, ...(extra === undefined ? {} : { extraKnownNonEditTools: extra }) }) as G.E2VerifierSpec;
   const sse = START + call('c0', 'edit_file') + names.map((n, i) => call(`u${i}`, n, {})).join('') + tail();
   const { lines, evidence } = await liveCapture(root, `u${Math.random()}.jsonl`, sse);
   return G.e2Gate({ streamLines: lines, anchor: anchorOf('workflow_output', evidence.finalHash), verifierSpec: spec, reexec: await G.recordVerifierReexec({ spec, cwd: repo, runner }),
@@ -41,7 +41,7 @@ describe('M3: unknown tools', () => {
   }, 60_000);
   it('extras cannot redeclare an edit tool, and must be non-empty strings', () => {
     for (const bad of [['edit_file'], [''], [3 as unknown as string], 'x' as unknown as string[]]) {
-      expect(G.pinVerifierSpec({ testCommand: 'node ok.mjs', workspace: repo, base, extraKnownNonEditTools: bad }), String(bad)).toEqual({ refused: 'spec_invalid' });
+      expect(G.pinVerifierSpec({ testCommand: 'node ok.mjs', minTests: 1, workspace: repo, base, extraKnownNonEditTools: bad }), String(bad)).toEqual({ refused: 'spec_invalid' });
     }
   });
 });

@@ -14,12 +14,15 @@ let root = '';
 const W = (p: string, c: string): void => { mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, c); };
 beforeAll(() => { root = realpathSync(mkdtempSync(join(tmpdir(), 'e2r10f-'))); });
 afterAll(() => { rmSync(root, { recursive: true, force: true }); });
-const T2 = "require('./h.js'); const test = require('node:test'); test('a', () => {}); test('b', () => {});\n";
+/* Round 7 R6-1/R6-3: a pinned test may not load coder code, so the coder-editable helper is DATA (h.json) that the base
+   test acts on: `exit` ends the process before any test, `print` writes coder-chosen text first. */
+const T2 = "const h = JSON.parse(require('node:fs').readFileSync(__dirname + '/h.json', 'utf8')); if (h.print) process.stdout.write(h.print); if (h.exit) process.exit(0);\nconst test = require('node:test'); test('a', () => {}); test('b', () => {});\n";
+const asData = (headH: string): string => JSON.stringify(headH === 'process.exit(0);\n' ? { exit: true } : headH === FAKE_SUMMARY ? { exit: true, print: '# tests 99\n# suites 0\n# pass 99\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 1\n' } : { v: 2 });
 const FAKE_SUMMARY = "process.stdout.write('# tests 99\\n# suites 0\\n# pass 99\\n# fail 0\\n# cancelled 0\\n# skipped 0\\n# todo 0\\n# duration_ms 1\\n'); process.exit(0);\n";
 
 async function gate(name: string, headH: string, opts: { minTests?: number; testCommand?: string } = {}): Promise<{ reasons: readonly string[]; spec: G.E2VerifierSpec; reexec: G.E2ReexecEvidence | null }> {
   const repo = join(root, name); mkdirSync(repo);
-  const { base, head } = makeRepo(repo, { 'a.txt': '1\n', 'h.js': 'module.exports = 1;\n', 't.test.js': T2 }, { 'a.txt': '2\n', 'h.js': headH }, W);
+  const { base, head } = makeRepo(repo, { 'a.txt': '1\n', 'h.json': '{"v":1}', 't.test.js': T2 }, { 'a.txt': '2\n', 'h.json': asData(headH) }, W);
   const runner = G.spawnVerifierRunner({ timeoutMs: 30_000 });
   const spec = G.pinVerifierSpec({ testCommand: opts.testCommand ?? 'node --test t.test.js', workspace: repo, base, ...(opts.minTests === undefined ? {} : { minTests: opts.minTests }) }) as G.E2VerifierSpec;
   expect('refused' in spec).toBe(false);
@@ -48,8 +51,9 @@ describe('R4-3: node --test vacuous passes', () => {
   it('the floor is max(1, mission minTests, base-pinned test count); a declared 0 cannot lower it', async () => {
     expect((await gate('m0', 'module.exports = 2;\n', { minTests: 0 })).spec.minTests).toEqual([2]);
     expect((await gate('m5', 'module.exports = 2;\n', { minTests: 5 })).reasons).toEqual(['e2_verifier_tests_below_minimum']);
-    const plain = await gate('plain', 'module.exports = 2;\n', { testCommand: 'node t.test.js', minTests: 0 });
-    expect(plain.spec.minTests).toEqual([null]);
+    /* Round 7 R6-3: plain `node <file>` needs a mission floor; with one it is enforced (was: floor null, exit code only). */
+    const plain = await gate('plain', 'module.exports = 2;\n', { testCommand: 'node t.test.js', minTests: 2 });
+    expect(plain.spec.minTests).toEqual([2]);
     expect(plain.reasons).toEqual([]);
     for (const bad of [-1, 1.5, Number.NaN, '3' as unknown as number]) {
       expect((G.pinVerifierSpec({ testCommand: 'node --test t.test.js', workspace: join(root, 'ok'), base: 'a'.repeat(40), minTests: bad }) as { refused?: string }).refused).toBe('spec_invalid');
@@ -66,8 +70,8 @@ describe('R4-3: node --test vacuous passes', () => {
   });
   it('mutation kills: a failure with passes above the floor, and a summary lost to an output overrun, are both refused', async () => {
     const repo = join(root, 'loop'); mkdirSync(repo);
-    const { base, head } = makeRepo(repo, { 'a.txt': '1\n', 't.test.js': "const test = require('node:test'); for (const n of [1, 2, 3]) test('t' + n, () => { if (n === 3 && require('./f.js')) throw new Error('x'); });\n", 'f.js': 'module.exports = false;\n' },
-      { 'a.txt': '2\n', 'f.js': 'module.exports = true;\n' }, W);
+    const { base, head } = makeRepo(repo, { 'a.txt': '1\n', 't.test.js': "const test = require('node:test'); for (const n of [1, 2, 3]) test('t' + n, () => { if (n === 3 && JSON.parse(require('node:fs').readFileSync(__dirname + '/f.json', 'utf8'))) throw new Error('x'); });\n", 'f.json': 'false' },
+      { 'a.txt': '2\n', 'f.json': 'true' }, W);
     const spec = G.pinVerifierSpec({ testCommand: 'node --test t.test.js', workspace: repo, base }) as G.E2VerifierSpec;
     expect(spec.minTests).toEqual([1]);
     const { lines, evidence } = await liveCapture(root, 'loop.jsonl', GOOD());

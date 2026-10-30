@@ -31,7 +31,7 @@ beforeAll(() => {
   repo = join(root, 'repo'); mkdirSync(repo);
   git(repo, 'init', '-q');
   writeFileSync(join(repo, 'a.txt'), 'one\n');
-  writeFileSync(join(repo, 'ok.mjs'), 'process.exit(0)\n'); // R3-2: the verifier script is pinned at base
+  writeFileSync(join(repo, 'ok.mjs'), "import test from 'node:test'; test('ok', () => {});\n"); // R3-2: the verifier script is pinned at base
   git(repo, 'add', '.'); git(repo, '-c', 'commit.gpgsign=false', 'commit', '-qm', 'a');
   base = git(repo, 'rev-parse', 'HEAD');
   writeFileSync(join(repo, 'a.txt'), 'two\n');
@@ -77,7 +77,7 @@ function rechain(lines: readonly string[], edit: (r: Record<string, unknown>) =>
 const chainAnchor = (l: readonly string[]) => anchorOf('ledger_hash', (verifyEvidenceChain(l) as { finalHash: string }).finalHash); // R3-1: simulates a writer who also controls the anchor source (recount tests)
 async function parts() {
   const runner = spawnVerifierRunner({ timeoutMs: 30_000 });
-  const verifierSpec = pinVerifierSpec({ testCommand: 'node ok.mjs', workspace: repo, base }) as E2VerifierSpec;
+  const verifierSpec = pinVerifierSpec({ testCommand: 'node ok.mjs', minTests: 1, workspace: repo, base }) as E2VerifierSpec;
   return {
     verifierSpec, reexec: await recordVerifierReexec({ spec: verifierSpec, cwd: repo, runner }),
     diff: await recordGitDiff({ base, head, cwd: repo, runner }),

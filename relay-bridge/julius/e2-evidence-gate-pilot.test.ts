@@ -49,7 +49,7 @@ beforeAll(() => {
   mkdirSync(repo);
   git(repo, 'init', '-q');
   writeFileSync(join(repo, 'a.txt'), 'one\n');
-  writeFileSync(join(repo, 'ok.cjs'), 'process.exit(0)\n'); // R3-2: the verifier script is pinned at base
+  writeFileSync(join(repo, 'ok.cjs'), "require('node:test')('ok', () => {});\n"); // R3-2: the verifier script is pinned at base
   writeFileSync(join(repo, 'old name.txt'), 'line\n'.repeat(20));
   git(repo, 'add', '.'); git(repo, '-c', 'commit.gpgsign=false', 'commit', '-qm', 'a');
   base = git(repo, 'rev-parse', 'HEAD');
@@ -104,7 +104,7 @@ function rechain(lines: readonly string[], edit: (r: Record<string, unknown>, i:
 }
 async function parts() {
   const runner = spawnVerifierRunner({ timeoutMs: 30_000 });
-  const verifierSpec = pinVerifierSpec({ testCommand: 'node ok.cjs', workspace: repo, base }) as E2VerifierSpec;
+  const verifierSpec = pinVerifierSpec({ testCommand: 'node ok.cjs', minTests: 1, workspace: repo, base }) as E2VerifierSpec;
   const reexec = await recordVerifierReexec({ spec: verifierSpec, cwd: repo, runner });
   const diff = await recordGitDiff({ base, head, cwd: repo, runner });
   return { runner, verifierSpec, reexec, diff, binding: { runId: REF.runId, base, head, workspace: repo }, modelId: 'grok-code-fast-1' };

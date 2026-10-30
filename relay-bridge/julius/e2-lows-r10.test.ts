@@ -15,9 +15,9 @@ let P: { verifierSpec: G.E2VerifierSpec; reexec: G.E2ReexecEvidence | null; diff
 beforeAll(async () => {
   root = realpathSync(mkdtempSync(join(tmpdir(), 'e2r10l-')));
   repo = join(root, 'repo'); mkdirSync(repo);
-  ({ base, head } = makeRepo(repo, { 'a.txt': 'one\n', 'ok.mjs': 'process.exit(0)\n' }, { 'a.txt': 'two\n' }, (p, c) => writeFileSync(p, c)));
+  ({ base, head } = makeRepo(repo, { 'a.txt': 'one\n', 'ok.mjs': "import test from 'node:test'; test('ok', () => {});\n" }, { 'a.txt': 'two\n' }, (p, c) => writeFileSync(p, c)));
   const runner = G.spawnVerifierRunner({ timeoutMs: 30_000 });
-  const verifierSpec = G.pinVerifierSpec({ testCommand: 'node ok.mjs', workspace: repo, base }) as G.E2VerifierSpec;
+  const verifierSpec = G.pinVerifierSpec({ testCommand: 'node ok.mjs', minTests: 1, workspace: repo, base }) as G.E2VerifierSpec;
   P = { verifierSpec, reexec: await G.recordVerifierReexec({ spec: verifierSpec, cwd: repo, runner }), diff: await G.recordGitDiff({ base, head, cwd: repo, runner }), modelId: MODEL };
 });
 afterAll(() => { rmSync(root, { recursive: true, force: true }); });

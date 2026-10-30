@@ -16,8 +16,11 @@ let root = '';
 const W = (p: string, c: string): void => { mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, c); };
 beforeAll(() => { root = realpathSync(mkdtempSync(join(tmpdir(), 'e2r11s-'))); });
 afterAll(() => { rmSync(root, { recursive: true, force: true }); });
-const LIB = 'module.exports = (x) => x + 1;\n';
-const T3 = "const t = require('node:test'); const a = require('assert'); const f = require('./lib.js');\nt('c0', () => a.strictEqual(f(0), 1)); t('c1', () => a.strictEqual(f(1), 2)); t('c2', () => a.strictEqual(f(2), 3));\n";
+/* Round 7 R6-1/R6-3: a pinned test may not load coder code (spec refusal), so the coder-editable "module" is now DATA
+   (lib.json) the base test acts on: `add` is the answer, `exitAt` exits inside the n-th call, `exitOnLoad` exits before
+   any test, `print` writes coder-chosen text first. The runtime checks see the same process behaviour as before. */
+const LIB = '{"add":1}';
+const T3 = "const t = require('node:test'); const a = require('assert'); const L = JSON.parse(require('node:fs').readFileSync(__dirname + '/lib.json', 'utf8'));\nif (L.print) process.stdout.write(L.print); if (L.exitOnLoad) process.exit(0);\nlet n = 0; const f = (x) => { if (L.exitAt && ++n === L.exitAt) process.exit(0); return x + L.add; };\nt('c0', () => a.strictEqual(f(0), 1)); t('c1', () => a.strictEqual(f(1), 2)); t('c2', () => a.strictEqual(f(2), 3));\n";
 
 async function gate(name: string, baseFiles: Record<string, string>, headFiles: Record<string, string>, testCommand = 'node --test t.test.js'): Promise<{ reasons: readonly string[]; reexec: G.E2ReexecEvidence | null }> {
   const repo = join(root, name); mkdirSync(repo);
@@ -33,18 +36,18 @@ async function gate(name: string, baseFiles: Record<string, string>, headFiles: 
 
 describe('R5-1: a file-level synthetic pass is not a test result', () => {
   it('control: an honest run with the t() alias passes (3/3)', async () => {
-    const r = await gate('ok', { 'lib.js': 'module.exports = () => 0;\n', 't.test.js': T3 }, { 'lib.js': LIB });
+    const r = await gate('ok', { 'lib.json': '{"add":0}', 't.test.js': T3 }, { 'lib.json': LIB });
     expect(r.reexec?.commands[0]?.testSummary).toEqual({ tests: 3, pass: 3, fail: 0 });
     expect(r.reasons).toEqual([]);
   }, 60_000);
   it('a coder module that calls process.exit(0) on import is refused', async () => {
-    const r = await gate('exit-import', { 'lib.js': LIB, 't.test.js': T3 }, { 'lib.js': 'process.exit(0);\n' });
+    const r = await gate('exit-import', { 'lib.json': LIB, 't.test.js': T3 }, { 'lib.json': '{"add":1,"exitOnLoad":true}' });
     expect(r.reexec?.commands[0]?.exitCode).toBe(0);
     expect(r.reexec?.commands[0]?.testSummary).toEqual({ tests: 1, pass: 1, fail: 0 });
     expect(r.reasons).toEqual(['e2_verifier_synthetic_result']);
   }, 60_000);
   it('a coder module that calls process.exit(0) inside the second test is refused', async () => {
-    const r = await gate('exit-mid', { 'lib.js': LIB, 't.test.js': T3 }, { 'lib.js': 'let n = 0; module.exports = (x) => { if (++n === 2) process.exit(0); return x + 1; };\n' });
+    const r = await gate('exit-mid', { 'lib.json': LIB, 't.test.js': T3 }, { 'lib.json': '{"add":1,"exitAt":2}' });
     expect(r.reasons).toEqual(['e2_verifier_synthetic_result']);
   }, 60_000);
   it('an empty pinned test file is refused', async () => {
@@ -53,13 +56,13 @@ describe('R5-1: a file-level synthetic pass is not a test result', () => {
     expect(r.reasons).toEqual(['e2_verifier_synthetic_result']);
   }, 60_000);
   it('a coder module that prints a fake TAP block and summary, then exits 0, is refused', async () => {
-    const fake = "process.stdout.write('ok 1 - c0\\nok 2 - c1\\nok 3 - c2\\n1..3\\n# tests 3\\n# suites 0\\n# pass 3\\n# fail 0\\n# cancelled 0\\n# skipped 0\\n# todo 0\\n# duration_ms 1\\n'); process.exit(0);\n";
-    const r = await gate('fake', { 'lib.js': LIB, 't.test.js': T3 }, { 'lib.js': fake });
+    const fake = 'ok 1 - c0\nok 2 - c1\nok 3 - c2\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 1\n';
+    const r = await gate('fake', { 'lib.json': LIB, 't.test.js': T3 }, { 'lib.json': JSON.stringify({ add: 1, exitOnLoad: true, print: fake }) });
     expect(r.reasons).toEqual(['e2_verifier_synthetic_result']);
   }, 60_000);
   it('the synthetic point is found for one file among several, and for a nested path', async () => {
-    const r = await gate('multi', { 'lib.js': LIB, 't.test.js': T3, 'test/u.test.js': "require('../lib.js'); require('node:test')('u', () => {});\n" },
-      { 'lib.js': 'let n = 0; module.exports = (x) => { if (++n === 1) process.exit(0); return x + 1; };\n' }, 'node --test test/u.test.js t.test.js');
+    const r = await gate('multi', { 'lib.json': LIB, 't.test.js': T3, 'test/u.test.js': "if (JSON.parse(require('node:fs').readFileSync(__dirname + '/../lib.json', 'utf8')).exitOnLoad) process.exit(0); require('node:test')('u', () => {});\n" },
+      { 'lib.json': '{"add":1,"exitOnLoad":true}' }, 'node --test test/u.test.js t.test.js');
     expect(r.reasons).toEqual(['e2_verifier_synthetic_result']);
   }, 60_000);
   it('unit: fileLevelPoints reads only top-level points named after the run files', () => {

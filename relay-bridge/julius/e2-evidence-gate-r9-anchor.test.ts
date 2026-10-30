@@ -13,13 +13,13 @@ let root = ''; let repo = ''; let base = ''; let head = '';
 beforeAll(() => {
   root = realpathSync(mkdtempSync(join(tmpdir(), 'e2r9a-')));
   repo = join(root, 'repo'); mkdirSync(repo);
-  ({ base, head } = makeRepo(repo, { 'a.txt': 'one\n', 'ok.mjs': 'process.exit(0)\n' }, { 'a.txt': 'two\n' }, (p, c) => writeFileSync(p, c)));
+  ({ base, head } = makeRepo(repo, { 'a.txt': 'one\n', 'ok.mjs': "import test from 'node:test'; test('ok', () => {});\n" }, { 'a.txt': 'two\n' }, (p, c) => writeFileSync(p, c)));
 });
 afterAll(() => { rmSync(root, { recursive: true, force: true }); });
 const reasons = (r: ReturnType<typeof G.e2Gate>): readonly string[] => (r.ok ? [] : r.reasons);
 async function parts() {
   const runner = G.spawnVerifierRunner({ timeoutMs: 30_000 });
-  const verifierSpec = G.pinVerifierSpec({ testCommand: 'node ok.mjs', workspace: repo, base }) as G.E2VerifierSpec;
+  const verifierSpec = G.pinVerifierSpec({ testCommand: 'node ok.mjs', minTests: 1, workspace: repo, base }) as G.E2VerifierSpec;
   return {
     verifierSpec, reexec: await G.recordVerifierReexec({ spec: verifierSpec, cwd: repo, runner }),
     diff: await G.recordGitDiff({ base, head, cwd: repo, runner }),

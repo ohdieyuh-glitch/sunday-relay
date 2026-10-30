@@ -1,6 +1,7 @@
 import { execFile, execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { isBuiltin } from 'node:module';
 import { tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, normalize as normalizePath, posix } from 'node:path';
 
@@ -115,7 +116,7 @@ function verifierShape(argv: readonly string[], workspace: string): { readonly f
     case 'node': {
       /* `node <file> [args to the script...]` (the script is pinned; its own arguments are its business) or `node --test <file>...`. */
       /* Round 5 R4-3: the spec inserts `--test-reporter=tap` so the run's summary can be parsed. */
-      const list = args[0] === '--test' ? args.slice(args[1] === '--test-reporter=tap' ? 2 : 1) : args.slice(0, 1);
+      const list = args[0] === '--test' ? args.slice(args[1] === '--test-reporter=tap' ? 2 : 1) : args[0] === '--test-reporter=tap' ? args.slice(1, 2) : args.slice(0, 1);
       if (list.length === 0 || list.some((x) => x.startsWith('-'))) return 'shape_not_allowed';
       const f = files(list); return f === null ? 'path_outside_workspace' : { files: f, configs: true };
     }
@@ -324,7 +325,7 @@ const TEST_POINT_TYPE = /^[ ]*type: 'test'$/gmu;
 export function analyzeTap(text: string, files: readonly string[], truncated: boolean): { summary: E2TestSummary | null; fileLevelPoints: string[]; testPoints: number; complete: boolean } {
   return { summary: parseNodeTestSummary(text), fileLevelPoints: fileLevelPoints(text, files), testPoints: (text.match(TEST_POINT_TYPE) ?? []).length, complete: !truncated };
 }
-const testFilesOf = (argv: readonly string[]): string[] => (argv[1] === '--test' ? argv.slice(2).filter((a) => !a.startsWith('--')) : []);
+const testFilesOf = (argv: readonly string[]): string[] => (argv[1] === '--test' ? argv.slice(2).filter((a) => !a.startsWith('--')) : argv[1] === '--test-reporter=tap' ? argv.slice(2, 3) : []);
 export interface E2ReexecEvidence {
   readonly label: typeof E2_JULIUS_LABEL | typeof E2_FAKE_LABEL; readonly cwd: string; readonly commands: readonly E2CommandRecord[];
   /** The mission spec the commands came from (null: the legacy free-argv form, refused by the gate). */
@@ -399,7 +400,10 @@ export interface E2VerifierSpec {
 }
 export type E2VerifierSpecRefusal =
   | 'spec_invalid' | 'spec_shell_syntax' | 'spec_base_invalid' | 'spec_workspace_invalid'
-  | E2VerifierShapeRefusal | 'spec_file_not_at_base' | 'spec_base_run_untrusted' | 'spec_base_tree_unreadable';
+  | E2VerifierShapeRefusal | 'spec_file_not_at_base' | 'spec_base_run_untrusted' | 'spec_base_tree_unreadable'
+  | E2PinnedSourceRefusal | 'spec_plain_node_no_floor';
+/** Round 7 R6-1/R6-3: why a pinned test/entry file's base content was refused by {@link scanPinnedSource}. */
+export type E2PinnedSourceRefusal = 'spec_pinned_test_imports_untrusted' | 'spec_pinned_test_dynamic_load' | 'spec_pinned_test_context_reference';
 const SPECS = new WeakSet<object>();
 /**
  * R4-3 / Round 6 R5-7: test()/it() calls in a base-pinned test file, a static count. Comments, string and template
@@ -423,6 +427,78 @@ export function stripJsNoise(src: string): string {
     out += c; i += 1;
   }
   return out;
+}
+/**
+ * Round 7 R6-1/R6-3 (Skywalker 70f96cfe): one linear pass that blanks comments and turns every string literal (and every
+ * template literal WITHOUT `${`) into a placeholder `§n§`, keeping its raw text in `lits`. A template with `${` keeps its
+ * expressions as code (lexed recursively), so a load hidden in one is still seen. Regex literals are not lexed (see the
+ * honest limit on {@link scanPinnedSource}).
+ */
+function lexJs(src: string): { readonly code: string; readonly lits: readonly string[] } {
+  const lits: string[] = [];
+  let i = 0;
+  const lex = (stopAtBrace: boolean): string => {
+    let out = ''; let depth = 0;
+    while (i < src.length) {
+      const c = src[i] as string; const d = src[i + 1];
+      if (stopAtBrace && c === '}' && depth === 0) { i += 1; return out; }
+      if (c === '{') depth += 1; else if (c === '}') depth -= 1;
+      if (c === '/' && d === '/') { const j = src.indexOf('\n', i); i = j === -1 ? src.length : j; out += ' '; continue; }
+      if (c === '/' && d === '*') { const j = src.indexOf('*/', i + 2); i = j === -1 ? src.length : j + 2; out += ' '; continue; }
+      if (c === "'" || c === '"') {
+        let j = i + 1;
+        while (j < src.length && src[j] !== c && src[j] !== '\n') j += src[j] === '\\' ? 2 : 1;
+        lits.push(src.slice(i + 1, Math.min(j, src.length))); out += ` §${lits.length - 1}§ `; i = j + 1; continue;
+      }
+      if (c === '`') {
+        let j = i + 1; let raw = ''; let interp = false; let parts = '';
+        while (j < src.length && src[j] !== '`') {
+          if (src[j] === '\\') { raw += src.slice(j, j + 2); j += 2; continue; }
+          if (src[j] === '$' && src[j + 1] === '{') { interp = true; i = j + 2; parts += ` ( ${lex(true)} ) `; j = i; continue; }
+          raw += src[j]; j += 1;
+        }
+        i = j + 1;
+        if (interp) out += ` \`${parts}\` `; else { lits.push(raw); out += ` §${lits.length - 1}§ `; }
+        continue;
+      }
+      out += c; i += 1;
+    }
+    return out;
+  };
+  return { code: lex(false), lits };
+}
+/** Built-ins that run other code (a child, a context, a worker, a loader, the v8 serializer the child protocol uses). */
+const EXECUTING_BUILTINS = new Set(['child_process', 'vm', 'worker_threads', 'module', 'v8', 'cluster', 'inspector', 'wasi', 'repl', 'sqlite', 'sea']);
+const trustedSpecifier = (raw: string): boolean => {
+  if (/[^a-z0-9_:/]/u.test(raw) || !isBuiltin(raw)) return false;
+  const name = raw.startsWith('node:') ? raw.slice(5) : raw;
+  return !EXECUTING_BUILTINS.has(name.split('/')[0] as string);
+};
+/**
+ * Round 7 R6-1/R6-3: the base content of a pinned test/entry file may load only non-executing Node built-ins (`node:x`
+ * or bare `x`), each by a literal specifier, and may not name NODE_TEST_CONTEXT. Anything else returns a refusal:
+ * a relative, absolute or package specifier, or an executing built-in: `spec_pinned_test_imports_untrusted`;
+ * `import(expr)`, `require` not called with one literal (alias, `.resolve`, computed), eval, Function, process.binding /
+ * dlopen / mainModule, module.require, `.constructor`: `spec_pinned_test_dynamic_load`; a NODE_TEST_CONTEXT or
+ * `NODE_TEST_` text anywhere, or a computed `env[...]`: `spec_pinned_test_context_reference`. Relative imports are refused
+ * rather than followed, so there is no transitive walk. HONEST LIMIT: this guards against a pinned file that loads coder
+ * code; it is a lexical scan, not a sandbox, and a deliberately obfuscated BASE file (regex literals that unbalance the
+ * lexer, `globalThis['ev' + 'al']`, node:test `run()` on coder files) is out of scope: base files are the mission's own.
+ */
+export function scanPinnedSource(src: string): E2PinnedSourceRefusal | null {
+  if (/NODE_TEST_/u.test(src)) return 'spec_pinned_test_context_reference';
+  const { code, lits } = lexJs(src);
+  if (/(?<![.\w$])env\s*\[(?!\s*§\d+§\s*\])/u.test(code)) return 'spec_pinned_test_context_reference';
+  const lit = (m: string | undefined): string => lits[Number(m)] as string;
+  for (const m of code.matchAll(/(?<![.\w$])(require|import)\b(\s*\(\s*§(\d+)§\s*\))?/gu)) {
+    const after = code.slice((m.index ?? 0) + m[0].length);
+    if (m[1] === 'import' && m[2] === undefined) { if (/^\s*\(/u.test(after)) return 'spec_pinned_test_dynamic_load'; continue; }
+    if (m[2] === undefined) return 'spec_pinned_test_dynamic_load';
+    if (!trustedSpecifier(lit(m[3]))) return 'spec_pinned_test_imports_untrusted';
+  }
+  for (const m of code.matchAll(/(?<![.\w$])(?:from|import)\s*§(\d+)§/gu)) if (!trustedSpecifier(lit(m[1]))) return 'spec_pinned_test_imports_untrusted';
+  if (/(?<![.\w$])(?:eval|Function)\b|\bprocess\s*\.\s*(?:binding|_linkedBinding|dlopen|mainModule)\b|(?<![.\w$])module\s*\.\s*(?:require|constructor|_load|_compile)\b|\.\s*constructor\b/u.test(code)) return 'spec_pinned_test_dynamic_load';
+  return null;
 }
 const SHELL_SYNTAX = /[;&|<>$`'"\\(){}[\]*?~!#=%^\r\n\t]/u;
 const gitBlob = (workspace: string, base: string, path: string): Buffer | null => {
@@ -470,9 +546,12 @@ export function pinVerifierSpec(input: E2MissionVerifierInput): E2VerifierSpec |
       a.push(...found);
     }
   }
+  /* Round 7 R6-3: plain `node <file>` only with a mission floor (minTests >= 1); it then runs with the TAP reporter and the
+     floor is enforced like node --test's (checked below, after the named shape/path/base refusals). */
   const commands = parsed.map((a) => {
     /* R4-3: node --test always reports TAP so the gate can read the summary. */
-    return Object.freeze(progName(a[0] as string) === 'node' && a[1] === '--test' && a[2] !== '--test-reporter=tap' ? [a[0] as string, '--test', '--test-reporter=tap', ...a.slice(2)] : a);
+    if (progName(a[0] as string) !== 'node' || a[1] === '--test-reporter=tap') return Object.freeze(a);
+    return Object.freeze(a[1] === '--test' ? (a[2] === '--test-reporter=tap' ? a : [a[0] as string, '--test', '--test-reporter=tap', ...a.slice(2)]) : [a[0] as string, '--test-reporter=tap', ...a.slice(1)]);
   });
   const pins: Record<string, string> = {};
   const minTests: (number | null)[] = [];
@@ -484,10 +563,13 @@ export function pinVerifierSpec(input: E2MissionVerifierInput): E2VerifierSpec |
     for (const f of shape.files) {
       const blob = gitBlob(input.workspace, input.base, f);
       if (blob === null) return no('spec_file_not_at_base');
+      const scanned = scanPinnedSource(blob.toString('utf8'));
+      if (scanned !== null) return no(scanned);
       pins[f] = sha256(blob);
       atBase += (stripJsNoise(blob.toString('utf8')).match(BASE_TEST_CALL) ?? []).length;
     }
-    minTests.push(argv[1] === '--test' ? Math.max(1, input.minTests ?? 0, atBase) : null);
+    if (argv[1] !== '--test' && !((input.minTests ?? 0) >= 1)) return no('spec_plain_node_no_floor');
+    minTests.push(Math.max(1, input.minTests ?? 0, atBase));
     if (shape.configs) for (const f of TOOL_CONFIGS) { const blob = gitBlob(input.workspace, input.base, f); pins[f] = blob === null ? 'absent' : sha256(blob); }
   }
   const spec: E2VerifierSpec = Object.freeze({ base: input.base, workspace: input.workspace, commands: Object.freeze(commands), pins: Object.freeze(pins), minTests: Object.freeze(minTests), baseRegistered: Object.freeze(commands.map(() => null)), extraKnownNonEditTools: Object.freeze([...(extra ?? [])]) });

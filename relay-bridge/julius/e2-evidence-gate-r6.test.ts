@@ -28,7 +28,7 @@ function makeRepo(name: string): { repo: string; base: string; head: string } {
   git(repo, 'init', '-q');
   writeFileSync(join(repo, 'a.txt'), Array.from({ length: 40 }, (_, i) => `line ${i}\n`).join(''));
   writeFileSync(join(repo, 'b.txt'), 'b\n');
-  writeFileSync(join(repo, 'ok.cjs'), 'process.exit(0)\n'); // R3-2: the verifier script is pinned at base
+  writeFileSync(join(repo, 'ok.cjs'), "require('node:test')('ok', () => {});\n"); // R3-2: the verifier script is pinned at base
   git(repo, 'add', '.'); git(repo, '-c', 'commit.gpgsign=false', 'commit', '-qm', 'a');
   const base = git(repo, 'rev-parse', 'HEAD');
   writeFileSync(join(repo, 'a.txt'), Array.from({ length: 40 }, (_, i) => (i === 5 || i === 20 ? `changed ${i}\n` : `line ${i}\n`)).join(''));
@@ -36,8 +36,8 @@ function makeRepo(name: string): { repo: string; base: string; head: string } {
   git(repo, '-c', 'commit.gpgsign=false', 'commit', '-qam', 'b');
   return { repo, base, head: git(repo, 'rev-parse', 'HEAD') };
 }
-const spec = (r: { repo: string; base: string }): E2VerifierSpec => pinVerifierSpec({ testCommand: 'node ok.cjs', workspace: r.repo, base: r.base }) as E2VerifierSpec;
-beforeAll(() => { root = realpathSync(mkdtempSync(join(tmpdir(), 'e2r6-'))); writeFileSync(join(root, 'ok.cjs'), 'process.exit(0)\n'); });
+const spec = (r: { repo: string; base: string }): E2VerifierSpec => pinVerifierSpec({ testCommand: 'node ok.cjs', minTests: 1, workspace: r.repo, base: r.base }) as E2VerifierSpec;
+beforeAll(() => { root = realpathSync(mkdtempSync(join(tmpdir(), 'e2r6-'))); writeFileSync(join(root, 'ok.cjs'), "require('node:test')('ok', () => {});\n"); });
 afterAll(() => { rmSync(root, { recursive: true, force: true }); });
 
 describe('PILOT 43b93a4e M-8: the diff bytes do not depend on repository config or attributes', () => {

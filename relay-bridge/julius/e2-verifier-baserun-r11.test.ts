@@ -36,20 +36,17 @@ async function gate(name: string, baseFiles: Record<string, string>, headFiles: 
 }
 
 describe('R5-1: forged or missing test registration', () => {
-  it("PILOT: a module that writes a fake summary to /proc/<ppid>/fd/1 and exits 0 is refused", async () => {
-    const lib = `try { require('fs').writeFileSync('/proc/' + process.ppid + '/fd/1', '${SUMMARY3}'); } catch {} process.exit(0);\n`;
-    const r = await gate('proc', { 'lib.js': LIB, 't.test.js': T3 }, { 'lib.js': lib });
-    expect(r.reasons).toContain('e2_verifier_synthetic_result');
-  }, 60_000);
-  it('a detached escapee that appends 80 KiB and a forged TAP block after node\'s summary is refused (or cannot reach the pipe)', async () => {
-    const forged = FORGED.replace(/\\n/gu, '\n');
-    const writer = `const fs = require('fs'); setTimeout(() => { fs.writeSync(1, '#'.repeat(80 * 1024) + '\\n' + ${JSON.stringify(forged)}); process.exit(0); }, 300);\n`;
-    const lib = "const { spawn } = require('child_process'); const fs = require('fs'); const fd = fs.openSync('/proc/' + process.ppid + '/fd/1', 'w');\nspawn(process.execPath, [__dirname + '/w.js'], { detached: true, stdio: ['ignore', fd, 'ignore'] }).unref(); process.exit(0);\n";
-    const r = await gate('escapee', { 'lib.js': LIB, 't.test.js': T3 }, { 'lib.js': lib, 'w.js': writer });
-    /* Fact (box, Linux): the runner's stdout is a socket, so reopening /proc/<ppid>/fd/1 fails with ENXIO; the module
-       throws and the run fails. Kept as a regression: if the reopen ever works, the whole-stdout checks must refuse. */
-    expect(r.reasons).toContain('e2_verifier_synthetic_result');
-  }, 60_000);
+  /* Round 7 R6-1/R6-3: both forgeries need the pinned test to LOAD coder code; the spec now refuses that before anything
+     runs. The whole-stdout checks they exercised stay (defence in depth) and keep their unit test below. */
+  it("PILOT: a module that writes a fake summary to /proc/<ppid>/fd/1 and exits 0 is refused (now at spec time)", () => {
+    const repo = join(root, 'proc'); mkdirSync(repo);
+    const { base } = makeRepo(repo, { 'a.txt': '1\n', 'lib.js': LIB, 't.test.js': T3 }, { 'a.txt': '2\n' }, W);
+    expect(G.pinVerifierSpec({ testCommand: 'node --test t.test.js', workspace: repo, base })).toEqual({ refused: 'spec_pinned_test_imports_untrusted' });
+  });
+  it('a detached escapee that appends 80 KiB and a forged TAP block is refused (now at spec time: child_process is an executing built-in)', () => {
+    expect(G.scanPinnedSource("const { spawn } = require('child_process'); spawn(process.execPath, ['w.js'], { detached: true });\n")).toBe('spec_pinned_test_imports_untrusted');
+    expect(FORGED.length).toBeGreaterThan(0);
+  });
   it('unit: # tests must equal the type:test points, and stdout over the cap is refused', () => {
     const ok = "ok 1 - c0\n  ---\n  type: 'test'\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 1\n";
     expect(G.analyzeTap(ok, ['t.test.js'], false)).toMatchObject({ testPoints: 1, fileLevelPoints: [], complete: true });
@@ -57,17 +54,18 @@ describe('R5-1: forged or missing test registration', () => {
     expect(G.analyzeTap(ok, ['t.test.js'], true).complete).toBe(false);
   });
   it('base run: tests defined in a coder-editable module (PILOT R5-4a shape) get the floor that registered at base', async () => {
-    const T = "const t = require('node:test'); for (const c of require('./cases.js')) t(c.n, () => require('assert').strictEqual(require('./lib.js')(c.x), c.x + 1));\n";
-    const cases = (n: number): string => `module.exports = ${JSON.stringify(Array.from({ length: n }, (_, i) => ({ n: `c${i}`, x: i })))};\n`;
-    const r = await gate('cases', { 'lib.js': 'module.exports = () => 0;\n', 'cases.js': cases(5), 't.test.js': T }, { 'lib.js': LIB, 'cases.js': cases(1) }, { baseRun: true });
+    /* Round 7: the coder-editable input is now data read with node:fs (a pinned test may not load coder code). */
+    const T = "const t = require('node:test'); const fs = require('node:fs'); for (const c of JSON.parse(fs.readFileSync(__dirname + '/cases.json', 'utf8'))) t(c.n, () => require('assert').strictEqual(c.y, c.x + 1));\n";
+    const cases = (n: number, ok = true): string => JSON.stringify(Array.from({ length: n }, (_, i) => ({ n: `c${i}`, x: i, y: ok ? i + 1 : 0 })));
+    const r = await gate('cases', { 'cases.json': cases(5, false), 't.test.js': T }, { 'cases.json': cases(1) }, { baseRun: true });
     expect(r.spec.minTests).toEqual([5]);
     expect(r.spec.baseRegistered).toEqual([5]);
     expect(r.reasons).toEqual(['e2_verifier_tests_below_minimum']);
-    const honest = await gate('cases-ok', { 'lib.js': 'module.exports = () => 0;\n', 'cases.js': cases(5), 't.test.js': T }, { 'lib.js': LIB }, { baseRun: true });
+    const honest = await gate('cases-ok', { 'cases.json': cases(5, false), 't.test.js': T }, { 'cases.json': cases(5) }, { baseRun: true });
     expect(honest.reasons).toEqual([]);
   }, 120_000);
   it('base run: a base file that cannot load at base (no registered tests) falls back to the static/mission floor and records null', async () => {
-    const T = "const test = require('node:test'); const d = require('./out.json'); test('a', () => {}); test('b', () => {});\n";
+    const T = "const test = require('node:test'); const d = JSON.parse(require('node:fs').readFileSync(__dirname + '/out.json', 'utf8')); test('a', () => {}); test('b', () => {});\n";
     const r = await gate('noload', { 't.test.js': T }, { 'out.json': '{}' }, { baseRun: true });
     expect(r.spec.baseRegistered).toEqual([null]);
     expect(r.spec.minTests).toEqual([2]);
