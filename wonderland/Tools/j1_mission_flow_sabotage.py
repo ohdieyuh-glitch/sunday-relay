@@ -415,27 +415,27 @@ MUTATIONS = [
     ),
     (
         'live_roles_open',
-        'if (!LiveWord(Field(Node, "role"), Event.Role) || !LiveRole(Event.Role)) { return Out; } // FLOW_LIVE_ROLES_ARE_CLOSED',
-        'if (!LiveWord(Field(Node, "role"), Event.Role)) { return Out; } // FLOW_LIVE_ROLES_ARE_CLOSED',
+        'if (!LiveWord(Field(Node, "role"), Event.Role) || !LiveRole(Event.Role)) { return false; } // FLOW_LIVE_ROLES_ARE_CLOSED',
+        'if (!LiveWord(Field(Node, "role"), Event.Role)) { return false; } // FLOW_LIVE_ROLES_ARE_CLOSED',
     ),
     (
         'live_task_types_open',
-        'Event.TaskType) || !LiveTaskType(Event.TaskType)) { return Out; }',
-        'Event.TaskType)) { return Out; }',
+        'Event.TaskType) || !LiveTaskType(Event.TaskType)) { return false; }',
+        'Event.TaskType)) { return false; }',
     ),
     (
         'live_task_states_open',
-        'Event.State) || !LiveTaskState(Event.State)) { return Out; }',
-        'Event.State)) { return Out; }',
+        'Event.State) || !LiveTaskState(Event.State)) { return false; }',
+        'Event.State)) { return false; }',
     ),
     (
         'live_repair_cycle_unbounded',
-        'Event.RepairCycle)) { return Out; } // FLOW_LIVE_REPAIR_CYCLE_BOUND',
-        'Event.RepairCycle) && false) { return Out; } // FLOW_LIVE_REPAIR_CYCLE_BOUND',
+        'Event.RepairCycle)) { return false; } // FLOW_LIVE_REPAIR_CYCLE_BOUND',
+        'Event.RepairCycle) && false) { return false; } // FLOW_LIVE_REPAIR_CYCLE_BOUND',
     ),
     (
         'live_phases_not_samples',
-        'if (!LiveBool(Field(Node, "sampled"), bSampled) || !bSampled) { return Out; } // FLOW_LIVE_PHASES_ARE_SAMPLES',
+        'if (!LiveBool(Field(Node, "sampled"), bSampled) || !bSampled) { return false; } // FLOW_LIVE_PHASES_ARE_SAMPLES',
         '// FLOW_LIVE_PHASES_ARE_SAMPLES',
     ),
     (
@@ -460,13 +460,13 @@ MUTATIONS = [
     ),
     (
         "live_markers_open",
-        'if (!IsExactString(Marker, "idle") && !IsExactString(Marker, "ended")) { return Out; } // FLOW_LIVE_MARKERS_ARE_CLOSED',
+        'if (!IsExactString(Marker, "idle") && !IsExactString(Marker, "ended")) { return false; } // FLOW_LIVE_MARKERS_ARE_CLOSED',
         "// FLOW_LIVE_MARKERS_ARE_CLOSED",
     ),
     (
         "live_reset_appends",
-        "EventList.clear();",
-        "// reset keeps the old events",
+        "*this = FLiveFeed(); // FLOW_LIVE_RESET_CLEARS_LATCHES",
+        "// reset keeps the old events (FLOW_LIVE_RESET_CLEARS_LATCHES)",
     ),
     (
         "live_now_running_hidden",
@@ -760,6 +760,53 @@ MUTATIONS = [
         "Out.Record = R::NotStarted; // FLOW_RECONCILE_NOTHING_HELD_RELEASES",
         "Out.Record = Waiting; // FLOW_RECONCILE_NOTHING_HELD_RELEASES",
     ),
+    # CLIENT LANE C3 (founder ruling 2026-10-30: a seq gap or reset:true clears the latches and resyncs from /status;
+    # never a stale "running"; live_view_unconfigured is a known reason; one bad event field never drops the page).
+    (
+        "c3_bad_event_drops_page",
+        "else { Read.SkippedSeqs.push_back(Event.Seq); } // FLOW_LIVE_BAD_EVENT_SKIPPED_NOT_PAGE",
+        "else { return Out; } // FLOW_LIVE_BAD_EVENT_SKIPPED_NOT_PAGE",
+    ),
+    (
+        "c3_unconfigured_reason_refused",
+        "|| S == \"live_view_unconfigured\"; // FLOW_LIVE_REASON_VIEW_UNCONFIGURED",
+        "; // FLOW_LIVE_REASON_VIEW_UNCONFIGURED",
+    ),
+    (
+        "c3_reset_keeps_latches",
+        "*this = FLiveFeed(); // FLOW_LIVE_RESET_CLEARS_LATCHES",
+        "EventList.clear(); LastSeq = -1; CursorNow.clear(); // FLOW_LIVE_RESET_CLEARS_LATCHES",
+    ),
+    (
+        "c3_gap_not_detected",
+        "if (Seq != NextSeq) { bGap = true; break; } // FLOW_LIVE_SEQ_GAP_DETECTED",
+        "if (Seq != NextSeq) { NextSeq = Seq + 1; continue; } // FLOW_LIVE_SEQ_GAP_DETECTED",
+    ),
+    (
+        "c3_gap_keeps_latches",
+        "*this = FLiveFeed(); // FLOW_LIVE_GAP_CLEARS_LATCHES",
+        "EventList.clear(); CursorNow.clear(); // FLOW_LIVE_GAP_CLEARS_LATCHES",
+    ),
+    (
+        "c3_resync_shows_old_stream",
+        "return Out; // FLOW_LIVE_RESYNC_SHOWS_NOTHING_OLD",
+        "// FLOW_LIVE_RESYNC_SHOWS_NOTHING_OLD",
+    ),
+    (
+        "c3_stale_is_live",
+        "Out.bLive = Feed.IsLive() && !bStaleView; // FLOW_LIVE_STALE_IS_NEVER_LIVE",
+        "Out.bLive = Feed.IsLive(); // FLOW_LIVE_STALE_IS_NEVER_LIVE",
+    ),
+    (
+        "c3_silence_not_stale",
+        "const bool bStaleView = Feed.IsStale() || (Feed.IsLive() && MsSinceLastRead > LiveNoReadAfterMs); // FLOW_LIVE_SILENCE_IS_STALE",
+        "const bool bStaleView = Feed.IsStale(); // FLOW_LIVE_SILENCE_IS_STALE",
+    ),
+    (
+        "c3_finished_silence_is_stale",
+        "const bool bStaleView = Feed.IsStale() || (Feed.IsLive() && MsSinceLastRead > LiveNoReadAfterMs); // FLOW_LIVE_SILENCE_IS_STALE",
+        "const bool bStaleView = Feed.IsStale() || MsSinceLastRead > LiveNoReadAfterMs; // FLOW_LIVE_SILENCE_IS_STALE",
+    ),
 ]
 
 
@@ -803,6 +850,11 @@ SUBSYSTEM_MUTATIONS = [
         "c2_status_read_auto_resends_start",
         "SaveStartRecord(); // SUBSYSTEM_STATUS_READ_NEVER_SENDS",
         "SaveStartRecord(); if (StartRecord == 4) { (void)StartPaidMission(TEXT(\"RUN LIVE MISSION\")); } // SUBSYSTEM_STATUS_READ_NEVER_SENDS",
+    ),
+    (
+        "c3_resync_does_not_read_status",
+        "NextStatusReadAtUtcMs = 0; // SUBSYSTEM_RESYNC_READS_STATUS",
+        "// SUBSYSTEM_RESYNC_READS_STATUS",
     ),
 ]
 

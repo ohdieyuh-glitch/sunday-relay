@@ -1095,6 +1095,22 @@ void UWonderlandJuliusMissionSubsystem::CompleteLiveRead(
 	bLiveDrained = Read.Events.empty();
 	LiveReadFailures = 0;
 	LastLiveOkUtcMs = Host->Clock.NowUtcMs();
+	if (const char* Resync = Host->LiveFeed.TakeResyncRequest())
+	{
+		// Founder ruling 2026-10-30: a seq gap or reset:true cleared every latch; /status is read now (it decides the
+		// state) and after a gap the stream replays from the start (the cursor was dropped). Nothing old is shown meanwhile.
+		NextStatusReadAtUtcMs = 0; // SUBSYSTEM_RESYNC_READS_STATUS
+		bStatusStopped = false;
+		NextLiveReadAtUtcMs = 0;
+		bLiveDrained = false;
+		UE_LOG(LogJuliusJ1, Display, TEXT("{\"event\":\"live_resync\",\"wlj_run_id\":\"%s\",\"reason\":\"%s\",\"events_skipped\":%d}"),
+			*ForRunId, UTF8_TO_TCHAR(Resync), static_cast<int32>(Read.SkippedSeqs.size()));
+	}
+	else if (!Read.SkippedSeqs.empty())
+	{
+		UE_LOG(LogJuliusJ1, Display, TEXT("{\"event\":\"live_events_skipped\",\"wlj_run_id\":\"%s\",\"events_skipped\":%d}"),
+			*ForRunId, static_cast<int32>(Read.SkippedSeqs.size()));
+	}
 	if (bNew || Read.bStale)
 	{
 		// Evidence line: which GitHub Actions run this client is reading, and what the server says about it.

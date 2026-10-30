@@ -316,6 +316,22 @@ namespace
 		return true;
 	}
 
+	/** The UE subsystem's source text (it cannot be compiled here; a few founder rules are checked as text). */
+	std::string SubsystemSource()
+	{
+		namespace fs = std::filesystem;
+		for (fs::path Dir = fs::current_path();; Dir = Dir.parent_path())
+		{
+			const fs::path File = Dir / "wonderland/Source/Wonderland/Julius/WonderlandJuliusMissionSubsystem.cpp";
+			if (fs::is_regular_file(File))
+			{
+				std::ifstream In(File);
+				return std::string((std::istreambuf_iterator<char>(In)), std::istreambuf_iterator<char>());
+			}
+			if (!Dir.has_parent_path() || Dir.parent_path() == Dir) { return std::string(); }
+		}
+	}
+
 	/**
 	 * Founder ruling 2026-10-30 (no automatic resend path): in the Julius subsystem the Start request is built in ONE
 	 * place, StartPaidMission, and nothing in the subsystem calls StartPaidMission (only the founder's click, from the
@@ -323,16 +339,8 @@ namespace
 	 */
 	bool CheckNoAutomaticStartResend()
 	{
-		namespace fs = std::filesystem;
-		fs::path Root;
-		for (fs::path Dir = fs::current_path();; Dir = Dir.parent_path())
-		{
-			if (fs::is_regular_file(Dir / "wonderland/Source/Wonderland/Julius/WonderlandJuliusMissionSubsystem.cpp")) { Root = Dir; break; }
-			if (!Dir.has_parent_path() || Dir.parent_path() == Dir) { break; }
-		}
-		if (Root.empty()) { std::printf("START RESEND CHECK FAIL: subsystem source not found\n"); return false; }
-		std::ifstream In(Root / "wonderland/Source/Wonderland/Julius/WonderlandJuliusMissionSubsystem.cpp");
-		const std::string Text((std::istreambuf_iterator<char>(In)), std::istreambuf_iterator<char>());
+		const std::string Text = SubsystemSource();
+		if (Text.empty()) { std::printf("START RESEND CHECK FAIL: subsystem source not found\n"); return false; }
 		auto Count = [&Text](const std::string& Needle)
 		{
 			int N = 0;
@@ -345,6 +353,30 @@ namespace
 		const bool bOk = Def != std::string::npos && End != std::string::npos && Count("StartRequest(") == 1 && Send > Def && Send < End
 			&& Count("StartPaidMission(") == 1;
 		if (!bOk) { std::printf("START RESEND CHECK FAIL: a Start is built or sent outside the founder's click\n"); }
+		return bOk;
+	}
+
+	/**
+	 * C3 (founder ruling 2026-10-30): a resync request from the live feed (seq gap or reset:true) makes the subsystem read
+	 * /status at once and restart the stream read, inside CompleteLiveRead, and never sends a Start there.
+	 */
+	bool CheckLiveResyncReadsStatus()
+	{
+		const std::string Text = SubsystemSource();
+		const std::size_t Def = Text.find("void UWonderlandJuliusMissionSubsystem::CompleteLiveRead(");
+		const std::size_t End = Def == std::string::npos ? std::string::npos : Text.find("\n}\n", Def);
+		const std::size_t Take = Text.find("TakeResyncRequest()", Def == std::string::npos ? 0 : Def);
+		if (Def == std::string::npos || End == std::string::npos || Take == std::string::npos || Take > End)
+		{
+			std::printf("LIVE RESYNC CHECK FAIL: CompleteLiveRead does not take the resync request\n");
+			return false;
+		}
+		const std::string Body = Text.substr(Take, End - Take);
+		const std::size_t Close = Body.find("\n\t}");
+		const std::string Branch = Body.substr(0, Close);
+		const bool bOk = Branch.find("NextStatusReadAtUtcMs = 0;") != std::string::npos && Branch.find("bStatusStopped = false;") != std::string::npos
+			&& Branch.find("NextLiveReadAtUtcMs = 0;") != std::string::npos && Branch.find("StartPaidMission(") == std::string::npos && Branch.find("StartRequest(") == std::string::npos;
+		if (!bOk) { std::printf("LIVE RESYNC CHECK FAIL: a resync does not re-read /status and the stream at once\n"); }
 		return bOk;
 	}
 
@@ -1269,6 +1301,7 @@ int main()
 
 	Expect(CheckJuliusModuleRootIncludes(), "julius_no_bare_module_root_include");
 	Expect(CheckNoAutomaticStartResend(), "julius_no_automatic_start_resend");
+	Expect(CheckLiveResyncReadsStatus(), "julius_live_resync_reads_status");
 	Expect(CheckPlatformCryptoTypesInclude(), "platform_crypto_result_includes_types");
 
 	if (Failures == 0)

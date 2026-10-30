@@ -435,12 +435,18 @@ namespace WonderlandJuliusMissionFlow
 		std::string Next;
 		/** The server did not know our cursor's epoch: this page restarts from seq 1. */
 		bool bReset = false;
+		/** Events whose seq was readable but whose other fields were not: skipped (never shown, never latched). */
+		std::vector<std::int64_t> SkippedSeqs;
 	};
 
 	/** The bridge sends at most this many events per /events page (contract with MAIN JULIUS). */
 	inline constexpr std::size_t LiveMaxEventsPerPage = 500;
 
-	/** Strict: a malformed field anywhere fails the whole read closed (no partial, no invented event). */
+	/**
+	 * Strict on the envelope: a malformed top-level field fails the whole read closed. Per event (founder ruling
+	 * 2026-10-30): an event whose seq is readable but whose other fields are not is skipped and named in SkippedSeqs
+	 * (never shown, never latched); a non-object event or an unreadable seq still fails the page (order is unknowable).
+	 */
 	FLiveRead ParseLiveEvents(std::string_view WljRunId, int HttpStatus, std::string_view Json);
 
 	/** One run's stream: events de-duplicated by seq, oldest first, capped; the cursor resumes after a reconnect. */
@@ -480,6 +486,20 @@ namespace WonderlandJuliusMissionFlow
 		const std::string& FirstFailure() const { return FirstFailureName; }
 		/** The newest non-marker phase sample (Role empty when none yet). */
 		const FLiveEvent& LastTaskPhase() const { return LastTaskPhaseEvent; }
+		/**
+		 * RESYNC (founder ruling 2026-10-30): a seq gap or a server reset:true clears every latch. A gap also drops the
+		 * stream and its cursor (the next read replays from the start) and shows nothing old meanwhile. Either way the
+		 * owner must read /status before trusting anything: TakeResyncRequest returns the reason once.
+		 */
+		bool Resyncing() const { return bResyncing; }
+		const char* TakeResyncRequest()
+		{
+			const char* Why = ResyncWhy;
+			ResyncWhy = nullptr;
+			return Why;
+		}
+		/** Seqs skipped as unreadable since the feed began (kept for the log). */
+		std::size_t SkippedEvents() const { return SkippedCount; }
 
 	private:
 		bool bHasRead = false;
@@ -504,6 +524,9 @@ namespace WonderlandJuliusMissionFlow
 		bool bGradeJobFinished = false;
 		std::string FirstFailureName;
 		FLiveEvent LastTaskPhaseEvent;
+		bool bResyncing = false;
+		const char* ResyncWhy = nullptr;
+		std::size_t SkippedCount = 0;
 		void Latch(const FLiveEvent& Event);
 	};
 

@@ -1349,7 +1349,8 @@ namespace WonderlandJuliusMissionFlow
 		}
 		bool LiveReason(const std::string& S)
 		{
-			return S == "not_dispatched" || S == "run_unbound" || S == "run_mismatch" || S == "github_unreadable";
+			return S == "not_dispatched" || S == "run_unbound" || S == "run_mismatch" || S == "github_unreadable"
+				|| S == "live_view_unconfigured"; // FLOW_LIVE_REASON_VIEW_UNCONFIGURED
 		}
 	}
 
@@ -1406,23 +1407,23 @@ namespace WonderlandJuliusMissionFlow
 		const FJson* Events = Field(Root, "events");
 		if (Events == nullptr || Events->Kind != EJsonKind::Array || Events->Array.size() > LiveMaxEventsPerPage) { return Out; }
 		if (Read.Source == ELiveSource::None && !Events->Array.empty()) { return Out; }
-		for (const FJson& Node : Events->Array)
+		// One bad field must not drop a whole page (founder ruling 2026-10-30): an event whose seq is readable but whose
+		// other fields are not is SKIPPED (named in SkippedSeqs, never shown, never latched); an unreadable seq or a
+		// non-object fails the page, because the seq is what orders and resumes the stream.
+		const auto ReadEvent = [](const FJson& Node, FLiveEvent& Event) -> bool
 		{
-			if (Node.Kind != EJsonKind::Object) { return Out; }
-			FLiveEvent Event;
-			if (!LiveInt(Field(Node, "seq"), 0, INT64_MAX, Event.Seq)) { return Out; }
 			const FJson* At = Field(Node, "at");
-			if (At != nullptr && At->Kind != EJsonKind::Null && !LivePlainText(At, 40, false, Event.At)) { return Out; }
-			if (At == nullptr) { return Out; }
+			if (At != nullptr && At->Kind != EJsonKind::Null && !LivePlainText(At, 40, false, Event.At)) { return false; }
+			if (At == nullptr) { return false; }
 			const FJson* Kind = Field(Node, "kind");
 			if (IsExactString(Kind, "job") || IsExactString(Kind, "step"))
 			{
 				Event.Kind = Kind->Text;
-				if (!LivePlainText(Field(Node, "job"), 120, false, Event.Job)) { return Out; }
-				if (!LivePlainText(Field(Node, "name"), 120, false, Event.Name)) { return Out; }
-				if (!LiveWord(Field(Node, "status"), Event.Status) || !LiveStatusWord(Event.Status)) { return Out; }
+				if (!LivePlainText(Field(Node, "job"), 120, false, Event.Job)) { return false; }
+				if (!LivePlainText(Field(Node, "name"), 120, false, Event.Name)) { return false; }
+				if (!LiveWord(Field(Node, "status"), Event.Status) || !LiveStatusWord(Event.Status)) { return false; }
 				const FJson* EventConclusion = Field(Node, "conclusion");
-				if (EventConclusion != nullptr && EventConclusion->Kind != EJsonKind::Null && !LiveWord(EventConclusion, Event.Conclusion)) { return Out; }
+				if (EventConclusion != nullptr && EventConclusion->Kind != EJsonKind::Null && !LiveWord(EventConclusion, Event.Conclusion)) { return false; }
 			}
 			else if (IsExactString(Kind, "phase"))
 			{
@@ -1431,33 +1432,40 @@ namespace WonderlandJuliusMissionFlow
 				if (Marker != nullptr && Marker->Kind != EJsonKind::Null)
 				{
 					// A marker sample (idle between tasks, or the publisher ended) carries no task fields at all.
-					if (!IsExactString(Marker, "idle") && !IsExactString(Marker, "ended")) { return Out; } // FLOW_LIVE_MARKERS_ARE_CLOSED
+					if (!IsExactString(Marker, "idle") && !IsExactString(Marker, "ended")) { return false; } // FLOW_LIVE_MARKERS_ARE_CLOSED
 					Event.Marker = Marker->Text;
 					for (const char* Name : {"role", "taskType", "state", "ordinal", "repairCycle"})
 					{
 						const FJson* Rest = Field(Node, Name);
-						if (Rest != nullptr && Rest->Kind != EJsonKind::Null) { return Out; }
+						if (Rest != nullptr && Rest->Kind != EJsonKind::Null) { return false; }
 					}
 					bool bMarkerSampled = false;
-					if (!LiveBool(Field(Node, "sampled"), bMarkerSampled) || !bMarkerSampled) { return Out; }
-					Read.Events.push_back(std::move(Event));
-					continue;
+					if (!LiveBool(Field(Node, "sampled"), bMarkerSampled) || !bMarkerSampled) { return false; }
+					return true;
 				}
-				if (!LiveWord(Field(Node, "role"), Event.Role) || !LiveRole(Event.Role)) { return Out; } // FLOW_LIVE_ROLES_ARE_CLOSED
-				if (!LiveWord(Field(Node, "taskType"), Event.TaskType) || !LiveTaskType(Event.TaskType)) { return Out; }
-				if (!LiveWord(Field(Node, "state"), Event.State) || !LiveTaskState(Event.State)) { return Out; }
+				if (!LiveWord(Field(Node, "role"), Event.Role) || !LiveRole(Event.Role)) { return false; } // FLOW_LIVE_ROLES_ARE_CLOSED
+				if (!LiveWord(Field(Node, "taskType"), Event.TaskType) || !LiveTaskType(Event.TaskType)) { return false; }
+				if (!LiveWord(Field(Node, "state"), Event.State) || !LiveTaskState(Event.State)) { return false; }
 				// Phase events are snapshots of the active task (a commit status, at most every 10 s): a short task can be
 				// missed between samples, so the server must say so and the panel never presents them as a complete log.
 				bool bSampled = false;
-				if (!LiveBool(Field(Node, "sampled"), bSampled) || !bSampled) { return Out; } // FLOW_LIVE_PHASES_ARE_SAMPLES
-				if (!LiveInt(Field(Node, "ordinal"), 0, 1000000, Event.Ordinal)) { return Out; }
+				if (!LiveBool(Field(Node, "sampled"), bSampled) || !bSampled) { return false; } // FLOW_LIVE_PHASES_ARE_SAMPLES
+				if (!LiveInt(Field(Node, "ordinal"), 0, 1000000, Event.Ordinal)) { return false; }
 				// `c x` on the wire is null here: the cycle was not reported. Kept as -1 and never shown as a number.
 				const FJson* Cycle = Field(Node, "repairCycle");
 				if (Cycle != nullptr && Cycle->Kind == EJsonKind::Null) { Event.RepairCycle = -1; }
-				else if (!LiveInt(Cycle, 0, 3, Event.RepairCycle)) { return Out; } // FLOW_LIVE_REPAIR_CYCLE_BOUND
+				else if (!LiveInt(Cycle, 0, 3, Event.RepairCycle)) { return false; } // FLOW_LIVE_REPAIR_CYCLE_BOUND
 			}
-			else { return Out; }
-			Read.Events.push_back(std::move(Event));
+			else { return false; }
+			return true;
+		};
+		for (const FJson& Node : Events->Array)
+		{
+			if (Node.Kind != EJsonKind::Object) { return Out; }
+			FLiveEvent Event;
+			if (!LiveInt(Field(Node, "seq"), 0, INT64_MAX, Event.Seq)) { return Out; }
+			if (ReadEvent(Node, Event)) { Read.Events.push_back(std::move(Event)); }
+			else { Read.SkippedSeqs.push_back(Event.Seq); } // FLOW_LIVE_BAD_EVENT_SKIPPED_NOT_PAGE
 		}
 		const FJson* Reset = Field(Root, "reset");
 		if (Reset != nullptr && Reset->Kind != EJsonKind::Null && !LiveBool(Reset, Read.bReset)) { return Out; }
@@ -1483,11 +1491,44 @@ namespace WonderlandJuliusMissionFlow
 		}
 		if (Read.bReset)
 		{
-			// The server restarted the stream from seq 1 under a new epoch: replace, never append twice.
-			EventList.clear();
-			LastSeq = -1;
-			CursorNow.clear();
+			// The server restarted the stream from seq 1 under a new epoch: replace, never append twice, and forget every
+			// latch (a latch from the old epoch is not evidence in the new one). /status is read before anything is trusted.
+			const std::size_t Skipped = SkippedCount;
+			*this = FLiveFeed(); // FLOW_LIVE_RESET_CLEARS_LATCHES
+			SkippedCount = Skipped;
+			ResyncWhy = "reset";
 		}
+		else if (LastSeq >= 0)
+		{
+			// The bridge's seq is contiguous per run (cache.events.length + 1). The first new seq of a page that is not
+			// LastSeq + 1, or a hole inside the page, means events were lost: drop the stream, replay it from the start.
+			std::vector<std::int64_t> Fresh = Read.SkippedSeqs;
+			for (const FLiveEvent& Event : Read.Events) { Fresh.push_back(Event.Seq); }
+			std::sort(Fresh.begin(), Fresh.end());
+			std::int64_t NextSeq = LastSeq + 1;
+			bool bGap = false;
+			for (const std::int64_t Seq : Fresh)
+			{
+				if (Seq < NextSeq) { continue; } // already held (a resumed page may repeat)
+				if (Seq != NextSeq) { bGap = true; break; } // FLOW_LIVE_SEQ_GAP_DETECTED
+				++NextSeq;
+			}
+			if (bGap)
+			{
+				const std::size_t Skipped = SkippedCount;
+				const std::string KeptWorkflow = Workflow;
+				*this = FLiveFeed(); // FLOW_LIVE_GAP_CLEARS_LATCHES
+				SkippedCount = Skipped;
+				bHasRead = true;
+				SourceNow = Read.Source;
+				Workflow = Read.WorkflowRunId.empty() ? KeptWorkflow : Read.WorkflowRunId; // which run is resyncing
+				bResyncing = true;
+				ResyncWhy = "seq_gap";
+				return;
+			}
+		}
+		bResyncing = false;
+		SkippedCount += Read.SkippedSeqs.size();
 		bHasRead = true;
 		SourceNow = Read.Source;
 		ReasonNow = Read.Reason;
@@ -1503,6 +1544,10 @@ namespace WonderlandJuliusMissionFlow
 			Latch(Event);
 			EventList.push_back(Event);
 			LastSeq = Event.Seq;
+		}
+		for (const std::int64_t Seq : Read.SkippedSeqs)
+		{
+			if (Seq > LastSeq) { LastSeq = Seq; } // a skipped event still holds its place in the order
 		}
 		if (EventList.size() > MaxEvents)
 		{
@@ -1558,6 +1603,14 @@ namespace WonderlandJuliusMissionFlow
 	{
 		FLivePanel Out;
 		if (!Feed.HasRead()) { return Out; }
+		if (Feed.Resyncing())
+		{
+			// Events were lost: nothing from the old stream is shown (never a stale "running") until it is replayed.
+			Out.bShow = true;
+			Out.Header = "RESYNCING -- events were missed; reading the bridge's /status and replaying the stream"
+				+ (Feed.WorkflowRunId().empty() ? std::string() : " (GitHub Actions run " + Feed.WorkflowRunId() + ")");
+			return Out; // FLOW_LIVE_RESYNC_SHOWS_NOTHING_OLD
+		}
 		if (Feed.Source() == ELiveSource::None)
 		{
 			// not_dispatched is already said by the progress line; anything else says plainly why there is no live view.
@@ -1570,12 +1623,20 @@ namespace WonderlandJuliusMissionFlow
 		}
 		if (Feed.WorkflowRunId().empty()) { return Out; }
 		Out.bShow = true;
-		Out.bLive = Feed.IsLive();
+		// STALE (founder ruling 2026-10-30): the bridge says GitHub is unreadable, or no good read for LiveNoReadAfterMs.
+		// The view is then never live and never says "running" or "now": only what was last seen, labelled STALE.
+		// (A finished run is not polled any more, so a long silence after the end is not staleness.)
+		const bool bStaleView = Feed.IsStale() || (Feed.IsLive() && MsSinceLastRead > LiveNoReadAfterMs); // FLOW_LIVE_SILENCE_IS_STALE
+		Out.bLive = Feed.IsLive() && !bStaleView; // FLOW_LIVE_STALE_IS_NEVER_LIVE
 		const std::string RunRef = " (GitHub Actions run " + Feed.WorkflowRunId() + ")";
 		if (Feed.Source() == ELiveSource::GithubActionsRecorded)
 		{
 			Out.Header = "RECORDED RUN, NOT LIVE" + RunRef; // FLOW_RECORDED_IS_NEVER_LIVE
 			if (!Feed.RunConclusion().empty()) { Out.Header += " -- GitHub workflow conclusion: " + Feed.RunConclusion() + " (not the mission result)"; }
+		}
+		else if (bStaleView)
+		{
+			Out.Header = "STALE -- last known state only, not live" + RunRef;
 		}
 		else if (Out.bLive)
 		{
@@ -1593,7 +1654,7 @@ namespace WonderlandJuliusMissionFlow
 		{
 			Out.Header += " -- connection to GitHub lost, reconnecting";
 		}
-		else if (Out.bLive && MsSinceLastRead > LiveNoReadAfterMs)
+		else if (bStaleView)
 		{
 			Out.Header += " -- no update for " + std::to_string(MsSinceLastRead / 1000) + " s, reconnecting";
 		}

@@ -434,6 +434,12 @@ const ABSENT_PHASE = {
 		return Text;
 	}
 
+	/** The page was read, exactly one event was skipped as unreadable, and nothing unreadable was kept. */
+	bool EventSkipped(const FLiveRead& Read)
+	{
+		return Read.bParsed && Read.SkippedSeqs.size() == 1;
+	}
+
 	void LiveFixtures()
 	{
 		const std::string Good = LiveBody(LiveTop, std::string(LiveStep) + "," + LivePhase);
@@ -512,17 +518,17 @@ const ABSENT_PHASE = {
 		Expect(!ParseLiveEvents(LiveWlj, 200, LiveBody(Swap(NoneTop, "\"live\":false", "\"live\":true"), "")).bParsed, "none+live refused");
 		++LiveCases;
 
-		struct FBad { const char* From; const char* To; const char* What; };
+		struct FBad { const char* From; const char* To; const char* What; bool bEventOnly = false; };
 		const FBad Bad[] = {
-			{"\"sampled\":true", "\"sampled\":false", "unsampled phase"},
-			{",\"sampled\":true", "", "phase without sampled"},
-			{"\"repair_build\"", "\"rebuild\"", "unknown task type"},
-			{"\"state\":\"active\"", "\"state\":\"thinking\"", "unknown task state"},
-			{"\"coder\"", "\"grok\"", "unknown role"},
-			{"\"repairCycle\":1", "\"repairCycle\":4", "repair cycle above 3"},
-			{"\"kind\":\"step\"", "\"kind\":\"thought\"", "unknown kind"},
-			{"LIVE: run", "LIVE:\\u0007run", "control char in a name"},
-			{"\"status\":\"in_progress\",\"conclusion\"", "\"status\":\"running\",\"conclusion\"", "unknown step status"},
+			{"\"sampled\":true", "\"sampled\":false", "unsampled phase", true},
+			{",\"sampled\":true", "", "phase without sampled", true},
+			{"\"repair_build\"", "\"rebuild\"", "unknown task type", true},
+			{"\"state\":\"active\"", "\"state\":\"thinking\"", "unknown task state", true},
+			{"\"coder\"", "\"grok\"", "unknown role", true},
+			{"\"repairCycle\":1", "\"repairCycle\":4", "repair cycle above 3", true},
+			{"\"kind\":\"step\"", "\"kind\":\"thought\"", "unknown kind", true},
+			{"LIVE: run", "LIVE:\\u0007run", "control char in a name", true},
+			{"\"status\":\"in_progress\",\"conclusion\"", "\"status\":\"running\",\"conclusion\"", "unknown step status", true},
 			{"\"live\":true", "\"live\":\"yes\"", "live must be a bool"},
 			{"\"mode\":\"paid\"", "\"mode\":\"free\"", "unknown mode"},
 			{"\"18733051234\"", "\"18733x\"", "non-digit workflow id"},
@@ -531,7 +537,9 @@ const ABSENT_PHASE = {
 		for (const FBad& Case : Bad)
 		{
 			const std::string Mutated = Swap(Good, Case.From, Case.To);
-			Expect(Mutated != Good && !ParseLiveEvents(LiveWlj, 200, Mutated).bParsed, Case.What);
+			// Founder ruling 2026-10-30: one bad EVENT field skips that event (named), never the page; a bad envelope
+			// field still refuses the page.
+			Expect(Mutated != Good && (Case.bEventOnly ? EventSkipped(ParseLiveEvents(LiveWlj, 200, Mutated)) : !ParseLiveEvents(LiveWlj, 200, Mutated).bParsed), Case.What);
 			++LiveCases;
 		}
 		Expect(!ParseLiveEvents("wlj_11111111-2222-4333-8444-555555555555", 200, Good).bParsed, "another run's events refused");
@@ -540,7 +548,7 @@ const ABSENT_PHASE = {
 
 		// Julius 2026-10-25 additions: null "at" for an unstarted step; reset:true restarts from seq 1; phase markers.
 		Expect(ParseLiveEvents(LiveWlj, 200, Swap(Good, "\"at\":\"2026-10-25T18:00:01Z\"", "\"at\":null")).bParsed, "unstarted step has null at");
-		Expect(!ParseLiveEvents(LiveWlj, 200, Swap(Good, ",\"at\":\"2026-10-25T18:00:01Z\"", "")).bParsed, "at is required");
+		Expect(EventSkipped(ParseLiveEvents(LiveWlj, 200, Swap(Good, ",\"at\":\"2026-10-25T18:00:01Z\"", ""))), "at is required");
 		++LiveCases;
 		FLiveFeed Reset;
 		Reset.Apply(Read);
@@ -558,9 +566,9 @@ const ABSENT_PHASE = {
 		Ended.Apply(ParseLiveEvents(LiveWlj, 200, LiveBody(LiveTop, Swap(Idle, "\"idle\"", "\"ended\""))));
 		const FLivePanel EndedPanel = LivePanelFor(Ended, 0);
 		Expect(PanelHas(EndedPanel, "stream ended (only the result says") && !PanelHas(EndedPanel, "complete"), "ended is not completion");
-		Expect(!ParseLiveEvents(LiveWlj, 200, LiveBody(LiveTop, Swap(Idle, "\"idle\"", "\"done\""))).bParsed, "unknown marker refused");
-		Expect(!ParseLiveEvents(LiveWlj, 200, LiveBody(LiveTop, Swap(Idle, "\"role\":null", "\"role\":\"coder\""))).bParsed, "marker with task fields refused");
-		Expect(!ParseLiveEvents(LiveWlj, 200, LiveBody(LiveTop, Swap(Idle, "\"sampled\":true", "\"sampled\":false"))).bParsed, "marker must be sampled");
+		Expect(EventSkipped(ParseLiveEvents(LiveWlj, 200, LiveBody(LiveTop, Swap(Idle, "\"idle\"", "\"done\"")))), "unknown marker refused");
+		Expect(EventSkipped(ParseLiveEvents(LiveWlj, 200, LiveBody(LiveTop, Swap(Idle, "\"role\":null", "\"role\":\"coder\"")))), "marker with task fields refused");
+		Expect(EventSkipped(ParseLiveEvents(LiveWlj, 200, LiveBody(LiveTop, Swap(Idle, "\"sampled\":true", "\"sampled\":false")))), "marker must be sampled");
 		Expect(ParseLiveEvents(LiveWlj, 200, LiveBody(LiveTop, Swap(LivePhase, ",\"sampled\"", ",\"marker\":null,\"sampled\""))).bParsed, "null marker is a task sample");
 		++LiveCases;
 		// GitHub's waiting/pending/requested pass through (rehearsal b refused every live page before this).
@@ -624,7 +632,7 @@ const ABSENT_PHASE = {
 			CxFeed.Apply(CxRead);
 			const FLivePanel CxPanel = LivePanelFor(CxFeed, 0);
 			Expect(PanelHas(CxPanel, "(repair cycle not reported)") && !PanelHas(CxPanel, "of 3"), "null cycle is never a number");
-			Expect(!ParseLiveEvents(LiveWlj, 200, LiveBody(LiveTop, Swap(LivePhase, "\"repairCycle\":1", "\"repairCycle\":\"x\""))).bParsed, "raw x is not the wire form");
+			Expect(EventSkipped(ParseLiveEvents(LiveWlj, 200, LiveBody(LiveTop, Swap(LivePhase, "\"repairCycle\":1", "\"repairCycle\":\"x\"")))), "raw x is not the wire form");
 			++LiveCases;
 		}
 		// REVIEW LOW: the kept cursor is exactly what the request will send (no space, not empty).
@@ -1647,6 +1655,87 @@ const ABSENT_PHASE = {
 		Expect(StartRecordFromStatus(R::Refused, Settled).Record == R::Refused, "a Refused record never re-opens");
 		++StatusCases;
 	}
+
+	// C3 (founder ruling 2026-10-30): a seq gap or reset:true clears the latches and resyncs from /status (never a stale
+	// "running"); live_view_unconfigured is a known reason; one bad event field never drops the whole page.
+	int ResyncCases = 0;
+	void ResyncFixtures()
+	{
+		const std::string Good = LiveBody(LiveTop, std::string(LiveStep) + "," + LivePhase);
+		const std::string BadRolePhase = Swap(LivePhase, "\"coder\"", "\"grok\"");
+		{
+			const FLiveRead Read = ParseLiveEvents(LiveWlj, 200, LiveBody(LiveTop, std::string(LiveStep) + "," + BadRolePhase));
+			Expect(Read.bParsed && Read.Events.size() == 1 && Read.Events[0].Seq == 3, "a bad event keeps the rest of the page");
+			Expect(Read.SkippedSeqs.size() == 1 && Read.SkippedSeqs[0] == 4, "the bad event is named by its seq");
+			Expect(!ParseLiveEvents(LiveWlj, 200, LiveBody(LiveTop, Swap(LiveStep, "\"seq\":3", "\"seq\":\"3\""))).bParsed, "an unreadable seq still refuses the page");
+			Expect(!ParseLiveEvents(LiveWlj, 200, LiveBody(LiveTop, std::string(LiveStep) + ",7")).bParsed, "a non-object event still refuses the page");
+			++ResyncCases;
+		}
+		{
+			FLiveFeed Feed;
+			Feed.Apply(ParseLiveEvents(LiveWlj, 200, Good));
+			Expect(Feed.LiveStepStarted() && Feed.TaskPhaseSeen() && !Feed.Resyncing() && Feed.TakeResyncRequest() == nullptr, "a contiguous read latches and asks nothing");
+			Feed.Apply(ParseLiveEvents(LiveWlj, 200, LiveBody(LiveTop, Swap(LivePhase, "\"seq\":4", "\"seq\":6"))));
+			Expect(Feed.Resyncing() && Feed.Events().empty() && Feed.Cursor().empty(), "a seq gap drops the stream and its cursor");
+			Expect(!Feed.LiveStepStarted() && !Feed.TaskPhaseSeen() && Feed.HasRead(), "a seq gap clears every latch");
+			const char* Why = Feed.TakeResyncRequest();
+			Expect(Why != nullptr && std::strcmp(Why, "seq_gap") == 0 && Feed.TakeResyncRequest() == nullptr, "a seq gap asks for /status once");
+			const FLivePanel Panel = LivePanelFor(Feed, 0);
+			Expect(Panel.bShow && !Panel.bLive && PanelHas(Panel, "RESYNCING") && PanelHas(Panel, "18733051234") && Panel.Lines.empty(), "resync shows nothing old");
+			Expect(!PanelHas(Panel, "LIVE --"), "resync is never labelled live");
+			Expect(!PanelHas(Panel, "running") && !PanelHas(Panel, "now"), "resync never says running");
+			Feed.Apply(ParseLiveEvents(LiveWlj, 200, LiveBody(LiveTop, Swap(LiveStep, "\"seq\":3", "\"seq\":1"))));
+			Expect(!Feed.Resyncing() && Feed.Events().size() == 1 && Feed.LiveStepStarted(), "the replay from seq 1 rebuilds the latches");
+			++ResyncCases;
+		}
+		{
+			FLiveFeed Feed;
+			Feed.Apply(ParseLiveEvents(LiveWlj, 200, Good));
+			Feed.Apply(ParseLiveEvents(LiveWlj, 200, LiveBody(LiveTop, Swap(BadRolePhase, "\"seq\":4", "\"seq\":5"))));
+			Expect(!Feed.Resyncing() && Feed.SkippedEvents() == 1 && Feed.Events().size() == 2, "a skipped event is not a gap");
+			Feed.Apply(ParseLiveEvents(LiveWlj, 200, LiveBody(LiveTop, Swap(LivePhase, "\"seq\":4", "\"seq\":6"))));
+			Expect(!Feed.Resyncing() && Feed.Events().size() == 3 && Feed.TakeResyncRequest() == nullptr, "the seq after a skipped one is contiguous");
+			Feed.Apply(ParseLiveEvents(LiveWlj, 200, LiveBody(LiveTop, Swap(LivePhase, "\"seq\":4", "\"seq\":6"))));
+			Expect(!Feed.Resyncing() && Feed.Events().size() == 3, "a repeated seq is neither a gap nor a duplicate");
+			++ResyncCases;
+		}
+		{
+			FLiveFeed Feed;
+			Feed.Apply(ParseLiveEvents(LiveWlj, 200, Good));
+			Feed.Apply(ParseLiveEvents(LiveWlj, 200, LiveBody(std::string(LiveTop) + ",\"reset\":true", Swap(LivePhase, "\"seq\":4", "\"seq\":1"))));
+			Expect(!Feed.LiveStepStarted() && Feed.TaskPhaseSeen() && Feed.Events().size() == 1, "reset clears the old epoch's latches");
+			const char* Why = Feed.TakeResyncRequest();
+			Expect(Why != nullptr && std::strcmp(Why, "reset") == 0, "reset asks for /status");
+			++ResyncCases;
+		}
+		{
+			const std::string Unconfigured = "\"workflowRunId\":null,\"source\":\"none\",\"reason\":\"live_view_unconfigured\",\"live\":false,"
+				"\"stale\":false,\"mode\":null,\"runStatus\":null,\"runConclusion\":null,\"fetchedAt\":\"x\",\"next\":null";
+			const FLiveRead Read = ParseLiveEvents(LiveWlj, 200, LiveBody(Unconfigured, ""));
+			Expect(Read.bParsed, "live_view_unconfigured is a known reason");
+			FLiveFeed Feed;
+			Feed.Apply(Read);
+			Expect(PanelHas(LivePanelFor(Feed, 0), "Live view unavailable: live_view_unconfigured"), "live_view_unconfigured is said plainly");
+			++ResyncCases;
+		}
+		{
+			FLiveFeed Feed;
+			Feed.Apply(ParseLiveEvents(LiveWlj, 200, Good));
+			const FLivePanel Fresh = LivePanelFor(Feed, 0);
+			Expect(Fresh.bLive && PanelHas(Fresh, "now running: "), "a fresh live read says now running");
+			const FLivePanel Silent = LivePanelFor(Feed, LiveNoReadAfterMs + 1);
+			Expect(!Silent.bLive && PanelHas(Silent, "STALE") && !PanelHas(Silent, "now running") && !PanelHas(Silent, "now: "), "silence is stale, never running");
+			Expect(PanelHas(Silent, "was running: ") && PanelHas(Silent, "last sampled: "), "stale names only what was last seen");
+			FLiveFeed Lost;
+			Lost.Apply(ParseLiveEvents(LiveWlj, 200, Swap(Good, "\"stale\":false", "\"stale\":true")));
+			const FLivePanel LostPanel = LivePanelFor(Lost, 0);
+			Expect(!LostPanel.bLive && PanelHas(LostPanel, "STALE") && !PanelHas(LostPanel, "now running"), "the bridge's stale flag is never live");
+			FLiveFeed Done;
+			Done.Apply(ParseLiveEvents(LiveWlj, 200, LiveBody(Swap(Swap(Swap(LiveTop, "\"live\":true", "\"live\":false"), "\"runStatus\":\"in_progress\"", "\"runStatus\":\"completed\""), "\"runConclusion\":null", "\"runConclusion\":\"success\""), LiveStep)));
+			Expect(!PanelHas(LivePanelFor(Done, LiveNoReadAfterMs * 10), "STALE"), "a finished run's silence is not stale");
+			++ResyncCases;
+		}
+	}
 }
 
 int main()
@@ -1889,6 +1978,7 @@ int main()
 	ExecFixtures();
 	StartAckFixtures();
 	StatusFixtures();
+	ResyncFixtures();
 
 	if (Failures != 0)
 	{
@@ -1896,7 +1986,7 @@ int main()
 		return 1;
 	}
 	std::printf(
-		"J1 MISSION FLOW KAT PASS meanings=%d route=%d result=%d flow=%d windows=%d bridge=%d phases=%d live=%d start=%d exec=%d ack=%d status=%d\n",
-		Meanings, Routes, Results, FlowSteps, Windows, Bridge, PhaseCases, LiveCases, StartCases, ExecCases, AckCases, StatusCases);
+		"J1 MISSION FLOW KAT PASS meanings=%d route=%d result=%d flow=%d windows=%d bridge=%d phases=%d live=%d start=%d exec=%d ack=%d status=%d resync=%d\n",
+		Meanings, Routes, Results, FlowSteps, Windows, Bridge, PhaseCases, LiveCases, StartCases, ExecCases, AckCases, StatusCases, ResyncCases);
 	return 0;
 }
