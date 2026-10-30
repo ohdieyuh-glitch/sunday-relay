@@ -43,7 +43,7 @@ import type {
 
 export const CURSOR_API_ORIGIN = 'https://api.cursor.com';
 export const CURSOR_API_KEY_ENV_NAME = 'CURSOR_API_KEY';
-export const CURSOR_CLOUD_AGENTS_TRANSPORT_KIND = 'cursor-cloud-agents-v1';
+export const CURSOR_CLOUD_AGENTS_TRANSPORT_KIND = 'cursor_cloud_agents_v1';
 
 export interface CursorFetchResponse {
   readonly ok: boolean;
@@ -155,7 +155,8 @@ const MAX_PR_URL_CHARS = 300;
 const PR_URL = /^https:\/\/github\.com\/[A-Za-z0-9._~\/%#?=&+-]+$/u;
 const REPORTED_MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
 const REQUEST_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
-const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/u;
+/** The same instant shape the router keeps (UTC, at most microseconds), so a carried value is never dropped downstream. */
+const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$/u;
 
 /**
  * Reads a response body, never past {@link MAX_BODY_BYTES}: a declared Content-Length over the cap is refused unread, and the

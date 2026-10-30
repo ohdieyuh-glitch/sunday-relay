@@ -79,7 +79,7 @@ export function buildJ1CoderProviderFor(options: {
   readonly run?: Parameters<typeof createClaudeCodeCodingAgentProvider>[0]['run'];
   readonly queryLoader?: Parameters<typeof createClaudeCodeCodingAgentProvider>[0]['queryLoader'];
   /**
-   * Who occupies the coder slot. Default (absent): the hosted Claude coder, exactly as before. `grok-bot-cloud-agent` builds the
+   * Who occupies the coder slot. Default (absent): the hosted Claude coder, exactly as before. `grok_bot_cloud_agent` builds the
    * Grok Bot coder from `grokBot` and NOTHING else: absent or refused deps throw at build time; there is no Claude fallback.
    */
   readonly occupant?: J1CoderOccupant;

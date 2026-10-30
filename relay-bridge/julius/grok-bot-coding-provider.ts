@@ -40,7 +40,7 @@ import { grokWorkspaceCommands, isSafeBranchName } from './grok-workspace-comman
  * trust the agent's branch or PR; apply anything outside the mission's permitted paths; report a cost of $0.
  */
 
-export const GROK_BOT_CODER_PROVIDER_KIND = 'grok-bot-cloud-agent';
+export const GROK_BOT_CODER_PROVIDER_KIND = 'grok_bot_cloud_agent';
 
 /** F8: the closed billing wording on every record: pool or prepaid credit, never "no bill". */
 export const GROK_CODER_BILLING_NOTE = 'cursor_pool_or_prepaid_credit_spend_unverified';
@@ -425,6 +425,7 @@ export function createGrokBotCodingAgentProvider(input: {
       const evidence: Record<string, unknown> = {
         codingAgentProvider: GROK_BOT_CODER_PROVIDER_KIND,
         transport: transport.transportKind,
+        codingAgentTransport: transport.transportKind,
         transportMode: cursorTransportMode(transport),
         requestedModel: modelId,
         cursorAgentId: agentId,
@@ -591,11 +592,11 @@ export function createGrokBotCodingAgentProvider(input: {
         const unsafeEntries = typeof fetched.unsafeEntries === 'number' && Number.isInteger(fetched.unsafeEntries) && fetched.unsafeEntries >= 0 ? fetched.unsafeEntries : 1;
         if (violations.length > 0 || gitInternal || permittedNone || unsafeEntries > 0) {
           return started('ENVELOPE_NOT_HONOURED', 'coder_grok_patch_out_of_scope', 'The agent changed paths outside the mission\'s permitted scope, a protected git path, or a symlink, submodule, file type or executable bit; nothing was applied.', {
-            scopeViolationCount: violations.length, unsafeEntryCount: unsafeEntries, protectedPathTouched: gitInternal, permittedPathsEmpty: permittedNone,
+            patchApplied: false, scopeViolationCount: violations.length, unsafeEntryCount: unsafeEntries, protectedPathTouched: gitInternal, permittedPathsEmpty: permittedNone,
           });
         }
         const applied = await workspace.applyFetched({ workspacePath: request.workspacePath, baseRevision: base.sha, headSha: fetched.headSha }, signal);
-        if (!applied.ok) return started('TOOL_CRASH', 'coder_grok_patch_apply_failed', 'The agent\'s changes could not be applied to the workspace.', { applyRefusal: applied.cause });
+        if (!applied.ok) return started('TOOL_CRASH', 'coder_grok_patch_apply_failed', 'The agent\'s changes could not be applied to the workspace.', { applyRefusal: applied.cause, patchApplied: false });
         evidence.patchApplied = true;
       } else {
         evidence.patchApplied = false;
@@ -607,7 +608,7 @@ export function createGrokBotCodingAgentProvider(input: {
         kind: 'completed',
         finalText: result.finalText,
         observation: {
-          // Only an id the API reported; a relaxed unattested run records null here and the relaxation in diagnostics.
+          // Only an id the API reported and that matched the pin (an unattested run never reaches this point).
           providerModel: verdict === 'MATCH' ? result.reportedModelId : null,
           turns: null,
           toolInvocations: null,

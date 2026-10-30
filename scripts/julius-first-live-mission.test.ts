@@ -3463,10 +3463,27 @@ describe('every diagnostic the allowlist admits reaches the exported bundle', ()
    */
   const EXPORT_EXEMPT: Readonly<Record<string, string>> = Object.freeze({
     /* PENDING A GOVERNED CHANGE, not a decision to destroy them: the dump script is founder-governed, and the three columns
-     * are drafted in /workspace/yuji-grok-coder/DRAFT-julius-live-evidence-dump.patch. Remove these three when it lands. */
+     * are drafted in /workspace/yuji-grok-coder/DRAFT-julius-live-evidence-dump.patch. Remove every entry below when it lands. */
     cursorAgentId: 'pending the governed worker-diagnostics dump column (cursor_agent_id); no live root composes the cloud-agent coder yet',
     agentBranch: 'pending the governed worker-diagnostics dump column (agent_branch); no live root composes the cloud-agent coder yet',
     cursorServedModel: 'pending the governed worker-diagnostics dump column (cursor_served_model); no live root composes the cloud-agent coder yet',
+    codingAgentTransport: 'pending the governed worker-diagnostics dump column (coding_agent_transport); no live root composes the cloud-agent coder yet',
+    transportMode: 'pending the governed worker-diagnostics dump column (transport_mode); no live root composes the cloud-agent coder yet',
+    servedModelVerdict: 'pending the governed worker-diagnostics dump column (served_model_verdict); no live root composes the cloud-agent coder yet',
+    servedModelAttestation: 'pending the governed worker-diagnostics dump column (served_model_attestation); no live root composes the cloud-agent coder yet',
+    spendVerified: 'pending the governed worker-diagnostics dump column (spend_verified); no live root composes the cloud-agent coder yet',
+    chargedAs: 'pending the governed worker-diagnostics dump column (charged_as); no live root composes the cloud-agent coder yet',
+    billingNote: 'pending the governed worker-diagnostics dump column (billing_note); no live root composes the cloud-agent coder yet',
+    cursorRunId: 'pending the governed worker-diagnostics dump column (cursor_run_id); no live root composes the cloud-agent coder yet',
+    cursorRequestId: 'pending the governed worker-diagnostics dump column (cursor_request_id); no live root composes the cloud-agent coder yet',
+    cursorRunCreatedAt: 'pending the governed worker-diagnostics dump column (cursor_run_created_at); no live root composes the cloud-agent coder yet',
+    runResponseSha256: 'pending the governed worker-diagnostics dump column (run_response_sha256); no live root composes the cloud-agent coder yet',
+    receiptRunIdMatches: 'pending the governed worker-diagnostics dump column (receipt_run_id_matches); no live root composes the cloud-agent coder yet',
+    baseRevision: 'pending the governed worker-diagnostics dump column (base_revision); no live root composes the cloud-agent coder yet',
+    agentHeadSha: 'pending the governed worker-diagnostics dump column (agent_head_sha); no live root composes the cloud-agent coder yet',
+    patchApplied: 'pending the governed worker-diagnostics dump column (patch_applied); no live root composes the cloud-agent coder yet',
+    outcomeUnknown: 'pending the governed worker-diagnostics dump column (outcome_unknown); no live root composes the cloud-agent coder yet',
+    cancelRequested: 'pending the governed worker-diagnostics dump column (cancel_requested); no live root composes the cloud-agent coder yet',
   });
 
   const allowlistKeys = (): readonly string[] => {

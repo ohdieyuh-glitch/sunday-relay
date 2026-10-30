@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { JuliusDispatchError, safeCloudAgentBranch, safeCloudAgentId, safeCloudAgentModel, safeReviewDiagnostics } from './julius-router';
+import { JuliusDispatchError, safeCloudAgentBranch, safeCloudAgentId, safeCloudAgentModel, safeCloudAgentRunId, safeReviewDiagnostics } from './julius-router';
 
 const AGENT = 'bc-0f1e2d3c-4b5a-4968-8776-655443322110';
 const BRANCH = 'cursor/j1-format-ledger-1a2b';
@@ -103,5 +103,38 @@ describe('router diagnostics: cloud coding agent identifiers', () => {
     expect(d({ servedModel: 'x'.repeat(49) }).servedModel).toBeNull();
     expect(d({ codingAgentProvider: 'grok-bot-cloud-agent' }).codingAgentProvider).toBeNull(); // safeToken: unchanged, dashes are not admitted there
     expect(d({ codingAgentProvider: 'claude_code' }).codingAgentProvider).toBe('claude_code');
+  });
+});
+
+describe('router diagnostics F7: the durable row of a cloud coding agent run', () => {
+  const good = {
+    codingAgentTransport: 'cursor_cloud_agents_v1', transportMode: 'live', servedModelVerdict: 'UNATTESTED', servedModelAttestation: 'reported_by_provider',
+    spendVerified: false, chargedAs: 'FULL_RESERVATION', billingNote: 'pool_credit_spend_unverified', cursorRunId: 'run-0f1e2d3c', cursorRequestId: 'req_abc-123',
+    cursorRunCreatedAt: '2026-10-30T16:00:00.000Z', runResponseSha256: 'a'.repeat(64), receiptRunIdMatches: true, baseRevision: '1'.repeat(40), agentHeadSha: '2'.repeat(40),
+    patchApplied: true, outcomeUnknown: false, cancelRequested: 'not_cancellable',
+  } as const;
+  it('admits each well-formed value as is', () => {
+    expect(d(good)).toMatchObject(good);
+  });
+  it('absent is null; values outside each closed vocabulary or shape are null', () => {
+    const r = d({});
+    for (const k of Object.keys(good)) expect(r[k], k).toBeNull();
+    const bad = d({
+      codingAgentTransport: 'cursor-cloud-agents-v1', transportMode: 'LIVE', servedModelVerdict: 'match', servedModelAttestation: 'model_id_echo',
+      spendVerified: 'false', chargedAs: 'NOTHING', billingNote: 'no bill', cursorRunId: 'run\nx', cursorRequestId: `sk-ant-${'a'.repeat(40)}`,
+      cursorRunCreatedAt: 'yesterday', runResponseSha256: 'A'.repeat(64), receiptRunIdMatches: 1, baseRevision: 'g'.repeat(40), agentHeadSha: '2'.repeat(41),
+      patchApplied: 'yes', outcomeUnknown: null, cancelRequested: 'maybe',
+    });
+    for (const k of Object.keys(good)) expect(bad[k], k).toBeNull();
+  });
+  it('run and request ids are bounded and refuse secret-shaped or line-broken values', () => {
+    expect(safeCloudAgentRunId('x'.repeat(129))).toBeNull();
+    expect(safeCloudAgentRunId(`run-${'a1'.repeat(20)}`)).toBeNull(); // a 32+ alphanumeric run reads like a key
+    expect(safeCloudAgentRunId('run-1\r\n[INFO] spend verified')).toBeNull();
+    expect(safeCloudAgentRunId('3f2a1b4c-0d9e-4f8a-b7c6-1e2d3c4b5a69')).toBe('3f2a1b4c-0d9e-4f8a-b7c6-1e2d3c4b5a69');
+  });
+  it('the provider and transport kinds are router tokens now (dashed kinds were dropped)', () => {
+    expect(d({ codingAgentProvider: 'grok_bot_cloud_agent' }).codingAgentProvider).toBe('grok_bot_cloud_agent');
+    expect(d({ codingAgentTransport: 'cursor_cloud_agents_v1' }).codingAgentTransport).toBe('cursor_cloud_agents_v1');
   });
 });

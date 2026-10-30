@@ -679,6 +679,25 @@ describe('F15/E8: transportMode is stamped by the transport module, not claimed;
 });
 
 describe('Grok Bot coder: identifiers reach the router diagnostics', () => {
+  it('F7: the kinds are router tokens and every durable fact survives safeReviewDiagnostics unchanged', async () => {
+    expect(GROK_BOT_CODER_PROVIDER_KIND).toMatch(/^[a-z][a-z0-9_]{0,63}$/u);
+    const sha = 'f'.repeat(64);
+    const { outcome } = await run({ t: fakeTransport({ result: goodResult({ receipt: { runId: 'run-1', createdAt: '2026-10-30T16:00:00Z', requestId: 'req_1', responseSha256: sha } }) }) });
+    const diag = completed(outcome).observation.diagnostics as Record<string, unknown>;
+    const safe = safeReviewDiagnostics(diag)!;
+    const keys = ['codingAgentProvider', 'transportMode', 'servedModelVerdict', 'servedModelAttestation', 'spendVerified', 'chargedAs', 'billingNote',
+      'cursorRunId', 'cursorRequestId', 'cursorRunCreatedAt', 'runResponseSha256', 'receiptRunIdMatches', 'baseRevision', 'agentHeadSha', 'patchApplied', 'billingPath', 'costBasis'] as const;
+    for (const k of keys) {
+      expect(diag[k], k).not.toBeUndefined();
+      expect(safe[k], k).toBe(diag[k]);
+    }
+    expect(safe).toMatchObject({ codingAgentProvider: 'grok_bot_cloud_agent', transportMode: 'fake', spendVerified: false, chargedAs: 'FULL_RESERVATION', patchApplied: true, billingPath: 'UNKNOWN' });
+  });
+  it('F7: an outcome-unknown ending keeps outcomeUnknown, the run id and the cancel result on the durable row', async () => {
+    const f = failed((await run({ t: fakeTransport({ create: () => ({ kind: 'outcome_unknown', cause: 'timeout' }) }) })).outcome);
+    const safe = new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'x', f.providerFailureClass, f.diagnostics).diagnostics!;
+    expect(safe).toMatchObject({ outcomeUnknown: true, codingAgentProvider: 'grok_bot_cloud_agent', spendVerified: false });
+  });
   it('a MATCH run: cursorAgentId, agentBranch, cursorServedModel and servedModel all survive safeReviewDiagnostics', async () => {
     const { outcome, t } = await run();
     const safe = safeReviewDiagnostics(completed(outcome).observation.diagnostics)!;

@@ -246,6 +246,10 @@ export const safeCloudAgentBranch=(value:unknown):string|null=>{
 };
 /** The model id a cloud agent's API reported for the run, whatever the verdict on it. */
 export const safeCloudAgentModel=(value:unknown):string|null=>safeCloudAgentText(value,64,CLOUD_AGENT_MODEL);
+const CLOUD_AGENT_RUN_ID=/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+/** A run id or a request id a cloud agent's API returned: a bounded opaque token, refused (not cut) when it looks like a secret. */
+export const safeCloudAgentRunId=(value:unknown):string|null=>safeCloudAgentText(value,128,CLOUD_AGENT_RUN_ID);
+const safeSha40=(value:unknown):string|null=>typeof value==='string'&&/^[0-9a-f]{40}$/.test(value)?value:null;
 export type JuliusSafeDiagnostics=Readonly<Record<string,string|number|boolean|null>>;
 export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
  if(value===null||typeof value!=='object'||Array.isArray(value))return null;
@@ -484,6 +488,27 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   cursorAgentId:safeCloudAgentId(v.cursorAgentId),
   agentBranch:safeCloudAgentBranch(v.agentBranch),
   cursorServedModel:safeCloudAgentModel(v.cursorServedModel),
+  /* --- WHAT A CLOUD CODING AGENT'S ROW HAS TO KEEP (F7): the verdict and how it was reached, whether spend was
+   * verified and what was charged, the run and request ids, the base and head revisions, and whether a patch was
+   * applied. Every one is a closed vocabulary, a boolean, or a bounded, shape-checked token. --- */
+  codingAgentTransport:safeToken(v.codingAgentTransport),
+  /** `live` only when the transport module itself stamped it; a fake is labelled `fake`. */
+  transportMode:safeEnum(v.transportMode,['live','fake'] as const),
+  servedModelVerdict:safeEnum(v.servedModelVerdict,['MATCH','MISMATCH','UNATTESTED'] as const),
+  servedModelAttestation:safeEnum(v.servedModelAttestation,['reported_by_provider'] as const),
+  spendVerified:safeNullableBool(v.spendVerified),
+  chargedAs:safeEnum(v.chargedAs,['FULL_RESERVATION'] as const),
+  billingNote:safeToken(v.billingNote),
+  cursorRunId:safeCloudAgentRunId(v.cursorRunId),
+  cursorRequestId:safeCloudAgentRunId(v.cursorRequestId),
+  cursorRunCreatedAt:safeInstant(v.cursorRunCreatedAt),
+  runResponseSha256:safeSha256Hex(v.runResponseSha256),
+  receiptRunIdMatches:safeNullableBool(v.receiptRunIdMatches),
+  baseRevision:safeSha40(v.baseRevision),
+  agentHeadSha:safeSha40(v.agentHeadSha),
+  patchApplied:safeNullableBool(v.patchApplied),
+  outcomeUnknown:safeNullableBool(v.outcomeUnknown),
+  cancelRequested:safeEnum(v.cancelRequested,['cancelled','not_cancellable','failed'] as const),
   /* --- Coding Agent cost, beside a refusal. Paid run 34037313976 was refused
    * for cost and the amount lived only in a message nothing persisted. --- */
   /** The runtime-reported cost in micro-dollars; null when the runtime reported none. */
