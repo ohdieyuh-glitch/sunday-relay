@@ -41,7 +41,7 @@ describe('the fetch allow-list: Cursor is off by default, and the default is byt
   it('realJ1WiringDeps still refuses the Cursor origin', async () => {
     const deps = realJ1WiringDeps(() => undefined);
     await expect(deps.fetchImpl('https://api.cursor.com/v1/agents', { method: 'POST', headers: {}, body: '{}', redirect: 'error' })).rejects.toThrow('provider_base_url_unpinned');
-    expect(deps.coderProviderFor({ PATH: '/bin' }, { requestedModel: 'claude-opus-5-5' }).providerKind).toBe('claude-code-hosted');
+    expect(deps.coderProviderFor?.({ PATH: '/bin' }, { requestedModel: 'claude-opus-5-5' })?.providerKind).toBe('claude-code-hosted');
   });
 });
 
