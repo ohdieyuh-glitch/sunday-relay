@@ -261,6 +261,10 @@ describe('served-model attestation matrix', () => {
     expect(failed((await run({ cfg, t: unattested() })).outcome).providerFailureClass).toBe('coder_served_model_unattested');
     expect(failed((await run({ cfg: config({ acceptRequestedModelUnattested: true }), t: unattested() })).outcome).providerFailureClass).toBe('coder_served_model_unattested');
   });
+  it('a matching founder pin without the flag does not relax it', async () => {
+    const pin = 'founder-issued-fake-pin';
+    expect(failed((await run({ cfg: config({ acceptRequestedModelUnattested: false, founderAuthorizationToken: pin }), t: unattested(), pin })).outcome).providerFailureClass).toBe('coder_served_model_unattested');
+  });
   it('the flag with a matching founder pin proceeds and says "requested model, unattested by provider"', async () => {
     const pin = 'founder-issued-fake-pin';
     const c = completed((await run({ cfg: config({ acceptRequestedModelUnattested: true, founderAuthorizationToken: pin }), t: unattested(), pin })).outcome);
