@@ -35,6 +35,7 @@ export const E2_STREAM_CAUSES = Object.freeze([
   'e2_stream_key_residue', 'e2_stream_malformed_event', 'e2_stream_run_mismatch', 'e2_stream_error_event', 'e2_stream_out_of_order',
   'e2_stream_conflicting_event', 'e2_stream_event_too_large', 'e2_stream_too_large', 'e2_stream_aborted', 'e2_evidence_write_failed',
   'e2_stream_resumed', 'e2_stream_duplicate_event', 'e2_stream_terminal_not_finished', 'e2_stream_call_unfinished',
+  'e2_stream_reconnect_limit', 'e2_stream_rate_budget', 'e2_stream_idle',
 ] as const);
 export type E2StreamCause = (typeof E2_STREAM_CAUSES)[number];
 
@@ -78,29 +79,8 @@ export async function readEvidenceLines(path: string): Promise<string[]> {
   } finally { await fh.close(); }
 }
 
-/*
- * M-6: secrets that are not the Cursor key are redacted before a record is stored (the Cursor key has its own scrub and
- * residue check). Patterns are the well-known public token shapes; the count of redactions is recorded per event and in total.
- */
-const SECRET_PATTERNS: readonly RegExp[] = [
-  /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/gu,
-  /\bgh[pousr]_[A-Za-z0-9]{20,}/gu,
-  /\bgithub_pat_[A-Za-z0-9_]{20,}/gu,
-  /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/gu,
-  /\bsk-[A-Za-z0-9_-]{16,}/gu,
-  /\bxai-[A-Za-z0-9_-]{16,}/gu,
-  /\bgsk_[A-Za-z0-9]{16,}/gu,
-  /\bxox[abprs]-[A-Za-z0-9-]{10,}/gu,
-  /\bAIza[0-9A-Za-z_-]{30,}/gu,
-  /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/gu,
-  /\b(?:Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}/giu,
-];
-export function redactSecrets(text: string): { readonly text: string; readonly count: number } {
-  let count = 0;
-  let out = text;
-  for (const re of SECRET_PATTERNS) out = out.replace(re, () => { count += 1; return '[REDACTED:secret]'; });
-  return { text: out, count };
-}
+/** M-6 / Skywalker F4: non-Cursor secrets are redacted inside the transport's stream scrub; re-exported here. */
+export { redactSecrets } from './cursor-cloud-agents-transport';
 
 const CAPTURED = new WeakSet<object>();
 /** True only for an evidence object returned by {@link captureCursorRunStream} in this process (no setter is exported). */
@@ -144,6 +124,10 @@ export interface E2StreamEvidence {
 /** One SSE event's text, or the whole stream, is never held past these. */
 export const E2_MAX_EVENT_BYTES = 1024 * 1024;
 export const E2_MAX_STREAM_BYTES = 64 * 1024 * 1024;
+/** Skywalker F3: a hard ceiling on reconnects, whatever the caller asks (11 connections at most). */
+export const E2_MAX_RECONNECTS = 10;
+/** Skywalker F5: the default longest wait for bytes on an open connection (any SSE line, heartbeats included). */
+export const E2_DEFAULT_IDLE_MS = 120_000;
 const READ_ONLY_TOOL_NAMES = new Set(['read_file']);
 const ZERO = '0'.repeat(64);
 const sha256 = (s: string): string => createHash('sha256').update(s).digest('hex');
@@ -208,6 +192,11 @@ interface RawEvent { readonly id: string | null; readonly event: string; readonl
  * Captures the run's stream live from the run start, before any result is accepted. Resumes with Last-Event-ID after a
  * dropped connection (spaced at least `reconnectDelayMs`, default 3000, inside the documented 20 requests/minute), and ends
  * with null (complete: a `result` for this run, then `done`) or a named fail-closed cause. Never falls back to anything.
+ *
+ * RESUME (PILOT H-1, Skywalker F6): SSE ids are opaque, so nothing proves a resumed connection replayed every event after
+ * Last-Event-ID. There is no proof of continuity to require, so a capture that resumed is never complete: it is recorded
+ * in full and ends `e2_stream_resumed` even with a clean terminal. Only a single unbroken connection (or a reconnect
+ * before any id, which restarts from the run start) can end with null.
  */
 export async function captureCursorRunStream(input: {
   readonly transport: unknown;
@@ -217,14 +206,18 @@ export async function captureCursorRunStream(input: {
   readonly signal?: AbortSignal;
   readonly now?: () => number;
   readonly sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
+  /** Clamped to {@link E2_MAX_RECONNECTS}. */
   readonly maxReconnects?: number;
+  /** Longest wait for bytes on an open connection; default {@link E2_DEFAULT_IDLE_MS}, at least 100. */
+  readonly idleTimeoutMs?: number;
   readonly reconnectDelayMs?: number;
   /** Lower only: the total-bytes cap, never above {@link E2_MAX_STREAM_BYTES}. */
   readonly maxStreamBytes?: number;
 }): Promise<E2StreamEvidence> {
   const now = input.now ?? Date.now;
   const sleep = input.sleep ?? defaultSleep;
-  const maxReconnects = Math.max(0, input.maxReconnects ?? 5);
+  const maxReconnects = Math.min(E2_MAX_RECONNECTS, Math.max(0, input.maxReconnects ?? 5));
+  const idleTimeoutMs = Math.max(100, input.idleTimeoutMs ?? E2_DEFAULT_IDLE_MS);
   const reconnectDelayMs = Math.max(3_000, input.reconnectDelayMs ?? 3_000);
   const maxStreamBytes = Math.min(E2_MAX_STREAM_BYTES, Math.max(0, input.maxStreamBytes ?? E2_MAX_STREAM_BYTES));
   const { ref, signal } = input;
@@ -284,7 +277,7 @@ export async function captureCursorRunStream(input: {
     for (;;) {
       if (isAborted(signal)) throw new Stop('e2_stream_aborted');
       if (connections > 0) {
-        if (reconnects >= maxReconnects) throw new Stop(everOpened ? 'e2_stream_gap' : 'e2_stream_open_failed');
+        if (reconnects >= maxReconnects) throw new Stop(everOpened ? 'e2_stream_reconnect_limit' : 'e2_stream_open_failed');
         if (lastId === null && sawUnresumable) throw new Stop('e2_stream_gap');
         reconnects += 1;
         await sleep(reconnectDelayMs, signal);
@@ -301,7 +294,7 @@ export async function captureCursorRunStream(input: {
         cause: open.kind === 'not_sent' || open.kind === 'failed_in_flight' ? open.cause : null,
         retentionSeconds: open.kind === 'opened' ? open.retentionSeconds : null, mode: open.kind === 'opened' ? open.mode : null,
       });
-      if (open.kind === 'not_sent') throw new Stop(open.cause === 'aborted' ? 'e2_stream_aborted' : 'e2_stream_open_failed');
+      if (open.kind === 'not_sent') throw new Stop(open.cause === 'aborted' ? 'e2_stream_aborted' : open.cause === 'rate_budget_exhausted' ? 'e2_stream_rate_budget' : 'e2_stream_open_failed');
       if (open.kind === 'deadline') throw new Stop('e2_stream_no_terminal');
       if (open.kind === 'failed_in_flight') {
         if (open.cause === 'aborted_in_flight') throw new Stop('e2_stream_aborted');
@@ -324,22 +317,17 @@ export async function captureCursorRunStream(input: {
           // Scrub every field and the raw lines before anything is written; surviving key characters stop the capture.
           const parts: string[] = [];
           let scrubbed = false;
-          for (const text of [e.raw, e.id ?? '', e.event, e.data]) {
+          let fieldSecrets = 0;
+          for (const [k, text] of [e.raw, e.id ?? '', e.event, e.data].entries()) {
             const s = open.scrub(text);
             if (s.kind === 'residue') throw new Stop('e2_stream_key_residue');
             scrubbed = scrubbed || s.scrubbed;
+            if (k > 0) fieldSecrets += s.secrets;
             parts.push(s.text);
           }
-          const [, cid, cevent, cdata] = parts as [string, string, string, string];
-          const rid = redactSecrets(cid);
-          const revent = redactSecrets(cevent);
-          const rdata = redactSecrets(cdata);
-          const redacted = rid.count + revent.count + rdata.count;
+          const [, sid, sevent, sdata] = parts as [string, string, string, string];
+          const redacted = fieldSecrets;
           secretsRedacted += redacted;
-          if (redacted > 0) scrubbed = true;
-          const sid = rid.text;
-          const sevent = revent.text;
-          const sdata = rdata.text;
           // M-2: every connection starts with an id-less status; a status that carries an id is a mid-run replay, not a start.
           if (inConn === 0 && (e.event !== 'status' || e.id !== null)) throw new Stop(first ? 'e2_stream_no_start' : 'e2_stream_gap');
           inConn += 1;
@@ -419,7 +407,7 @@ export async function captureCursorRunStream(input: {
         const ended = await readSse(open.body, async (e) => onEvent(e), (bytes) => {
           totalBytes += bytes;
           if (totalBytes > maxStreamBytes) throw new Stop('e2_stream_too_large');
-        }, signal, input.deadlineAtMs, now);
+        }, signal, input.deadlineAtMs, now, idleTimeoutMs);
         if (ended.partial) partialDiscarded += 1;
         if (doneSeen) {
           // H-1: SSE ids are opaque, so events a server skipped on resume cannot be detected; any resume fails.
@@ -454,6 +442,7 @@ async function readSse(
   signal: AbortSignal | undefined,
   deadlineAtMs: number,
   now: () => number,
+  idleTimeoutMs: number,
 ): Promise<{ partial: boolean }> {
   if (body === null) return { partial: false };
   const reader = body.getReader();
@@ -504,10 +493,12 @@ async function readSse(
       const remaining = deadlineAtMs - now();
       if (remaining <= 0) { void reader.cancel().catch(() => undefined); throw new Stop('e2_stream_no_terminal'); }
       let timer: ReturnType<typeof setTimeout> | undefined;
-      const late = new Promise<'deadline'>((resolve) => { timer = setTimeout(() => resolve('deadline'), Math.min(remaining, 2_000_000_000)); });
-      let got: ReadableStreamReadResult<Uint8Array> | 'deadline';
+      // Skywalker F5: an idle timeout between reads, inside the overall deadline.
+      const idleFirst = idleTimeoutMs < remaining;
+      const late = new Promise<'deadline' | 'idle'>((resolve) => { timer = setTimeout(() => resolve(idleFirst ? 'idle' : 'deadline'), Math.min(idleFirst ? idleTimeoutMs : remaining, 2_000_000_000)); });
+      let got: ReadableStreamReadResult<Uint8Array> | 'deadline' | 'idle';
       try { got = await Promise.race([reader.read(), late]); } catch { if (isAborted(signal)) throw new Stop('e2_stream_aborted'); break; } finally { clearTimeout(timer); }
-      if (got === 'deadline') { void reader.cancel().catch(() => undefined); throw new Stop('e2_stream_no_terminal'); }
+      if (got === 'deadline' || got === 'idle') { void reader.cancel().catch(() => undefined); throw new Stop(got === 'idle' ? 'e2_stream_idle' : 'e2_stream_no_terminal'); }
       r = got;
       if (r.done) break;
       countBytes(r.value.byteLength);

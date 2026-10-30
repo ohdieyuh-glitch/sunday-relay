@@ -92,6 +92,10 @@ const GLOBAL_RESPONSE_AT_LOAD: typeof Response | null = typeof globalThis.Respon
  * N15, FAILS CLOSED BY DESIGN: monitoring code that wraps `globalThis.fetch` or sets a global dispatcher AFTER this module
  * loads (APM, Sentry, OpenTelemetry fetch/undici instrumentation) makes every later call `not_sent` `transport_untrusted`
  * and every transport "fake". Load such instrumentation before this module, or not at all, on a live host.
+ *
+ * Skywalker F10, RESIDUAL: patching the captured dispatcher object's methods IN PLACE (`dispatcher.dispatch = wrapper`)
+ * leaves its identity unchanged and is NOT detected. Like the pre-import residual, it is outside what an in-process check
+ * can see.
  */
 const UNDICI_GLOBAL_DISPATCHER = Symbol.for('undici.globalDispatcher.1');
 const readGlobalDispatcher = (): unknown => (globalThis as unknown as Record<symbol, unknown>)[UNDICI_GLOBAL_DISPATCHER];
@@ -126,8 +130,33 @@ export function cursorTransportMode(transport: unknown): 'live' | 'fake' {
   return typeof transport === 'object' && transport !== null && LIVE_TRANSPORTS.has(transport) && !TAINTED_TRANSPORTS.has(transport) && cursorGlobalFetchIntact() ? 'live' : 'fake';
 }
 
+/*
+ * M-6 / Skywalker F4: secrets that are not the Cursor key (sk-/sk-ant-, xai-, gsk_, AKIA/ASIA, org-, gh*_, github_pat_,
+ * JWT, Bearer/Basic, PEM keys) are redacted by the stream scrub, after the Cursor-key patterns and before the residue check. Patterns are the well-known public token shapes; the count of redactions is recorded per event and in total.
+ */
+const SECRET_PATTERNS: readonly RegExp[] = [
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/gu,
+  /\bgh[pousr]_[A-Za-z0-9]{20,}/gu,
+  /\bgithub_pat_[A-Za-z0-9_]{20,}/gu,
+  /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/gu,
+  /\bsk-[A-Za-z0-9_-]{16,}/gu,
+  /\bxai-[A-Za-z0-9_-]{16,}/gu,
+  /\bgsk_[A-Za-z0-9]{16,}/gu,
+  /\bxox[abprs]-[A-Za-z0-9-]{10,}/gu,
+  /\bAIza[0-9A-Za-z_-]{30,}/gu,
+  /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/gu,
+  /\borg-[A-Za-z0-9]{16,}/gu,
+  /\b(?:Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}/giu,
+];
+export function redactSecrets(text: string): { readonly text: string; readonly count: number } {
+  let count = 0;
+  let out = text;
+  for (const re of SECRET_PATTERNS) out = out.replace(re, () => { count += 1; return '[REDACTED:secret]'; });
+  return { text: out, count };
+}
+
 /** E2: one scrubbed piece of stream text, or `residue` when key characters survive the scrub (the caller fails closed). */
-export type CursorStreamScrub = { readonly kind: 'clean'; readonly text: string; readonly scrubbed: boolean } | { readonly kind: 'residue' };
+export type CursorStreamScrub = { readonly kind: 'clean'; readonly text: string; readonly scrubbed: boolean; readonly secrets: number } | { readonly kind: 'residue' };
 /**
  * E2: the outcome of opening `GET /v1/agents/{id}/runs/{runId}/stream` once. `opened` hands over the response body and a
  * scrubber bound to the key that was sent (the key itself never leaves this module); `mode` is the transport's live stamp at
@@ -147,7 +176,7 @@ export type CursorStreamOpen =
     readonly close: () => void;
   }
   | { readonly kind: 'status'; readonly status: number }
-  | { readonly kind: 'not_sent'; readonly cause: 'aborted' | 'key_absent' | 'transport_untrusted' | 'transport_unknown' | 'ref_invalid' | 'last_event_id_invalid' }
+  | { readonly kind: 'not_sent'; readonly cause: 'aborted' | 'key_absent' | 'transport_untrusted' | 'transport_unknown' | 'ref_invalid' | 'last_event_id_invalid' | 'rate_budget_exhausted' }
   | { readonly kind: 'failed_in_flight'; readonly cause: 'timeout' | 'network' | 'aborted_in_flight' }
   | { readonly kind: 'deadline' };
 type CursorStreamOpener = (ref: CodingAgentRunRef, lastEventId: string | null, opts: { readonly deadlineAtMs: number; readonly signal?: AbortSignal }) => Promise<CursorStreamOpen>;
@@ -319,6 +348,8 @@ export interface CursorCloudAgentsTransportOptions {
   readonly requestTimeoutMs?: number;
   /** First 429 backoff when no Retry-After is given. Default 10000, doubling to 60000. */
   readonly rateLimitBackoffMs?: number;
+  /** Shared request budget per 60 s for this transport; default and maximum 20. */
+  readonly requestsPerMinute?: number;
   readonly log?: (line: string) => void;
 }
 
@@ -399,6 +430,20 @@ export function createCursorCloudAgentsTransport(options: CursorCloudAgentsTrans
   const firstBackoff = Math.max(1_000, options.rateLimitBackoffMs ?? 10_000);
   const modelField = effectiveAttestedModelField(CURSOR_ATTESTED_MODEL_FIELD);
   const log = options.log ?? ((): void => undefined);
+  /*
+   * Skywalker F3: ONE request budget per transport, shared by every call it makes (create, poll, result, usage, cancel,
+   * stream). Every request is counted in a sliding 60 s window; a stream open that would exceed the budget (default and
+   * maximum 20, Cursor's documented default) is not sent (`rate_budget_exhausted`). Other calls are counted, not blocked:
+   * they keep their 429 handling. The window uses the transport's clock.
+   */
+  const budget = Math.min(20, Math.max(1, Math.floor(options.requestsPerMinute ?? 20)));
+  const sentAt: number[] = [];
+  const budgetLeft = (): number => {
+    const t = now();
+    while (sentAt.length > 0 && (sentAt[0] as number) <= t - 60_000) sentAt.shift();
+    return budget - sentAt.length;
+  };
+  const noteRequest = (): void => { budgetLeft(); sentAt.push(now()); };
 
   /** The key, only for the duration of one request. A malformed key is treated as absent. */
   const readKey = (): string | null => {
@@ -425,6 +470,7 @@ export function createCursorCloudAgentsTransport(options: CursorCloudAgentsTrans
     const timer = setTimeout(() => timeout.abort(), requestTimeoutMs);
     const onAbort = (): void => timeout.abort();
     signal?.addEventListener('abort', onAbort, { once: true });
+    noteRequest();
     try {
       const res = await options.fetch(`${CURSOR_API_ORIGIN}${path}`, {
         method,
@@ -658,6 +704,8 @@ export function createCursorCloudAgentsTransport(options: CursorCloudAgentsTrans
         signal?.removeEventListener('abort', onAbort);
         ctl.abort();
       };
+      if (budgetLeft() <= 0) { close(); return { kind: 'not_sent', cause: 'rate_budget_exhausted' }; }
+      noteRequest();
       let res: CursorFetchResponse;
       try {
         res = await options.fetch(`${CURSOR_API_ORIGIN}/v1/agents/${encodeURIComponent(ref.agentId)}/runs/${encodeURIComponent(ref.runId)}/stream`, {
@@ -692,7 +740,9 @@ export function createCursorCloudAgentsTransport(options: CursorCloudAgentsTrans
       const scrub = (text: string): CursorStreamScrub => {
         let out = text;
         for (const re of cursorKeyPatterns(key)) out = out.replace(re, REDACTED);
-        return cursorKeyResidue(out, key) ? { kind: 'residue' } : { kind: 'clean', text: out, scrubbed: out !== text };
+        const other = redactSecrets(out);
+        out = other.text;
+        return cursorKeyResidue(out, key) ? { kind: 'residue' } : { kind: 'clean', text: out, scrubbed: out !== text, secrets: other.count };
       };
       return {
         kind: 'opened', status: res.status, mode, scrub, close,

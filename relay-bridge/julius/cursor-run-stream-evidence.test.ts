@@ -120,14 +120,15 @@ describe('E2 capture: a hashed, ordered, chained record of the run stream', () =
     expect(evidence.cause).toBeNull();
     expect(seen.map((s) => s.lastEventId)).toEqual([null, null]);
   });
-  it('gap: a resume that does not start with status, a 400 invalid_last_event_id, or reconnects exhausted', async () => {
+  /* Skywalker F3 (changed): exhausted reconnects are now the named e2_stream_reconnect_limit, not a gap. */
+  it('gap: a resume that does not start with status or a 400 invalid_last_event_id; reconnects exhausted is reconnect_limit', async () => {
     expect((await capture([{ chunks: [START, READ_RUN] }, { chunks: [READ_DONE, RESULT, DONE] }])).evidence.cause).toBe('e2_stream_gap');
     expect((await capture([{ chunks: [START, READ_RUN] }, { status: 400 }])).evidence.cause).toBe('e2_stream_gap');
     const ex = await capture([{ chunks: [START, READ_RUN] }, { chunks: [START] }], { maxReconnects: 3 });
-    expect(ex.evidence.cause).toBe('e2_stream_gap');
+    expect(ex.evidence.cause).toBe('e2_stream_reconnect_limit');
     expect(ex.seen.length).toBe(4);
     const net = await capture([{ chunks: [START, READ_RUN] }, 'throw'], { maxReconnects: 2 });
-    expect(net.evidence.cause).toBe('e2_stream_gap');
+    expect(net.evidence.cause).toBe('e2_stream_reconnect_limit');
     expect(net.seen.length).toBe(3);
   });
   it('410 stream_expired on open or on resume is e2_stream_expired; never a fallback to the diff', async () => {
@@ -355,6 +356,7 @@ describe('E2 capture: a hashed, ordered, chained record of the run stream', () =
       'e2_stream_key_residue', 'e2_stream_malformed_event', 'e2_stream_no_start', 'e2_stream_no_terminal', 'e2_stream_open_failed', 'e2_stream_out_of_order', 'e2_stream_run_mismatch',
       'e2_stream_too_large', 'e2_stream_truncated_key_call',
       'e2_stream_call_unfinished', 'e2_stream_duplicate_event', 'e2_stream_resumed', 'e2_stream_terminal_not_finished',
+      'e2_stream_idle', 'e2_stream_rate_budget', 'e2_stream_reconnect_limit',
     ].sort());
   });
 });
