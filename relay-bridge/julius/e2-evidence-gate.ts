@@ -4,6 +4,9 @@ import { lstatSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, normalize as normalizePath } from 'node:path';
 
 import { E2_STREAM_LABEL_LIVE, verifyEvidenceChain } from './cursor-run-stream-evidence';
+import { isWorkflowAnchor, type ExternalAnchor } from './e2-external-anchor';
+
+export { E2_EXTERNAL_ANCHOR_SOURCES, type E2ExternalAnchorSource, type E2UntrustedAnchorSource, type ExternalAnchor } from './e2-external-anchor';
 import { familyFromModelId, isRouterModelId } from './grok-bot-coding-provider';
 
 /**
@@ -498,40 +501,26 @@ export interface E2Binding { readonly runId: string; readonly base: string; read
 /**
  * The final hash recorded OUTSIDE the capture (workflow output, ledger). The gate never takes it from the file.
  * PILOT 5366ad30 R3-1: ENFORCED by type and by a module-private registry. The gate accepts only an {@link ExternalAnchor}
- * made by {@link externalAnchor} with a source from the closed set {@link E2_EXTERNAL_ANCHOR_SOURCES}; a bare object, a
+ * made by `externalAnchor` in ./e2-external-anchor with a source from the closed set {@link E2_EXTERNAL_ANCHOR_SOURCES}; a bare object, a
  * string, a copy, or an anchor labelled `evidence_file` / `capturing_process` is refused with `e2_anchor_not_external`.
  * {@link anchorFromEvidenceFile} and {@link anchorFromCapture} exist only so a caller that has nothing better gets a
  * refusal with a name instead of a silent pass. HONEST LIMIT: the label is the caller's claim. A writer who controls the
  * events, the final record AND the external anchor source still wins; the workflow side must hold the anchor (write it
  * from the workflow right after capture and read it back from that output only). The gate cannot verify provenance.
  */
-export const E2_EXTERNAL_ANCHOR_SOURCES = Object.freeze(['workflow_output', 'ledger_hash'] as const);
-export type E2ExternalAnchorSource = (typeof E2_EXTERNAL_ANCHOR_SOURCES)[number];
-export type E2UntrustedAnchorSource = 'evidence_file' | 'capturing_process';
-declare const ANCHOR_BRAND: unique symbol;
-export interface ExternalAnchor { readonly finalHash: string; readonly source: E2ExternalAnchorSource | E2UntrustedAnchorSource; readonly [ANCHOR_BRAND]: true }
-/** @deprecated alias kept for callers; only branded anchors pass. */
+/* Round 5 R4-2: the constructor and the brand registry live in ./e2-external-anchor (not exported from here). The two
+   helpers below make anchors the gate always refuses, so a caller with nothing better gets a named refusal. */
 export type E2Anchor = ExternalAnchor;
-const ANCHORS = new WeakSet<object>();
-const mkAnchor = (source: E2ExternalAnchorSource | E2UntrustedAnchorSource, finalHash: unknown): ExternalAnchor => {
-  const a = Object.freeze({ finalHash: typeof finalHash === 'string' ? finalHash : '', source }) as ExternalAnchor;
-  ANCHORS.add(a);
-  return a;
-};
-/** The only way to make an anchor the gate can accept. An unknown source throws (no default, no coercion). */
-export function externalAnchor(source: E2ExternalAnchorSource, finalHash: string): ExternalAnchor {
-  if (!(E2_EXTERNAL_ANCHOR_SOURCES as readonly string[]).includes(source)) throw new TypeError(`e2: anchor source must be one of ${E2_EXTERNAL_ANCHOR_SOURCES.join(', ')}`);
-  return mkAnchor(source, finalHash);
-}
+const untrusted = (source: 'evidence_file' | 'capturing_process', finalHash: unknown): ExternalAnchor =>
+  Object.freeze({ finalHash: typeof finalHash === 'string' ? finalHash : '', source }) as unknown as ExternalAnchor;
 /** An anchor read from the evidence file itself: always refused by the gate (`e2_anchor_not_external`). */
 export function anchorFromEvidenceFile(lines: readonly string[]): ExternalAnchor {
   const c = verifyEvidenceChain(lines);
-  return mkAnchor('evidence_file', c.ok ? c.finalHash : '');
+  return untrusted('evidence_file', c.ok ? c.finalHash : '');
 }
 /** An anchor taken from the capturing process's own result object: always refused (`e2_anchor_not_external`). */
-export const anchorFromCapture = (evidence: { readonly finalHash: string }): ExternalAnchor => mkAnchor('capturing_process', evidence.finalHash);
-const isExternal = (a: unknown): a is ExternalAnchor => typeof a === 'object' && a !== null && ANCHORS.has(a)
-  && (E2_EXTERNAL_ANCHOR_SOURCES as readonly string[]).includes((a as ExternalAnchor).source);
+export const anchorFromCapture = (evidence: { readonly finalHash: string }): ExternalAnchor => untrusted('capturing_process', evidence.finalHash);
+const isExternal = isWorkflowAnchor;
 
 /**
  * Skywalker N1 (0774db05): model ids are compared after NFKC, trimming and the provider's lookalike folding, so `AUTO `,

@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import * as G from './e2-evidence-gate';
-import { MODEL, RUN, START, call, liveCapture, makeRepo, tail } from './e2-test-kit';
+import { MODEL, RUN, START, call, liveCapture, makeRepo, tail, anchorOf } from './e2-test-kit';
 
 let root = ''; let repo = ''; let base = ''; let head = '';
 let P: Awaited<ReturnType<typeof parts>>;
@@ -30,7 +30,7 @@ let k = 0;
 async function gate(calls: readonly [string, unknown][], extra: Record<string, unknown> = {}): Promise<readonly string[]> {
   k += 1;
   const { lines, evidence } = await liveCapture(root, `p${k}.jsonl`, START + calls.map(([n, a], i) => call(`c${i}`, n, a)).join('') + tail());
-  const r = G.e2Gate({ streamLines: lines, anchor: G.externalAnchor('workflow_output', evidence.finalHash), ...P, binding: { runId: RUN, base, head, workspace: repo, ...extra } } as Parameters<typeof G.e2Gate>[0]);
+  const r = G.e2Gate({ streamLines: lines, anchor: anchorOf('workflow_output', evidence.finalHash), ...P, binding: { runId: RUN, base, head, workspace: repo, ...extra } } as Parameters<typeof G.e2Gate>[0]);
   return r.ok ? [] : r.reasons;
 }
 

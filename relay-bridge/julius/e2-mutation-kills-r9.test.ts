@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createCursorCloudAgentsTransport, type CursorFetch } from './cursor-cloud-agents-transport';
 import { captureCursorRunStream, createMemoryEvidenceSink } from './cursor-run-stream-evidence';
 import * as G from './e2-evidence-gate';
-import { MODEL, RUN, START, call, ev, git, liveCapture, makeRepo, tail } from './e2-test-kit';
+import { MODEL, RUN, START, call, ev, git, liveCapture, makeRepo, tail, anchorOf } from './e2-test-kit';
 
 let root = ''; let repo = ''; let base = ''; let head = ''; let emptyHead = '';
 beforeAll(() => {
@@ -32,7 +32,7 @@ let k = 0;
 async function gate(sse: string, h = head): Promise<readonly string[]> {
   k += 1;
   const { lines, evidence } = await liveCapture(root, `k${k}.jsonl`, sse);
-  const r = G.e2Gate({ streamLines: lines, anchor: G.externalAnchor('workflow_output', evidence.finalHash), ...await parts(h) } as Parameters<typeof G.e2Gate>[0]);
+  const r = G.e2Gate({ streamLines: lines, anchor: anchorOf('workflow_output', evidence.finalHash), ...await parts(h) } as Parameters<typeof G.e2Gate>[0]);
   return r.ok ? [] : r.reasons;
 }
 

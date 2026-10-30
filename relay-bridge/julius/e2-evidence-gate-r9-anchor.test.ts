@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { verifyEvidenceChain } from './cursor-run-stream-evidence';
 import * as G from './e2-evidence-gate';
-import { GOOD, MODEL, RUN, START, call, liveCapture, makeRepo, rechain, tail } from './e2-test-kit';
+import { GOOD, MODEL, RUN, START, call, liveCapture, makeRepo, rechain, tail, anchorOf } from './e2-test-kit';
 
 /* PILOT 5366ad30 R3-1: the independent anchor is enforced in code. Failing-first: on 5366ad30 a self-derived anchor passed. */
 let root = ''; let repo = ''; let base = ''; let head = '';
@@ -31,19 +31,19 @@ const selfHash = (l: readonly string[]): string => (verifyEvidenceChain(l) as { 
 describe('R3-1: only a branded external anchor counts', () => {
   it('an untouched capture with a workflow_output anchor passes', async () => {
     const { lines, evidence } = await liveCapture(root, 'ok.jsonl', GOOD());
-    expect(reasons(G.e2Gate({ streamLines: lines, anchor: G.externalAnchor('workflow_output', evidence.finalHash), ...await parts(), modelId: MODEL }))).toEqual([]);
-    expect(reasons(G.e2Gate({ streamLines: lines, anchor: G.externalAnchor('ledger_hash', evidence.finalHash), ...await parts(), modelId: MODEL }))).toEqual([]);
+    expect(reasons(G.e2Gate({ streamLines: lines, anchor: anchorOf('workflow_output', evidence.finalHash), ...await parts(), modelId: MODEL }))).toEqual([]);
+    expect(reasons(G.e2Gate({ streamLines: lines, anchor: anchorOf('ledger_hash', evidence.finalHash), ...await parts(), modelId: MODEL }))).toEqual([]);
   });
   it('a bare object, a string, a copy, or a file/capture-derived anchor is e2_anchor_not_external even when the hash matches', async () => {
     const { lines, evidence } = await liveCapture(root, 'bare.jsonl', GOOD());
     const p = await parts();
-    const good = G.externalAnchor('workflow_output', evidence.finalHash);
+    const good = anchorOf('workflow_output', evidence.finalHash);
     for (const anchor of [{ finalHash: evidence.finalHash }, evidence.finalHash, { ...good }, Object.assign(Object.create(null), good), G.anchorFromEvidenceFile(lines), G.anchorFromCapture(evidence)]) {
       expect(reasons(G.e2Gate({ streamLines: lines, anchor, ...p, modelId: MODEL } as unknown as Parameters<typeof G.e2Gate>[0]))).toEqual(['e2_anchor_not_external']);
     }
   });
   it('externalAnchor refuses a source outside the closed set', () => {
-    for (const s of ['evidence_file', 'capturing_process', 'workflow', '', 'WORKFLOW_OUTPUT']) expect(() => G.externalAnchor(s as 'workflow_output', 'a'.repeat(64))).toThrow();
+    for (const s of ['evidence_file', 'capturing_process', 'workflow', '', 'WORKFLOW_OUTPUT']) expect(() => anchorOf(s as 'workflow_output', 'a'.repeat(64))).toThrow();
     expect(G.E2_EXTERNAL_ANCHOR_SOURCES).toEqual(['workflow_output', 'ledger_hash']);
   });
   it('PILOT forgeries are refused when the only anchor available is derived from the file', async () => {
@@ -60,7 +60,7 @@ describe('R3-1: only a branded external anchor counts', () => {
     for (const forged of [relabelled, toEdit, swapped]) {
       expect(verifyEvidenceChain(forged).ok).toBe(true);
       /* Sanity: these ARE the forgeries that passed on 5366ad30 with a self-derived plain anchor. */
-      expect(reasons(G.e2Gate({ streamLines: forged, anchor: G.externalAnchor('ledger_hash', selfHash(forged)), ...p, modelId: MODEL }))).toEqual([]);
+      expect(reasons(G.e2Gate({ streamLines: forged, anchor: anchorOf('ledger_hash', selfHash(forged)), ...p, modelId: MODEL }))).toEqual([]);
       for (const anchor of [G.anchorFromEvidenceFile(forged), { finalHash: selfHash(forged) }]) {
         expect(reasons(G.e2Gate({ streamLines: forged, anchor, ...p, modelId: MODEL } as Parameters<typeof G.e2Gate>[0]))).toEqual(['e2_anchor_not_external']);
       }
@@ -70,7 +70,7 @@ describe('R3-1: only a branded external anchor counts', () => {
     const { lines } = await liveCapture(root, 'abs.jsonl', GOOD());
     const p = await parts();
     for (const anchor of [null, undefined]) expect(reasons(G.e2Gate({ streamLines: lines, anchor, ...p, modelId: MODEL }))).toEqual(['e2_anchor_absent']);
-    expect(reasons(G.e2Gate({ streamLines: lines, anchor: G.externalAnchor('workflow_output', ''), ...p, modelId: MODEL }))).toEqual(['e2_anchor_absent']);
-    expect(reasons(G.e2Gate({ streamLines: lines, anchor: G.externalAnchor('workflow_output', 'f'.repeat(64)), ...p, modelId: MODEL }))).toEqual(['e2_anchor_mismatch']);
+    expect(reasons(G.e2Gate({ streamLines: lines, anchor: anchorOf('workflow_output', ''), ...p, modelId: MODEL }))).toEqual(['e2_anchor_absent']);
+    expect(reasons(G.e2Gate({ streamLines: lines, anchor: anchorOf('workflow_output', 'f'.repeat(64)), ...p, modelId: MODEL }))).toEqual(['e2_anchor_mismatch']);
   });
 });

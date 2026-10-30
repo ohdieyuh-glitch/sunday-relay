@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { vi } from 'vitest';
 
 import { readEvidenceLines } from './cursor-run-stream-evidence';
+import { externalAnchor, type E2ExternalAnchorSource, type ExternalAnchor } from './e2-external-anchor';
 
 export const KEY = 'SENTINEL-KEY-0123456789-never-print';
 export const AGENT = 'bc-00000000-0000-4000-8000-000000000001';
@@ -65,3 +66,6 @@ export function rechain(lines: readonly string[], edit: (r: Record<string, unkno
   }
   return out;
 }
+
+/** Round 5 R4-2: tests build anchors through the injected-source constructor. */
+export const anchorOf = (source: E2ExternalAnchorSource, hash: string): ExternalAnchor => externalAnchor(() => ({ source, hash }));

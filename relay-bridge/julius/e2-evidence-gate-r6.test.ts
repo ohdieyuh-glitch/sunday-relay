@@ -7,7 +7,8 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { readEvidenceLines } from './cursor-run-stream-evidence';
-import { e2Gate, externalAnchor, pinVerifierSpec, type E2VerifierSpec, recordGitDiff, recordVerifierReexec, spawnVerifierRunner } from './e2-evidence-gate';
+import { e2Gate, pinVerifierSpec, type E2VerifierSpec, recordGitDiff, recordVerifierReexec, spawnVerifierRunner } from './e2-evidence-gate';
+import { anchorOf } from './e2-test-kit';
 
 /* PILOT 43b93a4e M-8 (git diff isolation) and Skywalker 43b93a4e N3 rule (b) (edit paths vs diff paths), failing-first. */
 const KEY = 'SENTINEL-KEY-0123456789-never-print';
@@ -83,7 +84,7 @@ async function liveCapture(name: string, sse: string) {
     if (c.kind !== 'created') throw new Error(c.kind);
     const path = join(root, name);
     const evidence = await E.captureCursorRunStream({ transport, ref: c.ref, sink: E.createFileEvidenceSink(path), deadlineAtMs: Date.now() + 60_000 });
-    return { lines: await readEvidenceLines(path), anchor: externalAnchor('workflow_output', evidence.finalHash) };
+    return { lines: await readEvidenceLines(path), anchor: anchorOf('workflow_output', evidence.finalHash) };
   } finally { globalThis.fetch = orig; vi.resetModules(); }
 }
 

@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import * as G from './e2-evidence-gate';
-import { GOOD, MODEL, RUN, liveCapture, makeRepo } from './e2-test-kit';
+import { GOOD, MODEL, RUN, liveCapture, makeRepo, anchorOf } from './e2-test-kit';
 
 let root = '';
 const W = (p: string, c: string): void => { mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, c); };
@@ -35,7 +35,7 @@ describe('R4-1: coder-committed binaries', () => {
     expect('refused' in verifierSpec).toBe(false);
     const p = { verifierSpec, reexec: await G.recordVerifierReexec({ spec: verifierSpec, cwd: repo, runner }), diff: await G.recordGitDiff({ base, head, cwd: repo, runner }), binding: { runId: RUN, base, head, workspace: repo }, modelId: MODEL };
     const { lines, evidence } = await liveCapture(root, 'nm.jsonl', GOOD());
-    const g = G.e2Gate({ streamLines: lines, anchor: G.externalAnchor('workflow_output', evidence.finalHash), ...p });
+    const g = G.e2Gate({ streamLines: lines, anchor: anchorOf('workflow_output', evidence.finalHash), ...p });
     expect(g.ok).toBe(false);
     expect(g.ok ? [] : g.reasons).toContain('e2_verifier_binary_untrusted');
     expect(existsSync(mark)).toBe(false);

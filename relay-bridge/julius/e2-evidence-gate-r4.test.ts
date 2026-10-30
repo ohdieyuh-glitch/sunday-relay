@@ -7,7 +7,8 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { readEvidenceLines, verifyEvidenceChain } from './cursor-run-stream-evidence';
-import { e2Gate, externalAnchor, pinVerifierSpec, type E2VerifierSpec, recordGitDiff, recordVerifierReexec, spawnVerifierRunner } from './e2-evidence-gate';
+import { e2Gate, pinVerifierSpec, type E2VerifierSpec, recordGitDiff, recordVerifierReexec, spawnVerifierRunner } from './e2-evidence-gate';
+import { anchorOf } from './e2-test-kit';
 
 /*
  * PILOT 43b93a4e N-1, N-5, N-6, M-2, mutant M2 and Skywalker 43b93a4e N2/N3/L3, failing-first. The live-labelled capture
@@ -73,7 +74,7 @@ function rechain(lines: readonly string[], edit: (r: Record<string, unknown>) =>
   }
   return out;
 }
-const anchorOf = (l: readonly string[]) => externalAnchor('ledger_hash', (verifyEvidenceChain(l) as { finalHash: string }).finalHash); // R3-1: simulates a writer who also controls the anchor source (recount tests)
+const chainAnchor = (l: readonly string[]) => anchorOf('ledger_hash', (verifyEvidenceChain(l) as { finalHash: string }).finalHash); // R3-1: simulates a writer who also controls the anchor source (recount tests)
 async function parts() {
   const runner = spawnVerifierRunner({ timeoutMs: 30_000 });
   const verifierSpec = pinVerifierSpec({ testCommand: 'node ok.mjs', workspace: repo, base }) as E2VerifierSpec;
@@ -89,13 +90,13 @@ describe('PILOT 43b93a4e N-1 / mutant M2: the gate recounts the final record fro
   it('the baseline created-run capture passes', async () => {
     const { lines, evidence } = await liveCapture('ok.jsonl', GOOD);
     const p = await parts();
-    expect(reasons(e2Gate({ streamLines: lines, anchor: externalAnchor('workflow_output', evidence.finalHash), ...p, modelId: MODEL }))).toEqual([]);
+    expect(reasons(e2Gate({ streamLines: lines, anchor: anchorOf('workflow_output', evidence.finalHash), ...p, modelId: MODEL }))).toEqual([]);
   });
   it('an ERROR result re-chained under a FINISHED final record is refused (M2)', async () => {
     const { lines } = await liveCapture('m2.jsonl', GOOD);
     const forged = rechain(lines, (r) => { if (r.kind === 'event' && r.event === 'result') r.data = JSON.stringify({ runId: RUN, status: 'ERROR', durationMs: 10 }); });
     const p = await parts();
-    expect(reasons(e2Gate({ streamLines: forged, anchor: anchorOf(forged), ...p, modelId: MODEL }))).toContain('e2_final_record_mismatch');
+    expect(reasons(e2Gate({ streamLines: forged, anchor: chainAnchor(forged), ...p, modelId: MODEL }))).toContain('e2_final_record_mismatch');
   });
   it('mutant M2: an ERROR run re-chained consistently (event and final both ERROR) is refused as not finished', async () => {
     const { lines } = await liveCapture('m2b.jsonl', GOOD);
@@ -104,17 +105,17 @@ describe('PILOT 43b93a4e N-1 / mutant M2: the gate recounts the final record fro
       if (r.kind === 'final') r.terminal = { ...(r.terminal as object), status: 'ERROR' };
     });
     const p = await parts();
-    expect(reasons(e2Gate({ streamLines: forged, anchor: anchorOf(forged), ...p, modelId: MODEL }))).toEqual(['e2_stream_terminal_not_finished']);
+    expect(reasons(e2Gate({ streamLines: forged, anchor: chainAnchor(forged), ...p, modelId: MODEL }))).toEqual(['e2_stream_terminal_not_finished']);
   });
   it('a tool_call event removed (final still counts it), or an unfinished call hidden, is refused', async () => {
     const { lines } = await liveCapture('n1.jsonl', GOOD);
     const p = await parts();
     const dropped = rechain(lines, (r) => !(r.kind === 'event' && r.event === 'tool_call'));
-    expect(reasons(e2Gate({ streamLines: dropped, anchor: anchorOf(dropped), ...p, modelId: MODEL }))).toContain('e2_final_record_mismatch');
+    expect(reasons(e2Gate({ streamLines: dropped, anchor: chainAnchor(dropped), ...p, modelId: MODEL }))).toContain('e2_final_record_mismatch');
     const pending = rechain(lines, (r) => { if (r.kind === 'event' && r.event === 'tool_call') r.data = JSON.stringify({ callId: 'c1', name: 'edit_file', status: 'running', args: { path: 'a.txt' } }); });
-    expect(reasons(e2Gate({ streamLines: pending, anchor: anchorOf(pending), ...p, modelId: MODEL }))).toContain('e2_final_record_mismatch');
+    expect(reasons(e2Gate({ streamLines: pending, anchor: chainAnchor(pending), ...p, modelId: MODEL }))).toContain('e2_final_record_mismatch');
     const nodone = rechain(lines, (r) => !(r.kind === 'event' && r.event === 'done'));
-    expect(reasons(e2Gate({ streamLines: nodone, anchor: anchorOf(nodone), ...p, modelId: MODEL }))).toContain('e2_final_record_mismatch');
+    expect(reasons(e2Gate({ streamLines: nodone, anchor: chainAnchor(nodone), ...p, modelId: MODEL }))).toContain('e2_final_record_mismatch');
   });
 });
 
@@ -122,14 +123,14 @@ describe('Skywalker 43b93a4e N3: real work', () => {
   it('a stream with only read-type tool calls is refused', async () => {
     const { lines, evidence } = await liveCapture('reads.jsonl', START + call('c1', 'read_file') + call('c2', 'grep') + tail());
     const p = await parts();
-    expect(reasons(e2Gate({ streamLines: lines, anchor: externalAnchor('workflow_output', evidence.finalHash), ...p, modelId: MODEL }))).toEqual(['e2_no_edit_calls']);
+    expect(reasons(e2Gate({ streamLines: lines, anchor: anchorOf('workflow_output', evidence.finalHash), ...p, modelId: MODEL }))).toEqual(['e2_no_edit_calls']);
   });
   it('PILOT N-5: an empty diff or base == head is refused', async () => {
     const { lines, evidence } = await liveCapture('empty.jsonl', GOOD);
     const p = await parts();
     const same = await recordGitDiff({ base: head, head, cwd: repo, runner: p.runner });
     expect(same?.bytes).toBe(0);
-    expect(reasons(e2Gate({ streamLines: lines, anchor: externalAnchor('workflow_output', evidence.finalHash), ...p, diff: same, binding: { ...p.binding, base: head }, modelId: MODEL }))).toEqual(['e2_diff_empty', 'e2_verifier_not_from_spec', 'e2_edit_path_not_in_diff']); // R3-2: spec pinned at the real base; r6 rule (b): the edit is not in an empty diff
+    expect(reasons(e2Gate({ streamLines: lines, anchor: anchorOf('workflow_output', evidence.finalHash), ...p, diff: same, binding: { ...p.binding, base: head }, modelId: MODEL }))).toEqual(['e2_diff_empty', 'e2_verifier_not_from_spec', 'e2_edit_path_not_in_diff']); // R3-2: spec pinned at the real base; r6 rule (b): the edit is not in an empty diff
   });
 });
 
@@ -137,7 +138,7 @@ describe('PILOT 43b93a4e M-2: a stream not opened on a run this transport create
   it('a literal ref (mid-run attach is indistinguishable) is e2_stream_mid_run_start', async () => {
     const { lines, evidence } = await liveCapture('mid.jsonl', GOOD, { created: false });
     const p = await parts();
-    expect(reasons(e2Gate({ streamLines: lines, anchor: externalAnchor('workflow_output', evidence.finalHash), ...p, modelId: MODEL }))).toEqual(['e2_stream_mid_run_start', 'e2_model_unbound']);
+    expect(reasons(e2Gate({ streamLines: lines, anchor: anchorOf('workflow_output', evidence.finalHash), ...p, modelId: MODEL }))).toEqual(['e2_stream_mid_run_start', 'e2_model_unbound']);
   });
 });
 
@@ -145,7 +146,7 @@ describe('Skywalker N2 / PILOT N-6: the model is bound to the evidence file and 
   it('a caller model that differs from the requested model in the header is refused', async () => {
     const { lines, evidence } = await liveCapture('bind.jsonl', GOOD, { modelId: 'composer-1' });
     const p = await parts();
-    const g = { streamLines: lines, anchor: externalAnchor('workflow_output', evidence.finalHash), ...p };
+    const g = { streamLines: lines, anchor: anchorOf('workflow_output', evidence.finalHash), ...p };
     expect(reasons(e2Gate({ ...g, modelId: 'composer-1' }))).toEqual([]);
     expect(reasons(e2Gate({ ...g, modelId: MODEL }))).toEqual(['e2_model_unbound']);
   });
@@ -153,7 +154,7 @@ describe('Skywalker N2 / PILOT N-6: the model is bound to the evidence file and 
     for (const m of ['hermes-composer', 'groq-composer', 'grok-4', 'gpt-5', 'not-a-gpt-thing', 'my composer', 'composer-1\u0000', 'composer-1\n', 'Composer-1']) {
       const { lines, evidence } = await liveCapture(`al-${createHash('sha256').update(m).digest('hex').slice(0, 8)}.jsonl`, GOOD, { modelId: m });
       const p = await parts();
-      const r = reasons(e2Gate({ streamLines: lines, anchor: externalAnchor('workflow_output', evidence.finalHash), ...p, modelId: m }));
+      const r = reasons(e2Gate({ streamLines: lines, anchor: anchorOf('workflow_output', evidence.finalHash), ...p, modelId: m }));
       expect(r.length, JSON.stringify(m)).toBeGreaterThan(0);
       expect(r.every((x) => x.startsWith('e2_model_')), `${JSON.stringify(m)} ${r.join()}`).toBe(true);
     }
