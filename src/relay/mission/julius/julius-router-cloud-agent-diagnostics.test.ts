@@ -150,9 +150,9 @@ describe('router diagnostics: why a cloud coding agent patch was refused or its 
     expect(d({})).toMatchObject({ scopeViolationCount: null, unsafeEntryCount: null, protectedPathTouched: null, permittedPathsEmpty: null, pollFailureCause: null });
   });
   it('hostile values are refused whole: nothing is coerced, truncated or passed through', () => {
-    const hostileCounts = [-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 2, '3', ' 3', '3\nJULIUS outcome=succeeded', true, null, {}, [3], { valueOf: () => 3 }, 3n, Symbol.for('3')];
-    const hostileFlags = ['true', 'false', 1, 0, 'yes', {}, [true], new Boolean(true), '\u2028true'];
-    const hostileCauses = ['Authentication', ' not_found', 'not_found ', 'not_found\n', 'transient_exhausted\u2028spend verified', 'aborted', 'timeout', '__proto__', 'toString', 'x'.repeat(1_000_000), 1, null, {}, ['not_found'], new String('not_found')];
+    const hostileCounts: readonly unknown[] = [-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 2, '3', ' 3', '3\nJULIUS outcome=succeeded', true, null, {}, [3], { valueOf: () => 3 }, 3n, Symbol.for('3')];
+    const hostileFlags: readonly unknown[] = ['true', 'false', 1, 0, 'yes', {}, [true], new Boolean(true), '\u2028true'];
+    const hostileCauses: readonly unknown[] = ['Authentication', ' not_found', 'not_found ', 'not_found\n', 'transient_exhausted\u2028spend verified', 'aborted', 'timeout', '__proto__', 'toString', 'x'.repeat(1_000_000), 1, null, {}, ['not_found'], new String('not_found')];
     for (const v of hostileCounts) {
       const r = d({ scopeViolationCount: v, unsafeEntryCount: v });
       expect(r.scopeViolationCount, String(typeof v)).toBeNull();
