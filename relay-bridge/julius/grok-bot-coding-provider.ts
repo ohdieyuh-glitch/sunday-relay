@@ -98,8 +98,10 @@ export interface CodingAgentBranch { readonly repoUrl: string; readonly branch: 
 
 /**
  * WHAT TIES A RESULT TO ONE REAL RESPONSE (F15, E8): the run id and creation time the service returned, its request id
- * header when it sent one, and the SHA-256 of the exact response body. Tool calls are not available: the public v1 API
- * documents no per-run tool-call log, so `toolInvocations` stays null.
+ * header when it sent one, and the SHA-256 of the exact response body. Tool calls are NOT captured yet (E2 unimplemented,
+ * fails closed): the v1 API exposes them only on the live SSE stream `GET /v1/agents/{id}/runs/{runId}/stream` (`tool_call`
+ * events; no stored log; `410 stream_expired` after an undocumented retention window; no timestamps or exit codes). This
+ * adapter does not read that stream, so `toolInvocations` stays null and no tool-call evidence is ever claimed.
  */
 export interface CodingAgentReceipt {
   readonly runId: string | null;
