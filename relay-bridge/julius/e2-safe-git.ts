@@ -174,10 +174,10 @@ function walk(ws: string): { entries: Entry[]; outsideLinks: string[]; secret: s
 /**
  * Round 10 (Skywalker 5a6e3400: the Round 9 registry + alternates-line design is withdrawn): the throwaway object
  * directory the snapshot's objects live in. Created by snapshotCommitSafely outside the workspace, mode 0700, unique.
- * NOTHING is written into the coder's .git. The caller passes `objectDir.path` to recordGitDiff({ objectDir }), which
- * checks it (checkSnapshotObjectDir) and hands it to git only through the gate's fixed module-git env
- * (GIT_ALTERNATE_OBJECT_DIRECTORIES). dispose() removes the directory; idempotent. After dispose the head hash survives
- * but its objects can no longer be read.
+ * NOTHING is written into the coder's .git. The caller passes `objectDir.path` with the trusted seed store to
+ * recordGitDiff({ objectDir, trustedObjects }), which checks both and hands them to git only through the gate's fixed
+ * module-git env (GIT_OBJECT_DIRECTORY = this dir, GIT_ALTERNATE_OBJECT_DIRECTORIES = the store; the coder's
+ * .git/objects is never read). dispose() removes the directory; idempotent.
  */
 export type SnapshotObjectDir = { readonly path: string; readonly disposed: () => boolean };
 export type SnapshotResult = {
@@ -189,8 +189,8 @@ export type SnapshotResult = {
  * Round 9: refuses unless HEAD == parent (override: `allowHeadNotParent: true`, for a caller that has deliberately moved
  * HEAD and records why); refuses secret-looking paths (safe_git_secret_path, with `paths`) and paths git would drop
  * (safe_git_dropped_path, with `paths`); compares the written tree's file list and modes to the no-follow walk
- * (safe_git_tree_mismatch). Objects go only to the throwaway object dir. Wiring order: snapshot -> recordGitDiff({ objectDir:
- * objectDir.path }) -> e2Gate -> dispose() in a finally. A refusal carries no object dir (already cleaned).
+ * (safe_git_tree_mismatch). Objects go only to the throwaway object dir. Wiring order: buildTrustedSeedStore -> pin ->
+ * coder -> kill -> snapshot({ trustedObjects }) -> recordGitDiff({ objectDir, trustedObjects }) -> e2Gate -> dispose() in a finally. A refusal carries no object dir (already cleaned).
  */
 export function snapshotCommitSafely(input: { readonly workspace: string; readonly parent: string; readonly message: string; readonly author: { readonly name: string; readonly email: string }; readonly allowHeadNotParent?: true; readonly trustedObjects?: string }):
   SnapshotResult | Refused {

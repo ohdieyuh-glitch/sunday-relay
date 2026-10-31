@@ -138,8 +138,8 @@ const isModuleGit = (argv: readonly string[]): boolean => MODULE_GIT.has(JSON.st
 /**
  * Round 10 (Skywalker 5a6e3400 F9-1/F9-2/F9-5): the snapshot's throwaway object dir reaches git ONLY through the gate's
  * fixed module-git env. recordGitDiff (after checkSnapshotObjectDir) mints `-c e2.snapshotObjectDir=<dir>` into the argv
- * (an inert config key, so the recorded argv names the dir); the runner turns that ONE module-minted pin into
- * GIT_ALTERNATE_OBJECT_DIRECTORIES. Caller env never reaches module git, and nothing is written into the coder's .git.
+ * (an inert config key, so the recorded argv names the dir), and `-c e2.trustedObjects=<store>`; the runner turns those
+ * module-minted pins into GIT_OBJECT_DIRECTORY / GIT_ALTERNATE_OBJECT_DIRECTORIES (see snapshotAltEnv). Caller env never reaches module git, and nothing is written into the coder's .git.
  */
 const OBJDIR_PIN = 'e2.snapshotObjectDir=';
 /** Round 10 (Skywalker amendment): the trusted seed store's objects dir, minted the same way. */
