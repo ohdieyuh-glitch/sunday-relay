@@ -407,7 +407,9 @@ export interface E2VerifierSpec {
 export type E2VerifierSpecRefusal =
   | 'spec_invalid' | 'spec_shell_syntax' | 'spec_base_invalid' | 'spec_workspace_invalid'
   | E2VerifierShapeRefusal | 'spec_file_not_at_base' | 'spec_base_run_untrusted' | 'spec_base_tree_unreadable'
-  | E2PinnedSourceRefusal | 'spec_plain_node_no_floor';
+  | E2PinnedSourceRefusal | 'spec_plain_node_no_floor'
+  /** Round 8 (PILOT R7-5): a pinned file is not a regular blob (100644/100755) in the base tree, e.g. a symlink. */
+  | 'spec_file_not_regular';
 /** Round 7 R6-1/R6-3: why a pinned test/entry file's base content was refused by {@link scanPinnedSource}. */
 export type E2PinnedSourceRefusal = E2PinnedScanRefusal;
 const SPECS = new WeakSet<object>();
@@ -528,6 +530,7 @@ export function pinVerifierSpec(input: E2MissionVerifierInput): E2VerifierSpec |
   });
   const pins: Record<string, string> = {};
   const minTests: (number | null)[] = [];
+  let listing: string | null | undefined;
   for (const argv of commands) {
     if ((argv[0] as string).includes('/')) return no('program_not_allowed');
     const shape = verifierShape(argv, input.workspace);
@@ -536,6 +539,8 @@ export function pinVerifierSpec(input: E2MissionVerifierInput): E2VerifierSpec |
     for (const f of shape.files) {
       const blob = gitBlob(input.workspace, input.base, f);
       if (blob === null) return no('spec_file_not_at_base');
+      listing ??= baseTreeListing(input.workspace, input.base);
+      if (listing === null || !isRegularAtBase(listing, f)) return no('spec_file_not_regular');
       const scanned = scanPinnedSource(blob.toString('utf8'));
       if (scanned !== null) return no(scanned);
       pins[f] = sha256(blob);
@@ -550,16 +555,22 @@ export function pinVerifierSpec(input: E2MissionVerifierInput): E2VerifierSpec |
   return spec;
 }
 /** Round 6 R5-1: writes the base tree's regular files into a fresh directory (symlinks and submodules are skipped). */
-function materializeBase(workspace: string, base: string): string | null {
+function baseTreeListing(workspace: string, base: string): string | null {
   const bin = resolveProgram('git');
   if (bin === null) return null;
-  let listing: string;
   try {
-    listing = execFileSync(bin, [...GIT_PINS, ...safeDir(workspace), 'ls-tree', '-r', '-z', base], {
+    return execFileSync(bin, [...GIT_PINS, ...safeDir(workspace), 'ls-tree', '-r', '-z', base], {
       cwd: workspace, shell: false, stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024,
       env: { LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...E2_GIT_ENV, GIT_NO_REPLACE_OBJECTS: '1', PATH: E2_VERIFIER_PATH },
     }).toString('utf8');
   } catch { return null; }
+}
+/** Round 8 (PILOT R7-5): the base-tree mode of `path` is a regular blob (not 120000 symlink, not a gitlink). */
+const isRegularAtBase = (listing: string, path: string): boolean =>
+  listing.split('\u0000').some((e) => /^(100644|100755) blob [0-9a-f]{40}\t/u.test(e) && e.slice(e.indexOf('\t') + 1) === path);
+function materializeBase(workspace: string, base: string): string | null {
+  const listing = baseTreeListing(workspace, base);
+  if (listing === null) return null;
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'e2-base-run-')));
   for (const entry of listing.split('\u0000')) {
     const m = /^(100644|100755) blob [0-9a-f]{40}\t(.+)$/u.exec(entry);
@@ -608,6 +619,11 @@ const isSpec = (x: unknown): x is E2VerifierSpec => typeof x === 'object' && x !
 /** The workspace file still has its base content (a symlink, a missing file where one was pinned, or new content: false). */
 function pinHolds(workspace: string, path: string, want: string): boolean {
   const f = join(workspace, path);
+  /* Round 8 (PILOT R7-5): every parent directory is a real directory, not a symlink. */
+  const parts = path.split('/');
+  for (let i = 1; i < parts.length; i += 1) {
+    try { const d = lstatSync(join(workspace, ...parts.slice(0, i))); if (!d.isDirectory() || d.isSymbolicLink()) return false; } catch { return false; }
+  }
   let st;
   try { st = lstatSync(f); } catch (e) { return want === 'absent' && (e as { code?: string }).code === 'ENOENT'; }
   if (want === 'absent' || !st.isFile()) return false;
