@@ -6,7 +6,7 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { deflateSync } from 'node:zlib';
 import { afterAll, describe, expect, it } from 'vitest';
 import * as G from './e2-evidence-gate';
@@ -194,6 +194,16 @@ describe('R10-5: dispose() never throws; it reports what it could not remove and
     expect(require('node:fs').readdirSync(real).length).toBeGreaterThan(0);
     expect((rep as { leftovers: string[] }).leftovers).toContain(real);
     rmSync(real, { recursive: true, force: true }); rmSync(od, { force: true });
+  });
+  it('store dir swapped for a symlink: store.dispose() removes nothing outside and reports the real directory', () => {
+    const { repo, base } = seed();
+    const st = S.buildTrustedSeedStore({ seed: repo, base }) as S.TrustedSeedStore;
+    const sd = st.storeDir; const real = `${sd}.real`;
+    renameSync(sd, real); symlinkSync(real, sd);
+    const rep = st.dispose();
+    expect(existsSync(join(real, relative(sd, st.objects)))).toBe(true);
+    expect(rep.leftovers).toContain(real);
+    rmSync(real, { recursive: true, force: true }); rmSync(sd, { force: true });
   });
   it('control: a normal dispose removes everything and reports no leftovers (idempotent)', () => {
     const { repo, base } = seed();
