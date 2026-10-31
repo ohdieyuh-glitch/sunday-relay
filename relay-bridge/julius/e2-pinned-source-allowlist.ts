@@ -42,6 +42,9 @@ export type E2PinnedScanRefusal = 'spec_pinned_test_imports_untrusted' | 'spec_p
   | 'spec_pinned_test_html_comment'
   /** Round 9 (PILOT R8-5): larger than E2_PINNED_MAX_BYTES, nested deeper than E2_PINNED_MAX_DEPTH, or the parse/walk threw. */
   | 'spec_pinned_test_too_large' | 'spec_pinned_test_too_deep' | 'spec_pinned_test_scan_failed'
+  /** Round 10 (Skywalker F9-3): an import binding is assigned, deleted, ++/--'d, a destructuring target, reassigned or
+   *  shadowed (on itself or any member chain rooted at it), or an assert/test import escapes as a value. */
+  | 'spec_pinned_test_import_mutated'
   /** Round 9 (N8-4 / R8-4): the typescript parser could not be loaded (e.g. a bundled gate with node_modules absent). */
   | 'e2_scanner_unavailable';
 
@@ -155,6 +158,82 @@ export function scanPinnedSourceAst(src: string): E2PinnedScanRefusal | null {
   if (loadTs() === null) return 'e2_scanner_unavailable';
   try { return scanInner(src); } catch { return 'spec_pinned_test_scan_failed'; }
 }
+const ASSIGN_OPS = (): ReadonlySet<ts.SyntaxKind> => new Set([L!.SyntaxKind.EqualsToken, L!.SyntaxKind.PlusEqualsToken, L!.SyntaxKind.MinusEqualsToken,
+  L!.SyntaxKind.AsteriskEqualsToken, L!.SyntaxKind.AsteriskAsteriskEqualsToken, L!.SyntaxKind.SlashEqualsToken, L!.SyntaxKind.PercentEqualsToken,
+  L!.SyntaxKind.LessThanLessThanEqualsToken, L!.SyntaxKind.GreaterThanGreaterThanEqualsToken, L!.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken,
+  L!.SyntaxKind.AmpersandEqualsToken, L!.SyntaxKind.BarEqualsToken, L!.SyntaxKind.CaretEqualsToken, L!.SyntaxKind.BarBarEqualsToken,
+  L!.SyntaxKind.AmpersandAmpersandEqualsToken, L!.SyntaxKind.QuestionQuestionEqualsToken]);
+/** Round 10: `n` is written to: the left of an assignment (also inside a destructuring pattern), a for-in/of target,
+ *  a delete operand, or a ++/-- operand. */
+function isWriteTarget(n: ts.Node): boolean {
+  let c: ts.Node = n; const ops = ASSIGN_OPS();
+  for (;;) {
+    const p = c.parent;
+    if (p === undefined) return false;
+    if (L!.isParenthesizedExpression(p) || L!.isArrayLiteralExpression(p) || L!.isSpreadElement(p) || L!.isSpreadAssignment(p) || L!.isObjectLiteralExpression(p)
+      || L!.isShorthandPropertyAssignment(p) || (L!.isPropertyAssignment(p) && p.initializer === c)) { c = p; continue; }
+    if (L!.isBinaryExpression(p) && p.left === c && ops.has(p.operatorToken.kind)) return true;
+    if ((L!.isForOfStatement(p) || L!.isForInStatement(p)) && p.initializer === c) return true;
+    if (L!.isDeleteExpression(p)) return true;
+    if ((L!.isPrefixUnaryExpression(p) || L!.isPostfixUnaryExpression(p)) && (p.operator === L!.SyntaxKind.PlusPlusToken || p.operator === L!.SyntaxKind.MinusMinusToken)) return true;
+    return false;
+  }
+}
+/** Round 10: an identifier that is a binding NAME other than the import itself (shadowing). */
+function isShadowingDecl(r: ts.Identifier): boolean {
+  const q = r.parent as ts.Node & { name?: ts.Node };
+  return (L!.isVariableDeclaration(q) || L!.isParameter(q) || L!.isFunctionDeclaration(q) || L!.isFunctionExpression(q) || L!.isClassDeclaration(q) || L!.isClassExpression(q)
+    || L!.isBindingElement(q)) && q.name === r;
+}
+/** Round 10: an identifier used as a property name, not as a reference to a binding. */
+function isNameOnly(r: ts.Identifier): boolean {
+  const q = r.parent as ts.Node & { name?: ts.Node; propertyName?: ts.Node; label?: ts.Node };
+  if (L!.isImportClause(q) || L!.isImportSpecifier(q) || L!.isNamespaceImport(q)) return true;
+  if (L!.isPropertyAccessExpression(q) && q.name === r) return true;
+  if ((L!.isPropertyAssignment(q) || L!.isMethodDeclaration(q) || L!.isPropertyDeclaration(q) || L!.isGetAccessorDeclaration(q) || L!.isSetAccessorDeclaration(q)) && q.name === r) return true;
+  if (L!.isBindingElement(q) && q.propertyName === r) return true;
+  if ((L!.isLabeledStatement(q) || L!.isBreakStatement(q) || L!.isContinueStatement(q)) && q.label === r) return true;
+  return false;
+}
+function importMutated(sf: ts.SourceFile, refs: ReadonlyMap<string, readonly ts.Identifier[]>): boolean {
+  const imports = new Map<string, boolean>(); /* name -> strict (an assert/test module binding) */
+  for (const st of sf.statements) {
+    if (!L!.isImportDeclaration(st) || st.importClause === undefined || !L!.isStringLiteral(st.moduleSpecifier)) continue;
+    const strict = /^(node:)?(assert(\/strict)?|test)$/u.test(st.moduleSpecifier.text);
+    const c = st.importClause; if (c.name !== undefined) imports.set(L!.idText(c.name), strict);
+    const b = c.namedBindings;
+    if (b !== undefined && L!.isNamespaceImport(b)) imports.set(L!.idText(b.name), strict);
+    if (b !== undefined && L!.isNamedImports(b)) for (const e of b.elements) imports.set(L!.idText(e.name), strict);
+  }
+  /* A `const x = <strict import>` alias is itself a strict import (checked the same way); its own declaring name is allowed. */
+  const aliasDecls = new Set<ts.Identifier>();
+  const queue = [...imports];
+  while (queue.length > 0) {
+    const [name, strict] = queue.shift() as [string, boolean];
+    for (const r of refs.get(name) ?? []) {
+      if (isNameOnly(r) || aliasDecls.has(r)) continue;
+      if (isShadowingDecl(r)) return true;
+      let top: ts.Node = r;
+      for (;;) {
+        const p = top.parent;
+        if (p !== undefined && (L!.isParenthesizedExpression(p) || ((L!.isPropertyAccessExpression(p) || L!.isElementAccessExpression(p)) && p.expression === top))) { top = p; continue; }
+        break;
+      }
+      if (isWriteTarget(top)) return true;
+      if (strict) {
+        const p = top.parent;
+        const callee = p !== undefined && (L!.isCallExpression(p) || L!.isNewExpression(p)) && p.expression === top;
+        const d = p;
+        if (!callee && d !== undefined && L!.isVariableDeclaration(d) && d.initializer === top && top === r && L!.isIdentifier(d.name)
+          && L!.isVariableDeclarationList(d.parent) && (d.parent.flags & L!.NodeFlags.Const) !== 0 && !imports.has(L!.idText(d.name))) {
+          aliasDecls.add(d.name); imports.set(L!.idText(d.name), true); queue.push([L!.idText(d.name), true]); continue;
+        }
+        if (!callee) return true;
+      }
+    }
+  }
+  return false;
+}
 function scanInner(src: string): E2PinnedScanRefusal | null {
   const sf = L!.createSourceFile('pinned.mjs', src, L!.ScriptTarget.Latest, true, L!.ScriptKind.JS);
   const diags = (sf as unknown as { parseDiagnostics?: readonly ts.Diagnostic[] }).parseDiagnostics;
@@ -228,5 +307,7 @@ function scanInner(src: string): E2PinnedScanRefusal | null {
   };
   visit(sf);
   for (const r of ['spec_pinned_test_context_reference', 'spec_pinned_test_imports_untrusted', 'spec_pinned_test_dynamic_load'] as const) if (found.has(r)) return r;
+  /* Round 10 F9-3: checked last, so every earlier refusal keeps its code. */
+  if (importMutated(sf, refs)) return 'spec_pinned_test_import_mutated';
   return null;
 }
