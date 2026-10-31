@@ -1,0 +1,137 @@
+/* Round 7 (Skywalker/PILOT, 4:15 PM): enumerate EVERY git invocation in the e2 production files and fail if one lacks the
+   pins. A git argv site is (a) a moduleGit([...]) call (run through the trusted runner's spawn or its CAPTURE execFile) or
+   (b) an execFileSync/execFile/spawn call whose program is resolveProgram('git') or the literal 'git'. Each must spread
+   GIT_PINS and safeDir(<workspace>); GIT_PINS must carry core.hooksPath=/dev/null and core.fsmonitor=false, and safeDir
+   must yield safe.directory=<realpath>. The CAPTURE execFile runs argv.slice(1) only after isModuleGit(argv), so it can
+   only run an argv minted by one of the (a) sites. The exact count is pinned so a new site needs a deliberate update. */
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+import * as ts from 'typescript';
+import { describe, expect, it } from 'vitest';
+
+import * as G from './e2-evidence-gate';
+import * as S from './e2-safe-git';
+
+const DIR = __dirname;
+type Site = { file: string; line: number; via: string; argsText: string; sub: string; callText: string };
+function sitesOf(file: string): Site[] {
+  const src = readFileSync(join(DIR, file), 'utf8');
+  const sf = ts.createSourceFile(file, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const gitBins = new Set<string>();
+  const out: Site[] = [];
+  const visit = (n: ts.Node): void => {
+    if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.initializer !== undefined && /resolveProgram\(\s*'git'\s*\)/u.test(n.initializer.getText(sf))) gitBins.add(n.name.text);
+    if (ts.isCallExpression(n) && ts.isIdentifier(n.expression)) {
+      const name = n.expression.text; const a0 = n.arguments[0];
+      const line = sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1;
+      if (name === 'moduleGit' && a0 !== undefined) {
+        const t = a0.getText(sf);
+        out.push({ file, line, via: 'moduleGit', argsText: t, callText: (ts.isCallExpression(n.parent) ? n.parent : n).getText(sf), sub: /safeDir\([^)]*\),\s*(?:\.\.\.(?:objPin|dPin),\s*)?'([a-z-]+)'/u.exec(t)?.[1] ?? '?' });
+      } else if (['execFileSync', 'execFile', 'spawn', 'spawnImpl', 'spawnSync', 'execSync', 'exec', 'fork'].includes(name) && a0 !== undefined) {
+        const prog = a0.getText(sf);
+        all.push(`${file}:${name}:${prog}`);
+        if (/['"`]git['"`]/u.test(prog) || gitBins.has(prog)) {
+          const t = n.arguments[1]?.getText(sf) ?? '';
+          out.push({ file, line, via: name, argsText: t, callText: n.getText(sf), sub: /safeDir\([^)]*\),\s*(?:\.\.\.(?:objPin|dPin),\s*)?'([a-z-]+)'/u.exec(t)?.[1] ?? (t === 'argv.slice(1)' ? '(capture)' : '?') });
+        }
+      }
+    }
+    ts.forEachChild(n, visit);
+  };
+  visit(sf);
+  return out;
+}
+const files = readdirSync(DIR).filter((f) => /^e2-.*\.ts$/u.test(f) && !f.endsWith('.test.ts') && f !== 'e2-test-kit.ts');
+const all: string[] = [];
+const sites = files.flatMap(sitesOf);
+
+describe('every git invocation in the e2 gate/spec/diff path carries the pins', () => {
+  it('the exact set of 11 git argv sites (10 gate + 1 safe-git; file, subcommand, via)', () => {
+    expect(sites.map((s) => `${s.file}:${s.via}:${s.sub}`)).toEqual([
+      'e2-evidence-gate.ts:execFile:(capture)',
+      'e2-evidence-gate.ts:execFileSync:cat-file',
+      'e2-evidence-gate.ts:execFileSync:ls-tree',
+      'e2-evidence-gate.ts:execFileSync:ls-tree',
+      'e2-evidence-gate.ts:moduleGit:?' /* Round 10 R9-1: verifyObjectClosure's g() (rev-list, ls-tree, cat-file --batch; pinned below) */,
+      'e2-evidence-gate.ts:execFileSync:(capture)' /* Round 10 R9-1: g() runs that module-minted argv */,
+      'e2-evidence-gate.ts:moduleGit:rev-parse' /* Round 10 F9-5: isolation is read before the diff */,
+      'e2-evidence-gate.ts:moduleGit:diff',
+      'e2-evidence-gate.ts:moduleGit:merge-base',
+      'e2-evidence-gate.ts:moduleGit:diff',
+      'e2-safe-git.ts:execFileSync:?' /* round 8 R7-1: the one site in the safe primitive (sg) */,
+    ]);
+    expect(sites.length).toBe(11);
+  });
+  it('all 8 child_process calls in the e2 files (7 gate + 1 safe-git) are these git sites or the runner spawnImpl (which runs only allowlisted verifier argv or isModuleGit argv)', () => {
+    expect(all).toEqual([
+      'e2-evidence-gate.ts:spawnImpl:bin', "e2-evidence-gate.ts:spawnImpl:'taskkill'" /* Windows process-tree kill, not git */, 'e2-evidence-gate.ts:execFile:bin',
+      'e2-evidence-gate.ts:execFileSync:bin', 'e2-evidence-gate.ts:execFileSync:bin', 'e2-evidence-gate.ts:execFileSync:bin',
+      'e2-evidence-gate.ts:execFileSync:bin' /* Round 10 R9-1 verifyObjectClosure */,
+      "e2-safe-git.ts:execFileSync:'git'",
+    ]);
+  });
+  it('each argv site spreads GIT_PINS and safeDir(); the capture site only runs module-minted argv', () => {
+    const bad = sites.filter((s) => s.sub === '(capture)' ? false : !((s.argsText.includes('...GIT_PINS') && /\.\.\.safeDir\(/u.test(s.argsText)) || s.argsText.startsWith('[...e2GitPins(')));
+    expect(bad).toEqual([]);
+    const src = readFileSync(join(DIR, 'e2-evidence-gate.ts'), 'utf8');
+    const cap = sites.find((s) => s.sub === '(capture)');
+    expect(cap).toBeDefined();
+    expect(src.split('\n').slice(Math.max(0, (cap?.line ?? 1) - 4), cap?.line).join('\n')).toMatch(/!isModuleGit\(argv\)\)\s*\{\s*resolve\(null\)/u);
+  });
+  it('the pins themselves: safe.directory (realpath), core.hooksPath=/dev/null, core.fsmonitor=false', () => {
+    const pins = G.e2GitPins(DIR);
+    const kv = pins.filter((_, i) => pins[i - 1] === '-c');
+    expect(kv).toContain('core.hooksPath=/dev/null');
+    expect(kv).toContain('core.fsmonitor=false');
+    expect(kv.filter((x) => x.startsWith('safe.directory='))).toEqual([`safe.directory=${DIR}`]);
+  });
+  /* Round 8 R7-5: the FULL pin list (Skywalker: the r12 test checked only hooksPath/fsmonitor; core.pager was covered
+     only by the literal-argv test). Every argv site spreads GIT_PINS (above), so pinning GIT_PINS exactly and forbidding
+     any later '-c'/flag override at a site checks every pin at every site. */
+  const EXPECTED_PINS = ['--no-replace-objects',
+    ...['diff.noprefix=false', 'diff.renames=false', 'core.quotepath=false', 'diff.mnemonicPrefix=false', 'color.ui=never', 'diff.relative=false',
+      'diff.suppressBlankEmpty=false', 'core.autocrlf=false', 'diff.context=3', 'diff.interHunkContext=0', 'diff.orderFile=/dev/null', 'diff.srcPrefix=a/',
+      'diff.dstPrefix=b/', 'diff.algorithm=myers', 'diff.indentHeuristic=true', 'core.attributesFile=/dev/null', 'diff.wsErrorHighlight=none',
+      'core.hooksPath=/dev/null', 'core.fsmonitor=false', 'core.sshCommand=/bin/false', 'protocol.allow=never', 'core.pager=cat', 'diff.external=',
+      'core.useReplaceRefs=false', 'core.commitGraph=false', 'gc.writeCommitGraph=false'].flatMap((kv) => ['-c', kv]),
+    '--attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904'];
+  it('R7-5 + Round 11 R10-7: e2GitPins is exactly the 26 -c pins (23 + core.useReplaceRefs + core.commitGraph + gc.writeCommitGraph), --no-replace-objects, --attr-source, then safe.directory', () => {
+    expect(G.e2GitPins(DIR)).toEqual([...EXPECTED_PINS, '-c', `safe.directory=${DIR}`]);
+    expect(EXPECTED_PINS.filter((x) => x === '-c').length).toBe(26);
+    expect(EXPECTED_PINS).toContain('core.pager=cat');
+  });
+  it('R7-5: no site adds a -c or global option after the pins (no override), and every site runs with E2_GIT_ENV', () => {
+    for (const s of sites) {
+      if (s.sub === '(capture)') { expect(s.callText).toMatch(/env/u); continue; }
+      const after = s.argsText.includes('...safeDir(') ? s.argsText.slice(s.argsText.indexOf('...safeDir(')) : s.argsText.slice(s.argsText.indexOf(')') + 1);
+      expect(after, `${s.file}:${s.line}`).not.toMatch(/'-c'|'--(?:git-dir|work-tree|exec-path|namespace|attr-source|config-env)/u);
+      /* moduleGit argv get their env from the runner/CAPTURE (both fixed to E2_GIT_ENV, checked below), never the caller. */
+      if (s.via !== 'moduleGit') expect(s.callText, `${s.file}:${s.line}`).toMatch(/\.\.\.E2_GIT_ENV/u);
+    }
+    const src = readFileSync(join(DIR, 'e2-evidence-gate.ts'), 'utf8');
+    expect(src).toMatch(/isModuleGit\(argv\)\s*\?\s*\{ LANG: 'C\.UTF-8', LC_ALL: 'C\.UTF-8', \.\.\.E2_GIT_ENV, GIT_NO_REPLACE_OBJECTS: '1', \.\.\.snapshotAltEnv\(argv\), PATH: E2_VERIFIER_PATH \}/u);
+    expect(src).toMatch(/env: \{ LANG: 'C\.UTF-8', LC_ALL: 'C\.UTF-8', \.\.\.E2_GIT_ENV, GIT_NO_REPLACE_OBJECTS: '1', \.\.\.snapshotAltEnv\(argv\), PATH: E2_VERIFIER_PATH \} \}, \(e, out\)/u);
+    /* Round 10: the only extra module-git env is GIT_ALTERNATE_OBJECT_DIRECTORIES, from the module-minted objPin; the
+       only spread after the pins besides safeDir is that objPin, built only after checkSnapshotObjectDir passed. */
+    /* Round 10 (trusted store): GIT_ALTERNATE_OBJECT_DIRECTORIES / GIT_OBJECT_DIRECTORY appear only in snapshotAltEnv
+       (from the two module-minted pins) and trustedEnv (the spec's checked trusted store). */
+    expect(src.match(/GIT_ALTERNATE_OBJECT_DIRECTORIES:/gu)?.length).toBe(2);
+    expect(src.match(/GIT_OBJECT_DIRECTORY:/gu)?.length).toBe(4); /* Round 11: + the verified private copy (VERIFIED_PIN) */
+    expect(src).toMatch(/const objPin = \[\.\.\.\(input\.objectDir === undefined \? \[\] : \['-c', `\$\{OBJDIR_PIN\}\$\{input\.objectDir\}`\]\), \.\.\.\(trusted === undefined \? \[\] : \['-c', `\$\{TRUSTED_PIN\}\$\{trusted\}`\]\)\];/u);
+    expect(src.indexOf('checkSnapshotObjectDir(input.objectDir')).toBeLessThan(src.indexOf('const objPin'));
+    for (const st of sites.filter((x) => x.via === 'moduleGit' && x.sub !== '?')) expect(st.argsText.replace(/\.\.\.(?:objPin|dPin), /u, '')).not.toMatch(/\.\.\.(?!GIT_PINS|safeDir|DIFF_FLAGS)/u);
+    /* Round 10 R9-1: the one `...args` site is verifyObjectClosure's g(); its callers pass only these literal subcommands. */
+    const verify = src.slice(src.indexOf('function verifyObjectClosure('), src.indexOf('/** Round 8 R7-2 (+ M-8): repository state'));
+    expect([...verify.matchAll(/\bg\(\[('[a-z-]+')/gu)].map((m) => m[1])).toEqual(["'rev-list'", "'rev-list'", "'ls-tree'", "'cat-file'"]);
+    expect(verify).toMatch(/moduleGit\(\['git', \.\.\.GIT_PINS, \.\.\.safeDir\(cwd\), \.\.\.objPin, \.\.\.args\]\)/u);
+    expect(verify).toMatch(/env: \{ LANG: 'C\.UTF-8', LC_ALL: 'C\.UTF-8', \.\.\.E2_GIT_ENV, GIT_NO_REPLACE_OBJECTS: '1', \.\.\.snapshotAltEnv\(argv\), PATH: E2_VERIFIER_PATH \}/u);
+    /* the safe primitive's one extra pin, and its env puts caller extras BEFORE the gate env. */
+    expect(S.SAFE_GIT_EXTRA_PINS).toEqual(['-c', 'commit.gpgSign=false']);
+    expect(readFileSync(join(DIR, 'e2-safe-git.ts'), 'utf8')).toMatch(/env: \{ \.\.\.\(opts\.env \?\? \{\}\), LANG: 'C\.UTF-8', LC_ALL: 'C\.UTF-8', \.\.\.E2_GIT_ENV, GIT_DIR: c\.gitDir,[^}]*PATH: E2_VERIFIER_PATH \}/u);
+    /* Round 11 R10-2: no git call in safe-git widens safe.directory or reads a global config: the env keeps E2_GIT_ENV last. */
+    expect(readFileSync(join(DIR, 'e2-safe-git.ts'), 'utf8')).not.toMatch(/GIT_CONFIG_GLOBAL|safe\.directory=\*/u);
+    expect(G.E2_GIT_ENV).toEqual({ GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', GIT_ATTR_NOSYSTEM: '1',
+      GIT_GRAFT_FILE: '/dev/null', GIT_REPLACE_REF_BASE: 'refs/e2-no-replace/', GIT_NO_REPLACE_OBJECTS: '1' });
+  });
+});

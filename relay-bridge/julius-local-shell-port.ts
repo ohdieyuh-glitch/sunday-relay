@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 
 import { juliusAttemptCloseCommand, juliusAttemptStartCommand, parseJuliusAttemptStart } from './julius/coder-workspace';
 import type { ShellEffectInput, ShellEffectPort, ShellEffectResult } from './julius/executor-effects';
+import { matchGrokWorkspaceCommand } from './julius/grok-workspace-commands';
 
 /**
  * A LOCAL ShellEffectPort FOR J1 (construct-only; no process is spawned and no file is touched unless an injected function does it).
@@ -10,7 +11,12 @@ import type { ShellEffectInput, ShellEffectPort, ShellEffectResult } from './jul
  *   - `juliusAttemptStartCommand(null)`                                    (the start of an attempt);
  *   - `juliusAttemptCloseCommand(null)` (plain status) and
  *     `juliusAttemptCloseCommand({ baseTree, startTree })` for the trees the LAST start reported;
- *   - the J1 workspace seed ({@link J1_SEED_COMMAND}), which only this module issues (a caller cannot send it).
+ *   - the J1 workspace seed ({@link J1_SEED_COMMAND}), which only this module issues (a caller cannot send it);
+ *   - ONLY when `cloudAgentSync` is configured (default: absent, and then nothing below is reachable): the three cloud-agent sync
+ *     commands, recognised by `matchGrokWorkspaceCommand` (a full-match parse of validated arguments — 40-hex SHAs, a bounded
+ *     branch charset, a bounded owner/repo charset — then an exact regeneration), and further bound here: only inside an open
+ *     attempt (after a start that reported its trees, before its close), a fetch only from the configured repository, and an
+ *     apply only of the exact base/head pair the last fetch in this attempt reported.
  * Anything else is REFUSED with `refused:command_not_allowed` and nothing is spawned: no arbitrary text can run through this port.
  * The coder session itself gets NO shell: the hosted envelope offers it Read/Glob/Grep/Edit and this port is not reachable from it.
  *
@@ -112,6 +118,8 @@ export function createLocalShellPort(input: {
   readonly seedFiles: readonly J1SeedFile[];
   /** Accepted for call-site compatibility and NEVER READ: no parent variable (not even PATH) reaches a child. */
   readonly baseEnv?: Readonly<Record<string, string | undefined>>;
+  /** Opt-in: the ONE GitHub repository the cloud-agent sync commands may fetch from. Absent = those commands are refused. */
+  readonly cloudAgentSync?: { readonly owner: string; readonly repo: string };
 }): LocalShellPort {
   const names = input.seedFiles.map((f) => f.name).sort();
   if (names.length !== SEED_NAMES.length || names.some((n, i) => n !== [...SEED_NAMES].sort()[i])) throw new Error('local_shell_seed_names_invalid');
@@ -139,6 +147,10 @@ export function createLocalShellPort(input: {
   let indexAfterStart: string | null = null;
   let indexBeforeClose: string | null = null;
   let counter = 0;
+  /** Cloud-agent sync: the base/head the last fetch in the open attempt reported. Reset by every start and close. */
+  let fetched: { readonly base: string; readonly head: string } | null = null;
+  const sync = input.cloudAgentSync === undefined ? null
+    : Object.freeze({ owner: input.cloudAgentSync.owner.toLowerCase(), repo: input.cloudAgentSync.repo.toLowerCase() });
   let chain: Promise<unknown> = Promise.resolve();
 
   const exec = async (command: string, timeoutMs: number): Promise<ShellEffectResult> => {
@@ -189,7 +201,7 @@ export function createLocalShellPort(input: {
   const handle = async (request: ShellEffectInput): Promise<ShellEffectResult> => {
     const command = request.command;
     if (command === START) {
-      closeForTrees = null; indexAfterStart = null; indexBeforeClose = null;
+      closeForTrees = null; indexAfterStart = null; indexBeforeClose = null; fetched = null;
       const refusal = await seed(request.timeoutMs);
       if (refusal !== null) return FAILED(refusal);
       const r = await exec(START, request.timeoutMs);
@@ -202,9 +214,26 @@ export function createLocalShellPort(input: {
       return r;
     }
     if (command === CLOSE_PLAIN || (closeForTrees !== null && command === closeForTrees)) {
+      fetched = null;
       indexBeforeClose = await readIndex(request.timeoutMs);
       if (indexAfterStart === null || indexBeforeClose === null) return FAILED('index_file_unverified');
       if (indexAfterStart !== indexBeforeClose) return FAILED('index_file_changed_between_start_and_close');
+      return exec(command, request.timeoutMs);
+    }
+    if (sync !== null) {
+      const m = matchGrokWorkspaceCommand(command);
+      if (m === null) return FAILED('command_not_allowed');
+      /* an open attempt: a start reported its trees and no close has run since */
+      if (closeForTrees === null || indexBeforeClose !== null) return FAILED('sync_outside_attempt');
+      if (m.kind === 'fetchBranch') {
+        if (m.owner.toLowerCase() !== sync.owner || m.repo.toLowerCase() !== sync.repo) return FAILED('sync_repo_not_configured');
+        fetched = null;
+        const r = await exec(command, request.timeoutMs);
+        const head = r.status === 'SUCCEEDED' ? /^HEAD ([0-9a-f]{40})$/mu.exec(r.stdout)?.[1] : undefined;
+        if (head !== undefined) fetched = { base: m.base, head };
+        return r;
+      }
+      if (m.kind === 'applyFetched' && (fetched === null || fetched.base !== m.base || fetched.head !== m.head)) return FAILED('sync_apply_not_fetched');
       return exec(command, request.timeoutMs);
     }
     return FAILED('command_not_allowed');

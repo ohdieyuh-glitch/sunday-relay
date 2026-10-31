@@ -146,6 +146,8 @@ const safeToken=(value:unknown):string|null=>typeof value==='string'&&/^[a-z][a-
  * rejected" when no plan was validated at all. `true` and `false` still mean
  * exactly themselves, and only a genuinely boolean value produces either.
  */
+/** Why a cloud coding agent's run status could not be read: the transport's own poll-failure vocabulary, closed. */
+export const JULIUS_CODING_AGENT_POLL_FAILURE_CAUSES=Object.freeze(['authentication','not_found','malformed_response','key_absent','unexpected_status','transient_exhausted','transport_untrusted'] as const);
 const safeNullableBool=(value:unknown):boolean|null=>typeof value==='boolean'?value:null;
 const safeCount=(value:unknown):number|null=>typeof value==='number'&&Number.isInteger(value)&&value>=0&&value<=Number.MAX_SAFE_INTEGER?value:null;
 const safePositiveCount=(value:unknown):number|null=>{const n=safeCount(value);return n!==null&&n>0?n:null;};
@@ -211,6 +213,49 @@ const safeInstant=(value:unknown):string|null=>typeof value==='string'&&INSTANT.
  * digest of a different algorithm, or a sentence about one.
  */
 const safeDigest=(value:unknown):string|null=>typeof value==='string'&&/^sha256:[0-9a-f]{64}$/.test(value)?value:null;
+/**
+ * A CLOUD CODING AGENT'S OWN IDENTIFIERS: its agent id, the branch it pushed,
+ * and the model id its API reported. They come from a remote service's JSON, so
+ * each is treated as hostile text: refused outright when oversized (never
+ * truncated into something else) or when it holds any line break (a forged
+ * log line); other C0/C1 controls, bidi overrides, zero-width and other invisible format characters are
+ * stripped, and what remains must FULL-match an ASCII grammar — so no
+ * whitespace, no newline, no `:` or `@` (no URL, let alone one carrying a
+ * credential) and no lookalike letter can pass. A value that still looks like
+ * a credential (a known key prefix in any segment, or a 32+ character
+ * unbroken alphanumeric run) is refused. Null always means "not known".
+ */
+const CLOUD_AGENT_INVISIBLE=/[\u0000-\u001F\u007F-\u009F\u00AD\u061C\u115F\u1160\u17B4\u17B5\u180B-\u180F\u200B-\u200F\u2028-\u202E\u2060-\u206F\u3164\uFE00-\uFE0F\uFEFF\uFFA0\uFFF9-\uFFFB]/gu;
+/** A line break is an attempt to forge a log line, not noise: the whole value is refused rather than stripped. */
+const CLOUD_AGENT_LINE_BREAK=/[\n\r\u000B\u000C\u0085\u2028\u2029]/u;
+const CLOUD_AGENT_KEY_SEGMENT=/(^|[/._-])(sk|ghp|gho|ghu|ghs|ghr|github_pat|glpat|crsr|cursor_key|api_?key)[-_]/i;
+const CLOUD_AGENT_ID=/^bc-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const CLOUD_AGENT_BRANCH=/^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$/;
+const CLOUD_AGENT_MODEL=/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+const safeCloudAgentText=(value:unknown,max:number,shape:RegExp):string|null=>{
+ if(typeof value!=='string'||value.length>max*2||CLOUD_AGENT_LINE_BREAK.test(value))return null;
+ const s=value.replace(CLOUD_AGENT_INVISIBLE,'');
+ if(s.length===0||s.length>max||!shape.test(s))return null;
+ if(CREDENTIAL_SHAPED.test(s)||CLOUD_AGENT_KEY_SEGMENT.test(s)||/[A-Za-z0-9]{32,}/.test(s))return null;
+ return s;
+};
+/** Cursor's agent id shape, `bc-` and a UUID. */
+export const safeCloudAgentId=(value:unknown):string|null=>safeCloudAgentText(value,39,CLOUD_AGENT_ID);
+/** A git branch name in a conservative subset of git's ref rules: no `..`, `//`, `@{`, trailing `/`, `.` or `.lock`. */
+/** Skywalker N10: one invisible or control character anywhere refuses a branch, so the logged branch is never a cleaned-up
+ * spelling of a different real ref (`cur\u200Bsor/x` is not `cursor/x`). */
+const CLOUD_AGENT_INVISIBLE_ANY=new RegExp(CLOUD_AGENT_INVISIBLE.source,'u');
+export const safeCloudAgentBranch=(value:unknown):string|null=>{
+ if(typeof value==='string'&&CLOUD_AGENT_INVISIBLE_ANY.test(value))return null;
+ const s=safeCloudAgentText(value,200,CLOUD_AGENT_BRANCH);
+ return s===null||s.includes('..')||s.includes('//')||s.endsWith('/')||s.endsWith('.')||s.endsWith('.lock')?null:s;
+};
+/** The model id a cloud agent's API reported for the run, whatever the verdict on it. */
+export const safeCloudAgentModel=(value:unknown):string|null=>safeCloudAgentText(value,64,CLOUD_AGENT_MODEL);
+const CLOUD_AGENT_RUN_ID=/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+/** A run id or a request id a cloud agent's API returned: a bounded opaque token, refused (not cut) when it looks like a secret. */
+export const safeCloudAgentRunId=(value:unknown):string|null=>safeCloudAgentText(value,128,CLOUD_AGENT_RUN_ID);
+const safeSha40=(value:unknown):string|null=>typeof value==='string'&&/^[0-9a-f]{40}$/.test(value)?value:null;
 export type JuliusSafeDiagnostics=Readonly<Record<string,string|number|boolean|null>>;
 export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
  if(value===null||typeof value!=='object'||Array.isArray(value))return null;
@@ -442,6 +487,45 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   operatorActionRequired:safeNullableBool(v.operatorActionRequired),
   /** Which implementation of the Coding Agent port ran, as a machine token. */
   codingAgentProvider:safeToken(v.codingAgentProvider),
+  /* --- A CLOUD CODING AGENT'S IDENTIFIERS, so a run can be found again on the
+   * provider's side without a second paid call. `cursorServedModel` is what the
+   * provider REPORTED, beside (never instead of) the verdict; `servedModel`
+   * keeps meaning an attested model. See {@link safeCloudAgentText}. --- */
+  cursorAgentId:safeCloudAgentId(v.cursorAgentId),
+  agentBranch:safeCloudAgentBranch(v.agentBranch),
+  cursorServedModel:safeCloudAgentModel(v.cursorServedModel),
+  /* --- WHAT A CLOUD CODING AGENT'S ROW HAS TO KEEP (F7): the verdict and how it was reached, whether spend was
+   * verified and what was charged, the run and request ids, the base and head revisions, and whether a patch was
+   * applied. Every one is a closed vocabulary, a boolean, or a bounded, shape-checked token. --- */
+  codingAgentTransport:safeToken(v.codingAgentTransport),
+  /** `live` only when the transport module itself stamped it; a fake is labelled `fake`. */
+  transportMode:safeEnum(v.transportMode,['live','fake'] as const),
+  servedModelVerdict:safeEnum(v.servedModelVerdict,['MATCH','MISMATCH','UNATTESTED'] as const),
+  servedModelAttestation:safeEnum(v.servedModelAttestation,['reported_by_provider'] as const),
+  spendVerified:safeNullableBool(v.spendVerified),
+  chargedAs:safeEnum(v.chargedAs,['FULL_RESERVATION'] as const),
+  billingNote:safeToken(v.billingNote),
+  cursorRunId:safeCloudAgentRunId(v.cursorRunId),
+  cursorRequestId:safeCloudAgentRunId(v.cursorRequestId),
+  cursorRunCreatedAt:safeInstant(v.cursorRunCreatedAt),
+  /** Whether the provider's response carried the request id / createdAt above. `not_provided` is a fact, not a gap: neither is ever invented. */
+  cursorRequestIdStatus:safeEnum(v.cursorRequestIdStatus,['provided','not_provided'] as const),
+  cursorRunCreatedAtStatus:safeEnum(v.cursorRunCreatedAtStatus,['provided','not_provided'] as const),
+  runResponseSha256:safeSha256Hex(v.runResponseSha256),
+  receiptRunIdMatches:safeNullableBool(v.receiptRunIdMatches),
+  baseRevision:safeSha40(v.baseRevision),
+  agentHeadSha:safeSha40(v.agentHeadSha),
+  patchApplied:safeNullableBool(v.patchApplied),
+  outcomeUnknown:safeNullableBool(v.outcomeUnknown),
+  cancelRequested:safeEnum(v.cancelRequested,['cancelled','not_cancellable','failed'] as const),
+  /* --- WHY A CLOUD CODING AGENT'S PATCH WAS REFUSED, OR WHY ITS RUN COULD NOT BE READ (PILOT Low 7). Without these the
+   * row says `coder_grok_scope_violation` / `coder_grok_poll_failed` and nothing about which rule fired. Counts are
+   * non-negative safe integers, flags are booleans, the cause is a closed vocabulary; anything else is null. --- */
+  scopeViolationCount:safeCount(v.scopeViolationCount),
+  unsafeEntryCount:safeCount(v.unsafeEntryCount),
+  protectedPathTouched:safeNullableBool(v.protectedPathTouched),
+  permittedPathsEmpty:safeNullableBool(v.permittedPathsEmpty),
+  pollFailureCause:safeEnum(v.pollFailureCause,JULIUS_CODING_AGENT_POLL_FAILURE_CAUSES),
   /* --- Coding Agent cost, beside a refusal. Paid run 34037313976 was refused
    * for cost and the amount lived only in a message nothing persisted. --- */
   /** The runtime-reported cost in micro-dollars; null when the runtime reported none. */
