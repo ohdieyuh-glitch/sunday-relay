@@ -78,13 +78,14 @@ describe('E2 part C: the diff', () => {
         '-c', 'diff.context=3', '-c', 'diff.interHunkContext=0', '-c', 'diff.orderFile=/dev/null', '-c', 'diff.srcPrefix=a/', '-c', 'diff.dstPrefix=b/',
         '-c', 'diff.algorithm=myers', '-c', 'diff.indentHeuristic=true', '-c', 'core.attributesFile=/dev/null', '-c', 'diff.wsErrorHighlight=none',
         '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'core.sshCommand=/bin/false', '-c', 'protocol.allow=never',
-        '-c', 'core.pager=cat', '-c', 'diff.external=', '-c', `safe.directory=${realpathSync(dir)}`,
+        '-c', 'core.pager=cat', '-c', 'diff.external=',
+        /* Round 8 R7-2/R7-4. */ '-c', 'core.useReplaceRefs=false', '--attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904', '-c', `safe.directory=${realpathSync(dir)}`,
         'diff', '--no-ext-diff', '--no-textconv', '--binary', '--no-renames', '--no-color', '--full-index',
         '-U3', '--inter-hunk-context=0', '-O/dev/null', '--src-prefix=a/', '--dst-prefix=b/', '--diff-algorithm=myers', '--indent-heuristic', `${base}..${head}`];
       const expected = execFileSync(argv[0] as string, argv.slice(1), { cwd: dir, env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null', GIT_ATTR_NOSYSTEM: '1' } });
       const runner = spawnVerifierRunner();
       const d = await recordGitDiff({ base, head, cwd: dir, runner });
-      expect(d).toEqual({ label: E2_JULIUS_LABEL, base, head, cwd: dir, argv, exitCode: 0, sha256: createHash('sha256').update(expected).digest('hex'), bytes: expected.byteLength, ancestry: true, paths: ['a.txt'], isolated: true });
+      expect(d).toEqual({ label: E2_JULIUS_LABEL, base, head, cwd: dir, argv, exitCode: 0, sha256: createHash('sha256').update(expected).digest('hex'), bytes: expected.byteLength, ancestry: true, paths: ['a.txt'], isolated: true, isolationFindings: [], attributeFiles: [] });
       expect(d?.bytes).toBeGreaterThan(0);
       for (const bad of [base.slice(0, 39), base.toUpperCase(), 'HEAD', `${base}\n`, `--output=${base}`]) {
         expect(await recordGitDiff({ base: bad, head, cwd: dir, runner })).toBeNull();

@@ -1,6 +1,6 @@
 import { execFile, execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { isBuiltin } from 'node:module';
 import { tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, normalize as normalizePath, posix } from 'node:path';
@@ -345,8 +345,13 @@ export interface E2DiffEvidence {
   readonly ancestry: boolean;
   /** `git diff --name-only -z` of the same range (spawn runner only; null otherwise). Rule (b). */
   readonly paths: readonly string[] | null;
-  /** M-8: the repository's info/attributes is absent or empty (spawn runner only; false otherwise). */
+  /** M-8 + round 8 R7-2: no info/attributes content, grafts, replace refs, alternates or shallow file (spawn runner only; false otherwise). */
   readonly isolated: boolean;
+  /** Round 8 R7-2: what made `isolated` false (e.g. 'info/grafts', 'refs/replace'); empty when isolated. */
+  readonly isolationFindings: readonly string[];
+  /** Round 8 R7-4: every `.gitattributes` in the working tree (any case, symlinks not followed). Recorded only: the diff
+   *  reads attributes from the empty tree (`--attr-source`), so these cannot change the recorded patch. */
+  readonly attributeFiles: readonly string[] | null;
 }
 
 const validArgv = (a: unknown): a is readonly string[] =>
@@ -727,7 +732,11 @@ const safeDir = (workspace: string): string[] => {
 /** Round 6 H1: the full pin list for one workspace (exported so tests and the workflow can check the argv). */
 export const e2GitPins = (workspace: string): readonly string[] => Object.freeze([...GIT_PINS, ...safeDir(workspace)]);
 /** M-8: git configuration that would change the diff bytes is pinned; global and system config are not read. */
-export const E2_GIT_ENV = Object.freeze({ GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', GIT_ATTR_NOSYSTEM: '1' });
+export const E2_GIT_ENV = Object.freeze({ GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', GIT_ATTR_NOSYSTEM: '1',
+  /* Round 8 R7-2: no grafts file, and replace refs looked up under a namespace nothing writes. */
+  GIT_GRAFT_FILE: '/dev/null', GIT_REPLACE_REF_BASE: 'refs/e2-no-replace/', GIT_NO_REPLACE_OBJECTS: '1' });
+/** git's well-known empty tree (built in; needs no object in the repository). */
+export const E2_EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
 const GIT_PINS = Object.freeze([
   /* Skywalker L2: replace refs never redirect objects (also GIT_NO_REPLACE_OBJECTS=1 in the env). */
   '--no-replace-objects',
@@ -739,9 +748,42 @@ const GIT_PINS = Object.freeze([
   /* Round 7 R6-7 (Skywalker 70f96cfe): the workspace .git/config is coder-writable; nothing it names may execute. */
   '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'core.sshCommand=/bin/false', '-c', 'protocol.allow=never',
   '-c', 'core.pager=cat', '-c', 'diff.external=',
+  /* Round 8 R7-2/R7-4: replace refs off; attributes come from the empty tree, never the worktree. */
+  '-c', 'core.useReplaceRefs=false', `--attr-source=${E2_EMPTY_TREE}`,
 ]);
 /** M-8: the same settings as explicit flags (a flag beats config). */
 const DIFF_FLAGS = Object.freeze(['-U3', '--inter-hunk-context=0', '-O/dev/null', '--src-prefix=a/', '--dst-prefix=b/', '--diff-algorithm=myers', '--indent-heuristic']);
+/** Round 8 R7-2 (+ M-8): repository state that changes what history or attributes mean. Paths are under the common dir. */
+function isolationFindings(commonDir: string): readonly string[] {
+  if (!isAbsolute(commonDir)) return Object.freeze(['git_dir_unknown']);
+  const out: string[] = [];
+  const nonEmpty = (rel: string): boolean => { try { return lstatSync(join(commonDir, rel)).size > 0; } catch { return false; } };
+  const present = (rel: string): boolean => { try { lstatSync(join(commonDir, rel)); return true; } catch { return false; } };
+  if (nonEmpty('info/attributes')) out.push('info/attributes');
+  if (present('info/grafts')) out.push('info/grafts');
+  if (present('shallow')) out.push('shallow');
+  if (present('objects/info/alternates')) out.push('objects/info/alternates');
+  if (present('objects/info/http-alternates')) out.push('objects/info/http-alternates');
+  try { if (readdirSync(join(commonDir, 'refs/replace')).length > 0) out.push('refs/replace'); } catch { /* absent */ }
+  try { if (/ refs\/replace\//u.test(readFileSync(join(commonDir, 'packed-refs'), 'utf8'))) out.push('packed-refs:refs/replace'); } catch { /* absent */ }
+  return Object.freeze(out);
+}
+/** Round 8 R7-4: `.gitattributes` files in the working tree (any case), without following symlinks; null past 200k entries. */
+function worktreeAttributeFiles(cwd: string): readonly string[] | null {
+  const out: string[] = []; let seen = 0;
+  const walk = (rel: string): boolean => {
+    let ents; try { ents = readdirSync(join(cwd, rel), { withFileTypes: true }); } catch { return true; }
+    for (const e of ents) {
+      if ((seen += 1) > 200_000) return false;
+      const p = rel === '' ? e.name : `${rel}/${e.name}`;
+      if (rel === '' && e.name === '.git') continue;
+      if (e.name.toLowerCase() === '.gitattributes') out.push(p);
+      if (e.isDirectory() && !e.isSymbolicLink() && !walk(p)) return false;
+    }
+    return true;
+  };
+  return walk('') ? Object.freeze(out.sort()) : null;
+}
 /** (C) The config-pinned diff between two full commit SHAs, and whether head descends from base. Bad SHAs are refused (null). */
 export async function recordGitDiff(input: { readonly base: string; readonly head: string; readonly cwd: string; readonly runner: VerifierRunner }): Promise<E2DiffEvidence | null> {
   if (!SHA.test(input.base) || !SHA.test(input.head)) return null;
@@ -754,18 +796,21 @@ export async function recordGitDiff(input: { readonly base: string; readonly hea
   const capture = CAPTURE.get(input.runner);
   let paths: readonly string[] | null = null;
   let isolated = false;
+  let findings: readonly string[] = Object.freeze(['unchecked']);
+  let attributeFiles: readonly string[] | null = null;
   if (capture !== undefined) {
     const names = await capture(moduleGit(['git', ...GIT_PINS, ...safeDir(input.cwd), 'diff', '--no-ext-diff', '--no-renames', '--name-only', '-z', range]), input.cwd, E2_GIT_ENV);
     if (names !== null) paths = Object.freeze(names.toString('utf8').split('\u0000').filter((x) => x !== ''));
-    const attr = await capture(moduleGit(['git', ...GIT_PINS, ...safeDir(input.cwd), 'rev-parse', '--git-path', 'info/attributes']), input.cwd, E2_GIT_ENV);
-    if (attr !== null) {
-      const f = attr.toString('utf8').replace(/\n$/u, '');
-      try { isolated = statSync(isAbsolute(f) ? f : join(input.cwd, f)).size === 0; } catch (e) { isolated = (e as { code?: string }).code === 'ENOENT'; }
+    const common = await capture(moduleGit(['git', ...GIT_PINS, ...safeDir(input.cwd), 'rev-parse', '--path-format=absolute', '--git-common-dir']), input.cwd, E2_GIT_ENV);
+    if (common !== null) {
+      findings = isolationFindings(common.toString('utf8').replace(/\n$/u, ''));
+      isolated = findings.length === 0;
     }
+    attributeFiles = worktreeAttributeFiles(input.cwd);
   }
   const ev: E2DiffEvidence = Object.freeze({
     label: TRUSTED_RUNNERS.has(input.runner) ? E2_JULIUS_LABEL : E2_FAKE_LABEL, base: input.base, head: input.head, cwd: input.cwd, argv,
-    exitCode: r.exitCode, sha256: r.stdoutSha256, bytes: r.stdoutBytes, ancestry: anc.exitCode === 0, paths, isolated,
+    exitCode: r.exitCode, sha256: r.stdoutSha256, bytes: r.stdoutBytes, ancestry: anc.exitCode === 0, paths, isolated, isolationFindings: findings, attributeFiles,
   });
   RECORDED.add(ev);
   return ev;
