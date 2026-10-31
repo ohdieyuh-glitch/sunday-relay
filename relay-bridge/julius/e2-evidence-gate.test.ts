@@ -80,13 +80,13 @@ describe('E2 part C: the diff', () => {
         '-c', 'diff.algorithm=myers', '-c', 'diff.indentHeuristic=true', '-c', 'core.attributesFile=/dev/null', '-c', 'diff.wsErrorHighlight=none',
         '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'core.sshCommand=/bin/false', '-c', 'protocol.allow=never',
         '-c', 'core.pager=cat', '-c', 'diff.external=',
-        /* Round 8 R7-2/R7-4. */ '-c', 'core.useReplaceRefs=false', '--attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904', '-c', `safe.directory=${realpathSync(dir)}`,
+        /* Round 8 R7-2/R7-4. */ '-c', 'core.useReplaceRefs=false', /* Round 11 R10-7. */ '-c', 'core.commitGraph=false', '-c', 'gc.writeCommitGraph=false', '--attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904', '-c', `safe.directory=${realpathSync(dir)}`,
         'diff', '--no-ext-diff', '--no-textconv', '--binary', '--no-renames', '--no-color', '--full-index',
         '-U3', '--inter-hunk-context=0', '-O/dev/null', '--src-prefix=a/', '--dst-prefix=b/', '--diff-algorithm=myers', '--indent-heuristic', `${base}..${head}`];
       const expected = execFileSync(argv[0] as string, argv.slice(1), { cwd: dir, env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null', GIT_ATTR_NOSYSTEM: '1' } });
       const runner = spawnVerifierRunner();
       const d = await recordGitDiffT({ base, head, cwd: dir, runner });
-      const pinned = [...argv.slice(0, argv.indexOf('diff')), '-c', `e2.snapshotObjectDir=${d?.objectDir}`, '-c', `e2.trustedObjects=${d?.trustedObjects}`, ...argv.slice(argv.indexOf('diff'))];
+      const pinned = [...argv.slice(0, argv.indexOf('diff')), '-c', `e2.snapshotObjectDir=${d?.objectDir}`, '-c', `e2.trustedObjects=${d?.trustedObjects}`, '-c', expect.stringMatching(/^e2\.verifiedObjects=\/.*e2-verified-objects-/u), ...argv.slice(argv.indexOf('diff'))];
       expect(d).toEqual({ label: E2_JULIUS_LABEL, base, head, cwd: dir, argv: pinned, exitCode: 0, sha256: createHash('sha256').update(expected).digest('hex'), bytes: expected.byteLength, ancestry: true, paths: ['a.txt'], isolated: true, isolationFindings: [], attributeFiles: [], objectDirRefusal: null, objectDir: expect.any(String), trustedObjects: expect.any(String), objectRefusal: null });
       expect(d?.bytes).toBeGreaterThan(0);
       for (const bad of [base.slice(0, 39), base.toUpperCase(), 'HEAD', `${base}\n`, `--output=${base}`]) {

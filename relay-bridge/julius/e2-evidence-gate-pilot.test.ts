@@ -202,8 +202,8 @@ describe('PILOT 0774db05 H-4: run, base, head and workspace are bound across str
     expect(reasons(e2Gate({ ...g, binding: { ...p.binding, runId: 'run-other' } }))).toEqual(['e2_binding_run_mismatch']);
     const swapped = await recordGitDiffT({ base: head, head: base, cwd: repo, runner: p.runner });
     expect(swapped?.ancestry).toBe(false);
-    expect(reasons(e2Gate({ ...g, diff: swapped }))).toEqual(['e2_objects_untrusted', 'e2_binding_diff_mismatch', 'e2_diff_not_descendant']); // Round 10: the diff's trusted store is for another base
-    expect(reasons(e2Gate({ ...g, diff: swapped, binding: { ...p.binding, base: head, head: base } }))).toEqual(['e2_objects_untrusted', 'e2_diff_not_descendant', 'e2_verifier_not_from_spec']); // Round 10: store for another base; R3-2: the spec was pinned at the real base
+    expect(reasons(e2Gate({ ...g, diff: swapped }))).toEqual(['e2_diff_failed', 'e2_objects_untrusted', 'e2_binding_diff_mismatch', 'e2_diff_not_descendant']); // Round 10: the diff's trusted store is for another base; Round 11: the old base's objects are outside the verified closure, so the private-copy diff fails closed
+    expect(reasons(e2Gate({ ...g, diff: swapped, binding: { ...p.binding, base: head, head: base } }))).toEqual(['e2_diff_failed', 'e2_objects_untrusted', 'e2_diff_not_descendant', 'e2_verifier_not_from_spec']); // Round 11: e2_diff_failed as above. Round 10: store for another base; R3-2: the spec was pinned at the real base
     /* R3-2: a spec re-exec in another cwd runs nothing; the legacy argv form in another cwd is refused twice over. */
     const elsewhere = await recordVerifierReexec({ spec: p.verifierSpec, cwd: root, runner: p.runner });
     expect(elsewhere?.refusal).toBe('cwd_not_spec_workspace');

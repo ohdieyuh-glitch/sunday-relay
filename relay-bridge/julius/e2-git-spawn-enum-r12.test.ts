@@ -27,13 +27,13 @@ function sitesOf(file: string): Site[] {
       const line = sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1;
       if (name === 'moduleGit' && a0 !== undefined) {
         const t = a0.getText(sf);
-        out.push({ file, line, via: 'moduleGit', argsText: t, callText: (ts.isCallExpression(n.parent) ? n.parent : n).getText(sf), sub: /safeDir\([^)]*\),\s*(?:\.\.\.objPin,\s*)?'([a-z-]+)'/u.exec(t)?.[1] ?? '?' });
+        out.push({ file, line, via: 'moduleGit', argsText: t, callText: (ts.isCallExpression(n.parent) ? n.parent : n).getText(sf), sub: /safeDir\([^)]*\),\s*(?:\.\.\.(?:objPin|dPin),\s*)?'([a-z-]+)'/u.exec(t)?.[1] ?? '?' });
       } else if (['execFileSync', 'execFile', 'spawn', 'spawnImpl', 'spawnSync', 'execSync', 'exec', 'fork'].includes(name) && a0 !== undefined) {
         const prog = a0.getText(sf);
         all.push(`${file}:${name}:${prog}`);
         if (/['"`]git['"`]/u.test(prog) || gitBins.has(prog)) {
           const t = n.arguments[1]?.getText(sf) ?? '';
-          out.push({ file, line, via: name, argsText: t, callText: n.getText(sf), sub: /safeDir\([^)]*\),\s*(?:\.\.\.objPin,\s*)?'([a-z-]+)'/u.exec(t)?.[1] ?? (t === 'argv.slice(1)' ? '(capture)' : '?') });
+          out.push({ file, line, via: name, argsText: t, callText: n.getText(sf), sub: /safeDir\([^)]*\),\s*(?:\.\.\.(?:objPin|dPin),\s*)?'([a-z-]+)'/u.exec(t)?.[1] ?? (t === 'argv.slice(1)' ? '(capture)' : '?') });
         }
       }
     }
@@ -94,11 +94,11 @@ describe('every git invocation in the e2 gate/spec/diff path carries the pins', 
       'diff.suppressBlankEmpty=false', 'core.autocrlf=false', 'diff.context=3', 'diff.interHunkContext=0', 'diff.orderFile=/dev/null', 'diff.srcPrefix=a/',
       'diff.dstPrefix=b/', 'diff.algorithm=myers', 'diff.indentHeuristic=true', 'core.attributesFile=/dev/null', 'diff.wsErrorHighlight=none',
       'core.hooksPath=/dev/null', 'core.fsmonitor=false', 'core.sshCommand=/bin/false', 'protocol.allow=never', 'core.pager=cat', 'diff.external=',
-      'core.useReplaceRefs=false'].flatMap((kv) => ['-c', kv]),
+      'core.useReplaceRefs=false', 'core.commitGraph=false', 'gc.writeCommitGraph=false'].flatMap((kv) => ['-c', kv]),
     '--attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904'];
-  it('R7-5: e2GitPins is exactly the 24 -c pins (23 + core.useReplaceRefs), --no-replace-objects, --attr-source, then safe.directory', () => {
+  it('R7-5 + Round 11 R10-7: e2GitPins is exactly the 26 -c pins (23 + core.useReplaceRefs + core.commitGraph + gc.writeCommitGraph), --no-replace-objects, --attr-source, then safe.directory', () => {
     expect(G.e2GitPins(DIR)).toEqual([...EXPECTED_PINS, '-c', `safe.directory=${DIR}`]);
-    expect(EXPECTED_PINS.filter((x) => x === '-c').length).toBe(24);
+    expect(EXPECTED_PINS.filter((x) => x === '-c').length).toBe(26);
     expect(EXPECTED_PINS).toContain('core.pager=cat');
   });
   it('R7-5: no site adds a -c or global option after the pins (no override), and every site runs with E2_GIT_ENV', () => {
@@ -117,10 +117,10 @@ describe('every git invocation in the e2 gate/spec/diff path carries the pins', 
     /* Round 10 (trusted store): GIT_ALTERNATE_OBJECT_DIRECTORIES / GIT_OBJECT_DIRECTORY appear only in snapshotAltEnv
        (from the two module-minted pins) and trustedEnv (the spec's checked trusted store). */
     expect(src.match(/GIT_ALTERNATE_OBJECT_DIRECTORIES:/gu)?.length).toBe(2);
-    expect(src.match(/GIT_OBJECT_DIRECTORY:/gu)?.length).toBe(3);
+    expect(src.match(/GIT_OBJECT_DIRECTORY:/gu)?.length).toBe(4); /* Round 11: + the verified private copy (VERIFIED_PIN) */
     expect(src).toMatch(/const objPin = \[\.\.\.\(input\.objectDir === undefined \? \[\] : \['-c', `\$\{OBJDIR_PIN\}\$\{input\.objectDir\}`\]\), \.\.\.\(trusted === undefined \? \[\] : \['-c', `\$\{TRUSTED_PIN\}\$\{trusted\}`\]\)\];/u);
     expect(src.indexOf('checkSnapshotObjectDir(input.objectDir')).toBeLessThan(src.indexOf('const objPin'));
-    for (const st of sites.filter((x) => x.via === 'moduleGit' && x.sub !== '?')) expect(st.argsText.replace(/\.\.\.objPin, /u, '')).not.toMatch(/\.\.\.(?!GIT_PINS|safeDir|DIFF_FLAGS)/u);
+    for (const st of sites.filter((x) => x.via === 'moduleGit' && x.sub !== '?')) expect(st.argsText.replace(/\.\.\.(?:objPin|dPin), /u, '')).not.toMatch(/\.\.\.(?!GIT_PINS|safeDir|DIFF_FLAGS)/u);
     /* Round 10 R9-1: the one `...args` site is verifyObjectClosure's g(); its callers pass only these literal subcommands. */
     const verify = src.slice(src.indexOf('function verifyObjectClosure('), src.indexOf('/** Round 8 R7-2 (+ M-8): repository state'));
     expect([...verify.matchAll(/\bg\(\[('[a-z-]+')/gu)].map((m) => m[1])).toEqual(["'rev-list'", "'rev-list'", "'ls-tree'", "'cat-file'"]);
@@ -128,7 +128,11 @@ describe('every git invocation in the e2 gate/spec/diff path carries the pins', 
     expect(verify).toMatch(/env: \{ LANG: 'C\.UTF-8', LC_ALL: 'C\.UTF-8', \.\.\.E2_GIT_ENV, GIT_NO_REPLACE_OBJECTS: '1', \.\.\.snapshotAltEnv\(argv\), PATH: E2_VERIFIER_PATH \}/u);
     /* the safe primitive's one extra pin, and its env puts caller extras BEFORE the gate env. */
     expect(S.SAFE_GIT_EXTRA_PINS).toEqual(['-c', 'commit.gpgSign=false']);
-    expect(readFileSync(join(DIR, 'e2-safe-git.ts'), 'utf8')).toMatch(/env: \{ \.\.\.\(opts\.env \?\? \{\}\), LANG: 'C\.UTF-8', LC_ALL: 'C\.UTF-8', \.\.\.E2_GIT_ENV, GIT_DIR: c\.gitDir,[^}]*PATH: E2_VERIFIER_PATH \}/u);
+    expect(readFileSync(join(DIR, 'e2-safe-git.ts'), 'utf8')).toMatch(/env: \{ \.\.\.\(opts\.env \?\? \{\}\), LANG: 'C\.UTF-8', LC_ALL: 'C\.UTF-8', \.\.\.E2_GIT_ENV, GIT_DIR: c\.gitDir,[^}]*PATH: E2_VERIFIER_PATH,[^]*?\.\.\.\(opts\.globalConfig === undefined \? \{\} : \{ GIT_CONFIG_GLOBAL: opts\.globalConfig \}\) \}/u);
+    /* Round 11 R10-2: exactly one caller passes a global config: the trusted-store seed fetch, with the gate-written file. */
+    const sgSrc = readFileSync(join(DIR, 'e2-safe-git.ts'), 'utf8');
+    expect(sgSrc.match(/\{ globalConfig: /gu)?.length).toBe(1);
+    expect(sgSrc).toMatch(/'fetch', '-q', '--no-tags', '--no-write-fetch-head', '--', c\.ws, input\.base\], \{ globalConfig: gcfg \}\)/u);
     expect(G.E2_GIT_ENV).toEqual({ GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', GIT_ATTR_NOSYSTEM: '1',
       GIT_GRAFT_FILE: '/dev/null', GIT_REPLACE_REF_BASE: 'refs/e2-no-replace/', GIT_NO_REPLACE_OBJECTS: '1' });
   });

@@ -2,6 +2,7 @@ import { execFile, execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { deflateSync } from 'node:zlib';
 import { basename, dirname, isAbsolute, join, normalize as normalizePath, posix } from 'node:path';
 
 import { E2_STREAM_LABEL_LIVE, verifyEvidenceChain } from './cursor-run-stream-evidence';
@@ -144,6 +145,8 @@ const isModuleGit = (argv: readonly string[]): boolean => MODULE_GIT.has(JSON.st
 const OBJDIR_PIN = 'e2.snapshotObjectDir=';
 /** Round 10 (Skywalker amendment): the trusted seed store's objects dir, minted the same way. */
 const TRUSTED_PIN = 'e2.trustedObjects=';
+/** Round 11 (PILOT R10-1 / Skywalker F10-1): the gate-private copy of the verified objects, minted the same way. */
+const VERIFIED_PIN = 'e2.verifiedObjects=';
 const pinValue = (argv: readonly string[], pin: string): string | undefined => {
   const i = argv.findIndex((a, j) => j > 0 && argv[j - 1] === '-c' && a.startsWith(pin));
   return i < 0 ? undefined : (argv[i] as string).slice(pin.length);
@@ -155,6 +158,9 @@ const pinValue = (argv: readonly string[], pin: string): string | undefined => {
  */
 const snapshotAltEnv = (argv: readonly string[]): Record<string, string> => {
   if (!isModuleGit(argv)) return {};
+  /* Round 11: the verified private copy is the ONLY object source (no alternates): the diff reads exactly the bytes the rehash checked. */
+  const v = pinValue(argv, VERIFIED_PIN);
+  if (v !== undefined) return { GIT_OBJECT_DIRECTORY: v };
   const o = pinValue(argv, OBJDIR_PIN); const t = pinValue(argv, TRUSTED_PIN);
   if (o !== undefined && t !== undefined) return { GIT_OBJECT_DIRECTORY: o, GIT_ALTERNATE_OBJECT_DIRECTORIES: t };
   if (t !== undefined) return { GIT_OBJECT_DIRECTORY: t };
@@ -751,7 +757,9 @@ const GIT_PINS = Object.freeze([
   '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'core.sshCommand=/bin/false', '-c', 'protocol.allow=never',
   '-c', 'core.pager=cat', '-c', 'diff.external=',
   /* Round 8 R7-2/R7-4: replace refs off; attributes come from the empty tree, never the worktree. */
-  '-c', 'core.useReplaceRefs=false', `--attr-source=${E2_EMPTY_TREE}`,
+  '-c', 'core.useReplaceRefs=false',
+  /* Round 11 (PILOT R10-7): a store or coder commit-graph file never shapes a listing, and none is written. */
+  '-c', 'core.commitGraph=false', '-c', 'gc.writeCommitGraph=false', `--attr-source=${E2_EMPTY_TREE}`,
 ]);
 /** M-8: the same settings as explicit flags (a flag beats config). */
 const DIFF_FLAGS = Object.freeze(['-U3', '--inter-hunk-context=0', '-O/dev/null', '--src-prefix=a/', '--dst-prefix=b/', '--diff-algorithm=myers', '--indent-heuristic']);
@@ -810,7 +818,8 @@ export function checkTrustedObjects(dir: unknown, workspace: string): E2ObjdirRe
 export const E2_OBJECT_REFUSALS = Object.freeze(['e2_object_hash_mismatch', 'e2_object_unverifiable'] as const);
 export type E2ObjectRefusal = typeof E2_OBJECT_REFUSALS[number];
 const E2_OBJECT_VERIFY_MAX = 2_000_000;
-function verifyObjectClosure(cwd: string, base: string, head: string, objPin: readonly string[]): E2ObjectRefusal | null {
+type VerifiedObject = { readonly oid: string; readonly type: string; readonly body: Buffer };
+function verifyObjectClosure(cwd: string, base: string, head: string, objPin: readonly string[]): E2ObjectRefusal | readonly VerifiedObject[] {
   const bin = resolveProgram('git');
   if (bin === null) return 'e2_object_unverifiable';
   const g = (args: readonly string[], input?: string): Buffer | null => {
@@ -829,6 +838,7 @@ function verifyObjectClosure(cwd: string, base: string, head: string, objPin: re
   const out = g(['cat-file', '--batch'], oids.map((o) => `${o}\n`).join(''));
   if (out === null) return 'e2_object_unverifiable';
   let at = 0;
+  const verified: VerifiedObject[] = [];
   for (const oid of oids) {
     const nl = out.indexOf(10, at);
     if (nl < 0) return 'e2_object_unverifiable';
@@ -837,9 +847,48 @@ function verifyObjectClosure(cwd: string, base: string, head: string, objPin: re
     const size = Number(m[3]); const body = out.subarray(nl + 1, nl + 1 + size);
     if (body.length !== size || out[nl + 1 + size] !== 10) return 'e2_object_unverifiable';
     if (createHash('sha1').update(`${m[2]} ${size}\0`).update(body).digest('hex') !== oid) return 'e2_object_hash_mismatch';
+    verified.push(Object.freeze({ oid, type: m[2] as string, body: Buffer.from(body) }));
     at = nl + 2 + size;
   }
-  return null;
+  return Object.freeze(verified);
+}
+/**
+ * Round 11 (PILOT R10-1 / Skywalker F10-1): the objects verified above are written, from those SAME in-memory bytes, as
+ * loose objects into a fresh gate-private 0700 dir (exclusive create, files 0400); every later git read (the diff and the
+ * changed-path listing) uses only that dir (GIT_OBJECT_DIRECTORY, no alternates). A same-uid swap in the store or the
+ * snapshot dir after the single cat-file read cannot reach the diff. After the diff the private files are compared with
+ * what was written (a swap inside the private dir is e2_object_hash_mismatch). Ancestry is computed in memory from the
+ * verified commit bodies. Returns null when the dir could not be made (the evidence is then e2_object_unverifiable).
+ */
+type PrivateCopy = { readonly dir: string; readonly intact: () => boolean; readonly dispose: () => void };
+function writePrivateCopy(objects: readonly VerifiedObject[]): PrivateCopy | null {
+  let dir: string;
+  try { dir = realpathSync(mkdtempSync(join(tmpdir(), 'e2-verified-objects-'))); chmodSync(dir, 0o700); } catch { return null; }
+  const dispose = (): void => { try { rmSync(dir, { recursive: true, force: true }); } catch { /* best effort; reported by nothing (gate-owned) */ } };
+  const files: Array<[string, Buffer]> = [];
+  try {
+    for (const o of objects) {
+      const z = deflateSync(Buffer.concat([Buffer.from(`${o.type} ${o.body.length}\0`), o.body]));
+      const fan = join(dir, o.oid.slice(0, 2)); mkdirSync(fan, { recursive: true, mode: 0o700 });
+      const f = join(fan, o.oid.slice(2)); writeFileSync(f, z, { flag: 'wx', mode: 0o400 }); files.push([f, z]);
+    }
+  } catch { dispose(); return null; }
+  const intact = (): boolean => { try { return files.every(([f, z]) => readFileSync(f).equals(z)); } catch { return false; } };
+  return Object.freeze({ dir, intact, dispose });
+}
+/** Round 11: head descends from base, decided from the verified commit bodies only (no git read). */
+function descendsInMemory(objects: readonly VerifiedObject[], base: string, head: string): boolean {
+  const commits = new Map(objects.filter((o) => o.type === 'commit').map((o) => [o.oid, o.body.toString('latin1')]));
+  const seen = new Set<string>(); const todo = [head];
+  while (todo.length > 0) {
+    const c = todo.pop() as string;
+    if (c === base) return true;
+    if (seen.has(c)) continue; seen.add(c);
+    const body = commits.get(c); if (body === undefined) continue;
+    const hdr = body.slice(0, body.indexOf('\n\n') < 0 ? body.length : body.indexOf('\n\n'));
+    for (const m of hdr.matchAll(/^parent ([0-9a-f]{40})$/gmu)) todo.push(m[1] as string);
+  }
+  return false;
 }
 /** Round 8 R7-2 (+ M-8): repository state that changes what history or attributes mean. Paths are under the common dir. */
 function isolationFindings(commonDir: string): readonly string[] {
@@ -902,25 +951,34 @@ export async function recordGitDiff(input: { readonly base: string; readonly hea
   }
   /* Round 10 R9-1: every object the diff and ancestry read is re-hashed first (trusted runner only; a fake runner's
      evidence is labelled fake and never passes). */
-  const objectRefusal = capture === undefined ? null : verifyObjectClosure(input.cwd, input.base, input.head, objPin);
-  const argv = moduleGit(['git', ...GIT_PINS, ...safeDir(input.cwd), ...objPin, 'diff', '--no-ext-diff', '--no-textconv', '--binary', '--no-renames', '--no-color', '--full-index', ...DIFF_FLAGS, range]);
+  const closure = capture === undefined ? null : verifyObjectClosure(input.cwd, input.base, input.head, objPin);
+  let objectRefusal: E2ObjectRefusal | null = closure === null || Array.isArray(closure) ? null : closure as E2ObjectRefusal;
+  /* Round 11 R10-1: from here on git reads only the private copy of the verified bytes. */
+  const priv = closure !== null && Array.isArray(closure) ? writePrivateCopy(closure as readonly VerifiedObject[]) : null;
+  if (closure !== null && Array.isArray(closure) && priv === null) objectRefusal = 'e2_object_unverifiable';
+  const dPin = priv === null ? objPin : [...objPin, '-c', `${VERIFIED_PIN}${priv.dir}`];
+  try {
+  const argv = moduleGit(['git', ...GIT_PINS, ...safeDir(input.cwd), ...dPin, 'diff', '--no-ext-diff', '--no-textconv', '--binary', '--no-renames', '--no-color', '--full-index', ...DIFF_FLAGS, range]);
   const r = await run(input.runner, argv, input.cwd, E2_GIT_ENV);
-  const anc = await run(input.runner, moduleGit(['git', ...GIT_PINS, ...safeDir(input.cwd), ...objPin, 'merge-base', '--is-ancestor', input.base, input.head]), input.cwd, E2_GIT_ENV);
+  const ancestry = priv !== null ? descendsInMemory(closure as readonly VerifiedObject[], input.base, input.head)
+    : (await run(input.runner, moduleGit(['git', ...GIT_PINS, ...safeDir(input.cwd), ...objPin, 'merge-base', '--is-ancestor', input.base, input.head]), input.cwd, E2_GIT_ENV)).exitCode === 0;
   /* Rule (b) needs the changed paths; M-8 needs to know whether info/attributes (which no config can switch off) is empty. */
   let paths: readonly string[] | null = null;
   let attributeFiles: readonly string[] | null = null;
   if (capture !== undefined) {
-    const names = await capture(moduleGit(['git', ...GIT_PINS, ...safeDir(input.cwd), ...objPin, 'diff', '--no-ext-diff', '--no-renames', '--name-only', '-z', range]), input.cwd, E2_GIT_ENV);
+    const names = await capture(moduleGit(['git', ...GIT_PINS, ...safeDir(input.cwd), ...dPin, 'diff', '--no-ext-diff', '--no-renames', '--name-only', '-z', range]), input.cwd, E2_GIT_ENV);
     if (names !== null) paths = Object.freeze(names.toString('utf8').split('\u0000').filter((x) => x !== ''));
     attributeFiles = worktreeAttributeFiles(input.cwd);
   }
+  if (priv !== null && objectRefusal === null && !priv.intact()) objectRefusal = 'e2_object_hash_mismatch';
   const ev: E2DiffEvidence = Object.freeze({
     label: TRUSTED_RUNNERS.has(input.runner) ? E2_JULIUS_LABEL : E2_FAKE_LABEL, base: input.base, head: input.head, cwd: input.cwd, argv,
-    exitCode: r.exitCode, sha256: r.stdoutSha256, bytes: r.stdoutBytes, ancestry: anc.exitCode === 0, paths, isolated, isolationFindings: findings, attributeFiles, objectDirRefusal: null, objectRefusal,
+    exitCode: r.exitCode, sha256: r.stdoutSha256, bytes: r.stdoutBytes, ancestry, paths, isolated, isolationFindings: findings, attributeFiles, objectDirRefusal: null, objectRefusal,
     objectDir: input.objectDir ?? null, trustedObjects: trusted ?? null,
   });
   RECORDED.add(ev);
   return ev;
+  } finally { priv?.dispose(); }
 }
 
 export const E2_GATE_REASONS = Object.freeze([

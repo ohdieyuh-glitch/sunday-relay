@@ -22,7 +22,7 @@
  * snapshot (every file except any `.git` entry is recorded).
  */
 import { execFileSync } from 'node:child_process';
-import { chmodSync, existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
@@ -103,12 +103,15 @@ function check(workspace: unknown): Checked | Refused {
 }
 export const SAFE_GIT_EXTRA_PINS = Object.freeze(['-c', 'commit.gpgSign=false']);
 /** The ONE git spawn site in this module: pins, safe.directory, the gate's env, GIT_DIR, fixed PATH, nothing else. */
-function sg(c: Checked, args: readonly string[], opts: { input?: Buffer | string; env?: Record<string, string> } = {}): string | null {
+function sg(c: Checked, args: readonly string[], opts: { input?: Buffer | string; env?: Record<string, string>; globalConfig?: string } = {}): string | null {
   try {
     return execFileSync('git', [...e2GitPins(c.ws), ...SAFE_GIT_EXTRA_PINS, ...args], {
       cwd: c.ws, shell: false, stdio: ['pipe', 'pipe', 'ignore'], maxBuffer: 256 * 1024 * 1024, input: opts.input ?? '',
       /* caller extras (index file, identity) first, so they can never override the gate env, GIT_DIR or PATH. */
-      env: { ...(opts.env ?? {}), LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...E2_GIT_ENV, GIT_DIR: c.gitDir, GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0', PATH: E2_VERIFIER_PATH },
+      env: { ...(opts.env ?? {}), LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...E2_GIT_ENV, GIT_DIR: c.gitDir, GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0', PATH: E2_VERIFIER_PATH,
+        /* Round 11 R10-2: only buildTrustedSeedStore's fetch passes a gate-written file (safe.directory for the seed);
+           git does not hand `-c` to the local upload-pack, but it does read GIT_CONFIG_GLOBAL there. */
+        ...(opts.globalConfig === undefined ? {} : { GIT_CONFIG_GLOBAL: opts.globalConfig }) },
     }).toString('utf8');
   } catch { return null; }
 }
@@ -127,10 +130,30 @@ type Entry = { mode: string; data: Buffer; path: string };
  * the refusal lists paths only), whatever the coder's .gitignore / info/exclude say (those
  * are never read). A secret-path refusal is a FAILED run, never a pass.
  */
+/* Round 11 (PILOT R10-4 / Skywalker F10-2): names are folded before matching: NFKD, combining marks and default-ignorable
+   code points removed, a small table of Cyrillic/Greek lookalikes mapped to Latin, then NFKC and lower case. Still a
+   heuristic on NAMES only: a secret in an innocent name (notes.txt) is not caught. */
+const CONFUSABLE: Readonly<Record<string, string>> = Object.freeze({
+  '\u0430': 'a', '\u0435': 'e', '\u043e': 'o', '\u0440': 'p', '\u0441': 'c', '\u0445': 'x', '\u0443': 'y', '\u0456': 'i', '\u0458': 'j', '\u0455': 's',
+  '\u0501': 'd', '\u043a': 'k', '\u043c': 'm', '\u0442': 't', '\u04bb': 'h', '\u0475': 'v', '\u0491': 'r',
+  '\u03b1': 'a', '\u03b5': 'e', '\u03bf': 'o', '\u03c1': 'p', '\u03b9': 'i', '\u03ba': 'k', '\u03bd': 'v', '\u03c4': 't', '\u03c5': 'u', '\u03c7': 'x',
+  '\u0131': 'i', '\u0261': 'g',
+});
+const IGNORABLE = /[\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180f\u200b-\u200f\u202a-\u202e\u2060-\u206f\u3164\ufe00-\ufe0f\ufeff\uffa0]/gu;
+export function foldName(n: string): string {
+  const d = n.normalize('NFKD').replace(/\p{M}/gu, '').replace(IGNORABLE, '').toLowerCase();
+  return [...d].map((ch) => CONFUSABLE[ch] ?? ch).join('').normalize('NFKC').toLowerCase();
+}
+const SECRET_DIR = (d: string): boolean => /^(secret|\.env|credentials)/u.test(d) || d === '.ssh' || d === '.aws' || d === '.gnupg' || d === '.vault';
 export function isSecretPath(p: string): boolean {
-  const parts = p.split('/'); const base = (parts[parts.length - 1] ?? '').toLowerCase();
-  if (parts.slice(0, -1).some((d) => /^secret/iu.test(d))) return true;
-  const parent = (parts[parts.length - 2] ?? '').toLowerCase();
+  const parts = p.split('/').map(foldName); const base = parts[parts.length - 1] ?? '';
+  if (parts.slice(0, -1).some(SECRET_DIR)) return true;
+  const parent = parts[parts.length - 2] ?? '';
+  if (base === '_netrc' || /id_(rsa|ed25519|ecdsa|dsa|xmss)/u.test(base) || /(^|[^a-z0-9])(gh|api|access|auth)?_?tokens?([^a-z0-9]|$)/u.test(base)
+    || base.endsWith('.tfvars.json') || /^sa-key.*\.json$/u.test(base) || base === 'application_default_credentials.json' || base === '.yarnrc.yml'
+    || base.endsWith('.asc') || /^client_secret.*\.json$/u.test(base) || /^api[-_]?key/u.test(base) || base === 'kubeconfig' || base === '.vault-token'
+    || base.startsWith('terraform.tfstate') || base.endsWith('.ppk') || base.endsWith('.p8')
+    || ['.boto', '.s3cfg', '.htpasswd', '.terraformrc', 'wallet.dat'].includes(base) || (parent === 'gh' && base === 'hosts.yml')) return true;
   return /^\.env/u.test(base) || base.endsWith('.pem') || base.endsWith('.key') || base.startsWith('id_rsa') || base.startsWith('credentials')
     || base === '.npmrc' || base === '.netrc' || /^secret/u.test(base)
     /* Round 10 (Skywalker F9-4): more key and credential names. Still a heuristic on NAMES only. */
@@ -157,7 +180,7 @@ function walk(ws: string): { entries: Entry[]; outsideLinks: string[]; secret: s
       if (isDroppedPath(p)) { dropped.push(p); continue; }
       const abs = join(ws, p);
       const st = lstatSync(abs);
-      if (st.isDirectory()) { if (/^(secret|\.env)/iu.test(d.name)) { secret.push(`${p}/`); continue; } rec(p); continue; }
+      if (st.isDirectory()) { if (SECRET_DIR(foldName(d.name))) { secret.push(`${p}/`); continue; } rec(p); continue; }
       if (isSecretPath(p)) { secret.push(p); continue; }
       if (st.isSymbolicLink()) {
         const target = readlinkSync(abs);
@@ -180,8 +203,35 @@ function walk(ws: string): { entries: Entry[]; outsideLinks: string[]; secret: s
  * .git/objects is never read). dispose() removes the directory; idempotent.
  */
 export type SnapshotObjectDir = { readonly path: string; readonly disposed: () => boolean };
+/** Round 11 (PILOT R10-5): what dispose() could not remove. dispose() never throws. */
+export type DisposeReport = { readonly leftovers: readonly string[] };
+/**
+ * Best-effort removal of a gate-made directory. Never throws. A symlink at `dir` (swapped in by a survivor) is unlinked,
+ * never followed: its target is reported as a leftover and nothing outside is removed. Anything rmSync cannot remove
+ * (EACCES, foreign-owned contents) is reported by path.
+ */
+export function disposeDir(dir: string): DisposeReport {
+  const left: string[] = [];
+  let st;
+  try { st = lstatSync(dir); } catch { return Object.freeze({ leftovers: Object.freeze([]) }); }
+  if (!st.isDirectory()) {
+    let target: string | null = null;
+    if (st.isSymbolicLink()) { try { target = resolve(dirname(dir), readlinkSync(dir)); } catch { /* unreadable link */ } }
+    try { unlinkSync(dir); } catch { left.push(dir); }
+    if (target !== null) left.push(target);
+    return Object.freeze({ leftovers: Object.freeze(left) });
+  }
+  try { rmSync(dir, { recursive: true, force: true }); } catch { /* reported below */ }
+  const scan = (p: string): void => {
+    let s2; try { s2 = lstatSync(p); } catch { return; }
+    left.push(p);
+    if (s2.isDirectory()) { let ents: string[] = []; try { ents = readdirSync(p); } catch { /* unreadable */ } for (const e of ents) scan(join(p, e)); }
+  };
+  scan(dir);
+  return Object.freeze({ leftovers: Object.freeze(left) });
+}
 export type SnapshotResult = {
-  readonly head: string; readonly tree: string; readonly objectDir: SnapshotObjectDir; readonly dispose: () => void;
+  readonly head: string; readonly tree: string; readonly objectDir: SnapshotObjectDir; readonly dispose: () => DisposeReport;
   readonly included: readonly string[]; readonly skipped: readonly string[]; readonly outsideLinks: readonly string[]; readonly configKeys: readonly string[];
 };
 /**
@@ -216,11 +266,12 @@ export function snapshotCommitSafely(input: { readonly workspace: string; readon
     const r = relative(c.ws, objDir);
     if (!(r === '..' || r.startsWith(`..${sep}`) || isAbsolute(r))) { rmSync(objDir, { recursive: true, force: true }); return no('safe_git_objdir_failed'); }
   } catch { return no('safe_git_objdir_failed'); }
-  let disposed = false;
-  const dispose = (): void => {
-    if (disposed) return;
+  let disposed = false; let last: DisposeReport = Object.freeze({ leftovers: Object.freeze([]) });
+  const dispose = (): DisposeReport => {
+    if (disposed && last.leftovers.length === 0) return last;
     disposed = true;
-    rmSync(objDir, { recursive: true, force: true });
+    last = disposeDir(objDir);
+    return last;
   };
   const tmp = mkdtempSync(join(tmpdir(), 'e2-safe-git-'));
   /* Round 10 (PILOT R9-1): the throwaway dir is the ONLY object store. With the coder's store as an alternate, `hash-object
@@ -272,7 +323,7 @@ function lstatExists(p: string): boolean { try { lstatSync(p); return true; } ca
  */
 export const TRUSTED_STORE_REASONS = Object.freeze(['store_seed_invalid', 'store_base_missing', 'store_failed'] as const);
 export type TrustedStoreRefusal = typeof TRUSTED_STORE_REASONS[number];
-export type TrustedSeedStore = { readonly storeDir: string; readonly objects: string; readonly base: string; readonly tree: string; readonly dispose: () => void };
+export type TrustedSeedStore = { readonly storeDir: string; readonly objects: string; readonly base: string; readonly tree: string; readonly dispose: () => DisposeReport };
 export function buildTrustedSeedStore(input: { readonly seed: string; readonly base: string }): TrustedSeedStore | { readonly refused: TrustedStoreRefusal } {
   const nope = (refused: TrustedStoreRefusal) => Object.freeze({ refused });
   const c = check(input?.seed);
@@ -286,12 +337,17 @@ export function buildTrustedSeedStore(input: { readonly seed: string; readonly b
     if (!(r === '..' || r.startsWith(`..${sep}`) || isAbsolute(r))) { rmSync(storeDir, { recursive: true, force: true }); return nope('store_failed'); }
   } catch { return nope('store_failed'); }
   let ok = false;
-  const dispose = (): void => { rmSync(storeDir, { recursive: true, force: true }); };
+  const dispose = (): DisposeReport => disposeDir(storeDir);
   try {
     const repo = join(storeDir, 'repo.git');
     const st = { ...c, gitDir: repo };
     if (sg(c, ['init', '-q', '--bare', repo]) === null) return nope('store_failed');
-    if (sg(st, ['-c', 'protocol.file.allow=always', 'fetch', '-q', '--no-tags', '--no-write-fetch-head', '--', c.ws, input.base]) === null) {
+    /* Round 11 R10-2: a gate-written global config naming the seed (realpath) as safe, so a seed owned by another uid
+       (git's upload-pack checks ownership and ignores `-c`) still fetches. The seed's own config was checked above. */
+    const gcfg = join(storeDir, 'gate.gitconfig');
+    const q = (x: string): string => `"${x.replace(/\\/gu, '\\\\').replace(/"/gu, '\\"')}"`;
+    writeFileSync(gcfg, `[safe]\n\tdirectory = ${q(c.ws)}\n\tdirectory = ${q(c.gitDir)}\n`, { mode: 0o600, flag: 'wx' });
+    if (sg(st, ['-c', 'protocol.file.allow=always', 'fetch', '-q', '--no-tags', '--no-write-fetch-head', '--', c.ws, input.base], { globalConfig: gcfg }) === null) {
       return nope(sg(c, ['cat-file', '-e', `${input.base}^{commit}`]) === null ? 'store_base_missing' : 'store_failed');
     }
     if (sg(st, ['rev-parse', '--verify', '-q', `${input.base}^{commit}`])?.trim() !== input.base) return nope('store_base_missing');
