@@ -112,8 +112,8 @@ describe('R7-1 steering: snapshotCommitSafely (plumbing, --no-filters, no add/st
 
 describe('R7-1 steering: a .git owned by another uid with world-writable config and hooks (live-workspace.sh layout)', () => {
   const sudoOk = spawnSync('sudo', ['-n', 'true']).status === 0;
-  /* Round 9 (PILOT): offline there is no passwordless sudo, so the FOREIGN-uid branch is NOT exercised here; the test then
-     only asserts that sudo is unavailable (SIMULATED/UNVERIFIED path, labelled as such in the test name). */
+  /* Round 9 (PILOT): where there is no passwordless sudo (PILOT's box) the FOREIGN-uid branch is NOT exercised; the test then
+     only asserts that sudo is unavailable, and its name says so. On a box with sudo -n (the author's) it chowns to uid 0. */
   it(`recordHeadSafely reads the head; a world-writable hook never runs; hostile config there is still refused (${sudoOk ? 'foreign uid: exercised' : 'foreign uid: NOT exercised offline, no sudo'})`, () => {
     if (!sudoOk) { expect(spawnSync('sudo', ['-n', 'true']).status).not.toBe(0); return; }
     const r = repo();
