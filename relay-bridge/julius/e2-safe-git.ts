@@ -215,7 +215,9 @@ export function snapshotCommitSafely(input: { readonly workspace: string; readon
     rmSync(objDir, { recursive: true, force: true });
   };
   const tmp = mkdtempSync(join(tmpdir(), 'e2-safe-git-'));
-  const obj = { GIT_OBJECT_DIRECTORY: objDir, GIT_ALTERNATE_OBJECT_DIRECTORIES: join(c.gitDir, 'objects') };
+  /* Round 10 (PILOT R9-1): the throwaway dir is the ONLY object store. With the coder's store as an alternate, `hash-object
+     -w` saw a planted (corrupt) object under the good hash as present and skipped the write. No coder object is read here. */
+  const obj = { GIT_OBJECT_DIRECTORY: objDir };
   let ok = false;
   try {
     const lines: string[] = [];
@@ -233,8 +235,13 @@ export function snapshotCommitSafely(input: { readonly workspace: string; readon
     const got = listed.split('\u0000').filter((x) => x !== '').map((l) => { const [meta, path] = l.split('\t'); return `${(meta ?? '').split(' ')[0]} ${path}`; });
     const want = w.entries.map((e) => `${e.mode} ${e.path}`);
     if (got.length !== want.length || got.some((g, i) => g !== want[i])) return no('safe_git_tree_mismatch');
-    const who = { ...obj, GIT_AUTHOR_NAME: input.author.name, GIT_AUTHOR_EMAIL: input.author.email, GIT_COMMITTER_NAME: input.author.name, GIT_COMMITTER_EMAIL: input.author.email };
-    const head = sg(c, ['commit-tree', tree, '-p', input.parent, '-F', '-'], { input: input.message, env: who })?.trim() ?? '';
+    /* Round 10 R9-1: the commit object is hashed directly (commit-tree would look the parent up in the coder store). */
+    const ident = (x: unknown): string | null => (typeof x === 'string' && x.trim() !== '' && !/[<>\n\r\0]/u.test(x) ? x.trim() : null);
+    const name = ident(input.author.name); const email = ident(input.author.email);
+    if (name === null || email === null || typeof input.message !== 'string' || input.message.includes('\0')) return no('safe_git_write_failed');
+    const when = `${Math.floor(Date.now() / 1000)} +0000`;
+    const body = `tree ${tree}\nparent ${input.parent}\nauthor ${name} <${email}> ${when}\ncommitter ${name} <${email}> ${when}\n\n${input.message.endsWith('\n') ? input.message : `${input.message}\n`}`;
+    const head = sg(c, ['hash-object', '-t', 'commit', '-w', '--stdin'], { input: body, env: obj })?.trim() ?? '';
     if (!SHA.test(head)) return no('safe_git_write_failed');
     ok = true;
     return Object.freeze({

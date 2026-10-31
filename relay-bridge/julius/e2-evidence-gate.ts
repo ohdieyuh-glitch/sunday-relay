@@ -371,6 +371,8 @@ export interface E2DiffEvidence {
   readonly attributeFiles: readonly string[] | null;
   /** Round 10: the named reason the snapshot object dir was refused (no git ran); null when none was given or it passed. */
   readonly objectDirRefusal?: E2ObjdirRefusal | null;
+  /** Round 10 R9-1: an object the diff reads did not re-hash to its name (or could not be read); null when all verified. */
+  readonly objectRefusal?: E2ObjectRefusal | null;
 }
 
 const validArgv = (a: unknown): a is readonly string[] =>
@@ -753,6 +755,47 @@ export function checkSnapshotObjectDir(dir: unknown, workspace: string): E2Objdi
   }
   return null;
 }
+/**
+ * Round 10 (PILOT 5a6e3400 R9-1): git never re-hashes a loose object on read, and the coder can write any bytes under any
+ * name in its own .git/objects. Before the diff, every object the diff and the ancestry check read is re-hashed: the
+ * commits in head ^base, the base commit, and every tree and blob reachable from their trees. A listing step reads only
+ * objects that are themselves verified, so a forged tree or commit cannot hide an entry. Returns null when every object
+ * re-hashes to its name, else the named refusal. Runs with the gate's fixed module-git env (plus the checked object dir).
+ */
+export const E2_OBJECT_REFUSALS = Object.freeze(['e2_object_hash_mismatch', 'e2_object_unverifiable'] as const);
+export type E2ObjectRefusal = typeof E2_OBJECT_REFUSALS[number];
+const E2_OBJECT_VERIFY_MAX = 2_000_000;
+function verifyObjectClosure(cwd: string, base: string, head: string, objPin: readonly string[]): E2ObjectRefusal | null {
+  const bin = resolveProgram('git');
+  if (bin === null) return 'e2_object_unverifiable';
+  const g = (args: readonly string[], input?: string): Buffer | null => {
+    const argv = moduleGit(['git', ...GIT_PINS, ...safeDir(cwd), ...objPin, ...args]);
+    try {
+      return execFileSync(bin, argv.slice(1), { cwd, shell: false, input: input ?? '', stdio: ['pipe', 'pipe', 'ignore'], maxBuffer: 1024 * 1024 * 1024, timeout: 300_000,
+        env: { LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...E2_GIT_ENV, GIT_NO_REPLACE_OBJECTS: '1', ...snapshotAltEnv(argv), PATH: E2_VERIFIER_PATH } });
+    } catch { return null; }
+  };
+  const a = g(['rev-list', '--objects', '--no-object-names', head, `^${base}`]);
+  const b = g(['rev-list', '--objects', '--no-object-names', '--no-walk', base]);
+  const t = g(['ls-tree', '-r', '-t', '--full-tree', '--format=%(objectname)', base]);
+  if (a === null || b === null || t === null) return 'e2_object_unverifiable';
+  const oids = [...new Set([...a.toString('utf8').split('\n'), ...b.toString('utf8').split('\n'), ...t.toString('utf8').split('\n'), base, head].filter((x) => x !== ''))];
+  if (oids.length > E2_OBJECT_VERIFY_MAX || oids.some((o) => !SHA.test(o))) return 'e2_object_unverifiable';
+  const out = g(['cat-file', '--batch'], oids.map((o) => `${o}\n`).join(''));
+  if (out === null) return 'e2_object_unverifiable';
+  let at = 0;
+  for (const oid of oids) {
+    const nl = out.indexOf(10, at);
+    if (nl < 0) return 'e2_object_unverifiable';
+    const m = /^([0-9a-f]{40}) (blob|tree|commit|tag) (\d+)$/u.exec(out.subarray(at, nl).toString('latin1'));
+    if (m === null || m[1] !== oid) return 'e2_object_unverifiable';
+    const size = Number(m[3]); const body = out.subarray(nl + 1, nl + 1 + size);
+    if (body.length !== size || out[nl + 1 + size] !== 10) return 'e2_object_unverifiable';
+    if (createHash('sha1').update(`${m[2]} ${size}\0`).update(body).digest('hex') !== oid) return 'e2_object_hash_mismatch';
+    at = nl + 2 + size;
+  }
+  return null;
+}
 /** Round 8 R7-2 (+ M-8): repository state that changes what history or attributes mean. Paths are under the common dir. */
 function isolationFindings(commonDir: string): readonly string[] {
   if (!isAbsolute(commonDir)) return Object.freeze(['git_dir_unknown']);
@@ -794,7 +837,7 @@ export async function recordGitDiff(input: { readonly base: string; readonly hea
   const objectDirRefusal = input.objectDir === undefined ? null : checkSnapshotObjectDir(input.objectDir, input.cwd);
   if (objectDirRefusal !== null) {
     const ev: E2DiffEvidence = Object.freeze({ label: TRUSTED_RUNNERS.has(input.runner) ? E2_JULIUS_LABEL : E2_FAKE_LABEL, base: input.base, head: input.head, cwd: input.cwd,
-      argv: Object.freeze([]), exitCode: 'unknown', sha256: EMPTY_SHA, bytes: 0, ancestry: false, paths: null, isolated: false, isolationFindings: Object.freeze(['objdir_refused']), attributeFiles: null, objectDirRefusal });
+      argv: Object.freeze([]), exitCode: 'unknown', sha256: EMPTY_SHA, bytes: 0, ancestry: false, paths: null, isolated: false, isolationFindings: Object.freeze(['objdir_refused']), attributeFiles: null, objectDirRefusal, objectRefusal: null });
     RECORDED.add(ev);
     return ev;
   }
@@ -810,6 +853,9 @@ export async function recordGitDiff(input: { readonly base: string; readonly hea
       isolated = findings.length === 0;
     }
   }
+  /* Round 10 R9-1: every object the diff and ancestry read is re-hashed first (trusted runner only; a fake runner's
+     evidence is labelled fake and never passes). */
+  const objectRefusal = capture === undefined ? null : verifyObjectClosure(input.cwd, input.base, input.head, objPin);
   const argv = moduleGit(['git', ...GIT_PINS, ...safeDir(input.cwd), ...objPin, 'diff', '--no-ext-diff', '--no-textconv', '--binary', '--no-renames', '--no-color', '--full-index', ...DIFF_FLAGS, range]);
   const r = await run(input.runner, argv, input.cwd, E2_GIT_ENV);
   const anc = await run(input.runner, moduleGit(['git', ...GIT_PINS, ...safeDir(input.cwd), ...objPin, 'merge-base', '--is-ancestor', input.base, input.head]), input.cwd, E2_GIT_ENV);
@@ -823,7 +869,7 @@ export async function recordGitDiff(input: { readonly base: string; readonly hea
   }
   const ev: E2DiffEvidence = Object.freeze({
     label: TRUSTED_RUNNERS.has(input.runner) ? E2_JULIUS_LABEL : E2_FAKE_LABEL, base: input.base, head: input.head, cwd: input.cwd, argv,
-    exitCode: r.exitCode, sha256: r.stdoutSha256, bytes: r.stdoutBytes, ancestry: anc.exitCode === 0, paths, isolated, isolationFindings: findings, attributeFiles, objectDirRefusal: null,
+    exitCode: r.exitCode, sha256: r.stdoutSha256, bytes: r.stdoutBytes, ancestry: anc.exitCode === 0, paths, isolated, isolationFindings: findings, attributeFiles, objectDirRefusal: null, objectRefusal,
   });
   RECORDED.add(ev);
   return ev;
@@ -837,7 +883,7 @@ export const E2_GATE_REASONS = Object.freeze([
   'e2_binding_absent', 'e2_binding_run_mismatch', 'e2_binding_diff_mismatch', 'e2_diff_not_descendant', 'e2_binding_cwd_mismatch',
   'e2_model_absent', 'e2_model_router', 'e2_model_claude', 'e2_model_unrecognised',
   'e2_final_record_mismatch', 'e2_no_edit_calls', 'e2_diff_empty', 'e2_stream_mid_run_start', 'e2_model_unbound',
-  'e2_diff_not_isolated', 'e2_diff_objdir_invalid', 'e2_edit_path_not_in_diff', 'e2_edit_path_unknown', 'e2_binding_remote_root_invalid',
+  'e2_diff_not_isolated', 'e2_diff_objdir_invalid', 'e2_object_hash_mismatch', 'e2_object_unverifiable', 'e2_edit_path_not_in_diff', 'e2_edit_path_unknown', 'e2_binding_remote_root_invalid',
   'e2_anchor_not_external', 'e2_verifier_spec_absent', 'e2_verifier_not_from_spec', 'e2_verifier_pin_changed',
   'e2_tool_unknown', 'e2_edit_path_outside_workspace', 'e2_verifier_binary_untrusted', 'e2_verifier_tests_below_minimum', 'e2_verifier_synthetic_result',
   'e2_verifier_spec_no_base_run',
@@ -1077,6 +1123,8 @@ export function e2Gate(input: {
     else if (diff.bytes === 0 || diff.base === diff.head) reasons.push('e2_diff_empty');
     if (diff.isolated !== true) reasons.push('e2_diff_not_isolated');
     if (diff.objectDirRefusal !== undefined && diff.objectDirRefusal !== null) reasons.push('e2_diff_objdir_invalid');
+    if (diff.objectRefusal !== undefined && diff.objectRefusal !== null) reasons.push(diff.objectRefusal);
+    else if (diff.label === E2_JULIUS_LABEL && diff.objectRefusal === undefined) reasons.push('e2_object_unverifiable');
   }
   if (!bound) reasons.push('e2_binding_absent');
   /* Skywalker 44c062b9 L3: a root of `/` would map every absolute path into the workspace; a relative root was ignored. */

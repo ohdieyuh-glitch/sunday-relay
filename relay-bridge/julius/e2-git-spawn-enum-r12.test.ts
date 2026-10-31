@@ -47,24 +47,27 @@ const all: string[] = [];
 const sites = files.flatMap(sitesOf);
 
 describe('every git invocation in the e2 gate/spec/diff path carries the pins', () => {
-  it('the exact set of 9 git argv sites (8 gate + 1 safe-git; file, subcommand, via)', () => {
+  it('the exact set of 11 git argv sites (10 gate + 1 safe-git; file, subcommand, via)', () => {
     expect(sites.map((s) => `${s.file}:${s.via}:${s.sub}`)).toEqual([
       'e2-evidence-gate.ts:execFile:(capture)',
       'e2-evidence-gate.ts:execFileSync:cat-file',
       'e2-evidence-gate.ts:execFileSync:ls-tree',
       'e2-evidence-gate.ts:execFileSync:ls-tree',
+      'e2-evidence-gate.ts:moduleGit:?' /* Round 10 R9-1: verifyObjectClosure's g() (rev-list, ls-tree, cat-file --batch; pinned below) */,
+      'e2-evidence-gate.ts:execFileSync:(capture)' /* Round 10 R9-1: g() runs that module-minted argv */,
       'e2-evidence-gate.ts:moduleGit:rev-parse' /* Round 10 F9-5: isolation is read before the diff */,
       'e2-evidence-gate.ts:moduleGit:diff',
       'e2-evidence-gate.ts:moduleGit:merge-base',
       'e2-evidence-gate.ts:moduleGit:diff',
       'e2-safe-git.ts:execFileSync:?' /* round 8 R7-1: the one site in the safe primitive (sg) */,
     ]);
-    expect(sites.length).toBe(9);
+    expect(sites.length).toBe(11);
   });
-  it('all 7 child_process calls in the e2 files (6 gate + 1 safe-git) are these git sites or the runner spawnImpl (which runs only allowlisted verifier argv or isModuleGit argv)', () => {
+  it('all 8 child_process calls in the e2 files (7 gate + 1 safe-git) are these git sites or the runner spawnImpl (which runs only allowlisted verifier argv or isModuleGit argv)', () => {
     expect(all).toEqual([
       'e2-evidence-gate.ts:spawnImpl:bin', "e2-evidence-gate.ts:spawnImpl:'taskkill'" /* Windows process-tree kill, not git */, 'e2-evidence-gate.ts:execFile:bin',
       'e2-evidence-gate.ts:execFileSync:bin', 'e2-evidence-gate.ts:execFileSync:bin', 'e2-evidence-gate.ts:execFileSync:bin',
+      'e2-evidence-gate.ts:execFileSync:bin' /* Round 10 R9-1 verifyObjectClosure */,
       "e2-safe-git.ts:execFileSync:'git'",
     ]);
   });
@@ -114,7 +117,12 @@ describe('every git invocation in the e2 gate/spec/diff path carries the pins', 
     expect(src.match(/GIT_ALTERNATE_OBJECT_DIRECTORIES:/gu)?.length).toBe(1);
     expect(src).toMatch(/const objPin = input\.objectDir === undefined \? \[\] : \['-c', `\$\{OBJDIR_PIN\}\$\{input\.objectDir\}`\];/u);
     expect(src.indexOf('checkSnapshotObjectDir(input.objectDir')).toBeLessThan(src.indexOf('const objPin'));
-    for (const st of sites.filter((x) => x.via === 'moduleGit')) expect(st.argsText.replace(/\.\.\.objPin, /u, '')).not.toMatch(/\.\.\.(?!GIT_PINS|safeDir|DIFF_FLAGS)/u);
+    for (const st of sites.filter((x) => x.via === 'moduleGit' && x.sub !== '?')) expect(st.argsText.replace(/\.\.\.objPin, /u, '')).not.toMatch(/\.\.\.(?!GIT_PINS|safeDir|DIFF_FLAGS)/u);
+    /* Round 10 R9-1: the one `...args` site is verifyObjectClosure's g(); its callers pass only these literal subcommands. */
+    const verify = src.slice(src.indexOf('function verifyObjectClosure('), src.indexOf('/** Round 8 R7-2 (+ M-8): repository state'));
+    expect([...verify.matchAll(/\bg\(\[('[a-z-]+')/gu)].map((m) => m[1])).toEqual(["'rev-list'", "'rev-list'", "'ls-tree'", "'cat-file'"]);
+    expect(verify).toMatch(/moduleGit\(\['git', \.\.\.GIT_PINS, \.\.\.safeDir\(cwd\), \.\.\.objPin, \.\.\.args\]\)/u);
+    expect(verify).toMatch(/env: \{ LANG: 'C\.UTF-8', LC_ALL: 'C\.UTF-8', \.\.\.E2_GIT_ENV, GIT_NO_REPLACE_OBJECTS: '1', \.\.\.snapshotAltEnv\(argv\), PATH: E2_VERIFIER_PATH \}/u);
     /* the safe primitive's one extra pin, and its env puts caller extras BEFORE the gate env. */
     expect(S.SAFE_GIT_EXTRA_PINS).toEqual(['-c', 'commit.gpgSign=false']);
     expect(readFileSync(join(DIR, 'e2-safe-git.ts'), 'utf8')).toMatch(/env: \{ \.\.\.\(opts\.env \?\? \{\}\), LANG: 'C\.UTF-8', LC_ALL: 'C\.UTF-8', \.\.\.E2_GIT_ENV, GIT_DIR: c\.gitDir,[^}]*PATH: E2_VERIFIER_PATH \}/u);
