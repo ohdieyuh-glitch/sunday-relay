@@ -147,16 +147,15 @@ function maxDepth(src: string): number {
 }
 export function scanPinnedSourceAst(src: string): E2PinnedScanRefusal | null {
   if (Buffer.byteLength(src, 'utf8') > E2_PINNED_MAX_BYTES) return 'spec_pinned_test_too_large';
+  /* Round 9 N8-2: the HTML-like comment forms are a parse differential between node (CJS script goal) and TypeScript.
+     Refused anywhere, even inside a string, before parsing. Pinned files are .mjs only (the gate's
+     spec_pinned_test_not_mjs), so node parses them with the module goal, the same as this parse. */
   if (src.includes('<!--') || src.includes('-->')) return 'spec_pinned_test_html_comment';
   if (maxDepth(src) > E2_PINNED_MAX_DEPTH) return 'spec_pinned_test_too_deep';
   if (loadTs() === null) return 'e2_scanner_unavailable';
   try { return scanInner(src); } catch { return 'spec_pinned_test_scan_failed'; }
 }
 function scanInner(src: string): E2PinnedScanRefusal | null {
-  /* Round 9 N8-2: the HTML-like comment forms are a parse differential between node (CJS script goal) and TypeScript.
-     Refused anywhere, even inside a string, before parsing. Pinned files are .mjs only (the gate's
-     spec_pinned_test_not_mjs), so node parses them with the module goal, the same as this parse. */
-  if (src.includes('<!--') || src.includes('-->')) return 'spec_pinned_test_html_comment';
   const sf = L!.createSourceFile('pinned.mjs', src, L!.ScriptTarget.Latest, true, L!.ScriptKind.JS);
   const diags = (sf as unknown as { parseDiagnostics?: readonly ts.Diagnostic[] }).parseDiagnostics;
   if (!Array.isArray(diags) || diags.length > 0) return 'spec_pinned_test_unparsed';

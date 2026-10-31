@@ -118,6 +118,12 @@ describe('6:01 PM design: throwaway object dir, dispose()', () => {
     const diff = await G.recordGitDiff({ base: r.head, head: h, cwd: r.dir, runner: G.spawnVerifierRunner({ timeoutMs: 30_000 }) });
     expect(diff?.isolationFindings).toContain('objects/info/alternates');
   });
+  it('S25 kill: a refusal AFTER the object dir exists (objects/info is a file, so the alternates line cannot be written) removes the dir', () => {
+    const r = repo(); rmSync(join(r.dir, '.git/objects/info'), { recursive: true, force: true }); writeFileSync(join(r.dir, '.git/objects/info'), '');
+    const before = objDirs();
+    expect(snap(r)).toEqual({ refused: 'safe_git_alternates_present' });
+    expect(objDirs()).toEqual(before);
+  });
   it('a pre-existing objects/info/alternates is refused (it could inject objects)', () => {
     const r = repo(); W(join(r.dir, '.git/objects/info/alternates'), '/tmp/elsewhere\n');
     expect(snap(r)).toEqual({ refused: 'safe_git_alternates_present' });
