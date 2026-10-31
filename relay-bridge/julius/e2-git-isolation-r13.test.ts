@@ -68,3 +68,18 @@ describe('R7-4: worktree .gitattributes cannot change the recorded patch, and is
     expect(clean.diff?.attributeFiles).toEqual([]);
   }, 120_000);
 });
+
+describe('Round 8 mutation kills: every isolation finding is recorded', () => {
+  it('info/attributes, http-alternates and a packed-refs replace entry each give e2_diff_not_isolated', async () => {
+    const cases: Array<[string, (repo: string) => void]> = [
+      ['info/attributes', (repo) => W(join(repo, '.git/info/attributes'), '* -diff\n')],
+      ['objects/info/http-alternates', (repo) => W(join(repo, '.git/objects/info/http-alternates'), 'http://x/\n')],
+      ['packed-refs:refs/replace', (repo) => W(join(repo, '.git/packed-refs'), `# pack-refs with: peeled\n${git(repo, 'rev-parse', 'HEAD')} refs/replace/${git(repo, 'rev-parse', 'HEAD~1')}\n`)],
+    ];
+    for (const [finding, hook] of cases) {
+      const r = await gate({ hook });
+      expect(r.diff?.isolationFindings, finding).toEqual([finding]);
+      expect(r.reasons, finding).toContain('e2_diff_not_isolated');
+    }
+  }, 120_000);
+});

@@ -104,3 +104,13 @@ describe('R7-3: julius-unreal-mission-1 through the real spec path (seeded one-c
     } finally { rmSync(dir, { recursive: true, force: true }); }
   }, 120_000);
 });
+
+describe('Round 8 mutation kills: string-named bindings and numeric specifiers', () => {
+  it('A15: a banned name written as a string in an import/export specifier or binding is refused', () => {
+    expect(G.scanPinnedSource("import { 'run' as r } from 'node:test';\n")).toBe('spec_pinned_test_dynamic_load');
+    expect(G.scanPinnedSource("const { 'constructor': C } = () => 1;\n")).toBe('spec_pinned_test_dynamic_load');
+  });
+  it('A18: a numeric require specifier is refused', () => {
+    expect(G.scanPinnedSource('require(1);\n')).toBe('spec_pinned_test_dynamic_load');
+  });
+});

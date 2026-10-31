@@ -122,3 +122,39 @@ describe('R7-1 steering: a .git owned by another uid with world-writable config 
     expect(existsSync(r.marker)).toBe(false);
   });
 });
+
+describe('Round 8 mutation kills (mut/mutants13.py survivors)', () => {
+  const snap = (r: ReturnType<typeof repo>, parent = r.head) => S.snapshotCommitSafely({ workspace: r.dir, parent, message: 'm', author: { name: 'J', email: 'j@x' } });
+  it('S4: a config.worktree without extensions.worktreeConfig is still refused', () => {
+    const r = repo(); W(join(r.dir, '.git/config.worktree'), '[user]\n\tname = y\n');
+    expect(S.recordHeadSafely({ workspace: r.dir })).toEqual({ refused: 'safe_git_config_extensions' });
+  });
+  it('S5: a key outside the allowlist (gui.foo, diff.x.textconv) is refused as other', () => {
+    const r = repo(); appendConfig(r.dir, '[gui]\n\tfoo = 1\n');
+    expect(S.recordHeadSafely({ workspace: r.dir })).toEqual({ refused: 'safe_git_config_other' });
+    const q = repo(); appendConfig(q.dir, `[diff "x"]\n\ttextconv = ${q.payload}\n`);
+    expect(S.recordHeadSafely({ workspace: q.dir })).toEqual({ refused: 'safe_git_config_other' });
+  });
+  it('S6: a continuation line is refused as unparsed', () => {
+    const r = repo(); appendConfig(r.dir, '[user]\n\tname = a\\\n\tb\n');
+    expect(S.recordHeadSafely({ workspace: r.dir })).toEqual({ refused: 'safe_git_config_unparsed' });
+  });
+  it('S9: --no-filters: info/attributes `* text` does not normalise CRLF in the snapshot', () => {
+    const r = repo(); W(join(r.dir, '.git/info/attributes'), '* text\n'); W(join(r.dir, 'a.txt'), 'x\r\n');
+    const out = snap(r) as { commit: string };
+    expect(execFileSync('git', ['cat-file', 'blob', `${out.commit}:a.txt`], { cwd: r.dir }).toString('latin1')).toBe('x\r\n');
+  });
+  it('S12: a parent that is not a commit in the repo is refused', () => {
+    const r = repo();
+    expect(snap(r, 'f'.repeat(40))).toEqual({ refused: 'safe_git_parent_invalid' });
+    expect(snap(r, git(r.dir, 'rev-parse', 'HEAD^{tree}'))).toEqual({ refused: 'safe_git_parent_invalid' });
+  });
+  it('S13/S14: the exec bit is kept and nothing under .git is snapshotted', () => {
+    const r = repo(); W(join(r.dir, 'run.sh'), 'echo\n'); chmodSync(join(r.dir, 'run.sh'), 0o755);
+    const out = snap(r) as { commit: string };
+    const tree = git(r.dir, 'ls-tree', '-r', out.commit);
+    expect(tree).toMatch(/^100755 blob [0-9a-f]{40}\trun\.sh$/mu);
+    expect(tree).toMatch(/^100644 blob [0-9a-f]{40}\ta\.txt$/mu);
+    expect(tree).not.toMatch(/\t\.git\//u);
+  });
+});
