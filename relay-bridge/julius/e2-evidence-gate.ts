@@ -7,7 +7,7 @@ import { basename, dirname, isAbsolute, join, normalize as normalizePath, posix 
 import { E2_STREAM_LABEL_LIVE, verifyEvidenceChain } from './cursor-run-stream-evidence';
 import { isWorkflowAnchor, type ExternalAnchor } from './e2-external-anchor';
 import { scanPinnedSourceAst, type E2PinnedScanRefusal } from './e2-pinned-source-allowlist';
-export { E2_PINNED_BANNED_NAMES, E2_PINNED_IMPORT_ALLOWLIST } from './e2-pinned-source-allowlist';
+export { E2_PINNED_BANNED_NAMES, E2_PINNED_IMPORT_ALLOWLIST, E2_PINNED_MAX_BYTES, E2_PINNED_MAX_DEPTH } from './e2-pinned-source-allowlist';
 
 export { E2_EXTERNAL_ANCHOR_SOURCES, type E2ExternalAnchorSource, type E2UntrustedAnchorSource, type ExternalAnchor } from './e2-external-anchor';
 import { familyFromModelId, isRouterModelId } from './grok-bot-coding-provider';

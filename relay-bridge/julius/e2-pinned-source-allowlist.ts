@@ -17,11 +17,33 @@
  * coder code or to process-level hooks; it is not a sandbox. What remains: node:fs can read and write files (it cannot
  * execute them without a banned loader), and a route through an allowed built-in this list does not know about.
  */
-import * as ts from 'typescript';
+import type * as ts from 'typescript';
+
+/* Round 9 (Skywalker N8-4 / PILOT R8-4): typescript is loaded lazily and guarded, so a bundled gate or a tree without
+   node_modules refuses with the named `e2_scanner_unavailable` instead of throwing at import time. A synchronous
+   guarded require is used, not import(): the scan (and pinVerifierSpec's call to it) is synchronous; the guard is the same
+   (any throw or a module without createSourceFile -> null -> e2_scanner_unavailable). */
+type TsModule = typeof import('typescript');
+let L: TsModule | null | undefined;
+function loadTs(): TsModule | null {
+  if (L !== undefined) return L;
+  try {
+    const m = require('typescript') as TsModule;
+    L = typeof m?.createSourceFile === 'function' ? m : null;
+  } catch { L = null; }
+  return L;
+}
+/** Round 9 (PILOT R8-5): byte cap and bracket-nesting cap checked before the parse. */
+export const E2_PINNED_MAX_BYTES = 256 * 1024;
+export const E2_PINNED_MAX_DEPTH = 256;
 
 export type E2PinnedScanRefusal = 'spec_pinned_test_imports_untrusted' | 'spec_pinned_test_dynamic_load' | 'spec_pinned_test_context_reference' | 'spec_pinned_test_unparsed'
   /** Round 9 (Skywalker N8-2): `<!--` or `-->` anywhere (node's CommonJS script goal reads them as line comments; TypeScript does not). */
-  | 'spec_pinned_test_html_comment';
+  | 'spec_pinned_test_html_comment'
+  /** Round 9 (PILOT R8-5): larger than E2_PINNED_MAX_BYTES, nested deeper than E2_PINNED_MAX_DEPTH, or the parse/walk threw. */
+  | 'spec_pinned_test_too_large' | 'spec_pinned_test_too_deep' | 'spec_pinned_test_scan_failed'
+  /** Round 9 (N8-4 / R8-4): the typescript parser could not be loaded (e.g. a bundled gate with node_modules absent). */
+  | 'e2_scanner_unavailable';
 
 const BASE_ALLOW = ['assert', 'assert/strict', 'crypto', 'fs', 'fs/promises', 'path', 'path/posix', 'test', 'url', 'util'];
 /** Exact module specifiers a pinned file may load. `test` is node:test-only (the bare `test` is a package name). */
@@ -43,22 +65,22 @@ export const E2_PINNED_BANNED_STRINGS: ReadonlySet<string> = new Set([...PROTO_S
   'require', 'child_process', 'vm', 'worker_threads', 'inspector', 'module', 'cluster', 'net', 'http', 'https', 'dgram', 'dns', 'tls', 'wasi', 'sqlite']);
 /** Constant-folds a string expression made of literals, `+` and templates; null when any part is not constant. */
 function foldString(e: ts.Node): string | null {
-  if (ts.isStringLiteral(e) || ts.isNoSubstitutionTemplateLiteral(e) || ts.isNumericLiteral(e)) return e.text;
-  if (ts.isParenthesizedExpression(e)) return foldString(e.expression);
-  if (ts.isBinaryExpression(e) && e.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+  if (L!.isStringLiteral(e) || L!.isNoSubstitutionTemplateLiteral(e) || L!.isNumericLiteral(e)) return e.text;
+  if (L!.isParenthesizedExpression(e)) return foldString(e.expression);
+  if (L!.isBinaryExpression(e) && e.operatorToken.kind === L!.SyntaxKind.PlusToken) {
     const l = foldString(e.left); const r = foldString(e.right); return l === null || r === null ? null : l + r;
   }
-  if (ts.isTemplateExpression(e)) {
+  if (L!.isTemplateExpression(e)) {
     let out = e.head.text;
     for (const sp of e.templateSpans) { const v = foldString(sp.expression); if (v === null) return null; out += v + sp.literal.text; }
     return out;
   }
   return null;
 }
-const unwrap = (e: ts.Expression): ts.Expression => (ts.isParenthesizedExpression(e) || ts.isNonNullExpression(e) || ts.isAsExpression(e) ? unwrap(e.expression) : e);
-const isFunctionLike = (e: ts.Expression): boolean => { const u = unwrap(e); return ts.isArrowFunction(u) || ts.isFunctionExpression(u) || ts.isClassExpression(u); };
+const unwrap = (e: ts.Expression): ts.Expression => (L!.isParenthesizedExpression(e) || L!.isNonNullExpression(e) || L!.isAsExpression(e) ? unwrap(e.expression) : e);
+const isFunctionLike = (e: ts.Expression): boolean => { const u = unwrap(e); return L!.isArrowFunction(u) || L!.isFunctionExpression(u) || L!.isClassExpression(u); };
 const literalKey = (e: ts.Node): string | null =>
-  ts.isStringLiteral(e) || ts.isNoSubstitutionTemplateLiteral(e) ? e.text : ts.isNumericLiteral(e) ? e.text : null;
+  L!.isStringLiteral(e) || L!.isNoSubstitutionTemplateLiteral(e) ? e.text : L!.isNumericLiteral(e) ? e.text : null;
 
 /** A non-literal key is allowed only as an index: identifiers, numbers and + - * / % of them (e.g. `src[i + 1]`), and the
  *  result is a VALUE: not called, not constructed, not indexed again, not a tagged template tag.
@@ -70,72 +92,89 @@ const literalKey = (e: ts.Node): string | null =>
  *  --disallow-code-generation-from-strings (e2-evidence-gate.ts), so a Function reached by a route the scan does not see
  *  (e.g. a key built with Array#join) still cannot compile a string. */
 const isIndexExpr = (e: ts.Expression): boolean =>
-  ts.isIdentifier(e) || ts.isNumericLiteral(e) || (ts.isParenthesizedExpression(e) && isIndexExpr(e.expression))
-  || (ts.isBinaryExpression(e) && [ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken, ts.SyntaxKind.AsteriskToken, ts.SyntaxKind.SlashToken, ts.SyntaxKind.PercentToken].includes(e.operatorToken.kind) && isIndexExpr(e.left) && isIndexExpr(e.right));
+  L!.isIdentifier(e) || L!.isNumericLiteral(e) || (L!.isParenthesizedExpression(e) && isIndexExpr(e.expression))
+  || (L!.isBinaryExpression(e) && [L!.SyntaxKind.PlusToken, L!.SyntaxKind.MinusToken, L!.SyntaxKind.AsteriskToken, L!.SyntaxKind.SlashToken, L!.SyntaxKind.PercentToken].includes(e.operatorToken.kind) && isIndexExpr(e.left) && isIndexExpr(e.right));
 /** Round 9 (PILOT R8-1, Skywalker N8-1): an identifier/arithmetic-keyed index read is allowed only when its VALUE provably
  *  goes nowhere it could be called: a comparison operand, a string concatenation (`+`, `+=` onto an identifier, a template
  *  span), the left of `??` / a conditional test (then judged by where that goes), the argument of a RegExp literal's
  *  `.test`, an argument of an assert method imported from node:assert, or a `const` binding whose EVERY use is one of
  *  these. Calling, constructing, indexing, member-reading, assigning to it, passing it to any other function, returning it,
  *  or storing it in a mutable binding / object / array is refused. A literal string key must also not be a banned name. */
-const COMPARE = new Set([ts.SyntaxKind.EqualsEqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken, ts.SyntaxKind.EqualsEqualsToken,
-  ts.SyntaxKind.ExclamationEqualsToken, ts.SyntaxKind.LessThanToken, ts.SyntaxKind.GreaterThanToken, ts.SyntaxKind.LessThanEqualsToken,
-  ts.SyntaxKind.GreaterThanEqualsToken]);
+const compareKinds = (): Set<number> => new Set([L!.SyntaxKind.EqualsEqualsEqualsToken, L!.SyntaxKind.ExclamationEqualsEqualsToken, L!.SyntaxKind.EqualsEqualsToken,
+  L!.SyntaxKind.ExclamationEqualsToken, L!.SyntaxKind.LessThanToken, L!.SyntaxKind.GreaterThanToken, L!.SyntaxKind.LessThanEqualsToken,
+  L!.SyntaxKind.GreaterThanEqualsToken]);
 const ASSERT_METHODS = new Set(['equal', 'strictEqual', 'notEqual', 'notStrictEqual', 'deepEqual', 'deepStrictEqual', 'notDeepEqual', 'notDeepStrictEqual', 'ok']);
 interface FlowCtx { readonly sf: ts.SourceFile; readonly assertNames: ReadonlySet<string>; readonly refs: ReadonlyMap<string, readonly ts.Identifier[]>; }
 function valueInert(node: ts.Node, ctx: FlowCtx, depth = 0): boolean {
   if (depth > 8) return false;
   let child: ts.Node = node; let p: ts.Node = node.parent;
-  while (ts.isParenthesizedExpression(p)) { child = p; p = p.parent; }
-  if (ts.isBinaryExpression(p)) {
+  while (L!.isParenthesizedExpression(p)) { child = p; p = p.parent; }
+  if (L!.isBinaryExpression(p)) {
     const op = p.operatorToken.kind;
-    if (COMPARE.has(op)) return true;
-    if (op === ts.SyntaxKind.PlusToken) return true; /* string/number coercion only */
-    if (op === ts.SyntaxKind.PlusEqualsToken) return p.right === child && ts.isIdentifier(p.left);
-    if (op === ts.SyntaxKind.QuestionQuestionToken || op === ts.SyntaxKind.BarBarToken || op === ts.SyntaxKind.AmpersandAmpersandToken) return valueInert(p, ctx, depth + 1);
+    if (compareKinds().has(op)) return true;
+    if (op === L!.SyntaxKind.PlusToken) return true; /* string/number coercion only */
+    if (op === L!.SyntaxKind.PlusEqualsToken) return p.right === child && L!.isIdentifier(p.left);
+    if (op === L!.SyntaxKind.QuestionQuestionToken || op === L!.SyntaxKind.BarBarToken || op === L!.SyntaxKind.AmpersandAmpersandToken) return valueInert(p, ctx, depth + 1);
     return false;
   }
-  if (ts.isTemplateSpan(p)) return !ts.isTaggedTemplateExpression(p.parent.parent);
-  if (ts.isConditionalExpression(p)) return p.condition === child;
-  if (ts.isIfStatement(p) || ts.isWhileStatement(p)) return p.expression === child;
-  if (ts.isPrefixUnaryExpression(p) && p.operator === ts.SyntaxKind.ExclamationToken) return true;
-  if (ts.isCallExpression(p) && p.expression !== child && p.arguments.includes(child as ts.Expression)) {
+  if (L!.isTemplateSpan(p)) return !L!.isTaggedTemplateExpression(p.parent.parent);
+  if (L!.isConditionalExpression(p)) return p.condition === child;
+  if (L!.isIfStatement(p) || L!.isWhileStatement(p)) return p.expression === child;
+  if (L!.isPrefixUnaryExpression(p) && p.operator === L!.SyntaxKind.ExclamationToken) return true;
+  if (L!.isCallExpression(p) && p.expression !== child && p.arguments.includes(child as ts.Expression)) {
     const c = p.expression;
-    if (ts.isPropertyAccessExpression(c) && ts.idText(c.name) === 'test' && ts.isRegularExpressionLiteral(c.expression)) return true;
-    if (ts.isPropertyAccessExpression(c) && ts.isIdentifier(c.expression) && ctx.assertNames.has(ts.idText(c.expression)) && ASSERT_METHODS.has(ts.idText(c.name))) return true;
-    if (ts.isIdentifier(c) && ctx.assertNames.has(ts.idText(c))) return true;
+    if (L!.isPropertyAccessExpression(c) && L!.idText(c.name) === 'test' && L!.isRegularExpressionLiteral(c.expression)) return true;
+    if (L!.isPropertyAccessExpression(c) && L!.isIdentifier(c.expression) && ctx.assertNames.has(L!.idText(c.expression)) && ASSERT_METHODS.has(L!.idText(c.name))) return true;
+    if (L!.isIdentifier(c) && ctx.assertNames.has(L!.idText(c))) return true;
     return false;
   }
-  if (ts.isVariableDeclaration(p) && p.initializer === child && ts.isIdentifier(p.name)
-    && ts.isVariableDeclarationList(p.parent) && (p.parent.flags & ts.NodeFlags.Const) !== 0) {
-    const uses = (ctx.refs.get(ts.idText(p.name)) ?? []).filter((r) => r !== p.name);
+  if (L!.isVariableDeclaration(p) && p.initializer === child && L!.isIdentifier(p.name)
+    && L!.isVariableDeclarationList(p.parent) && (p.parent.flags & L!.NodeFlags.Const) !== 0) {
+    const uses = (ctx.refs.get(L!.idText(p.name)) ?? []).filter((r) => r !== p.name);
     return uses.every((u) => valueInert(u, ctx, depth + 1));
   }
   return false;
 }
+/** Max nesting of ( [ { and template `${`, counted lexically (strings included: over-counting only over-refuses; a
+    deliberate under-count still meets the try/catch around the parse). */
+function maxDepth(src: string): number {
+  let d = 0; let m = 0;
+  for (let i = 0; i < src.length; i++) {
+    const c = src.charCodeAt(i);
+    if (c === 40 || c === 91 || c === 123) { d++; if (d > m) m = d; } else if ((c === 41 || c === 93 || c === 125) && d > 0) d--;
+  }
+  return m;
+}
 export function scanPinnedSourceAst(src: string): E2PinnedScanRefusal | null {
+  if (Buffer.byteLength(src, 'utf8') > E2_PINNED_MAX_BYTES) return 'spec_pinned_test_too_large';
+  if (src.includes('<!--') || src.includes('-->')) return 'spec_pinned_test_html_comment';
+  if (maxDepth(src) > E2_PINNED_MAX_DEPTH) return 'spec_pinned_test_too_deep';
+  if (loadTs() === null) return 'e2_scanner_unavailable';
+  try { return scanInner(src); } catch { return 'spec_pinned_test_scan_failed'; }
+}
+function scanInner(src: string): E2PinnedScanRefusal | null {
   /* Round 9 N8-2: the HTML-like comment forms are a parse differential between node (CJS script goal) and TypeScript.
      Refused anywhere, even inside a string, before parsing. Pinned files are .mjs only (the gate's
      spec_pinned_test_not_mjs), so node parses them with the module goal, the same as this parse. */
   if (src.includes('<!--') || src.includes('-->')) return 'spec_pinned_test_html_comment';
-  const sf = ts.createSourceFile('pinned.mjs', src, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+  const sf = L!.createSourceFile('pinned.mjs', src, L!.ScriptTarget.Latest, true, L!.ScriptKind.JS);
   const diags = (sf as unknown as { parseDiagnostics?: readonly ts.Diagnostic[] }).parseDiagnostics;
   if (!Array.isArray(diags) || diags.length > 0) return 'spec_pinned_test_unparsed';
   const found = new Set<E2PinnedScanRefusal>();
   const assertNames = new Set<string>(); const refs = new Map<string, ts.Identifier[]>();
   const collect = (n: ts.Node): void => {
-    if (ts.isIdentifier(n)) { const t = ts.idText(n); const a = refs.get(t) ?? []; a.push(n); refs.set(t, a); }
-    if (ts.isImportDeclaration(n) && ts.isStringLiteral(n.moduleSpecifier) && /^(node:)?assert(\/strict)?$/u.test(n.moduleSpecifier.text) && n.importClause !== undefined) {
-      const c = n.importClause; if (c.name !== undefined) assertNames.add(ts.idText(c.name));
+    if (L!.isIdentifier(n)) { const t = L!.idText(n); const a = refs.get(t) ?? []; a.push(n); refs.set(t, a); }
+    if (L!.isImportDeclaration(n) && L!.isStringLiteral(n.moduleSpecifier) && /^(node:)?assert(\/strict)?$/u.test(n.moduleSpecifier.text) && n.importClause !== undefined) {
+      const c = n.importClause; if (c.name !== undefined) assertNames.add(L!.idText(c.name));
       const b = c.namedBindings;
-      if (b !== undefined && ts.isNamespaceImport(b)) assertNames.add(ts.idText(b.name));
-      if (b !== undefined && ts.isNamedImports(b)) for (const e of b.elements) { const pn = e.propertyName ?? e.name; if (ts.isIdentifier(pn) && ASSERT_METHODS.has(ts.idText(pn))) assertNames.add(ts.idText(e.name)); }
+      if (b !== undefined && L!.isNamespaceImport(b)) assertNames.add(L!.idText(b.name));
+      if (b !== undefined && L!.isNamedImports(b)) for (const e of b.elements) { const pn = e.propertyName ?? e.name; if (L!.isIdentifier(pn) && ASSERT_METHODS.has(L!.idText(pn))) assertNames.add(L!.idText(e.name)); }
     }
-    ts.forEachChild(n, collect);
+    L!.forEachChild(n, collect);
   };
   collect(sf);
   for (const name of [...assertNames]) {
-    const declared = (refs.get(name) ?? []).some((r) => { const q = r.parent; return (ts.isVariableDeclaration(q) || ts.isParameter(q) || ts.isFunctionDeclaration(q) || ts.isClassDeclaration(q) || ts.isBindingElement(q)) && (q as { name?: ts.Node }).name === r; });
+    const declared = (refs.get(name) ?? []).some((r) => { const q = r.parent; return (L!.isVariableDeclaration(q) || L!.isParameter(q) || L!.isFunctionDeclaration(q) || L!.isClassDeclaration(q) || L!.isBindingElement(q)) && (q as { name?: ts.Node }).name === r; });
     if (declared) assertNames.delete(name);
   }
   const ctx: FlowCtx = { sf, assertNames, refs };
@@ -143,50 +182,50 @@ export function scanPinnedSourceAst(src: string): E2PinnedScanRefusal | null {
   const dyn = (): void => { found.add('spec_pinned_test_dynamic_load'); };
   const loadSpec = (spec: ts.Node | undefined): void => {
     const s = spec === undefined ? null : literalKey(spec);
-    if (s === null || ts.isNumericLiteral(spec as ts.Node)) dyn();
+    if (s === null || L!.isNumericLiteral(spec as ts.Node)) dyn();
     else if (!E2_PINNED_IMPORT_ALLOWLIST.has(s)) found.add('spec_pinned_test_imports_untrusted');
   };
   const visit = (n: ts.Node): void => {
-    if (ts.isIdentifier(n) || ts.isPrivateIdentifier(n)) {
-      const name = ts.isIdentifier(n) ? ts.idText(n) : n.text;
+    if (L!.isIdentifier(n) || L!.isPrivateIdentifier(n)) {
+      const name = L!.isIdentifier(n) ? L!.idText(n) : n.text;
       if (n.getText(sf) !== name) dyn(); /* written with a unicode escape */
       if (E2_PINNED_BANNED_NAMES.has(name.replace(/^#/u, ''))) dyn();
       if (name === 'require') {
         const p = n.parent;
-        const ok = ts.isCallExpression(p) && p.expression === n && p.arguments.length === 1;
+        const ok = L!.isCallExpression(p) && p.expression === n && p.arguments.length === 1;
         if (!ok) dyn(); else loadSpec(p.arguments[0]);
       }
     }
-    if (ts.isImportDeclaration(n) || (ts.isExportDeclaration(n) && n.moduleSpecifier !== undefined)) loadSpec(n.moduleSpecifier);
-    if (ts.isImportEqualsDeclaration(n) || ts.isWithStatement(n) || ts.isTaggedTemplateExpression(n)) dyn();
-    if (ts.isCallExpression(n) && n.expression.kind === ts.SyntaxKind.ImportKeyword) dyn();
-    if (ts.isMetaProperty(n) && n.keywordToken === ts.SyntaxKind.ImportKeyword) {
-      if (!(ts.isPropertyAccessExpression(n.parent) && n.parent.expression === n && META_OK.has(ts.idText(n.parent.name as ts.Identifier)))) dyn();
+    if (L!.isImportDeclaration(n) || (L!.isExportDeclaration(n) && n.moduleSpecifier !== undefined)) loadSpec(n.moduleSpecifier);
+    if (L!.isImportEqualsDeclaration(n) || L!.isWithStatement(n) || L!.isTaggedTemplateExpression(n)) dyn();
+    if (L!.isCallExpression(n) && n.expression.kind === L!.SyntaxKind.ImportKeyword) dyn();
+    if (L!.isMetaProperty(n) && n.keywordToken === L!.SyntaxKind.ImportKeyword) {
+      if (!(L!.isPropertyAccessExpression(n.parent) && n.parent.expression === n && META_OK.has(L!.idText(n.parent.name as ts.Identifier)))) dyn();
     }
     /* Round 9 N8-1: no member or index access on a function, arrow or class expression, and no foldable string naming
        the prototype route anywhere (a literal, a concatenation or a template, in any position). */
-    if ((ts.isElementAccessExpression(n) || ts.isPropertyAccessExpression(n)) && isFunctionLike(n.expression)) dyn();
-    if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n) || ts.isTemplateExpression(n) || (ts.isBinaryExpression(n) && n.operatorToken.kind === ts.SyntaxKind.PlusToken)) {
+    if ((L!.isElementAccessExpression(n) || L!.isPropertyAccessExpression(n)) && isFunctionLike(n.expression)) dyn();
+    if (L!.isStringLiteral(n) || L!.isNoSubstitutionTemplateLiteral(n) || L!.isTemplateExpression(n) || (L!.isBinaryExpression(n) && n.operatorToken.kind === L!.SyntaxKind.PlusToken)) {
       const v = foldString(n); if (v !== null && (E2_PINNED_BANNED_STRINGS.has(v) || E2_PINNED_BANNED_STRINGS.has(v.replace(/^node:/u, '')))) dyn();
     }
-    if (ts.isElementAccessExpression(n)) {
+    if (L!.isElementAccessExpression(n)) {
       const k = literalKey(n.argumentExpression);
       if (k === null) {
         if (!isIndexExpr(n.argumentExpression) || !valueInert(n, ctx)) dyn();
         const obj = n.expression;
-        if ((ts.isIdentifier(obj) && obj.text === 'env') || (ts.isPropertyAccessExpression(obj) && ts.idText(obj.name as ts.Identifier) === 'env')
-          || (ts.isElementAccessExpression(obj) && literalKey(obj.argumentExpression) === 'env')) found.add('spec_pinned_test_context_reference');
+        if ((L!.isIdentifier(obj) && obj.text === 'env') || (L!.isPropertyAccessExpression(obj) && L!.idText(obj.name as ts.Identifier) === 'env')
+          || (L!.isElementAccessExpression(obj) && literalKey(obj.argumentExpression) === 'env')) found.add('spec_pinned_test_context_reference');
       } else if (E2_PINNED_BANNED_NAMES.has(k) || k === 'require') dyn();
     }
-    if (ts.isComputedPropertyName(n)) {
+    if (L!.isComputedPropertyName(n)) {
       const k = literalKey(n.expression);
       if (k === null || E2_PINNED_BANNED_NAMES.has(k) || k === 'require') dyn();
     }
-    if ((ts.isStringLiteral(n) || ts.isNumericLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n)) && n.parent !== undefined) {
+    if ((L!.isStringLiteral(n) || L!.isNumericLiteral(n) || L!.isNoSubstitutionTemplateLiteral(n)) && n.parent !== undefined) {
       const p = n.parent as ts.Node & { name?: ts.Node; propertyName?: ts.Node };
       if ((p.name === n || p.propertyName === n) && (E2_PINNED_BANNED_NAMES.has(n.text) || n.text === 'require')) dyn();
     }
-    ts.forEachChild(n, visit);
+    L!.forEachChild(n, visit);
   };
   visit(sf);
   for (const r of ['spec_pinned_test_context_reference', 'spec_pinned_test_imports_untrusted', 'spec_pinned_test_dynamic_load'] as const) if (found.has(r)) return r;
