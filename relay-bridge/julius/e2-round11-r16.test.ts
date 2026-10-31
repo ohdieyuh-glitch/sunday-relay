@@ -113,6 +113,21 @@ describe('R10-2: a foreign-owned seed (uid 65534) still builds the trusted store
   }, 120_000);
 });
 
+describe('R10-2: the gate-owned seed copy never follows a symlink inside the seed .git', () => {
+  it('objects/info symlinked to an outside dir refuses store_seed_invalid; control without the link builds', () => {
+    const a = seed();
+    const ok = S.buildTrustedSeedStore({ seed: a.repo, base: a.base });
+    expect('refused' in ok ? ok.refused : 'built').toBe('built');
+    if (!('refused' in ok)) ok.dispose();
+    const b = seed();
+    const outside = join(root, `outside-${Date.now()}`); mkdirSync(outside);
+    rmSync(join(b.repo, '.git', 'objects', 'info'), { recursive: true, force: true });
+    symlinkSync(outside, join(b.repo, '.git', 'objects', 'info'));
+    const st = S.buildTrustedSeedStore({ seed: b.repo, base: b.base });
+    expect('refused' in st ? st.refused : 'built').toBe('store_seed_invalid');
+  });
+});
+
 describe('R10-3: S20 kill input (PILOT): a U+FFFD file and a 0xFF-named file', () => {
   it('refused as safe_git_tree_mismatch (the 0xFF file would otherwise vanish from the evidence)', () => {
     const { repo, base } = seed();
