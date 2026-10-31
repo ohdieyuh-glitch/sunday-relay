@@ -1,6 +1,7 @@
 /* Round 9 (Skywalker 8439b565 N8-1, N8-2): two base-file bypasses of the parse allowlist carried the child-v8 forgery to
    a full-gate PASS 3/3. Reproduced here through the FULL gate (spec with base run -> reexec -> diff -> e2Gate). */
 import { afterAll, describe, expect, it } from 'vitest';
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -15,16 +16,30 @@ afterAll(() => { rmSync(root, { recursive: true, force: true }); });
 const W = (p: string, c: string): void => { mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, c); };
 let k = 0;
 /** Round 10: the wiring contract end to end: store before the coder -> pin from it -> coder edits the worktree -> snapshot -> diff (throwaway dir + store) -> gate -> dispose. */
-export async function trustedGate(base: Record<string, string>, head: Record<string, string>, cmd: string): Promise<{ refused?: string; gate?: 'PASS' | readonly string[]; summary?: unknown }> {
+/* Round 11 (Skywalker 8:4x PM, PILOT R10-2): `foreign` chowns the whole workspace to uid 65534 BEFORE the store is built
+   (the live workspace is chowned to the sandbox uid while the gate runs as the runner user); the coder's edits are then
+   written as that uid via sudo. Needs passwordless sudo; the caller asserts sudo availability in both branches. */
+const SUDO = ((): boolean => { try { execFileSync('sudo', ['-n', 'true'], { stdio: 'ignore' }); return true; } catch { return false; } })();
+const ME = `${process.getuid?.() ?? 0}:${process.getgid?.() ?? 0}`;
+export async function trustedGate(base: Record<string, string>, head: Record<string, string>, cmd: string, opts: { foreign?: true } = {}): Promise<{ refused?: string; gate?: 'PASS' | readonly string[]; summary?: unknown }> {
   const repo = join(root, `r${k++}`); mkdirSync(repo);
   const { base: b } = makeRepo(repo, base, {}, W); git(repo, 'reset', '-q', '--hard', b);
+  const write = (p: string, c: string): void => {
+    if (opts.foreign !== true) { W(join(repo, p), c); return; }
+    /* the scratch root is 0700 (runner-owned), so root writes and the tree is re-chowned to the sandbox uid */
+    execFileSync('sudo', ['-n', 'sh', '-c', 'mkdir -p "$1" && cat > "$2" && chown -R 65534:65534 "$3"', 'w', dirname(join(repo, p)), join(repo, p), repo], { input: c, stdio: ['pipe', 'ignore', 'ignore'] });
+  };
+  if (opts.foreign === true) { execFileSync('sudo', ['-n', 'chown', '-R', '65534:65534', repo]); execFileSync('sudo', ['-n', 'chmod', '-R', 'go-w', repo]); }
+  try { return await trustedFlow(repo, b, head, cmd, write); } finally { if (opts.foreign === true) execFileSync('sudo', ['-n', 'chown', '-R', ME, repo]); }
+}
+async function trustedFlow(repo: string, b: string, head: Record<string, string>, cmd: string, write: (p: string, c: string) => void): Promise<{ refused?: string; gate?: 'PASS' | readonly string[]; summary?: unknown }> {
   const store = S.buildTrustedSeedStore({ seed: repo, base: b });
   if ('refused' in store) return { refused: store.refused };
   try {
     const runner = G.spawnVerifierRunner({ timeoutMs: 60_000 });
     const spec = await G.pinVerifierSpecWithBaseRun({ testCommand: cmd, workspace: repo, base: b, trustedObjects: store.objects }, runner);
     if ('refused' in spec) return { refused: spec.refused };
-    for (const [p, c] of Object.entries(head)) W(join(repo, p), c);
+    for (const [p, c] of Object.entries(head)) write(p, c);
     const snap = S.snapshotCommitSafely({ workspace: repo, parent: b, message: 'snapshot', author: { name: 'j', email: 'j@x' }, trustedObjects: store.objects });
     if ('refused' in snap) return { refused: snap.refused };
     try {
@@ -123,6 +138,13 @@ describe('N8-1 (a): the real missions still pass with the flag on (full gate)', 
     const t = await trustedGate(seed, { 'out/normalized.json': norm }, 'node --test format.test.mjs'); /* Round 10: the wiring contract path */
     expect(t.refused ?? t.gate).toBe('PASS');
     expect(JSON.stringify(t.summary)).toMatch(/"pass":4[,}]/u);
+    /* Round 11 R10-2: the same flow with the workspace owned by uid 65534 (real chown via sudo -n). */
+    expect(SUDO, 'passwordless sudo is required for the foreign-owned run; without it this run is NOT exercised').toBe(true);
+    const f = await trustedGate(seed, { 'out/normalized.json': norm }, 'node --test format.test.mjs', { foreign: true });
+    expect(f.refused ?? f.gate).toBe('PASS');
+    expect(JSON.stringify(f.summary)).toMatch(/"pass":4[,}]/u);
+    const fw = await trustedGate(seed, { 'out/normalized.json': '{}' }, 'node --test format.test.mjs', { foreign: true }); /* control: a wrong answer */
+    expect(fw.gate).not.toBe('PASS');
   }, 60_000);
   it('julius-unreal-mission-1: reference solution PASS 5/5', async () => {
     const { readdirSync, readFileSync } = await import('node:fs');
@@ -139,6 +161,13 @@ describe('N8-1 (a): the real missions still pass with the flag on (full gate)', 
     const t = await trustedGate(seed, head, 'node --test .julius/hub-scroll-static.test.mjs'); /* Round 10: the wiring contract path */
     expect(t.refused ?? t.gate).toBe('PASS');
     expect(JSON.stringify(t.summary)).toMatch(/"pass":5[,}]/u);
+    /* Round 11 R10-2: foreign-owned workspace (uid 65534). */
+    expect(SUDO, 'passwordless sudo is required for the foreign-owned run; without it this run is NOT exercised').toBe(true);
+    const f = await trustedGate(seed, head, 'node --test .julius/hub-scroll-static.test.mjs', { foreign: true });
+    expect(f.refused ?? f.gate).toBe('PASS');
+    expect(JSON.stringify(f.summary)).toMatch(/"pass":5[,}]/u);
+    const fu = await trustedGate(seed, {}, 'node --test .julius/hub-scroll-static.test.mjs', { foreign: true }); /* control: the unchanged seed (4/5) */
+    expect(fu.gate).not.toBe('PASS');
   }, 120_000);
 });
 

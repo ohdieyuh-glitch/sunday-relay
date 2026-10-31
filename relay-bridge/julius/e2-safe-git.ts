@@ -22,7 +22,7 @@
  * snapshot (every file except any `.git` entry is recorded).
  */
 import { execFileSync } from 'node:child_process';
-import { chmodSync, existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
@@ -103,15 +103,12 @@ function check(workspace: unknown): Checked | Refused {
 }
 export const SAFE_GIT_EXTRA_PINS = Object.freeze(['-c', 'commit.gpgSign=false']);
 /** The ONE git spawn site in this module: pins, safe.directory, the gate's env, GIT_DIR, fixed PATH, nothing else. */
-function sg(c: Checked, args: readonly string[], opts: { input?: Buffer | string; env?: Record<string, string>; globalConfig?: string } = {}): string | null {
+function sg(c: Checked, args: readonly string[], opts: { input?: Buffer | string; env?: Record<string, string> } = {}): string | null {
   try {
     return execFileSync('git', [...e2GitPins(c.ws), ...SAFE_GIT_EXTRA_PINS, ...args], {
       cwd: c.ws, shell: false, stdio: ['pipe', 'pipe', 'ignore'], maxBuffer: 256 * 1024 * 1024, input: opts.input ?? '',
       /* caller extras (index file, identity) first, so they can never override the gate env, GIT_DIR or PATH. */
-      env: { ...(opts.env ?? {}), LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...E2_GIT_ENV, GIT_DIR: c.gitDir, GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0', PATH: E2_VERIFIER_PATH,
-        /* Round 11 R10-2: only buildTrustedSeedStore's fetch passes a gate-written file (safe.directory for the seed);
-           git does not hand `-c` to the local upload-pack, but it does read GIT_CONFIG_GLOBAL there. */
-        ...(opts.globalConfig === undefined ? {} : { GIT_CONFIG_GLOBAL: opts.globalConfig }) },
+      env: { ...(opts.env ?? {}), LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...E2_GIT_ENV, GIT_DIR: c.gitDir, GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0', PATH: E2_VERIFIER_PATH },
     }).toString('utf8');
   } catch { return null; }
 }
@@ -314,6 +311,26 @@ export function snapshotCommitSafely(input: { readonly workspace: string; readon
   }
 }
 function lstatExists(p: string): boolean { try { lstatSync(p); return true; } catch { return false; } }
+/** Round 11 R10-2: copies the parts of a seed .git that a fetch reads, as plain files/dirs owned by the gate (0700/0600). */
+function copySeedGitDir(from: string, to: string): boolean {
+  const one = (src: string, dst: string, top: boolean): boolean => {
+    let st; try { st = lstatSync(src); } catch { return top ? false : true; }
+    if (st.isSymbolicLink()) return false;
+    if (st.isDirectory()) {
+      try { mkdirSync(dst, { mode: 0o700 }); } catch { return false; }
+      let ents: string[]; try { ents = readdirSync(src); } catch { return false; }
+      return ents.every((e) => one(join(src, e), join(dst, e), false));
+    }
+    if (!st.isFile()) return false;
+    try { writeFileSync(dst, readFileSync(src), { mode: 0o600, flag: 'wx' }); return true; } catch { return false; }
+  };
+  try { mkdirSync(to, { mode: 0o700 }); } catch { return false; }
+  for (const [name, required] of [['HEAD', true], ['config', true], ['objects', true], ['refs', true], ['packed-refs', false]] as const) {
+    if (!lstatExists(join(from, name))) { if (required) return false; continue; }
+    if (!one(join(from, name), join(to, name), true)) return false;
+  }
+  return true;
+}
 /**
  * Round 10 (Skywalker amendment to 5a6e3400): the TRUSTED SEED STORE. Build it from the mission seed BEFORE any coder code
  * runs. `git init --bare` in a fresh 0700 directory outside the seed, then `fetch --no-tags <seed> <base>` over the file
@@ -342,14 +359,16 @@ export function buildTrustedSeedStore(input: { readonly seed: string; readonly b
     const repo = join(storeDir, 'repo.git');
     const st = { ...c, gitDir: repo };
     if (sg(c, ['init', '-q', '--bare', repo]) === null) return nope('store_failed');
-    /* Round 11 R10-2: a gate-written global config naming the seed (realpath) as safe, so a seed owned by another uid
-       (git's upload-pack checks ownership and ignores `-c`) still fetches. The seed's own config was checked above. */
-    const gcfg = join(storeDir, 'gate.gitconfig');
-    const q = (x: string): string => `"${x.replace(/\\/gu, '\\\\').replace(/"/gu, '\\"')}"`;
-    writeFileSync(gcfg, `[safe]\n\tdirectory = ${q(c.ws)}\n\tdirectory = ${q(c.gitDir)}\n`, { mode: 0o600, flag: 'wx' });
-    if (sg(st, ['-c', 'protocol.file.allow=always', 'fetch', '-q', '--no-tags', '--no-write-fetch-head', '--', c.ws, input.base], { globalConfig: gcfg }) === null) {
-      return nope(sg(c, ['cat-file', '-e', `${input.base}^{commit}`]) === null ? 'store_base_missing' : 'store_failed');
-    }
+    /* Round 11 R10-2 (Skywalker: critical path): the seed's .git is first copied by THIS module (lstat, no symlink
+       followed; only HEAD, config, packed-refs, objects/ and refs/; anything not a plain file or dir refuses) into a
+       gate-owned dir, and the store fetches from that copy. git never runs inside a foreign-owned seed for the store, and
+       no safe.directory is widened (no global/system config, no '*'). The copy is removed after the fetch. */
+    const copy = join(storeDir, 'seed.git');
+    if (!copySeedGitDir(c.gitDir, copy)) return nope('store_seed_invalid');
+    const fetched = sg(st, ['-c', 'protocol.file.allow=always', 'fetch', '-q', '--no-tags', '--no-write-fetch-head', '--', copy, input.base]);
+    const hasBase = fetched !== null || sg({ ...c, gitDir: copy }, ['cat-file', '-e', `${input.base}^{commit}`]) !== null;
+    rmSync(copy, { recursive: true, force: true });
+    if (fetched === null) return nope(hasBase ? 'store_failed' : 'store_base_missing');
     if (sg(st, ['rev-parse', '--verify', '-q', `${input.base}^{commit}`])?.trim() !== input.base) return nope('store_base_missing');
     if (sg(st, ['fsck', '--strict', '--no-dangling', '--no-progress']) === null) return nope('store_failed');
     const tree = sg(st, ['rev-parse', '--verify', '-q', `${input.base}^{tree}`])?.trim() ?? '';

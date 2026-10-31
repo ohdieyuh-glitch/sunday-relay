@@ -128,11 +128,9 @@ describe('every git invocation in the e2 gate/spec/diff path carries the pins', 
     expect(verify).toMatch(/env: \{ LANG: 'C\.UTF-8', LC_ALL: 'C\.UTF-8', \.\.\.E2_GIT_ENV, GIT_NO_REPLACE_OBJECTS: '1', \.\.\.snapshotAltEnv\(argv\), PATH: E2_VERIFIER_PATH \}/u);
     /* the safe primitive's one extra pin, and its env puts caller extras BEFORE the gate env. */
     expect(S.SAFE_GIT_EXTRA_PINS).toEqual(['-c', 'commit.gpgSign=false']);
-    expect(readFileSync(join(DIR, 'e2-safe-git.ts'), 'utf8')).toMatch(/env: \{ \.\.\.\(opts\.env \?\? \{\}\), LANG: 'C\.UTF-8', LC_ALL: 'C\.UTF-8', \.\.\.E2_GIT_ENV, GIT_DIR: c\.gitDir,[^}]*PATH: E2_VERIFIER_PATH,[^]*?\.\.\.\(opts\.globalConfig === undefined \? \{\} : \{ GIT_CONFIG_GLOBAL: opts\.globalConfig \}\) \}/u);
-    /* Round 11 R10-2: exactly one caller passes a global config: the trusted-store seed fetch, with the gate-written file. */
-    const sgSrc = readFileSync(join(DIR, 'e2-safe-git.ts'), 'utf8');
-    expect(sgSrc.match(/\{ globalConfig: /gu)?.length).toBe(1);
-    expect(sgSrc).toMatch(/'fetch', '-q', '--no-tags', '--no-write-fetch-head', '--', c\.ws, input\.base\], \{ globalConfig: gcfg \}\)/u);
+    expect(readFileSync(join(DIR, 'e2-safe-git.ts'), 'utf8')).toMatch(/env: \{ \.\.\.\(opts\.env \?\? \{\}\), LANG: 'C\.UTF-8', LC_ALL: 'C\.UTF-8', \.\.\.E2_GIT_ENV, GIT_DIR: c\.gitDir,[^}]*PATH: E2_VERIFIER_PATH \}/u);
+    /* Round 11 R10-2: no git call in safe-git widens safe.directory or reads a global config: the env keeps E2_GIT_ENV last. */
+    expect(readFileSync(join(DIR, 'e2-safe-git.ts'), 'utf8')).not.toMatch(/GIT_CONFIG_GLOBAL|safe\.directory=\*/u);
     expect(G.E2_GIT_ENV).toEqual({ GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', GIT_ATTR_NOSYSTEM: '1',
       GIT_GRAFT_FILE: '/dev/null', GIT_REPLACE_REF_BASE: 'refs/e2-no-replace/', GIT_NO_REPLACE_OBJECTS: '1' });
   });
