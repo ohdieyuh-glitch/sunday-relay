@@ -47,7 +47,7 @@ const all: string[] = [];
 const sites = files.flatMap(sitesOf);
 
 describe('every git invocation in the e2 gate/spec/diff path carries the pins', () => {
-  it('the exact set of git argv sites (file, subcommand, via)', () => {
+  it('the exact set of 9 git argv sites (8 gate + 1 safe-git; file, subcommand, via)', () => {
     expect(sites.map((s) => `${s.file}:${s.via}:${s.sub}`)).toEqual([
       'e2-evidence-gate.ts:execFile:(capture)',
       'e2-evidence-gate.ts:execFileSync:cat-file',
@@ -61,7 +61,7 @@ describe('every git invocation in the e2 gate/spec/diff path carries the pins', 
     ]);
     expect(sites.length).toBe(9);
   });
-  it('every child_process call in the e2 files is one of these git sites or the runner spawnImpl (which runs only allowlisted verifier argv or isModuleGit argv)', () => {
+  it('all 7 child_process calls in the e2 files (6 gate + 1 safe-git) are these git sites or the runner spawnImpl (which runs only allowlisted verifier argv or isModuleGit argv)', () => {
     expect(all).toEqual([
       'e2-evidence-gate.ts:spawnImpl:bin', "e2-evidence-gate.ts:spawnImpl:'taskkill'" /* Windows process-tree kill, not git */, 'e2-evidence-gate.ts:execFile:bin',
       'e2-evidence-gate.ts:execFileSync:bin', 'e2-evidence-gate.ts:execFileSync:bin', 'e2-evidence-gate.ts:execFileSync:bin',
