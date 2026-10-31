@@ -1,12 +1,13 @@
 import { execFile, execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { isBuiltin } from 'node:module';
 import { tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, normalize as normalizePath, posix } from 'node:path';
 
 import { E2_STREAM_LABEL_LIVE, verifyEvidenceChain } from './cursor-run-stream-evidence';
 import { isWorkflowAnchor, type ExternalAnchor } from './e2-external-anchor';
+import { scanPinnedSourceAst, type E2PinnedScanRefusal } from './e2-pinned-source-allowlist';
+export { E2_PINNED_BANNED_NAMES, E2_PINNED_IMPORT_ALLOWLIST } from './e2-pinned-source-allowlist';
 
 export { E2_EXTERNAL_ANCHOR_SOURCES, type E2ExternalAnchorSource, type E2UntrustedAnchorSource, type ExternalAnchor } from './e2-external-anchor';
 import { familyFromModelId, isRouterModelId } from './grok-bot-coding-provider';
@@ -408,7 +409,7 @@ export type E2VerifierSpecRefusal =
   | E2VerifierShapeRefusal | 'spec_file_not_at_base' | 'spec_base_run_untrusted' | 'spec_base_tree_unreadable'
   | E2PinnedSourceRefusal | 'spec_plain_node_no_floor';
 /** Round 7 R6-1/R6-3: why a pinned test/entry file's base content was refused by {@link scanPinnedSource}. */
-export type E2PinnedSourceRefusal = 'spec_pinned_test_imports_untrusted' | 'spec_pinned_test_dynamic_load' | 'spec_pinned_test_context_reference';
+export type E2PinnedSourceRefusal = E2PinnedScanRefusal;
 const SPECS = new WeakSet<object>();
 /** Round 7 PILOT R6-4: specs produced by pinVerifierSpecWithBaseRun (the only ones e2Gate accepts). */
 const BASE_RUN_SPECS = new WeakSet<object>();
@@ -463,78 +464,14 @@ export function stripJsNoise(src: string): string {
   return out;
 }
 /**
- * Round 7 R6-1/R6-3 (Skywalker 70f96cfe): one linear pass that blanks comments and turns every string literal (and every
- * template literal WITHOUT `${`) into a placeholder `§n§`, keeping its raw text in `lits`. A template with `${` keeps its
- * expressions as code (lexed recursively), so a load hidden in one is still seen. Regex literals are not lexed (see the
- * honest limit on {@link scanPinnedSource}).
- */
-function lexJs(src: string): { readonly code: string; readonly lits: readonly string[] } {
-  const lits: string[] = [];
-  let i = 0;
-  const lex = (stopAtBrace: boolean): string => {
-    let out = ''; let depth = 0;
-    while (i < src.length) {
-      const c = src[i] as string; const d = src[i + 1];
-      if (stopAtBrace && c === '}' && depth === 0) { i += 1; return out; }
-      if (c === '{') depth += 1; else if (c === '}') depth -= 1;
-      if (c === '/' && d === '/') { const j = src.indexOf('\n', i); i = j === -1 ? src.length : j; out += ' '; continue; }
-      if (c === '/' && d === '*') { const j = src.indexOf('*/', i + 2); i = j === -1 ? src.length : j + 2; out += ' '; continue; }
-      if (c === '/' && regexAllowed(out)) { i = regexEnd(src, i); out += ' 0 '; continue; }
-      if (c === "'" || c === '"') {
-        let j = i + 1;
-        while (j < src.length && src[j] !== c && src[j] !== '\n') j += src[j] === '\\' ? 2 : 1;
-        lits.push(src.slice(i + 1, Math.min(j, src.length))); out += ` §${lits.length - 1}§ `; i = j + 1; continue;
-      }
-      if (c === '`') {
-        let j = i + 1; let raw = ''; let interp = false; let parts = '';
-        while (j < src.length && src[j] !== '`') {
-          if (src[j] === '\\') { raw += src.slice(j, j + 2); j += 2; continue; }
-          if (src[j] === '$' && src[j + 1] === '{') { interp = true; i = j + 2; parts += ` ( ${lex(true)} ) `; j = i; continue; }
-          raw += src[j]; j += 1;
-        }
-        i = j + 1;
-        if (interp) out += ` \`${parts}\` `; else { lits.push(raw); out += ` §${lits.length - 1}§ `; }
-        continue;
-      }
-      out += c; i += 1;
-    }
-    return out;
-  };
-  return { code: lex(false), lits };
-}
-/** Built-ins that run other code (a child, a context, a worker, a loader, the v8 serializer the child protocol uses). */
-const EXECUTING_BUILTINS = new Set(['child_process', 'vm', 'worker_threads', 'module', 'v8', 'cluster', 'inspector', 'wasi', 'repl', 'sqlite', 'sea']);
-const trustedSpecifier = (raw: string): boolean => {
-  if (/[^a-z0-9_:/]/u.test(raw) || !isBuiltin(raw)) return false;
-  const name = raw.startsWith('node:') ? raw.slice(5) : raw;
-  return !EXECUTING_BUILTINS.has(name.split('/')[0] as string);
-};
-/**
- * Round 7 R6-1/R6-3: the base content of a pinned test/entry file may load only non-executing Node built-ins (`node:x`
- * or bare `x`), each by a literal specifier, and may not name NODE_TEST_CONTEXT. Anything else returns a refusal:
- * a relative, absolute or package specifier, or an executing built-in: `spec_pinned_test_imports_untrusted`;
- * `import(expr)`, `require` not called with one literal (alias, `.resolve`, computed), eval, Function, process.binding /
- * dlopen / mainModule, module.require, `.constructor`: `spec_pinned_test_dynamic_load`; a NODE_TEST_CONTEXT or
- * `NODE_TEST_` text anywhere, or a computed `env[...]`: `spec_pinned_test_context_reference`. Relative imports are refused
- * rather than followed, so there is no transitive walk. HONEST LIMIT: this guards against a pinned file that loads coder
- * code; it is a lexical scan, not a sandbox, and a deliberately obfuscated BASE file (regex literals that unbalance the
- * lexer, `globalThis['ev' + 'al']`, node:test `run()` on coder files) is out of scope: base files are the mission's own.
+ * Round 7 R6-1/R6-3, replaced in round 8 (R7-3): the base content of a pinned test/entry file is checked by the AST
+ * allowlist in e2-pinned-source-allowlist.ts (exact import allowlist, banned names in any position, literal keys only,
+ * no dynamic import/with/tagged templates/unicode-escaped identifiers; unparsable files refused). Base files are
+ * assumed to be the mission seed's own; see that module for what remains of that assumption.
  */
 export function scanPinnedSource(src: string): E2PinnedSourceRefusal | null {
-  if (/NODE_TEST_/u.test(src)) return 'spec_pinned_test_context_reference';
-  const { code, lits } = lexJs(src);
-  /* `process.env[k]` and a destructured `env[k]` alike (mutation run r12 SC2 found the `.env[` form slipped through). */
-  if (/(?<![\w$])env\s*\[(?!\s*§\d+§\s*\])/u.test(code)) return 'spec_pinned_test_context_reference';
-  const lit = (m: string | undefined): string => lits[Number(m)] as string;
-  for (const m of code.matchAll(/(?<![.\w$])(require|import)\b(\s*\(\s*§(\d+)§\s*\))?/gu)) {
-    const after = code.slice((m.index ?? 0) + m[0].length);
-    if (m[1] === 'import' && m[2] === undefined) { if (/^\s*\(/u.test(after)) return 'spec_pinned_test_dynamic_load'; continue; }
-    if (m[2] === undefined) return 'spec_pinned_test_dynamic_load';
-    if (!trustedSpecifier(lit(m[3]))) return 'spec_pinned_test_imports_untrusted';
-  }
-  for (const m of code.matchAll(/(?<![.\w$])(?:from|import)\s*§(\d+)§/gu)) if (!trustedSpecifier(lit(m[1]))) return 'spec_pinned_test_imports_untrusted';
-  if (/(?<![.\w$])(?:eval|Function)\b|\bprocess\s*\.\s*(?:binding|_linkedBinding|dlopen|mainModule)\b|(?<![.\w$])module\s*\.\s*(?:require|constructor|_load|_compile)\b|\.\s*constructor\b/u.test(code)) return 'spec_pinned_test_dynamic_load';
-  return null;
+  /* Round 8 R7-3: replaced the lexical blacklist with the AST allowlist in e2-pinned-source-allowlist.ts. */
+  return scanPinnedSourceAst(src);
 }
 const SHELL_SYNTAX = /[;&|<>$`'"\\(){}[\]*?~!#=%^\r\n\t]/u;
 const gitBlob = (workspace: string, base: string, path: string): Buffer | null => {

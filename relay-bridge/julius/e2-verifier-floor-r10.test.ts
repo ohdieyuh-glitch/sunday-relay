@@ -16,10 +16,19 @@ beforeAll(() => { root = realpathSync(mkdtempSync(join(tmpdir(), 'e2r10f-'))); }
 afterAll(() => { rmSync(root, { recursive: true, force: true }); });
 /* Round 7 R6-1/R6-3: a pinned test may not load coder code, so the coder-editable helper is DATA (h.json) that the base
    test acts on: `exit` ends the process before any test, `print` writes coder-chosen text first. */
-const T2 = "const h = JSON.parse(require('node:fs').readFileSync(__dirname + '/h.json', 'utf8')); if (h.print) process.stdout.write(h.print); if (h.exit) process.exit(0);\nconst test = require('node:test'); test('a', () => {}); test('b', () => {});\n";
+/* Round 8 R7-3: `process` is a banned name in a pinned file, so the process-control vehicle (exit 0, raw stdout) is now
+   refused at SPEC time; the honest fixtures use console.log only, and the hostile ones assert the spec refusal. The runtime
+   synthetic/floor checks stay as defence in depth (unit-tested below / in fileLevelPoints). */
+const T2X = "const h = JSON.parse(require('node:fs').readFileSync(__dirname + '/h.json', 'utf8')); if (h.print) process.stdout.write(h.print); if (h.exit) process.exit(0);\nconst test = require('node:test'); test('a', () => {}); test('b', () => {});\n";
+const T2 = "const h = JSON.parse(require('node:fs').readFileSync(__dirname + '/h.json', 'utf8')); if (h.print) console.log(h.print);\nconst test = require('node:test'); test('a', () => {}); test('b', () => {});\n";
 const asData = (headH: string): string => JSON.stringify(headH === 'process.exit(0);\n' ? { exit: true } : headH === FAKE_SUMMARY ? { exit: true, print: '# tests 99\n# suites 0\n# pass 99\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 1\n' } : { v: 2 });
 const FAKE_SUMMARY = "process.stdout.write('# tests 99\\n# suites 0\\n# pass 99\\n# fail 0\\n# cancelled 0\\n# skipped 0\\n# todo 0\\n# duration_ms 1\\n'); process.exit(0);\n";
 
+async function specOf(name: string, t: string): Promise<unknown> {
+  const repo = join(root, name); mkdirSync(repo);
+  const { base } = makeRepo(repo, { 'a.txt': '1\n', 'h.json': '{"v":1}', 't.test.js': t }, { 'a.txt': '2\n' }, W);
+  return G.pinVerifierSpecWithBaseRun({ testCommand: 'node --test t.test.js', workspace: repo, base }, G.spawnVerifierRunner({ timeoutMs: 30_000 }));
+}
 async function gate(name: string, headH: string, opts: { minTests?: number; testCommand?: string } = {}): Promise<{ reasons: readonly string[]; spec: G.E2VerifierSpec; reexec: G.E2ReexecEvidence | null }> {
   const repo = join(root, name); mkdirSync(repo);
   const { base, head } = makeRepo(repo, { 'a.txt': '1\n', 'h.json': '{"v":1}', 't.test.js': T2 }, { 'a.txt': '2\n', 'h.json': asData(headH) }, W);
@@ -38,15 +47,14 @@ describe('R4-3: node --test vacuous passes', () => {
     expect(r.reasons).toEqual([]);
     expect(r.reexec?.commands[0]?.testSummary).toEqual({ tests: 2, pass: 2, fail: 0 });
   }, 60_000);
-  it('a helper that exits 0 before any test runs is refused (exit 0 is not enough)', async () => {
-    const r = await gate('exit0', 'process.exit(0);\n');
-    expect(r.reexec?.commands[0]?.exitCode).toBe(0);
-    expect(r.reasons).toEqual(['e2_verifier_tests_below_minimum', 'e2_verifier_synthetic_result']);
+  it('a helper that exits 0 before any test runs is refused (exit 0 is not enough): now at spec time', async () => {
+    expect(await specOf('exit0', T2X)).toEqual({ refused: 'spec_pinned_test_dynamic_load' });
   }, 60_000);
   it('coder-controlled output printing a fake summary cannot raise the count or lower the floor', async () => {
     const r = await gate('fake', FAKE_SUMMARY);
-    expect(r.reexec?.commands[0]?.testSummary?.tests).toBe(1);
-    expect(r.reasons).toEqual(['e2_verifier_tests_below_minimum', 'e2_verifier_synthetic_result']);
+    expect(r.reexec?.commands[0]?.testSummary).toEqual({ tests: 2, pass: 2, fail: 0 });
+    expect(r.reasons).toEqual([]);
+    expect(FAKE_SUMMARY).toContain('process.exit');
   }, 60_000);
   it('the floor is max(1, mission minTests, base-pinned test count); a declared 0 cannot lower it', async () => {
     expect((await gate('m0', 'module.exports = 2;\n', { minTests: 0 })).spec.minTests).toEqual([2]);

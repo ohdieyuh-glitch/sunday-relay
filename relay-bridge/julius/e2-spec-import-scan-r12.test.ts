@@ -95,7 +95,8 @@ describe('Round 7 PILOT R6-7: the pinned-source scan refuses the AST-scan forms 
 describe('Round 7 mutation kills on the pinned-source scan (mut/mutants12.out SC2, SC10)', () => {
   it('SC2: a computed env key (NODE_TEST_CONTEXT assembled at run time) is a context reference', () => {
     expect(G.scanPinnedSource("const k = 'NODE' + '_TE' + 'ST_CONTEXT'; delete process.env[k];")).toBe('spec_pinned_test_context_reference');
-    expect(G.scanPinnedSource("const v = process.env['HOME'];")).toBeNull();
+    /* Round 8 R7-3: `process` is now a banned name in any position, so even a literal env key is refused. */
+    expect(G.scanPinnedSource("const v = process.env['HOME'];")).toBe('spec_pinned_test_dynamic_load');
   });
   it('SC10: reaching Function through .constructor is a dynamic load', () => {
     expect(G.scanPinnedSource("const F = (() => {}).constructor; F('return 1')();")).toBe('spec_pinned_test_dynamic_load');

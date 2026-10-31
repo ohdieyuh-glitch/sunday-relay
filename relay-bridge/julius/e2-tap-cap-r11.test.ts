@@ -16,7 +16,7 @@ afterAll(() => { rmSync(root, { recursive: true, force: true }); });
 describe('TAP size cap and base-run runner', () => {
   it('three real passing tests with 9 MiB of logged output are e2_verifier_synthetic_result (stdout too large to check)', async () => {
     const repo = join(root, 'cap'); mkdirSync(repo);
-    const T = "const test = require('node:test');\ntest('a', () => { process.stdout.write('x'.repeat(9 * 1024 * 1024) + '\\n'); });\ntest('b', () => {});\ntest('c', () => {});\n";
+    const T = "const test = require('node:test');\ntest('a', () => { console.log('x'.repeat(9 * 1024 * 1024)); }); /* r8: console, process is banned */\ntest('b', () => {});\ntest('c', () => {});\n";
     const { base, head } = makeRepo(repo, { 'a.txt': '1\n', 't.test.js': T }, { 'a.txt': '2\n' }, W);
     const runner = G.spawnVerifierRunner({ timeoutMs: 60_000 });
     const verifierSpec = (await G.pinVerifierSpecWithBaseRun({ testCommand: 'node --test t.test.js', workspace: repo, base }, G.spawnVerifierRunner({ timeoutMs: 30_000 }))) as G.E2VerifierSpec;
