@@ -27,7 +27,12 @@ describe('R7-3: every listed bypass is refused', () => {
     ['Symbol.for', "Symbol.for('nodejs.util.inspect.custom');\n"],
     ['import.meta.resolve', "import.meta.resolve('./x');\n"],
     ['createRequire via node:module', "import { createRequire } from 'node:module';\n"],
-    ['computed non-literal key', "const o = {}; const k = 'a'; o[k];\n"],
+    ['computed non-literal key (string expr)', "const o = {}; const k = 'a'; o[k + ''].x;\n"],
+    ['index then call', "const o = {}; const k = 'a'; o[k]();\n"],
+    ['double dynamic index then call (Function via constructor)', "const f = () => 1; const a = 'x'; const b = 'y'; f[a][b]('return 1')();\n"],
+    ['index then member', "const o = {}; const k = 'a'; o[k].call;\n"],
+    ['index assignment target', "const o = {}; const k = '__proto__'; o[k] = {};\n"],
+    ['index with a call in the key', "const o = {}; o[String(1)];\n"],
     ['computed destructuring key', "const k = 'constructor'; const { [k]: F } = () => 1;\n"],
     ["'constructor' literal key", "(() => 1)['constructor']('1');\n"],
     ['constructor destructured', "const { constructor: F } = () => 1;\n"],
@@ -64,13 +69,38 @@ describe('R7-3: the allowlist itself', () => {
     expect(G.scanPinnedSource("import s from 'node:sqlite';\n")).toBe('spec_pinned_test_imports_untrusted');
   });
   it('is exactly this list (bare and node: forms)', () => {
-    expect([...G.E2_PINNED_IMPORT_ALLOWLIST].sort()).toEqual(['assert', 'assert/strict', 'fs', 'fs/promises', 'node:assert', 'node:assert/strict', 'node:fs', 'node:fs/promises',
+    expect([...G.E2_PINNED_IMPORT_ALLOWLIST].sort()).toEqual(['assert', 'assert/strict', 'crypto', 'node:crypto', 'fs', 'fs/promises', 'node:assert', 'node:assert/strict', 'node:fs', 'node:fs/promises',
       'node:path', 'node:path/posix', 'node:test', 'node:url', 'node:util', 'path', 'path/posix', 'url', 'util'].sort());
   });
   it('accepts ordinary test code: literal imports, regex and template literals, import.meta.url, literal indices', () => {
     for (const src of [
       "import assert from 'node:assert/strict';\nimport { readFileSync } from 'node:fs';\nimport test, { describe, it } from 'node:test';\nconst doc = JSON.parse(readFileSync(new URL('./o.json', import.meta.url), 'utf8'));\ntest('a', () => { assert.match('x', /^[a-z]'\\/$/u); assert.equal(`${1 + 1}`, '2'); assert.equal([1][0], 1); });\n",
       "const test = require('node:test'); const a = require('node:assert');\ntest('c0', () => a.ok(/[`'\"]/.test('`')));\n",
+      "const s = 'abc'; let n = 0; for (let i = 0; i < s.length; i += 1) { if (s[i] === s[i + 1]) n += 1; const c = s[i - 1]; }\n",
     ]) expect(G.scanPinnedSource(src), src).toBeNull();
   });
+});
+describe('R7-3: the accepted mission fixtures stay accepted (census)', () => {
+  it('julius-unreal-mission-1 .julius/hub-scroll-static.test.mjs (node:crypto createHash) and julius-inworld-data-1 format.test.mjs scan clean', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const m = join(__dirname, '../../.github/julius-missions');
+    expect(G.scanPinnedSource(readFileSync(join(m, 'julius-unreal-mission-1/workspace/.julius/hub-scroll-static.test.mjs'), 'utf8'))).toBeNull();
+    expect(G.scanPinnedSource(readFileSync(join(m, 'julius-inworld-data-1/workspace/format.test.mjs'), 'utf8'))).toBeNull();
+  });
+});
+describe('R7-3: julius-unreal-mission-1 through the real spec path (seeded one-commit repo, trusted base run)', () => {
+  it('is accepted with floor [5] and base-registered [5]', async () => {
+    const { cpSync, mkdtempSync, realpathSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const { git } = await import('./e2-test-kit');
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'e2-unreal13-')));
+    try {
+      cpSync(join(__dirname, '../../.github/julius-missions/julius-unreal-mission-1/workspace'), dir, { recursive: true });
+      git(dir, 'init', '-q'); git(dir, 'add', '-A'); git(dir, '-c', 'user.name=x', '-c', 'user.email=x@x', '-c', 'commit.gpgsign=false', 'commit', '-qm', 'seed');
+      const spec = await G.pinVerifierSpecWithBaseRun({ testCommand: 'node --test .julius/hub-scroll-static.test.mjs', workspace: dir, base: git(dir, 'rev-parse', 'HEAD') }, G.spawnVerifierRunner({ timeoutMs: 60_000 }));
+      expect('refused' in spec ? spec : { minTests: spec.minTests, baseRegistered: spec.baseRegistered }).toEqual({ minTests: [5], baseRegistered: [5] });
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  }, 120_000);
 });

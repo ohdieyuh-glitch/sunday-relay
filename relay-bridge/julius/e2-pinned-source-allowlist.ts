@@ -8,7 +8,7 @@
  *    with <x> in {@link E2_PINNED_IMPORT_ALLOWLIST} (else `spec_pinned_test_imports_untrusted`);
  *  - no identifier is written with a unicode escape; no `import(...)`, `import x = require()`, `with`, tagged template,
  *    `require` other than called with one literal, `import.meta` other than `.url`/`.dirname`/`.filename`, computed member
- *    access or computed property/binding name whose key is not a literal, and no identifier or literal key in
+ *    access whose key is not a literal (except a pure index read, see indexOk) or computed property/binding name whose key is not a literal, and no identifier or literal key in
  *    {@link E2_PINNED_BANNED_NAMES} in ANY position (else `spec_pinned_test_dynamic_load`);
  *  - no `NODE_TEST_` text anywhere, and no non-literal `env[...]` (else `spec_pinned_test_context_reference`).
  * Priority when several apply: unparsed > context_reference > imports_untrusted > dynamic_load.
@@ -21,7 +21,7 @@ import * as ts from 'typescript';
 
 export type E2PinnedScanRefusal = 'spec_pinned_test_imports_untrusted' | 'spec_pinned_test_dynamic_load' | 'spec_pinned_test_context_reference' | 'spec_pinned_test_unparsed';
 
-const BASE_ALLOW = ['assert', 'assert/strict', 'fs', 'fs/promises', 'path', 'path/posix', 'test', 'url', 'util'];
+const BASE_ALLOW = ['assert', 'assert/strict', 'crypto', 'fs', 'fs/promises', 'path', 'path/posix', 'test', 'url', 'util'];
 /** Exact module specifiers a pinned file may load. `test` is node:test-only (the bare `test` is a package name). */
 export const E2_PINNED_IMPORT_ALLOWLIST: ReadonlySet<string> = new Set([...BASE_ALLOW.map((b) => `node:${b}`), ...BASE_ALLOW.filter((b) => b !== 'test')]);
 /** Names refused as an identifier in any position, or as a literal member key. */
@@ -36,6 +36,23 @@ const META_OK = new Set(['url', 'dirname', 'filename']);
 const literalKey = (e: ts.Node): string | null =>
   ts.isStringLiteral(e) || ts.isNoSubstitutionTemplateLiteral(e) ? e.text : ts.isNumericLiteral(e) ? e.text : null;
 
+/** A non-literal key is allowed only as an index: identifiers, numbers and + - * / % of them (e.g. `src[i + 1]`), and the
+ *  result is a VALUE: not called, not constructed, not indexed again, not a tagged template tag. One dynamic step from a
+ *  plain value reaches at most a prototype object, never a callable Function (`o[a][b]('code')()` and `o[k]()` are refused). */
+const isIndexExpr = (e: ts.Expression): boolean =>
+  ts.isIdentifier(e) || ts.isNumericLiteral(e) || (ts.isParenthesizedExpression(e) && isIndexExpr(e.expression))
+  || (ts.isBinaryExpression(e) && [ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken, ts.SyntaxKind.AsteriskToken, ts.SyntaxKind.SlashToken, ts.SyntaxKind.PercentToken].includes(e.operatorToken.kind) && isIndexExpr(e.left) && isIndexExpr(e.right));
+function indexOk(n: ts.ElementAccessExpression): boolean {
+  if (!isIndexExpr(n.argumentExpression)) return false;
+  let p: ts.Node = n.parent;
+  let child: ts.Node = n;
+  while (ts.isParenthesizedExpression(p) || ts.isNonNullExpression(p)) { child = p; p = p.parent; }
+  if ((ts.isCallExpression(p) || ts.isNewExpression(p)) && p.expression === child) return false;
+  if ((ts.isElementAccessExpression(p) || ts.isPropertyAccessExpression(p)) && p.expression === child) return false;
+  if (ts.isTaggedTemplateExpression(p)) return false;
+  if (ts.isBinaryExpression(p) && p.left === child && p.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && p.operatorToken.kind <= ts.SyntaxKind.LastAssignment) return false;
+  return true;
+}
 export function scanPinnedSourceAst(src: string): E2PinnedScanRefusal | null {
   const sf = ts.createSourceFile('pinned.js', src, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
   const diags = (sf as unknown as { parseDiagnostics?: readonly ts.Diagnostic[] }).parseDiagnostics;
@@ -68,7 +85,7 @@ export function scanPinnedSourceAst(src: string): E2PinnedScanRefusal | null {
     if (ts.isElementAccessExpression(n)) {
       const k = literalKey(n.argumentExpression);
       if (k === null) {
-        dyn();
+        if (!indexOk(n)) dyn();
         const obj = n.expression;
         if ((ts.isIdentifier(obj) && obj.text === 'env') || (ts.isPropertyAccessExpression(obj) && ts.idText(obj.name as ts.Identifier) === 'env')
           || (ts.isElementAccessExpression(obj) && literalKey(obj.argumentExpression) === 'env')) found.add('spec_pinned_test_context_reference');
