@@ -122,14 +122,21 @@ export function recordHeadSafely(input: { readonly workspace: string }): { reado
 }
 type Entry = { mode: string; data: Buffer; path: string };
 /**
- * Round 9 (PILOT R8-2): secret-looking paths are refused by name, whatever the coder's .gitignore / info/exclude say (those
+ * Round 9 (PILOT R8-2) + Round 10 (F9-4): secret-looking paths are refused by name (a heuristic: names, never contents;
+ * the refusal lists paths only), whatever the coder's .gitignore / info/exclude say (those
  * are never read). A secret-path refusal is a FAILED run, never a pass.
  */
 export function isSecretPath(p: string): boolean {
   const parts = p.split('/'); const base = (parts[parts.length - 1] ?? '').toLowerCase();
   if (parts.slice(0, -1).some((d) => /^secret/iu.test(d))) return true;
+  const parent = (parts[parts.length - 2] ?? '').toLowerCase();
   return /^\.env/u.test(base) || base.endsWith('.pem') || base.endsWith('.key') || base.startsWith('id_rsa') || base.startsWith('credentials')
-    || base === '.npmrc' || base === '.netrc' || /^secret/u.test(base);
+    || base === '.npmrc' || base === '.netrc' || /^secret/u.test(base)
+    /* Round 10 (Skywalker F9-4): more key and credential names. Still a heuristic on NAMES only. */
+    || /^id_(ed25519|ecdsa|dsa)/u.test(base) || base === '.git-credentials' || /\.(p12|pfx|keystore|jks|gpg)$/u.test(base)
+    || base === '.pgpass' || base === '.pypirc' || base === '.dockercfg' || base.startsWith('token') || base.endsWith('.tfvars') || /^service-account.*\.json$/u.test(base)
+    || (parent === '.kube' && base === 'config') || (parent === '.docker' && base === 'config.json')
+    || (base.endsWith('.asc') && /(priv|secret|secring)/u.test(base));
 }
 /** Round 9 (PILOT R8-3): a path component git refuses or silently drops (.git in any case, with trailing dots/spaces, or the 8.3 alias git~N). */
 export function isDroppedPath(p: string): boolean {
