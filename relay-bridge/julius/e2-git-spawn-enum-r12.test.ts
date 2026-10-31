@@ -11,6 +11,7 @@ import * as ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 import * as G from './e2-evidence-gate';
+import * as S from './e2-safe-git';
 
 const DIR = __dirname;
 type Site = { file: string; line: number; via: string; argsText: string; sub: string; callText: string };
@@ -56,17 +57,19 @@ describe('every git invocation in the e2 gate/spec/diff path carries the pins', 
       'e2-evidence-gate.ts:moduleGit:merge-base',
       'e2-evidence-gate.ts:moduleGit:diff',
       'e2-evidence-gate.ts:moduleGit:rev-parse',
+      'e2-safe-git.ts:execFileSync:?' /* round 8 R7-1: the one site in the safe primitive (sg) */,
     ]);
-    expect(sites.length).toBe(8);
+    expect(sites.length).toBe(9);
   });
   it('every child_process call in the e2 files is one of these git sites or the runner spawnImpl (which runs only allowlisted verifier argv or isModuleGit argv)', () => {
     expect(all).toEqual([
       'e2-evidence-gate.ts:spawnImpl:bin', "e2-evidence-gate.ts:spawnImpl:'taskkill'" /* Windows process-tree kill, not git */, 'e2-evidence-gate.ts:execFile:bin',
       'e2-evidence-gate.ts:execFileSync:bin', 'e2-evidence-gate.ts:execFileSync:bin', 'e2-evidence-gate.ts:execFileSync:bin',
+      "e2-safe-git.ts:execFileSync:'git'",
     ]);
   });
   it('each argv site spreads GIT_PINS and safeDir(); the capture site only runs module-minted argv', () => {
-    const bad = sites.filter((s) => s.sub === '(capture)' ? false : !(s.argsText.includes('...GIT_PINS') && /\.\.\.safeDir\(/u.test(s.argsText)));
+    const bad = sites.filter((s) => s.sub === '(capture)' ? false : !((s.argsText.includes('...GIT_PINS') && /\.\.\.safeDir\(/u.test(s.argsText)) || s.argsText.startsWith('[...e2GitPins(')));
     expect(bad).toEqual([]);
     const src = readFileSync(join(DIR, 'e2-evidence-gate.ts'), 'utf8');
     const cap = sites.find((s) => s.sub === '(capture)');
@@ -98,7 +101,7 @@ describe('every git invocation in the e2 gate/spec/diff path carries the pins', 
   it('R7-5: no site adds a -c or global option after the pins (no override), and every site runs with E2_GIT_ENV', () => {
     for (const s of sites) {
       if (s.sub === '(capture)') { expect(s.callText).toMatch(/env/u); continue; }
-      const after = s.argsText.slice(s.argsText.indexOf('...safeDir('));
+      const after = s.argsText.includes('...safeDir(') ? s.argsText.slice(s.argsText.indexOf('...safeDir(')) : s.argsText.slice(s.argsText.indexOf(')') + 1);
       expect(after, `${s.file}:${s.line}`).not.toMatch(/'-c'|'--(?:git-dir|work-tree|exec-path|namespace|attr-source|config-env)/u);
       /* moduleGit argv get their env from the runner/CAPTURE (both fixed to E2_GIT_ENV, checked below), never the caller. */
       if (s.via !== 'moduleGit') expect(s.callText, `${s.file}:${s.line}`).toMatch(/\.\.\.E2_GIT_ENV/u);
@@ -106,6 +109,9 @@ describe('every git invocation in the e2 gate/spec/diff path carries the pins', 
     const src = readFileSync(join(DIR, 'e2-evidence-gate.ts'), 'utf8');
     expect(src).toMatch(/isModuleGit\(argv\)\s*\?\s*\{ LANG: 'C\.UTF-8', LC_ALL: 'C\.UTF-8', \.\.\.E2_GIT_ENV,/u);
     expect(src).toMatch(/env: \{ LANG: 'C\.UTF-8', LC_ALL: 'C\.UTF-8', \.\.\.E2_GIT_ENV, GIT_NO_REPLACE_OBJECTS: '1', PATH: E2_VERIFIER_PATH \} \}, \(e, out\)/u);
+    /* the safe primitive's one extra pin, and its env puts caller extras BEFORE the gate env. */
+    expect(S.SAFE_GIT_EXTRA_PINS).toEqual(['-c', 'commit.gpgSign=false']);
+    expect(readFileSync(join(DIR, 'e2-safe-git.ts'), 'utf8')).toMatch(/env: \{ \.\.\.\(opts\.env \?\? \{\}\), LANG: 'C\.UTF-8', LC_ALL: 'C\.UTF-8', \.\.\.E2_GIT_ENV, GIT_DIR: c\.gitDir,[^}]*PATH: E2_VERIFIER_PATH \}/u);
     expect(G.E2_GIT_ENV).toEqual({ GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', GIT_ATTR_NOSYSTEM: '1',
       GIT_GRAFT_FILE: '/dev/null', GIT_REPLACE_REF_BASE: 'refs/e2-no-replace/', GIT_NO_REPLACE_OBJECTS: '1' });
   });
