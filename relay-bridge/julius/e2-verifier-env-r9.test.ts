@@ -31,9 +31,11 @@ describe('R3-3 env allowlist', () => {
       expect(r.exitCode).toBe(0);
       expect(existsSync(join(dir, 'PRELOADED'))).toBe(false);
       const env = JSON.parse(readFileSync(out, 'utf8')) as Record<string, string>;
-      expect(Object.keys(env).filter((k) => !['PATH', 'LANG', 'LC_ALL', 'CI', 'TZ', 'NODE_ENV', 'LC_CTYPE', '__CF_USER_TEXT_ENCODING'].includes(k))).toEqual([]);
+      expect(Object.keys(env).filter((k) => !['PATH', 'LANG', 'LC_ALL', 'NODE_OPTIONS', 'CI', 'TZ', 'NODE_ENV', 'LC_CTYPE', '__CF_USER_TEXT_ENCODING'].includes(k))).toEqual([]);
       expect(env.CI).toBe('1'); expect(env.TZ).toBe('UTC'); expect(env.NODE_ENV).toBe('test');
       expect(env.PATH).not.toBe('/evil');
+      /* Round 9 N8-1: NODE_OPTIONS is the runner's own fixed value, never the caller's. */
+      expect(env.NODE_OPTIONS).toBe('--disallow-code-generation-from-strings');
     });
   }
   it('GIT_DIR in the runner env cannot redirect the module git diff', async () => {

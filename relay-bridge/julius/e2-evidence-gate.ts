@@ -63,6 +63,10 @@ export function isCanonicalDir(cwd: string): boolean {
  */
 /** R3-3: the only caller-supplied env keys a verifier child receives (PATH is fixed separately). */
 export const E2_VERIFIER_ENV_KEYS: readonly string[] = Object.freeze(['LANG', 'LC_ALL', 'CI', 'TZ', 'NODE_ENV']);
+/** Round 9 (Skywalker N8-1): every verifier child (and, through the inherited env, every node --test file subprocess) runs
+ *  with string code generation disabled, so eval / Function / a Function reached through a prototype cannot compile a
+ *  string. Set by the runner itself, after the caller env (NODE_OPTIONS is never accepted from a caller, R3-3). */
+export const E2_VERIFIER_NODE_OPTIONS = '--disallow-code-generation-from-strings';
 export const E2_VERIFIER_PATH = `${dirname(process.execPath)}:/usr/local/bin:/usr/bin:/bin`;
 const progName = (p: string): string => basename(p.replace(/\\/gu, '/')).toLowerCase();
 /** Resolves a program name to an absolute binary on the fixed PATH (node is process.execPath), or null. */
@@ -187,7 +191,7 @@ export function spawnVerifierRunner(options: {
     /* Module git gets only its own fixed env (R3-3/L2); caller env never reaches git. */
     const env: Record<string, string> = isModuleGit(argv)
       ? { LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...E2_GIT_ENV, GIT_NO_REPLACE_OBJECTS: '1', PATH: E2_VERIFIER_PATH }
-      : { LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...noPath(options.env), ...noPath(extraEnv), PATH: E2_VERIFIER_PATH };
+      : { LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...noPath(options.env), ...noPath(extraEnv), PATH: E2_VERIFIER_PATH, NODE_OPTIONS: E2_VERIFIER_NODE_OPTIONS };
     let child: ReturnType<typeof spawn>;
     try {
       child = spawnImpl(bin, argv.slice(1), { cwd, shell: false, env, detached: platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'] });

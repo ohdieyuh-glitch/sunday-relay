@@ -33,31 +33,106 @@ export const E2_PINNED_BANNED_NAMES: ReadonlySet<string> = new Set([
   'AsyncFunction', 'GeneratorFunction',
 ]);
 const META_OK = new Set(['url', 'dirname', 'filename']);
+/** Round 9 N8-1: strings that name the route from any value to Function / a prototype. */
+const PROTO_STRINGS: ReadonlySet<string> = new Set(['constructor', '__proto__', 'prototype']);
+/** Round 9 (PILOT R8-1): no string the scan can fold may equal one of these, in ANY position (a string is never proven
+ *  inert; the simplest sound rule is to refuse it). */
+export const E2_PINNED_BANNED_STRINGS: ReadonlySet<string> = new Set([...PROTO_STRINGS, ...E2_PINNED_BANNED_NAMES,
+  'require', 'child_process', 'vm', 'worker_threads', 'inspector', 'module', 'cluster', 'net', 'http', 'https', 'dgram', 'dns', 'tls', 'wasi', 'sqlite']);
+/** Constant-folds a string expression made of literals, `+` and templates; null when any part is not constant. */
+function foldString(e: ts.Node): string | null {
+  if (ts.isStringLiteral(e) || ts.isNoSubstitutionTemplateLiteral(e) || ts.isNumericLiteral(e)) return e.text;
+  if (ts.isParenthesizedExpression(e)) return foldString(e.expression);
+  if (ts.isBinaryExpression(e) && e.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+    const l = foldString(e.left); const r = foldString(e.right); return l === null || r === null ? null : l + r;
+  }
+  if (ts.isTemplateExpression(e)) {
+    let out = e.head.text;
+    for (const sp of e.templateSpans) { const v = foldString(sp.expression); if (v === null) return null; out += v + sp.literal.text; }
+    return out;
+  }
+  return null;
+}
+const unwrap = (e: ts.Expression): ts.Expression => (ts.isParenthesizedExpression(e) || ts.isNonNullExpression(e) || ts.isAsExpression(e) ? unwrap(e.expression) : e);
+const isFunctionLike = (e: ts.Expression): boolean => { const u = unwrap(e); return ts.isArrowFunction(u) || ts.isFunctionExpression(u) || ts.isClassExpression(u); };
 const literalKey = (e: ts.Node): string | null =>
   ts.isStringLiteral(e) || ts.isNoSubstitutionTemplateLiteral(e) ? e.text : ts.isNumericLiteral(e) ? e.text : null;
 
 /** A non-literal key is allowed only as an index: identifiers, numbers and + - * / % of them (e.g. `src[i + 1]`), and the
- *  result is a VALUE: not called, not constructed, not indexed again, not a tagged template tag. One dynamic step from a
- *  plain value reaches at most a prototype object, never a callable Function (`o[a][b]('code')()` and `o[k]()` are refused). */
+ *  result is a VALUE: not called, not constructed, not indexed again, not a tagged template tag.
+ *  Round 9 (Skywalker N8-1) CORRECTION: the round 8 comment here claimed one dynamic step "never" reaches a callable
+ *  Function. That was wrong: `const F = (()=>0)['constr'+'uctor']` is one index read whose VALUE is Function, and calling
+ *  `F` later is a plain call of an identifier. Closed in depth by (1) refusing any member/index access on a function, arrow
+ *  or class expression, (2) refusing any string the scan can fold (literal, `+` concatenation, template) equal to
+ *  'constructor', '__proto__' or 'prototype', and (3) the structural fix: every verifier child runs with
+ *  --disallow-code-generation-from-strings (e2-evidence-gate.ts), so a Function reached by a route the scan does not see
+ *  (e.g. a key built with Array#join) still cannot compile a string. */
 const isIndexExpr = (e: ts.Expression): boolean =>
   ts.isIdentifier(e) || ts.isNumericLiteral(e) || (ts.isParenthesizedExpression(e) && isIndexExpr(e.expression))
   || (ts.isBinaryExpression(e) && [ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken, ts.SyntaxKind.AsteriskToken, ts.SyntaxKind.SlashToken, ts.SyntaxKind.PercentToken].includes(e.operatorToken.kind) && isIndexExpr(e.left) && isIndexExpr(e.right));
-function indexOk(n: ts.ElementAccessExpression): boolean {
-  if (!isIndexExpr(n.argumentExpression)) return false;
-  let p: ts.Node = n.parent;
-  let child: ts.Node = n;
-  while (ts.isParenthesizedExpression(p) || ts.isNonNullExpression(p)) { child = p; p = p.parent; }
-  if ((ts.isCallExpression(p) || ts.isNewExpression(p)) && p.expression === child) return false;
-  if ((ts.isElementAccessExpression(p) || ts.isPropertyAccessExpression(p)) && p.expression === child) return false;
-  if (ts.isTaggedTemplateExpression(p)) return false;
-  if (ts.isBinaryExpression(p) && p.left === child && p.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && p.operatorToken.kind <= ts.SyntaxKind.LastAssignment) return false;
-  return true;
+/** Round 9 (PILOT R8-1, Skywalker N8-1): an identifier/arithmetic-keyed index read is allowed only when its VALUE provably
+ *  goes nowhere it could be called: a comparison operand, a string concatenation (`+`, `+=` onto an identifier, a template
+ *  span), the left of `??` / a conditional test (then judged by where that goes), the argument of a RegExp literal's
+ *  `.test`, an argument of an assert method imported from node:assert, or a `const` binding whose EVERY use is one of
+ *  these. Calling, constructing, indexing, member-reading, assigning to it, passing it to any other function, returning it,
+ *  or storing it in a mutable binding / object / array is refused. A literal string key must also not be a banned name. */
+const COMPARE = new Set([ts.SyntaxKind.EqualsEqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken, ts.SyntaxKind.EqualsEqualsToken,
+  ts.SyntaxKind.ExclamationEqualsToken, ts.SyntaxKind.LessThanToken, ts.SyntaxKind.GreaterThanToken, ts.SyntaxKind.LessThanEqualsToken,
+  ts.SyntaxKind.GreaterThanEqualsToken]);
+const ASSERT_METHODS = new Set(['equal', 'strictEqual', 'notEqual', 'notStrictEqual', 'deepEqual', 'deepStrictEqual', 'notDeepEqual', 'notDeepStrictEqual', 'ok']);
+interface FlowCtx { readonly sf: ts.SourceFile; readonly assertNames: ReadonlySet<string>; readonly refs: ReadonlyMap<string, readonly ts.Identifier[]>; }
+function valueInert(node: ts.Node, ctx: FlowCtx, depth = 0): boolean {
+  if (depth > 8) return false;
+  let child: ts.Node = node; let p: ts.Node = node.parent;
+  while (ts.isParenthesizedExpression(p)) { child = p; p = p.parent; }
+  if (ts.isBinaryExpression(p)) {
+    const op = p.operatorToken.kind;
+    if (COMPARE.has(op)) return true;
+    if (op === ts.SyntaxKind.PlusToken) return true; /* string/number coercion only */
+    if (op === ts.SyntaxKind.PlusEqualsToken) return p.right === child && ts.isIdentifier(p.left);
+    if (op === ts.SyntaxKind.QuestionQuestionToken || op === ts.SyntaxKind.BarBarToken || op === ts.SyntaxKind.AmpersandAmpersandToken) return valueInert(p, ctx, depth + 1);
+    return false;
+  }
+  if (ts.isTemplateSpan(p)) return !ts.isTaggedTemplateExpression(p.parent.parent);
+  if (ts.isConditionalExpression(p)) return p.condition === child;
+  if (ts.isIfStatement(p) || ts.isWhileStatement(p)) return p.expression === child;
+  if (ts.isPrefixUnaryExpression(p) && p.operator === ts.SyntaxKind.ExclamationToken) return true;
+  if (ts.isCallExpression(p) && p.expression !== child && p.arguments.includes(child as ts.Expression)) {
+    const c = p.expression;
+    if (ts.isPropertyAccessExpression(c) && ts.idText(c.name) === 'test' && ts.isRegularExpressionLiteral(c.expression)) return true;
+    if (ts.isPropertyAccessExpression(c) && ts.isIdentifier(c.expression) && ctx.assertNames.has(ts.idText(c.expression)) && ASSERT_METHODS.has(ts.idText(c.name))) return true;
+    if (ts.isIdentifier(c) && ctx.assertNames.has(ts.idText(c))) return true;
+    return false;
+  }
+  if (ts.isVariableDeclaration(p) && p.initializer === child && ts.isIdentifier(p.name)
+    && ts.isVariableDeclarationList(p.parent) && (p.parent.flags & ts.NodeFlags.Const) !== 0) {
+    const uses = (ctx.refs.get(ts.idText(p.name)) ?? []).filter((r) => r !== p.name);
+    return uses.every((u) => valueInert(u, ctx, depth + 1));
+  }
+  return false;
 }
 export function scanPinnedSourceAst(src: string): E2PinnedScanRefusal | null {
   const sf = ts.createSourceFile('pinned.js', src, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
   const diags = (sf as unknown as { parseDiagnostics?: readonly ts.Diagnostic[] }).parseDiagnostics;
   if (!Array.isArray(diags) || diags.length > 0) return 'spec_pinned_test_unparsed';
   const found = new Set<E2PinnedScanRefusal>();
+  const assertNames = new Set<string>(); const refs = new Map<string, ts.Identifier[]>();
+  const collect = (n: ts.Node): void => {
+    if (ts.isIdentifier(n)) { const t = ts.idText(n); const a = refs.get(t) ?? []; a.push(n); refs.set(t, a); }
+    if (ts.isImportDeclaration(n) && ts.isStringLiteral(n.moduleSpecifier) && /^(node:)?assert(\/strict)?$/u.test(n.moduleSpecifier.text) && n.importClause !== undefined) {
+      const c = n.importClause; if (c.name !== undefined) assertNames.add(ts.idText(c.name));
+      const b = c.namedBindings;
+      if (b !== undefined && ts.isNamespaceImport(b)) assertNames.add(ts.idText(b.name));
+      if (b !== undefined && ts.isNamedImports(b)) for (const e of b.elements) { const pn = e.propertyName ?? e.name; if (ts.isIdentifier(pn) && ASSERT_METHODS.has(ts.idText(pn))) assertNames.add(ts.idText(e.name)); }
+    }
+    ts.forEachChild(n, collect);
+  };
+  collect(sf);
+  for (const name of [...assertNames]) {
+    const declared = (refs.get(name) ?? []).some((r) => { const q = r.parent; return (ts.isVariableDeclaration(q) || ts.isParameter(q) || ts.isFunctionDeclaration(q) || ts.isClassDeclaration(q) || ts.isBindingElement(q)) && (q as { name?: ts.Node }).name === r; });
+    if (declared) assertNames.delete(name);
+  }
+  const ctx: FlowCtx = { sf, assertNames, refs };
   if (/NODE_TEST_/u.test(src)) found.add('spec_pinned_test_context_reference');
   const dyn = (): void => { found.add('spec_pinned_test_dynamic_load'); };
   const loadSpec = (spec: ts.Node | undefined): void => {
@@ -82,10 +157,16 @@ export function scanPinnedSourceAst(src: string): E2PinnedScanRefusal | null {
     if (ts.isMetaProperty(n) && n.keywordToken === ts.SyntaxKind.ImportKeyword) {
       if (!(ts.isPropertyAccessExpression(n.parent) && n.parent.expression === n && META_OK.has(ts.idText(n.parent.name as ts.Identifier)))) dyn();
     }
+    /* Round 9 N8-1: no member or index access on a function, arrow or class expression, and no foldable string naming
+       the prototype route anywhere (a literal, a concatenation or a template, in any position). */
+    if ((ts.isElementAccessExpression(n) || ts.isPropertyAccessExpression(n)) && isFunctionLike(n.expression)) dyn();
+    if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n) || ts.isTemplateExpression(n) || (ts.isBinaryExpression(n) && n.operatorToken.kind === ts.SyntaxKind.PlusToken)) {
+      const v = foldString(n); if (v !== null && (E2_PINNED_BANNED_STRINGS.has(v) || E2_PINNED_BANNED_STRINGS.has(v.replace(/^node:/u, '')))) dyn();
+    }
     if (ts.isElementAccessExpression(n)) {
       const k = literalKey(n.argumentExpression);
       if (k === null) {
-        if (!indexOk(n)) dyn();
+        if (!isIndexExpr(n.argumentExpression) || !valueInert(n, ctx)) dyn();
         const obj = n.expression;
         if ((ts.isIdentifier(obj) && obj.text === 'env') || (ts.isPropertyAccessExpression(obj) && ts.idText(obj.name as ts.Identifier) === 'env')
           || (ts.isElementAccessExpression(obj) && literalKey(obj.argumentExpression) === 'env')) found.add('spec_pinned_test_context_reference');
