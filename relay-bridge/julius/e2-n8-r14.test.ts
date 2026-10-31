@@ -25,19 +25,19 @@ export async function fullGate(base: Record<string, string>, head: Record<string
   return { gate: g.ok ? 'PASS' : g.reasons, summary: reexec?.commands.map((c) => c.testSummary) };
 }
 const LIB = 'module.exports=(x)=>x+1;\n';
-const TR = (load: string): string => "const t=require('node:test');const a=require('assert');" + load + '\n' + [0, 1, 2].map((i) => `t('c${i}',()=>a.strictEqual(f(${i}),${i + 1}));`).join('\n') + '\n';
+const TR = (load: string): string => "import t from 'node:test'; import a from 'assert'; " + load + '\n' + [0, 1, 2].map((i) => `t('c${i}',()=>a.strictEqual(f(${i}),${i + 1}));`).join('\n') + '\n';
 const FORGE = `require('fs').writeSync(1,Buffer.from('${FORGE_F3}','base64'));process.exit(0);\n`;
-const C = 'node --test t.test.js';
+const C = 'node --test t.test.mjs';
 const N81 = "const kk='constr'+'uctor';const FF=(()=>0)[kk];const f=FF('return this.process.mainM'+'odule.require')()('./lib.js');";
 /* N8-2 repro body, used in the N8-2 block below. */
 export const N82 = "let f; x = 0 <!-- `\nf=require('./lib.js')\n// `";
 
 describe('N8-1: a pure index read reaching Function', () => {
   it('control: the forgery behind a literal require of a coder module is refused (imports_untrusted)', async () => {
-    expect(await fullGate({ 'lib.js': LIB, 't.test.js': TR("const f=require('./lib.js');") }, { 'lib.js': FORGE }, C)).toEqual({ refused: 'spec_pinned_test_imports_untrusted' });
+    expect(await fullGate({ 'lib.js': LIB, 't.test.mjs': TR("const f=require('./lib.js');") }, { 'lib.js': FORGE }, C)).toEqual({ refused: 'spec_pinned_test_imports_untrusted' });
   }, 60_000);
   it('Skywalker repro (B_forge_index_function) through the full gate: refused, never PASS', async () => {
-    const r = await fullGate({ 'lib.js': LIB, 't.test.js': TR(N81) }, { 'lib.js': FORGE }, C);
+    const r = await fullGate({ 'lib.js': LIB, 't.test.mjs': TR(N81) }, { 'lib.js': FORGE }, C);
     expect(r.gate).not.toBe('PASS');
     expect(r).toEqual({ refused: 'spec_pinned_test_dynamic_load' });
   }, 60_000);
@@ -78,8 +78,8 @@ describe('N8-1: a pure index read reaching Function', () => {
 describe('N8-1 (a): every verifier child runs with --disallow-code-generation-from-strings', () => {
   it('a base test that builds code from strings fails in the verifier run (EvalError), so even an unscanned route gives no Function', async () => {
     const dir = join(root, `dcg${k++}`); mkdirSync(dir);
-    W(join(dir, 't.test.js'), "const t=require('node:test');const a=require('node:assert');\nt('blocked',()=>{a.throws(()=>new (Object.getPrototypeOf(()=>0).constructor)('return 1'),EvalError);a.throws(()=>eval('1'),EvalError);});\n");
-    const r = await G.spawnVerifierRunner({ timeoutMs: 60_000 })(['node', '--test', '--test-reporter=tap', 't.test.js'], dir);
+    W(join(dir, 't.test.mjs'), "import t from 'node:test'; import a from 'node:assert'; \nt('blocked',()=>{a.throws(()=>new (Object.getPrototypeOf(()=>0).constructor)('return 1'),EvalError);a.throws(()=>eval('1'),EvalError);});\n");
+    const r = await G.spawnVerifierRunner({ timeoutMs: 60_000 })(['node', '--test', '--test-reporter=tap', 't.test.mjs'], dir);
     expect(r.exitCode).toBe(0);
   }, 60_000);
 });
@@ -110,4 +110,25 @@ describe('N8-1 (a): the real missions still pass with the flag on (full gate)', 
     expect(r.gate).toBe('PASS');
     expect(JSON.stringify(r.summary)).toMatch(/"pass":5[,}]/u);
   }, 120_000);
+});
+
+describe('N8-2: HTML-comment parse divergence + .mjs-only pinned tests (Round 9)', () => {
+  const body = "import t from 'node:test'; import a from 'assert';\n" + N82 + "\n" + [0, 1, 2].map((i) => `t('c${i}',()=>a.strictEqual(f(${i}),${i + 1}));`).join('\n') + '\n';
+  it('Skywalker exact input as .cjs through the full gate: spec_pinned_test_not_mjs, never PASS', async () => {
+    const r = await fullGate({ 'lib.js': LIB, 't.test.cjs': body }, { 'lib.js': FORGE }, 'node --test t.test.cjs');
+    expect(r).toEqual({ refused: 'spec_pinned_test_not_mjs' });
+  }, 60_000);
+  it('Skywalker exact input as .js with no package.json through the full gate: spec_pinned_test_not_mjs', async () => {
+    const r = await fullGate({ 'lib.js': LIB, 't.test.js': body }, { 'lib.js': FORGE }, 'node --test t.test.js');
+    expect(r).toEqual({ refused: 'spec_pinned_test_not_mjs' });
+  }, 60_000);
+  it('Skywalker exact input as .mjs through the full gate: spec_pinned_test_html_comment', async () => {
+    const r = await fullGate({ 'lib.js': LIB, 't.test.mjs': body }, { 'lib.js': FORGE }, C);
+    expect(r).toEqual({ refused: 'spec_pinned_test_html_comment' });
+  }, 60_000);
+  it('scan refuses <!-- and line-leading --> anywhere', () => {
+    expect(G.scanPinnedSource('const x = 1 <!-- y\n')).toBe('spec_pinned_test_html_comment');
+    expect(G.scanPinnedSource('const x = 1;\n--> y\n')).toBe('spec_pinned_test_html_comment');
+    expect(G.scanPinnedSource("const s = '<!--';\n")).toBe('spec_pinned_test_html_comment');
+  });
 });

@@ -19,23 +19,23 @@ const repoWith = (files: Record<string, string>, head: Record<string, string> = 
 };
 describe('R5-7: static floor lexer', () => {
   it('regex .test(, comments and strings do not count; one real test gives floor 1 and passes', async () => {
-    const T = "const test = require('node:test');\n// test( one\n/* it( two test( */\nconst s = 'test(' + \"it(\" + `test(`;\nconst ok = /x/.test('x');\ntest('real', () => { if (!ok || !s) throw new Error(); });\n";
-    const { repo, base } = repoWith({ 't.test.js': T });
-    const s = G.pinVerifierSpec({ testCommand: 'node --test t.test.js', workspace: repo, base });
+    const T = "import test from 'node:test'; \n// test( one\n/* it( two test( */\nconst s = 'test(' + \"it(\" + `test(`;\nconst ok = /x/.test('x');\ntest('real', () => { if (!ok || !s) throw new Error(); });\n";
+    const { repo, base } = repoWith({ 't.test.mjs': T });
+    const s = G.pinVerifierSpec({ testCommand: 'node --test t.test.mjs', workspace: repo, base });
     expect('refused' in s ? s.refused : s.minTests).toEqual([1]);
   });
   it('real calls are still counted (test, it, nested in describe, after a division)', () => {
-    const T = "const { test, it, describe } = require('node:test');\nconst x = 4 / 2; test('a', () => {});\ndescribe('d', () => { it('b', () => {}); it ('c', () => {}); });\n";
-    const { repo, base } = repoWith({ 't.test.js': T });
-    const s = G.pinVerifierSpec({ testCommand: 'node --test t.test.js', workspace: repo, base });
+    const T = "import { test, it, describe } from 'node:test'; \nconst x = 4 / 2; test('a', () => {});\ndescribe('d', () => { it('b', () => {}); it ('c', () => {}); });\n";
+    const { repo, base } = repoWith({ 't.test.mjs': T });
+    const s = G.pinVerifierSpec({ testCommand: 'node --test t.test.mjs', workspace: repo, base });
     expect('refused' in s ? s.refused : s.minTests).toEqual([3]);
   });
 });
 describe('R5-9 F2: the floor is at least 1', () => {
   it('an all-skipped base file (static count 0) is refused: pass 0 is below the floor of 1', async () => {
-    const { repo, base, head } = repoWith({ 't.test.js': "const test = require('node:test');\ntest.skip('x', () => {});\n" });
+    const { repo, base, head } = repoWith({ 't.test.mjs': "import test from 'node:test'; \ntest.skip('x', () => {});\n" });
     const runner = G.spawnVerifierRunner({ timeoutMs: 30_000 });
-    const verifierSpec = (await G.pinVerifierSpecWithBaseRun({ testCommand: 'node --test t.test.js', workspace: repo, base }, G.spawnVerifierRunner({ timeoutMs: 30_000 }))) as G.E2VerifierSpec;
+    const verifierSpec = (await G.pinVerifierSpecWithBaseRun({ testCommand: 'node --test t.test.mjs', workspace: repo, base }, G.spawnVerifierRunner({ timeoutMs: 30_000 }))) as G.E2VerifierSpec;
     expect(verifierSpec.minTests).toEqual([1]);
     const p = { verifierSpec, reexec: await G.recordVerifierReexec({ spec: verifierSpec, cwd: repo, runner }), diff: await G.recordGitDiff({ base, head, cwd: repo, runner }), binding: { runId: RUN, base, head, workspace: repo }, modelId: MODEL };
     const { lines, evidence } = await liveCapture(root, 'f2.jsonl', GOOD());

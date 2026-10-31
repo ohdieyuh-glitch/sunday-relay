@@ -19,7 +19,9 @@
  */
 import * as ts from 'typescript';
 
-export type E2PinnedScanRefusal = 'spec_pinned_test_imports_untrusted' | 'spec_pinned_test_dynamic_load' | 'spec_pinned_test_context_reference' | 'spec_pinned_test_unparsed';
+export type E2PinnedScanRefusal = 'spec_pinned_test_imports_untrusted' | 'spec_pinned_test_dynamic_load' | 'spec_pinned_test_context_reference' | 'spec_pinned_test_unparsed'
+  /** Round 9 (Skywalker N8-2): `<!--` or `-->` anywhere (node's CommonJS script goal reads them as line comments; TypeScript does not). */
+  | 'spec_pinned_test_html_comment';
 
 const BASE_ALLOW = ['assert', 'assert/strict', 'crypto', 'fs', 'fs/promises', 'path', 'path/posix', 'test', 'url', 'util'];
 /** Exact module specifiers a pinned file may load. `test` is node:test-only (the bare `test` is a package name). */
@@ -112,7 +114,11 @@ function valueInert(node: ts.Node, ctx: FlowCtx, depth = 0): boolean {
   return false;
 }
 export function scanPinnedSourceAst(src: string): E2PinnedScanRefusal | null {
-  const sf = ts.createSourceFile('pinned.js', src, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+  /* Round 9 N8-2: the HTML-like comment forms are a parse differential between node (CJS script goal) and TypeScript.
+     Refused anywhere, even inside a string, before parsing. Pinned files are .mjs only (the gate's
+     spec_pinned_test_not_mjs), so node parses them with the module goal, the same as this parse. */
+  if (src.includes('<!--') || src.includes('-->')) return 'spec_pinned_test_html_comment';
+  const sf = ts.createSourceFile('pinned.mjs', src, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
   const diags = (sf as unknown as { parseDiagnostics?: readonly ts.Diagnostic[] }).parseDiagnostics;
   if (!Array.isArray(diags) || diags.length > 0) return 'spec_pinned_test_unparsed';
   const found = new Set<E2PinnedScanRefusal>();

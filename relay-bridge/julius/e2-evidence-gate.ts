@@ -413,7 +413,9 @@ export type E2VerifierSpecRefusal =
   | E2VerifierShapeRefusal | 'spec_file_not_at_base' | 'spec_base_run_untrusted' | 'spec_base_tree_unreadable'
   | E2PinnedSourceRefusal | 'spec_plain_node_no_floor'
   /** Round 8 (PILOT R7-5): a pinned file is not a regular blob (100644/100755) in the base tree, e.g. a symlink. */
-  | 'spec_file_not_regular';
+  | 'spec_file_not_regular'
+  /** Round 9 (Skywalker N8-2, 5:57 PM): a pinned test/entry file of a node form is not `.mjs` (ESM goal only). */
+  | 'spec_pinned_test_not_mjs';
 /** Round 7 R6-1/R6-3: why a pinned test/entry file's base content was refused by {@link scanPinnedSource}. */
 export type E2PinnedSourceRefusal = E2PinnedScanRefusal;
 const SPECS = new WeakSet<object>();
@@ -545,6 +547,7 @@ export function pinVerifierSpec(input: E2MissionVerifierInput): E2VerifierSpec |
       if (blob === null) return no('spec_file_not_at_base');
       listing ??= baseTreeListing(input.workspace, input.base);
       if (listing === null || !isRegularAtBase(listing, f)) return no('spec_file_not_regular');
+      if (!f.endsWith('.mjs')) return no('spec_pinned_test_not_mjs');
       const scanned = scanPinnedSource(blob.toString('utf8'));
       if (scanned !== null) return no(scanned);
       pins[f] = sha256(blob);

@@ -16,7 +16,7 @@ const W = (p: string, c: string): void => { mkdirSync(dirname(p), { recursive: t
 beforeAll(() => { root = realpathSync(mkdtempSync(join(tmpdir(), 'e2r12s-'))); });
 afterAll(() => { rmSync(root, { recursive: true, force: true }); });
 type Out = { refused: string } | { reasons: readonly string[]; summary: unknown };
-async function gate(baseFiles: Record<string, string>, headFiles: Record<string, string>, testCommand = 'node --test t.test.js', minTests?: number, seedDir?: string): Promise<Out> {
+async function gate(baseFiles: Record<string, string>, headFiles: Record<string, string>, testCommand = 'node --test t.test.mjs', minTests?: number, seedDir?: string): Promise<Out> {
   n += 1; const repo = join(root, `s${n}`); mkdirSync(repo);
   if (seedDir !== undefined) cpSync(seedDir, repo, { recursive: true });
   const { base, head } = makeRepo(repo, { 'a.txt': '1\n', ...baseFiles }, { 'a.txt': '2\n', ...headFiles }, W);
@@ -32,12 +32,12 @@ const UNTRUSTED = { refused: 'spec_pinned_test_imports_untrusted' };
 /* The forged-protocol case: the pinned test loads a coder module; at head that module, seeing NODE_TEST_CONTEXT, would
    write node's child protocol itself. The spec refuses before anything runs. */
 const FORGE = "if (process.env.NODE_TEST_CONTEXT === 'child-v8') { /* write serialized test:pass events, then exit */ process.exit(0); }\nmodule.exports = (x) => x + 1;\n";
-const T_REL = "const test = require('node:test'); const a = require('node:assert'); const f = require('./lib.js');\ntest('c0', () => a.strictEqual(f(0), 1));\n";
-const T_OK = "const test = require('node:test'); const a = require('assert'); const fs = require('node:fs');\ntest('c0', () => a.strictEqual(fs.readFileSync('a.txt', 'utf8'), '2\\n'));\n";
+const T_REL = "import test from 'node:test'; import a from 'node:assert'; const f = require('./lib.js');\ntest('c0', () => a.strictEqual(f(0), 1));\n";
+const T_OK = "import test from 'node:test'; import a from 'assert'; import fs from 'node:fs'; \ntest('c0', () => a.strictEqual(fs.readFileSync('a.txt', 'utf8'), '2\\n'));\n";
 
 describe('R6-1/R6-3: the spec refuses pinned test files that load anything but Node built-ins', () => {
   it('the forged-protocol case is refused at spec time through the full gate', async () => {
-    expect(await gate({ 'lib.js': 'module.exports = () => 0;\n', 't.test.js': T_REL }, { 'lib.js': FORGE })).toEqual(UNTRUSTED);
+    expect(await gate({ 'lib.js': 'module.exports = () => 0;\n', 't.test.mjs': T_REL }, { 'lib.js': FORGE })).toEqual(UNTRUSTED);
   }, 60_000);
   it('a relative import (ESM, re-export, side effect, require) is refused', async () => {
     for (const src of ["import test from 'node:test'; import f from './lib.mjs';\ntest('x', () => f());\n", "export * from '../x.js';\n", "import './setup.js';\n", "const x = require(\"./x\");\n", "import test from 'node:test'; import p from 'lodash';\n"]) {
@@ -58,12 +58,12 @@ describe('R6-1/R6-3: the spec refuses pinned test files that load anything but N
   it('a NODE_TEST_CONTEXT reference is refused', async () => {
     expect(G.scanPinnedSource("const c = process.env.NODE_TEST_CONTEXT;\n")).toBe('spec_pinned_test_context_reference');
     expect(G.scanPinnedSource("const c = process.env['NODE_TEST_' + 'CONTEXT'];\n")).toBe('spec_pinned_test_context_reference');
-    expect(await gate({ 't.test.js': "require('node:test')('x', () => {}); delete process.env.NODE_TEST_CONTEXT;\n" }, {})).toEqual({ refused: 'spec_pinned_test_context_reference' });
+    expect(await gate({ 't.test.mjs': "import t from 'node:test'; t('x', () => {}); delete process.env.NODE_TEST_CONTEXT;\n" }, {})).toEqual({ refused: 'spec_pinned_test_context_reference' });
   }, 60_000);
   it('a builtin-only file is accepted and passes the full gate', async () => {
     expect(G.scanPinnedSource(T_OK)).toBeNull();
     expect(G.scanPinnedSource("// require('./x') in a comment\nconst s = \"import('./y')\"; import a from 'node:assert/strict'; export {};\n")).toBeNull();
-    expect(await gate({ 't.test.js': T_OK }, {})).toEqual({ reasons: [], summary: { tests: 1, pass: 1, fail: 0 } });
+    expect(await gate({ 't.test.mjs': T_OK }, {})).toEqual({ reasons: [], summary: { tests: 1, pass: 1, fail: 0 } });
   }, 60_000);
   it('julius-inworld-data-1 seed fixture: accepted, 4/4 with a correct solution', async () => {
     const seed = resolve(__dirname, '../../.github/julius-missions/julius-inworld-data-1/workspace');
@@ -72,13 +72,13 @@ describe('R6-1/R6-3: the spec refuses pinned test files that load anything but N
     expect(r).toEqual({ reasons: [], summary: { tests: 4, pass: 4, fail: 0 } });
   }, 60_000);
   it('plain `node <file>` is refused without a mission floor, and the floor is enforced with one', async () => {
-    const T2 = "const test = require('node:test');\ntest('a', () => {}); test('b', () => {});\n";
-    expect(await gate({ 't.test.js': T2 }, {}, 'node t.test.js')).toEqual({ refused: 'spec_plain_node_no_floor' });
-    expect(await gate({ 't.test.js': T2 }, {}, 'node t.test.js', 0)).toEqual({ refused: 'spec_plain_node_no_floor' });
-    expect(await gate({ 't.test.js': T2 }, {}, 'node t.test.js', 2)).toEqual({ reasons: [], summary: { tests: 2, pass: 2, fail: 0 } });
-    const r = await gate({ 't.test.js': T2 }, {}, 'node t.test.js', 3);
+    const T2 = "import test from 'node:test'; \ntest('a', () => {}); test('b', () => {});\n";
+    expect(await gate({ 't.test.mjs': T2 }, {}, 'node t.test.mjs')).toEqual({ refused: 'spec_plain_node_no_floor' });
+    expect(await gate({ 't.test.mjs': T2 }, {}, 'node t.test.mjs', 0)).toEqual({ refused: 'spec_plain_node_no_floor' });
+    expect(await gate({ 't.test.mjs': T2 }, {}, 'node t.test.mjs', 2)).toEqual({ reasons: [], summary: { tests: 2, pass: 2, fail: 0 } });
+    const r = await gate({ 't.test.mjs': T2 }, {}, 'node t.test.mjs', 3);
     expect('reasons' in r && r.reasons.length > 0).toBe(true);
-    expect(await gate({ 't.test.js': "process.exit(0);\n" }, {}, 'node t.test.js', 1)).not.toEqual(expect.objectContaining({ reasons: [] }));
+    expect(await gate({ 't.test.mjs': "process.exit(0);\n" }, {}, 'node t.test.mjs', 1)).not.toEqual(expect.objectContaining({ reasons: [] }));
   }, 120_000);
 });
 describe('Round 7 PILOT R6-7: the pinned-source scan refuses the AST-scan forms too', () => {
@@ -89,7 +89,7 @@ describe('Round 7 PILOT R6-7: the pinned-source scan refuses the AST-scan forms 
       "require('Node:FS');", "const p = 'node:fs'; require(p);", "require('../outside/x.js');",
     ];
     for (const f of forms) expect(G.scanPinnedSource(f), f).not.toBeNull();
-    expect(G.scanPinnedSource("const test = require('node:test'); const assert = require('node:assert');")).toBeNull();
+    expect(G.scanPinnedSource("import test from 'node:test'; import assert from 'node:assert'; ")).toBeNull();
   });
 });
 describe('Round 7 mutation kills on the pinned-source scan (mut/mutants12.out SC2, SC10)', () => {

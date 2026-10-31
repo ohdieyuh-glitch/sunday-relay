@@ -25,35 +25,35 @@ async function world(baseFiles: Record<string, string>, headFiles: Record<string
   const g = G.e2Gate({ streamLines: lines, anchor: anchorOf('workflow_output', evidence.finalHash), ...p });
   return { g, reexec: p.reexec };
 }
-const T = "const test = require('node:test'); const a = require('assert'); const h = require('#h');\ntest('h', () => a.strictEqual(h(), 2));\n";
+const T = "import test from 'node:test'; import a from 'assert'; const h = require('#h');\ntest('h', () => a.strictEqual(h(), 2));\n";
 describe('L1: node_modules in the diff, any case', () => {
   for (const dir of ['Node_Modules', 'NODE_MODULES', 'sub/Node_modules']) {
     it(`${dir}/x.js in the diff is e2_verifier_binary_untrusted`, async () => {
-      const { g } = await world({ 'a.txt': '1\n', 't.test.js': "require('node:test')('x', () => {});\n" }, { 'a.txt': '2\n', [`${dir}/x.js`]: 'module.exports = 1;\n' }, 'node --test t.test.js');
+      const { g } = await world({ 'a.txt': '1\n', 't.test.mjs': "import t from 'node:test'; t('x', () => {});\n" }, { 'a.txt': '2\n', [`${dir}/x.js`]: 'module.exports = 1;\n' }, 'node --test t.test.mjs');
       expect(g.ok ? [] : g.reasons).toContain('e2_verifier_binary_untrusted');
     });
   }
 });
 describe('R5-6: a nested package.json in the diff', () => {
-  const base = { 'a.txt': '1\n', 'test/package.json': JSON.stringify({ imports: { '#h': './h.js' } }), 'test/h.js': 'module.exports = () => 1;\n', 'test/stub.js': 'module.exports = () => 2;\n', 'test/t.test.js': T };
+  const base = { 'a.txt': '1\n', 'test/package.json': JSON.stringify({ imports: { '#h': './h.js' } }), 'test/h.js': 'module.exports = () => 1;\n', 'test/stub.js': 'module.exports = () => 2;\n', 'test/t.test.mjs': T };
   /* Round 7 R6-1/R6-3: a pinned test that loads `#h` (an imports-map specifier, i.e. workspace code) is refused at spec time. */
   it('PILOT world: a pinned test that loads #h is now refused at spec time (spec_pinned_test_imports_untrusted)', async () => {
     const repo = join(root, 'pilot-h'); mkdirSync(repo);
     const { base: b } = makeRepo(repo, base, { 'a.txt': '2\n', 'test/package.json': JSON.stringify({ imports: { '#h': './stub.js' } }) }, W);
-    expect(G.pinVerifierSpec({ testCommand: 'node --test test/t.test.js', workspace: repo, base: b })).toEqual({ refused: 'spec_pinned_test_imports_untrusted' });
+    expect(G.pinVerifierSpec({ testCommand: 'node --test test/t.test.mjs', workspace: repo, base: b })).toEqual({ refused: 'spec_pinned_test_imports_untrusted' });
   });
-  const B2 = { 'a.txt': '1\n', 'test/t.test.js': "require('node:test')('x', () => {});\n" };
+  const B2 = { 'a.txt': '1\n', 'test/t.test.mjs': "import t from 'node:test'; t('x', () => {});\n" };
   it('PILOT world, builtin-only test: a nested package.json in the diff is still refused', async () => {
-    const { g, reexec } = await world(B2, { 'a.txt': '2\n', 'test/package.json': JSON.stringify({ imports: { '#h': './stub.js' } }) }, 'node --test test/t.test.js');
+    const { g, reexec } = await world(B2, { 'a.txt': '2\n', 'test/package.json': JSON.stringify({ imports: { '#h': './stub.js' } }) }, 'node --test test/t.test.mjs');
     expect(reexec?.commands[0]?.exitCode).toBe(0);
     expect(g.ok ? [] : g.reasons).toContain('e2_verifier_binary_untrusted');
   });
   it('a new nested Package.JSON is refused too', async () => {
-    const { g } = await world(B2, { 'a.txt': '2\n', 'test/sub/Package.JSON': '{}' }, 'node --test test/t.test.js');
+    const { g } = await world(B2, { 'a.txt': '2\n', 'test/sub/Package.JSON': '{}' }, 'node --test test/t.test.mjs');
     expect(g.ok ? [] : g.reasons).toContain('e2_verifier_binary_untrusted');
   });
   it('control: an unrelated diff with the same base is not refused for this', async () => {
-    const { g } = await world(B2, { 'a.txt': '2\n' }, 'node --test test/t.test.js');
+    const { g } = await world(B2, { 'a.txt': '2\n' }, 'node --test test/t.test.mjs');
     expect(g.ok ? [] : g.reasons).not.toContain('e2_verifier_binary_untrusted');
   });
 });

@@ -10,8 +10,8 @@ import { MODEL, RUN, START, anchorOf, call, git, liveCapture, makeRepo, tail } f
 const root = realpathSync(mkdtempSync(join(tmpdir(), 'e2-iso13-')));
 afterAll(() => { rmSync(root, { recursive: true, force: true }); });
 const W = (p: string, c: string): void => { mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, c); };
-const TB = "const t = require('node:test'); const a = require('node:assert');\nt('one', () => a.strictEqual(1, 1));\n";
-const BASEF = { 'a.js': 'function a(){\n return 1;\n}\n'.repeat(5), 't.test.js': TB };
+const TB = "import t from 'node:test'; import a from 'node:assert'; \nt('one', () => a.strictEqual(1, 1));\n";
+const BASEF = { 'a.js': 'function a(){\n return 1;\n}\n'.repeat(5), 't.test.mjs': TB };
 const HEADF = { 'a.js': 'function a(){\n return 2;\n}\n'.repeat(5) };
 let k = 0;
 async function gate(o: { head2?: (r: string, b: string) => string; hook?: (r: string) => void } = {}) {
@@ -20,7 +20,7 @@ async function gate(o: { head2?: (r: string, b: string) => string; hook?: (r: st
   if (o.head2) head = o.head2(repo, base);
   o.hook?.(repo);
   const runner = G.spawnVerifierRunner({ timeoutMs: 60_000 });
-  const spec = await G.pinVerifierSpecWithBaseRun({ testCommand: 'node --test t.test.js', workspace: repo, base }, runner);
+  const spec = await G.pinVerifierSpecWithBaseRun({ testCommand: 'node --test t.test.mjs', workspace: repo, base }, runner);
   if ('refused' in spec) return { refused: spec.refused, diff: null };
   const reexec = await G.recordVerifierReexec({ spec, cwd: repo, runner });
   const diff = await G.recordGitDiff({ base, head, cwd: repo, runner });

@@ -17,12 +17,12 @@ const W = (p: string, c: string): void => { mkdirSync(dirname(p), { recursive: t
 beforeAll(() => { root = realpathSync(mkdtempSync(join(tmpdir(), 'e2r12b-'))); });
 afterAll(() => { rmSync(root, { recursive: true, force: true }); });
 /* Base registers 3 tests through the alias `t` (static count 0); the coder's data cuts it to 1. */
-const T = "const t = require('node:test'); const k = JSON.parse(require('node:fs').readFileSync(__dirname + '/k.json', 'utf8')); for (let i = 0; i < k; i += 1) t('c' + i, () => {});\n";
+const T = "import __fs from 'node:fs'; import t from 'node:test'; const k = JSON.parse(__fs.readFileSync(new URL(import.meta.url).pathname.replace(/[^/]*$/u, '') + 'k.json', 'utf8')); for (let i = 0; i < k; i += 1) t('c' + i, () => {});\n";
 async function gate(baseRun: boolean): Promise<readonly string[]> {
   n += 1; const repo = join(root, `b${n}`); mkdirSync(repo);
-  const { base, head } = makeRepo(repo, { 'a.txt': '1\n', 'k.json': '3', 't.test.js': T }, { 'a.txt': '2\n', 'k.json': '1' }, W);
+  const { base, head } = makeRepo(repo, { 'a.txt': '1\n', 'k.json': '3', 't.test.mjs': T }, { 'a.txt': '2\n', 'k.json': '1' }, W);
   const runner = G.spawnVerifierRunner({ timeoutMs: 30_000 });
-  const input = { testCommand: 'node --test t.test.js', workspace: repo, base };
+  const input = { testCommand: 'node --test t.test.mjs', workspace: repo, base };
   const spec = (baseRun ? await G.pinVerifierSpecWithBaseRun(input, runner) : G.pinVerifierSpec(input)) as G.E2VerifierSpec;
   const reexec = await G.recordVerifierReexec({ spec, cwd: repo, runner });
   const { lines, evidence } = await liveCapture(root, `b${n}.jsonl`, GOOD());
@@ -38,9 +38,9 @@ describe('R6-4: the gate requires a base-run spec', () => {
   }, 60_000);
   it('BR7: an unreadable base tree is a refusal, never the static spec', async () => {
     const repo = join(root, 'br7'); mkdirSync(repo);
-    const { base } = makeRepo(repo, { 'a.txt': '1\n', 'other.txt': 'x\n', 't.test.js': "require('node:test')('x', () => {});\n" }, {}, W);
+    const { base } = makeRepo(repo, { 'a.txt': '1\n', 'other.txt': 'x\n', 't.test.mjs': "import t from 'node:test'; t('x', () => {});\n" }, {}, W);
     const oid = execFileSync('git', ['-C', repo, 'rev-parse', `${base}:other.txt`]).toString().trim();
     unlinkSync(join(repo, '.git/objects', oid.slice(0, 2), oid.slice(2)));
-    expect(await G.pinVerifierSpecWithBaseRun({ testCommand: 'node --test t.test.js', workspace: repo, base }, G.spawnVerifierRunner({ timeoutMs: 30_000 }))).toEqual({ refused: 'spec_base_tree_unreadable' });
+    expect(await G.pinVerifierSpecWithBaseRun({ testCommand: 'node --test t.test.mjs', workspace: repo, base }, G.spawnVerifierRunner({ timeoutMs: 30_000 }))).toEqual({ refused: 'spec_base_tree_unreadable' });
   }, 60_000);
 });

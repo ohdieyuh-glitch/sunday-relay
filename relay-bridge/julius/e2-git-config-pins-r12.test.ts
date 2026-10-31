@@ -23,7 +23,7 @@ describe('R6-7: gate git calls ignore a malicious workspace .git/config', () => 
   });
   it('fsmonitor, hooks, diff driver/textconv, external diff and sshCommand run nothing during spec, base run and diff', async () => {
     const repo = join(root, 'r'); mkdirSync(repo);
-    const { base, head } = makeRepo(repo, { 'a.txt': '1\n', 't.test.js': "require('node:test')('x', () => {});\n" }, { 'a.txt': '2\n' }, W);
+    const { base, head } = makeRepo(repo, { 'a.txt': '1\n', 't.test.mjs': "import t from 'node:test'; t('x', () => {});\n" }, { 'a.txt': '2\n' }, W);
     const marker = join(root, 'PWNED');
     const evil = join(root, 'evil.sh');
     writeFileSync(evil, `#!/bin/sh\necho "$0 $*" >> ${marker}\nexit 0\n`); chmodSync(evil, 0o755);
@@ -32,7 +32,7 @@ describe('R6-7: gate git calls ignore a malicious workspace .git/config', () => 
     appendFileSync(join(repo, '.git/config'), `[core]\n\tfsmonitor = ${evil}\n\thooksPath = ${hooks}\n\tsshCommand = ${evil}\n\tpager = ${evil}\n[diff]\n\texternal = ${evil}\n[diff "evil"]\n\ttextconv = ${evil}\n\tcommand = ${evil}\n`);
     writeFileSync(join(repo, '.git/info/attributes'), '* diff=evil\n');
     const runner = G.spawnVerifierRunner({ timeoutMs: 30_000 });
-    const spec = await G.pinVerifierSpecWithBaseRun({ testCommand: 'node --test t.test.js', workspace: repo, base }, runner);
+    const spec = await G.pinVerifierSpecWithBaseRun({ testCommand: 'node --test t.test.mjs', workspace: repo, base }, runner);
     expect('refused' in spec).toBe(false);
     const diff = await G.recordGitDiff({ base, head, cwd: repo, runner });
     expect(diff).not.toBeNull();
