@@ -79,8 +79,8 @@ describe('R7-1 steering: snapshotCommitSafely (plumbing, --no-filters, no add/st
   it('a filter named by an untracked .gitattributes AND .git/info/attributes cannot run: refused at config, and with no config filter the attrs are inert', () => {
     const r = repo(); W(join(r.dir, '.gitattributes'), '* filter=x diff=x\n'); W(join(r.dir, '.git/info/attributes'), '* filter=x\n'); W(join(r.dir, 'a.txt'), '2\n');
     const out = S.snapshotCommitSafely({ workspace: r.dir, parent: r.head, message: 'snap', author: { name: 'J', email: 'j@x' } });
-    expect('commit' in out).toBe(true);
-    const c = (out as { commit: string }).commit;
+    expect('head' in out).toBe(true);
+    const c = (out as { head: string }).head;
     expect(git(r.dir, 'show', `${c}:a.txt`)).toBe('2');
     expect(git(r.dir, 'rev-parse', `${c}^`)).toBe(r.head);
     expect(existsSync(r.marker)).toBe(false);
@@ -91,26 +91,29 @@ describe('R7-1 steering: snapshotCommitSafely (plumbing, --no-filters, no add/st
     symlinkSync(join(secretDir, 's.txt'), join(r.dir, 'leak.txt'));
     symlinkSync(secretDir, join(r.dir, 'leakdir'));
     symlinkSync('a.txt', join(r.dir, 'inside.txt'));
-    const out = S.snapshotCommitSafely({ workspace: r.dir, parent: r.head, message: 'snap', author: { name: 'J', email: 'j@x' } }) as { commit: string; outsideLinks: readonly string[] };
+    const out = S.snapshotCommitSafely({ workspace: r.dir, parent: r.head, message: 'snap', author: { name: 'J', email: 'j@x' } }) as { head: string; outsideLinks: readonly string[] };
     expect(out.outsideLinks).toEqual(['leak.txt', 'leakdir']);
-    const tree = git(r.dir, 'ls-tree', '-r', out.commit);
+    const tree = git(r.dir, 'ls-tree', '-r', out.head);
     expect(tree).toMatch(/^120000 blob [0-9a-f]{40}\tleak\.txt$/mu);
     expect(tree).toMatch(/^120000 blob [0-9a-f]{40}\tleakdir$/mu);
     expect(tree).not.toMatch(/leakdir\/s\.txt/u);
-    expect(git(r.dir, 'cat-file', '-p', `${out.commit}:leak.txt`)).toBe(join(secretDir, 's.txt'));
-    expect(spawnSync('git', ['grep', '-q', 'SECRET', out.commit], { cwd: r.dir }).status).toBe(1);
+    expect(git(r.dir, 'cat-file', '-p', `${out.head}:leak.txt`)).toBe(join(secretDir, 's.txt'));
+    expect(spawnSync('git', ['grep', '-q', 'SECRET', out.head], { cwd: r.dir }).status).toBe(1);
   });
   it('the refusal shape matches the gate ({refused: <named code>}) and every code is listed', () => {
     expect(S.SAFE_GIT_REASONS).toEqual(['safe_git_workspace_invalid', 'safe_git_dir_not_plain', 'safe_git_config_unparsed', 'safe_git_config_include', 'safe_git_config_filter',
-      'safe_git_config_core', 'safe_git_config_alias', 'safe_git_config_extensions', 'safe_git_config_other', 'safe_git_head_unreadable', 'safe_git_parent_invalid', 'safe_git_tree_unreadable', 'safe_git_write_failed']);
+      'safe_git_config_core', 'safe_git_config_alias', 'safe_git_config_extensions', 'safe_git_config_other', 'safe_git_head_unreadable', 'safe_git_parent_invalid', 'safe_git_tree_unreadable', 'safe_git_write_failed',
+      'safe_git_head_not_parent', 'safe_git_secret_path', 'safe_git_dropped_path', 'safe_git_tree_mismatch', 'safe_git_alternates_present', 'safe_git_objdir_failed']);
     expect(S.recordHeadSafely({ workspace: 'relative' })).toEqual({ refused: 'safe_git_workspace_invalid' });
   });
 });
 
 describe('R7-1 steering: a .git owned by another uid with world-writable config and hooks (live-workspace.sh layout)', () => {
   const sudoOk = spawnSync('sudo', ['-n', 'true']).status === 0;
-  it('recordHeadSafely reads the head; a world-writable hook never runs; hostile config there is still refused (needs passwordless sudo)', () => {
-    if (!sudoOk) { expect(spawnSync('sudo', ['-n', 'true']).status).not.toBe(0); return; } /* no sudo: nothing to chown with; asserted, not skipped */
+  /* Round 9 (PILOT): offline there is no passwordless sudo, so the FOREIGN-uid branch is NOT exercised here; the test then
+     only asserts that sudo is unavailable (SIMULATED/UNVERIFIED path, labelled as such in the test name). */
+  it(`recordHeadSafely reads the head; a world-writable hook never runs; hostile config there is still refused (${sudoOk ? 'foreign uid: exercised' : 'foreign uid: NOT exercised offline, no sudo'})`, () => {
+    if (!sudoOk) { expect(spawnSync('sudo', ['-n', 'true']).status).not.toBe(0); return; }
     const r = repo();
     W(join(r.dir, '.git/hooks/post-checkout'), `#!/bin/sh\necho ran >> ${r.marker}\n`); chmodSync(join(r.dir, '.git/hooks/post-checkout'), 0o777);
     chmodSync(join(r.dir, '.git/config'), 0o666);
@@ -142,8 +145,8 @@ describe('Round 8 mutation kills (mut/mutants13.py survivors)', () => {
   });
   it('S9: --no-filters: info/attributes `* text` does not normalise CRLF in the snapshot', () => {
     const r = repo(); W(join(r.dir, '.git/info/attributes'), '* text\n'); W(join(r.dir, 'a.txt'), 'x\r\n');
-    const out = snap(r) as { commit: string };
-    expect(execFileSync('git', ['cat-file', 'blob', `${out.commit}:a.txt`], { cwd: r.dir }).toString('latin1')).toBe('x\r\n');
+    const out = snap(r) as { head: string };
+    expect(execFileSync('git', ['cat-file', 'blob', `${out.head}:a.txt`], { cwd: r.dir }).toString('latin1')).toBe('x\r\n');
   });
   it('S12: a parent that is not a commit in the repo is refused', () => {
     const r = repo();
@@ -152,8 +155,8 @@ describe('Round 8 mutation kills (mut/mutants13.py survivors)', () => {
   });
   it('S13/S14: the exec bit is kept and nothing under .git is snapshotted', () => {
     const r = repo(); W(join(r.dir, 'run.sh'), 'echo\n'); chmodSync(join(r.dir, 'run.sh'), 0o755);
-    const out = snap(r) as { commit: string };
-    const tree = git(r.dir, 'ls-tree', '-r', out.commit);
+    const out = snap(r) as { head: string };
+    const tree = git(r.dir, 'ls-tree', '-r', out.head);
     expect(tree).toMatch(/^100755 blob [0-9a-f]{40}\trun\.sh$/mu);
     expect(tree).toMatch(/^100644 blob [0-9a-f]{40}\ta\.txt$/mu);
     expect(tree).not.toMatch(/\t\.git\//u);

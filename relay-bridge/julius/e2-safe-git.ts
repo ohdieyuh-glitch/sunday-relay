@@ -22,17 +22,19 @@
  * snapshot (every file except any `.git` entry is recorded).
  */
 import { execFileSync } from 'node:child_process';
-import { lstatSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
+import { registerSnapshotObjectDir, unregisterSnapshotObjectDir } from './e2-snapshot-objects';
 import { E2_GIT_ENV, E2_VERIFIER_PATH, e2GitPins } from './e2-evidence-gate';
 
 export const SAFE_GIT_REASONS = Object.freeze(['safe_git_workspace_invalid', 'safe_git_dir_not_plain', 'safe_git_config_unparsed', 'safe_git_config_include', 'safe_git_config_filter',
-  'safe_git_config_core', 'safe_git_config_alias', 'safe_git_config_extensions', 'safe_git_config_other', 'safe_git_head_unreadable', 'safe_git_parent_invalid', 'safe_git_tree_unreadable', 'safe_git_write_failed'] as const);
+  'safe_git_config_core', 'safe_git_config_alias', 'safe_git_config_extensions', 'safe_git_config_other', 'safe_git_head_unreadable', 'safe_git_parent_invalid', 'safe_git_tree_unreadable', 'safe_git_write_failed',
+  /* Round 9: */ 'safe_git_head_not_parent', 'safe_git_secret_path', 'safe_git_dropped_path', 'safe_git_tree_mismatch', 'safe_git_alternates_present', 'safe_git_objdir_failed'] as const);
 export type SafeGitRefusal = typeof SAFE_GIT_REASONS[number];
-type Refused = { readonly refused: SafeGitRefusal };
-const no = (refused: SafeGitRefusal): Refused => Object.freeze({ refused });
+type Refused = { readonly refused: SafeGitRefusal; readonly paths?: readonly string[] };
+const no = (refused: SafeGitRefusal, paths?: readonly string[]): Refused => Object.freeze(paths === undefined ? { refused } : { refused, paths: Object.freeze([...paths]) });
 
 /** Allowed repository-config keys (lower-cased `section.key`; a subsection is `*`). */
 export const SAFE_GIT_ALLOWED_KEY: ReadonlySet<string> = new Set([
@@ -120,49 +122,125 @@ export function recordHeadSafely(input: { readonly workspace: string }): { reado
   return SHA.test(head) ? Object.freeze({ head, configKeys: c.configKeys }) : no('safe_git_head_unreadable');
 }
 type Entry = { mode: string; data: Buffer; path: string };
-function walk(ws: string): { entries: Entry[]; outsideLinks: string[] } {
-  const entries: Entry[] = []; const outsideLinks: string[] = [];
+/**
+ * Round 9 (PILOT R8-2): secret-looking paths are refused by name, whatever the coder's .gitignore / info/exclude say (those
+ * are never read). A secret-path refusal is a FAILED run, never a pass.
+ */
+export function isSecretPath(p: string): boolean {
+  const parts = p.split('/'); const base = (parts[parts.length - 1] ?? '').toLowerCase();
+  if (parts.slice(0, -1).some((d) => /^secret/iu.test(d))) return true;
+  return /^\.env/u.test(base) || base.endsWith('.pem') || base.endsWith('.key') || base.startsWith('id_rsa') || base.startsWith('credentials')
+    || base === '.npmrc' || base === '.netrc' || /^secret/u.test(base);
+}
+/** Round 9 (PILOT R8-3): a path component git refuses or silently drops (.git in any case, with trailing dots/spaces, or the 8.3 alias git~N). */
+export function isDroppedPath(p: string): boolean {
+  return p.split('/').some((c) => { const n = c.toLowerCase().replace(/[. ]+$/u, ''); return n === '.git' || /^git~\d+$/u.test(n); });
+}
+function walk(ws: string): { entries: Entry[]; outsideLinks: string[]; secret: string[]; dropped: string[] } {
+  const entries: Entry[] = []; const outsideLinks: string[] = []; const secret: string[] = []; const dropped: string[] = [];
   const rec = (rel: string): void => {
     for (const d of readdirSync(join(ws, rel), { withFileTypes: true })) {
-      if (d.name === '.git') continue;
+      if (rel === '' && d.name === '.git') continue;
       const p = rel === '' ? d.name : `${rel}/${d.name}`;
+      if (isDroppedPath(p)) { dropped.push(p); continue; }
       const abs = join(ws, p);
       const st = lstatSync(abs);
+      if (st.isDirectory()) { if (/^(secret|\.env)/iu.test(d.name)) { secret.push(`${p}/`); continue; } rec(p); continue; }
+      if (isSecretPath(p)) { secret.push(p); continue; }
       if (st.isSymbolicLink()) {
         const target = readlinkSync(abs);
         const r = relative(ws, resolve(dirname(abs), target));
         if (r === '..' || r.startsWith(`..${sep}`) || isAbsolute(r)) outsideLinks.push(p);
         entries.push({ mode: '120000', data: Buffer.from(target), path: p });
-      } else if (st.isDirectory()) rec(p);
-      else if (st.isFile()) entries.push({ mode: (st.mode & 0o111) !== 0 ? '100755' : '100644', data: readFileSync(abs), path: p });
+      } else if (st.isFile()) entries.push({ mode: (st.mode & 0o111) !== 0 ? '100755' : '100644', data: readFileSync(abs), path: p });
     }
   };
   rec('');
-  return { entries: entries.sort((a, b) => (a.path < b.path ? -1 : 1)), outsideLinks: outsideLinks.sort() };
+  const byPath = (a: { path: string } | string, b: { path: string } | string): number => { const x = typeof a === 'string' ? a : a.path; const y = typeof b === 'string' ? b : b.path; return x < y ? -1 : x > y ? 1 : 0; };
+  return { entries: entries.sort(byPath), outsideLinks: outsideLinks.sort(), secret: secret.sort(), dropped: dropped.sort() };
 }
-/** Snapshots the working tree into a commit on `parent` with plumbing only; see the module comment. */
-export function snapshotCommitSafely(input: { readonly workspace: string; readonly parent: string; readonly message: string; readonly author: { readonly name: string; readonly email: string } }):
-  { readonly commit: string; readonly tree: string; readonly outsideLinks: readonly string[]; readonly configKeys: readonly string[] } | Refused {
+/**
+ * Round 9 (Skywalker 6:01 PM design): the throwaway object directory the snapshot's objects live in. Created by
+ * snapshotCommitSafely outside the workspace, mode 0700, unique; attached to the repo ONLY through a one-line
+ * `.git/objects/info/alternates` written by this module (refused up front if one already exists) so the gate's unchanged
+ * recordGitDiff can read the snapshot. dispose() removes the alternates line and the directory; idempotent. After dispose
+ * the head hash survives but its objects can no longer be read through it.
+ */
+export type SnapshotObjectDir = { readonly path: string; readonly disposed: () => boolean };
+export type SnapshotResult = {
+  readonly head: string; readonly tree: string; readonly objectDir: SnapshotObjectDir; readonly dispose: () => void;
+  readonly included: readonly string[]; readonly skipped: readonly string[]; readonly outsideLinks: readonly string[]; readonly configKeys: readonly string[];
+};
+/**
+ * Snapshots the working tree into a commit on `parent` with plumbing only; see the module comment.
+ * Round 9: refuses unless HEAD == parent (override: `allowHeadNotParent: true`, for a caller that has deliberately moved
+ * HEAD and records why); refuses secret-looking paths (safe_git_secret_path, with `paths`) and paths git would drop
+ * (safe_git_dropped_path, with `paths`); compares the written tree's file list and modes to the no-follow walk
+ * (safe_git_tree_mismatch). Objects go only to the throwaway object dir. Wiring order: snapshot -> recordGitDiff -> e2Gate ->
+ * dispose(). A refusal carries no object dir (already cleaned).
+ */
+export function snapshotCommitSafely(input: { readonly workspace: string; readonly parent: string; readonly message: string; readonly author: { readonly name: string; readonly email: string }; readonly allowHeadNotParent?: true }):
+  SnapshotResult | Refused {
   const c = check(input?.workspace);
   if ('refused' in c) return c;
   if (typeof input.parent !== 'string' || !SHA.test(input.parent) || sg(c, ['rev-parse', '--verify', '-q', `${input.parent}^{commit}`])?.trim() !== input.parent) return no('safe_git_parent_invalid');
+  if (input.allowHeadNotParent !== true) {
+    const head = sg(c, ['rev-parse', '--verify', '-q', 'HEAD^{commit}'])?.trim() ?? '';
+    if (head !== input.parent) return no('safe_git_head_not_parent');
+  }
+  const altFile = join(c.gitDir, 'objects', 'info', 'alternates');
+  if (existsSync(altFile) || lstatExists(altFile)) return no('safe_git_alternates_present');
   let w;
   try { w = walk(c.ws); } catch { return no('safe_git_tree_unreadable'); }
+  if (w.dropped.length > 0) return no('safe_git_dropped_path', w.dropped);
+  if (w.secret.length > 0) return no('safe_git_secret_path', w.secret);
+  let objDir: string;
+  try {
+    objDir = realpathSync(mkdtempSync(join(tmpdir(), 'e2-snap-objects-')));
+    chmodSync(objDir, 0o700);
+    const r = relative(c.ws, objDir);
+    if (!(r === '..' || r.startsWith(`..${sep}`) || isAbsolute(r))) { rmSync(objDir, { recursive: true, force: true }); return no('safe_git_objdir_failed'); }
+  } catch { return no('safe_git_objdir_failed'); }
+  let disposed = false;
+  const dispose = (): void => {
+    if (disposed) return;
+    disposed = true;
+    unregisterSnapshotObjectDir(objDir);
+    try { if (readFileSync(altFile, 'utf8') === `${objDir}\n`) rmSync(altFile, { force: true }); } catch { /* absent */ }
+    rmSync(objDir, { recursive: true, force: true });
+  };
   const tmp = mkdtempSync(join(tmpdir(), 'e2-safe-git-'));
+  const obj = { GIT_OBJECT_DIRECTORY: objDir, GIT_ALTERNATE_OBJECT_DIRECTORIES: join(c.gitDir, 'objects') };
+  let ok = false;
   try {
     const lines: string[] = [];
     for (const e of w.entries) {
-      const oid = sg(c, ['hash-object', '-w', '--no-filters', '--stdin'], { input: e.data })?.trim() ?? '';
+      const oid = sg(c, ['hash-object', '-w', '--no-filters', '--stdin'], { input: e.data, env: obj })?.trim() ?? '';
       if (!SHA.test(oid)) return no('safe_git_write_failed');
       lines.push(`${e.mode} ${oid}\t${e.path}`);
     }
-    const idx = { GIT_INDEX_FILE: join(tmp, 'index') };
+    const idx = { ...obj, GIT_INDEX_FILE: join(tmp, 'index') };
     if (sg(c, ['update-index', '-z', '--index-info'], { input: lines.map((l) => `${l}\u0000`).join(''), env: idx }) === null) return no('safe_git_write_failed');
     const tree = sg(c, ['write-tree'], { env: idx })?.trim() ?? '';
     if (!SHA.test(tree)) return no('safe_git_write_failed');
-    const who = { GIT_AUTHOR_NAME: input.author.name, GIT_AUTHOR_EMAIL: input.author.email, GIT_COMMITTER_NAME: input.author.name, GIT_COMMITTER_EMAIL: input.author.email };
-    const commit = sg(c, ['commit-tree', tree, '-p', input.parent, '-F', '-'], { input: input.message, env: who })?.trim() ?? '';
-    if (!SHA.test(commit)) return no('safe_git_write_failed');
-    return Object.freeze({ commit, tree, outsideLinks: Object.freeze(w.outsideLinks), configKeys: c.configKeys });
-  } finally { rmSync(tmp, { recursive: true, force: true }); }
+    const listed = sg(c, ['ls-tree', '-r', '-z', '--full-tree', tree], { env: obj });
+    if (listed === null) return no('safe_git_write_failed');
+    const got = listed.split('\u0000').filter((x) => x !== '').map((l) => { const [meta, path] = l.split('\t'); return `${(meta ?? '').split(' ')[0]} ${path}`; });
+    const want = w.entries.map((e) => `${e.mode} ${e.path}`);
+    if (got.length !== want.length || got.some((g, i) => g !== want[i])) return no('safe_git_tree_mismatch');
+    const who = { ...obj, GIT_AUTHOR_NAME: input.author.name, GIT_AUTHOR_EMAIL: input.author.email, GIT_COMMITTER_NAME: input.author.name, GIT_COMMITTER_EMAIL: input.author.email };
+    const head = sg(c, ['commit-tree', tree, '-p', input.parent, '-F', '-'], { input: input.message, env: who })?.trim() ?? '';
+    if (!SHA.test(head)) return no('safe_git_write_failed');
+    try { mkdirSync(dirname(altFile), { recursive: true }); writeFileSync(altFile, `${objDir}\n`, { flag: 'wx' }); } catch { return no('safe_git_alternates_present'); }
+    registerSnapshotObjectDir(objDir);
+    ok = true;
+    return Object.freeze({
+      head, tree, dispose, objectDir: Object.freeze({ path: objDir, disposed: () => disposed }),
+      included: Object.freeze(w.entries.map((e) => e.path)), skipped: Object.freeze(['.git']), outsideLinks: Object.freeze(w.outsideLinks), configKeys: c.configKeys,
+    });
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+    if (!ok) dispose();
+  }
 }
+function lstatExists(p: string): boolean { try { lstatSync(p); return true; } catch { return false; } }

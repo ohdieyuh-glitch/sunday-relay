@@ -6,6 +6,7 @@ import { basename, dirname, isAbsolute, join, normalize as normalizePath, posix 
 
 import { E2_STREAM_LABEL_LIVE, verifyEvidenceChain } from './cursor-run-stream-evidence';
 import { isWorkflowAnchor, type ExternalAnchor } from './e2-external-anchor';
+import { isLiveSnapshotObjectDir } from './e2-snapshot-objects';
 import { scanPinnedSourceAst, type E2PinnedScanRefusal } from './e2-pinned-source-allowlist';
 export { E2_PINNED_BANNED_NAMES, E2_PINNED_IMPORT_ALLOWLIST, E2_PINNED_MAX_BYTES, E2_PINNED_MAX_DEPTH } from './e2-pinned-source-allowlist';
 
@@ -713,6 +714,14 @@ const GIT_PINS = Object.freeze([
 ]);
 /** M-8: the same settings as explicit flags (a flag beats config). */
 const DIFF_FLAGS = Object.freeze(['-U3', '--inter-hunk-context=0', '-O/dev/null', '--src-prefix=a/', '--dst-prefix=b/', '--diff-algorithm=myers', '--indent-heuristic']);
+/** Round 9: the one alternates file the gate accepts is the line snapshotCommitSafely wrote for a still-live object dir. */
+function snapshotAlternatesOnly(file: string): boolean {
+  try {
+    if (!lstatSync(file).isFile()) return false;
+    const m = /^(\/[^\n]+)\n$/u.exec(readFileSync(file, 'utf8'));
+    return m !== null && isLiveSnapshotObjectDir(m[1] as string);
+  } catch { return false; }
+}
 /** Round 8 R7-2 (+ M-8): repository state that changes what history or attributes mean. Paths are under the common dir. */
 function isolationFindings(commonDir: string): readonly string[] {
   if (!isAbsolute(commonDir)) return Object.freeze(['git_dir_unknown']);
@@ -722,7 +731,7 @@ function isolationFindings(commonDir: string): readonly string[] {
   if (nonEmpty('info/attributes')) out.push('info/attributes');
   if (present('info/grafts')) out.push('info/grafts');
   if (present('shallow')) out.push('shallow');
-  if (present('objects/info/alternates')) out.push('objects/info/alternates');
+  if (present('objects/info/alternates') && !snapshotAlternatesOnly(join(commonDir, 'objects/info/alternates'))) out.push('objects/info/alternates');
   if (present('objects/info/http-alternates')) out.push('objects/info/http-alternates');
   try { if (readdirSync(join(commonDir, 'refs/replace')).length > 0) out.push('refs/replace'); } catch { /* absent */ }
   try { if (/ refs\/replace\//u.test(readFileSync(join(commonDir, 'packed-refs'), 'utf8'))) out.push('packed-refs:refs/replace'); } catch { /* absent */ }
