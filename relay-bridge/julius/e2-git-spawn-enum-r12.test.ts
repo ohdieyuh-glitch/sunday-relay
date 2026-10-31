@@ -27,13 +27,13 @@ function sitesOf(file: string): Site[] {
       const line = sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1;
       if (name === 'moduleGit' && a0 !== undefined) {
         const t = a0.getText(sf);
-        out.push({ file, line, via: 'moduleGit', argsText: t, callText: (ts.isCallExpression(n.parent) ? n.parent : n).getText(sf), sub: /safeDir\([^)]*\),\s*'([a-z-]+)'/u.exec(t)?.[1] ?? '?' });
+        out.push({ file, line, via: 'moduleGit', argsText: t, callText: (ts.isCallExpression(n.parent) ? n.parent : n).getText(sf), sub: /safeDir\([^)]*\),\s*(?:\.\.\.objPin,\s*)?'([a-z-]+)'/u.exec(t)?.[1] ?? '?' });
       } else if (['execFileSync', 'execFile', 'spawn', 'spawnImpl', 'spawnSync', 'execSync', 'exec', 'fork'].includes(name) && a0 !== undefined) {
         const prog = a0.getText(sf);
         all.push(`${file}:${name}:${prog}`);
         if (/['"`]git['"`]/u.test(prog) || gitBins.has(prog)) {
           const t = n.arguments[1]?.getText(sf) ?? '';
-          out.push({ file, line, via: name, argsText: t, callText: n.getText(sf), sub: /safeDir\([^)]*\),\s*'([a-z-]+)'/u.exec(t)?.[1] ?? (t === 'argv.slice(1)' ? '(capture)' : '?') });
+          out.push({ file, line, via: name, argsText: t, callText: n.getText(sf), sub: /safeDir\([^)]*\),\s*(?:\.\.\.objPin,\s*)?'([a-z-]+)'/u.exec(t)?.[1] ?? (t === 'argv.slice(1)' ? '(capture)' : '?') });
         }
       }
     }
@@ -53,10 +53,10 @@ describe('every git invocation in the e2 gate/spec/diff path carries the pins', 
       'e2-evidence-gate.ts:execFileSync:cat-file',
       'e2-evidence-gate.ts:execFileSync:ls-tree',
       'e2-evidence-gate.ts:execFileSync:ls-tree',
+      'e2-evidence-gate.ts:moduleGit:rev-parse' /* Round 10 F9-5: isolation is read before the diff */,
       'e2-evidence-gate.ts:moduleGit:diff',
       'e2-evidence-gate.ts:moduleGit:merge-base',
       'e2-evidence-gate.ts:moduleGit:diff',
-      'e2-evidence-gate.ts:moduleGit:rev-parse',
       'e2-safe-git.ts:execFileSync:?' /* round 8 R7-1: the one site in the safe primitive (sg) */,
     ]);
     expect(sites.length).toBe(9);
@@ -107,8 +107,14 @@ describe('every git invocation in the e2 gate/spec/diff path carries the pins', 
       if (s.via !== 'moduleGit') expect(s.callText, `${s.file}:${s.line}`).toMatch(/\.\.\.E2_GIT_ENV/u);
     }
     const src = readFileSync(join(DIR, 'e2-evidence-gate.ts'), 'utf8');
-    expect(src).toMatch(/isModuleGit\(argv\)\s*\?\s*\{ LANG: 'C\.UTF-8', LC_ALL: 'C\.UTF-8', \.\.\.E2_GIT_ENV,/u);
-    expect(src).toMatch(/env: \{ LANG: 'C\.UTF-8', LC_ALL: 'C\.UTF-8', \.\.\.E2_GIT_ENV, GIT_NO_REPLACE_OBJECTS: '1', PATH: E2_VERIFIER_PATH \} \}, \(e, out\)/u);
+    expect(src).toMatch(/isModuleGit\(argv\)\s*\?\s*\{ LANG: 'C\.UTF-8', LC_ALL: 'C\.UTF-8', \.\.\.E2_GIT_ENV, GIT_NO_REPLACE_OBJECTS: '1', \.\.\.snapshotAltEnv\(argv\), PATH: E2_VERIFIER_PATH \}/u);
+    expect(src).toMatch(/env: \{ LANG: 'C\.UTF-8', LC_ALL: 'C\.UTF-8', \.\.\.E2_GIT_ENV, GIT_NO_REPLACE_OBJECTS: '1', \.\.\.snapshotAltEnv\(argv\), PATH: E2_VERIFIER_PATH \} \}, \(e, out\)/u);
+    /* Round 10: the only extra module-git env is GIT_ALTERNATE_OBJECT_DIRECTORIES, from the module-minted objPin; the
+       only spread after the pins besides safeDir is that objPin, built only after checkSnapshotObjectDir passed. */
+    expect(src.match(/GIT_ALTERNATE_OBJECT_DIRECTORIES:/gu)?.length).toBe(1);
+    expect(src).toMatch(/const objPin = input\.objectDir === undefined \? \[\] : \['-c', `\$\{OBJDIR_PIN\}\$\{input\.objectDir\}`\];/u);
+    expect(src.indexOf('checkSnapshotObjectDir(input.objectDir')).toBeLessThan(src.indexOf('const objPin'));
+    for (const st of sites.filter((x) => x.via === 'moduleGit')) expect(st.argsText.replace(/\.\.\.objPin, /u, '')).not.toMatch(/\.\.\.(?!GIT_PINS|safeDir|DIFF_FLAGS)/u);
     /* the safe primitive's one extra pin, and its env puts caller extras BEFORE the gate env. */
     expect(S.SAFE_GIT_EXTRA_PINS).toEqual(['-c', 'commit.gpgSign=false']);
     expect(readFileSync(join(DIR, 'e2-safe-git.ts'), 'utf8')).toMatch(/env: \{ \.\.\.\(opts\.env \?\? \{\}\), LANG: 'C\.UTF-8', LC_ALL: 'C\.UTF-8', \.\.\.E2_GIT_ENV, GIT_DIR: c\.gitDir,[^}]*PATH: E2_VERIFIER_PATH \}/u);

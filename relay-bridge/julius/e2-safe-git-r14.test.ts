@@ -4,7 +4,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import * as S from './e2-safe-git';
 import * as G from './e2-evidence-gate';
 import { git } from './e2-test-kit';
@@ -29,6 +29,10 @@ const allObjectsContain = (gitDir: string, needle: string): boolean => {
   return out.stdout.toString('latin1').includes(needle);
 };
 
+/* Round 10: snapshot objects are readable only with the object dir in GIT_ALTERNATE_OBJECT_DIRECTORIES; the test's own
+   git reads get it through the env, reset after each test. */
+const see = (out: S.SnapshotResult): void => { process.env.GIT_ALTERNATE_OBJECT_DIRECTORIES = out.objectDir.path; };
+afterEach(() => { delete process.env.GIT_ALTERNATE_OBJECT_DIRECTORIES; });
 describe('Skywalker: HEAD guard', () => {
   it('HEAD != parent is refused (safe_git_head_not_parent) and leaves no object dir', () => {
     const r = repo(); W(join(r.dir, 'a.txt'), '2\n'); git(r.dir, '-c', 'commit.gpgsign=false', 'commit', '-qam', 'moved');
@@ -38,7 +42,7 @@ describe('Skywalker: HEAD guard', () => {
   });
   it('the documented override allowHeadNotParent: true snapshots on the given parent', () => {
     const r = repo(); W(join(r.dir, 'a.txt'), '2\n'); git(r.dir, '-c', 'commit.gpgsign=false', 'commit', '-qam', 'moved');
-    const out = snap(r, { allowHeadNotParent: true }) as S.SnapshotResult;
+    const out = snap(r, { allowHeadNotParent: true }) as S.SnapshotResult; see(out);
     expect(git(r.dir, 'rev-parse', `${out.head}^`)).toBe(r.head);
     out.dispose();
   });
@@ -82,7 +86,7 @@ describe('PILOT R8-3: paths git drops are a named refusal (kills S14)', () => {
   });
 });
 
-describe('6:01 PM design: throwaway object dir, dispose()', () => {
+describe('Round 10 design: throwaway object dir passed to the gate by env only, dispose()', () => {
   it('objects live only in a 0700 dir outside the workspace; the gate diff reads them; dispose is idempotent and removes everything', async () => {
     const r = repo(); W(join(r.dir, 'b.txt'), 'new file r14\n');
     const loose = (): string => git(r.dir, 'count-objects', '-v').split('\n').filter((l) => /^(count|size|in-pack):/u.test(l)).join('\n');
@@ -93,10 +97,15 @@ describe('6:01 PM design: throwaway object dir, dispose()', () => {
     expect(relative(r.dir, d).startsWith('..')).toBe(true);
     expect(loose()).toBe(looseBefore); /* nothing written into the workspace object store */
     const runner = G.spawnVerifierRunner({ timeoutMs: 30_000 });
-    const diff = await G.recordGitDiff({ base: r.head, head: out.head, cwd: r.dir, runner });
+    expect(existsSync(join(r.dir, '.git/objects/info/alternates'))).toBe(false); /* Round 10: nothing written into .git */
+    const diff = await G.recordGitDiff({ base: r.head, head: out.head, cwd: r.dir, runner, objectDir: d });
     expect(diff?.exitCode).toBe(0);
     expect(diff?.paths).toEqual(['b.txt']);
-    expect(diff?.isolated).toBe(true); /* the gate accepts exactly this live snapshot alternates line */
+    expect(diff?.isolated).toBe(true);
+    expect(diff?.objectDirRefusal).toBeNull();
+    expect(diff?.argv).toContain(`e2.snapshotObjectDir=${d}`);
+    const without = await G.recordGitDiff({ base: r.head, head: out.head, cwd: r.dir, runner });
+    expect(without?.exitCode).not.toBe(0); /* without the env the snapshot is unreadable */
     out.dispose(); out.dispose();
     expect(out.objectDir.disposed()).toBe(true);
     expect(existsSync(d)).toBe(false);
@@ -110,18 +119,20 @@ describe('6:01 PM design: throwaway object dir, dispose()', () => {
     expect(Object.keys(out)).toEqual(['refused', 'paths']);
     expect(objDirs()).toEqual(before);
   });
-  it('after dispose, the same alternates line written back is an isolation finding again (registry is live-only)', async () => {
+  it('Round 10: an alternates line naming the LIVE snapshot dir is still an isolation finding (no exception)', async () => {
     const r = repo(); W(join(r.dir, 'b.txt'), 'x\n');
     const out = snap(r) as S.SnapshotResult; const d = out.objectDir.path; const h = out.head;
-    out.dispose();
     W(join(r.dir, '.git/objects/info/alternates'), `${d}\n`);
+    try {
     const diff = await G.recordGitDiff({ base: r.head, head: h, cwd: r.dir, runner: G.spawnVerifierRunner({ timeoutMs: 30_000 }) });
     expect(diff?.isolationFindings).toContain('objects/info/alternates');
+    expect(diff?.isolated).toBe(false);
+    } finally { out.dispose(); }
   });
-  it('S25 kill: a refusal AFTER the object dir exists (objects/info is a file, so the alternates line cannot be written) removes the dir', () => {
-    const r = repo(); rmSync(join(r.dir, '.git/objects/info'), { recursive: true, force: true }); writeFileSync(join(r.dir, '.git/objects/info'), '');
+  it('S25 kill (Round 10): a refusal AFTER the object dir exists (commit-tree rejects an empty ident) removes the dir', () => {
+    const r = repo(); W(join(r.dir, 'b.txt'), 'x\n');
     const before = objDirs();
-    expect(snap(r)).toEqual({ refused: 'safe_git_alternates_present' });
+    expect(S.snapshotCommitSafely({ workspace: r.dir, parent: r.head, message: 'm', author: { name: '<>', email: '<>' } })).toEqual({ refused: 'safe_git_write_failed' });
     expect(objDirs()).toEqual(before);
   });
   it('a pre-existing objects/info/alternates is refused (it could inject objects)', () => {
@@ -130,7 +141,7 @@ describe('6:01 PM design: throwaway object dir, dispose()', () => {
   });
   it('the recorded tree equals the no-follow walk (file list and modes)', () => {
     const r = repo(); W(join(r.dir, 'd/e.txt'), 'e\n');
-    const out = snap(r) as S.SnapshotResult;
+    const out = snap(r) as S.SnapshotResult; see(out);
     expect(execFileSync('git', ['ls-tree', '-r', '--name-only', out.head], { cwd: r.dir }).toString().trim().split('\n')).toEqual(out.included);
     out.dispose();
   });

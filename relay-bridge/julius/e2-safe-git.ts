@@ -22,11 +22,10 @@
  * snapshot (every file except any `.git` entry is recorded).
  */
 import { execFileSync } from 'node:child_process';
-import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
-import { registerSnapshotObjectDir, unregisterSnapshotObjectDir } from './e2-snapshot-objects';
 import { E2_GIT_ENV, E2_VERIFIER_PATH, e2GitPins } from './e2-evidence-gate';
 
 export const SAFE_GIT_REASONS = Object.freeze(['safe_git_workspace_invalid', 'safe_git_dir_not_plain', 'safe_git_config_unparsed', 'safe_git_config_include', 'safe_git_config_filter',
@@ -160,11 +159,12 @@ function walk(ws: string): { entries: Entry[]; outsideLinks: string[]; secret: s
   return { entries: entries.sort(byPath), outsideLinks: outsideLinks.sort(), secret: secret.sort(), dropped: dropped.sort() };
 }
 /**
- * Round 9 (Skywalker 6:01 PM design): the throwaway object directory the snapshot's objects live in. Created by
- * snapshotCommitSafely outside the workspace, mode 0700, unique; attached to the repo ONLY through a one-line
- * `.git/objects/info/alternates` written by this module (refused up front if one already exists) so the gate's unchanged
- * recordGitDiff can read the snapshot. dispose() removes the alternates line and the directory; idempotent. After dispose
- * the head hash survives but its objects can no longer be read through it.
+ * Round 10 (Skywalker 5a6e3400: the Round 9 registry + alternates-line design is withdrawn): the throwaway object
+ * directory the snapshot's objects live in. Created by snapshotCommitSafely outside the workspace, mode 0700, unique.
+ * NOTHING is written into the coder's .git. The caller passes `objectDir.path` to recordGitDiff({ objectDir }), which
+ * checks it (checkSnapshotObjectDir) and hands it to git only through the gate's fixed module-git env
+ * (GIT_ALTERNATE_OBJECT_DIRECTORIES). dispose() removes the directory; idempotent. After dispose the head hash survives
+ * but its objects can no longer be read.
  */
 export type SnapshotObjectDir = { readonly path: string; readonly disposed: () => boolean };
 export type SnapshotResult = {
@@ -176,8 +176,8 @@ export type SnapshotResult = {
  * Round 9: refuses unless HEAD == parent (override: `allowHeadNotParent: true`, for a caller that has deliberately moved
  * HEAD and records why); refuses secret-looking paths (safe_git_secret_path, with `paths`) and paths git would drop
  * (safe_git_dropped_path, with `paths`); compares the written tree's file list and modes to the no-follow walk
- * (safe_git_tree_mismatch). Objects go only to the throwaway object dir. Wiring order: snapshot -> recordGitDiff -> e2Gate ->
- * dispose(). A refusal carries no object dir (already cleaned).
+ * (safe_git_tree_mismatch). Objects go only to the throwaway object dir. Wiring order: snapshot -> recordGitDiff({ objectDir:
+ * objectDir.path }) -> e2Gate -> dispose() in a finally. A refusal carries no object dir (already cleaned).
  */
 export function snapshotCommitSafely(input: { readonly workspace: string; readonly parent: string; readonly message: string; readonly author: { readonly name: string; readonly email: string }; readonly allowHeadNotParent?: true }):
   SnapshotResult | Refused {
@@ -205,8 +205,6 @@ export function snapshotCommitSafely(input: { readonly workspace: string; readon
   const dispose = (): void => {
     if (disposed) return;
     disposed = true;
-    unregisterSnapshotObjectDir(objDir);
-    try { if (readFileSync(altFile, 'utf8') === `${objDir}\n`) rmSync(altFile, { force: true }); } catch { /* absent */ }
     rmSync(objDir, { recursive: true, force: true });
   };
   const tmp = mkdtempSync(join(tmpdir(), 'e2-safe-git-'));
@@ -231,8 +229,6 @@ export function snapshotCommitSafely(input: { readonly workspace: string; readon
     const who = { ...obj, GIT_AUTHOR_NAME: input.author.name, GIT_AUTHOR_EMAIL: input.author.email, GIT_COMMITTER_NAME: input.author.name, GIT_COMMITTER_EMAIL: input.author.email };
     const head = sg(c, ['commit-tree', tree, '-p', input.parent, '-F', '-'], { input: input.message, env: who })?.trim() ?? '';
     if (!SHA.test(head)) return no('safe_git_write_failed');
-    try { mkdirSync(dirname(altFile), { recursive: true }); writeFileSync(altFile, `${objDir}\n`, { flag: 'wx' }); } catch { return no('safe_git_alternates_present'); }
-    registerSnapshotObjectDir(objDir);
     ok = true;
     return Object.freeze({
       head, tree, dispose, objectDir: Object.freeze({ path: objDir, disposed: () => disposed }),

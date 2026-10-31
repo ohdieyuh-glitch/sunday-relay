@@ -6,7 +6,6 @@ import { basename, dirname, isAbsolute, join, normalize as normalizePath, posix 
 
 import { E2_STREAM_LABEL_LIVE, verifyEvidenceChain } from './cursor-run-stream-evidence';
 import { isWorkflowAnchor, type ExternalAnchor } from './e2-external-anchor';
-import { isLiveSnapshotObjectDir } from './e2-snapshot-objects';
 import { scanPinnedSourceAst, type E2PinnedScanRefusal } from './e2-pinned-source-allowlist';
 export { E2_PINNED_BANNED_NAMES, E2_PINNED_IMPORT_ALLOWLIST, E2_PINNED_MAX_BYTES, E2_PINNED_MAX_DEPTH } from './e2-pinned-source-allowlist';
 
@@ -137,6 +136,18 @@ const MODULE_GIT = new Set<string>();
 const moduleGit = (argv: readonly string[]): readonly string[] => { MODULE_GIT.add(JSON.stringify(argv)); return Object.freeze([...argv]); };
 const isModuleGit = (argv: readonly string[]): boolean => MODULE_GIT.has(JSON.stringify(argv));
 /**
+ * Round 10 (Skywalker 5a6e3400 F9-1/F9-2/F9-5): the snapshot's throwaway object dir reaches git ONLY through the gate's
+ * fixed module-git env. recordGitDiff (after checkSnapshotObjectDir) mints `-c e2.snapshotObjectDir=<dir>` into the argv
+ * (an inert config key, so the recorded argv names the dir); the runner turns that ONE module-minted pin into
+ * GIT_ALTERNATE_OBJECT_DIRECTORIES. Caller env never reaches module git, and nothing is written into the coder's .git.
+ */
+const OBJDIR_PIN = 'e2.snapshotObjectDir=';
+const snapshotAltEnv = (argv: readonly string[]): Record<string, string> => {
+  if (!isModuleGit(argv)) return {};
+  const i = argv.findIndex((a, j) => j > 0 && argv[j - 1] === '-c' && a.startsWith(OBJDIR_PIN));
+  return i < 0 ? {} : { GIT_ALTERNATE_OBJECT_DIRECTORIES: (argv[i] as string).slice(OBJDIR_PIN.length) };
+};
+/**
  * PILOT 43b93a4e N-3, 5366ad30 R3-2/R3-4 and Skywalker 5366ad30 M1/M2: the closed verifier allowlist (see verifierShape).
  * Every named file must exist, be a regular file, and realpath inside the cwd. An absolute argv0 must be the binary the
  * fixed PATH resolves to. Git, wrappers, shells, inline code and no-op forms are refused.
@@ -191,7 +202,7 @@ export function spawnVerifierRunner(options: {
     if (bin === null) { resolve({ ...refused, cause: 'refused' }); return; }
     /* Module git gets only its own fixed env (R3-3/L2); caller env never reaches git. */
     const env: Record<string, string> = isModuleGit(argv)
-      ? { LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...E2_GIT_ENV, GIT_NO_REPLACE_OBJECTS: '1', PATH: E2_VERIFIER_PATH }
+      ? { LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...E2_GIT_ENV, GIT_NO_REPLACE_OBJECTS: '1', ...snapshotAltEnv(argv), PATH: E2_VERIFIER_PATH }
       : { LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...noPath(options.env), ...noPath(extraEnv), PATH: E2_VERIFIER_PATH, NODE_OPTIONS: E2_VERIFIER_NODE_OPTIONS };
     let child: ReturnType<typeof spawn>;
     try {
@@ -264,7 +275,7 @@ export function spawnVerifierRunner(options: {
     const bin = resolveProgram('git');
     if (bin === null) { resolve(null); return; }
     execFile(bin, argv.slice(1), { cwd, shell: false, encoding: 'buffer', maxBuffer: 64 * 1024 * 1024, timeout: timeoutMs, killSignal: 'SIGKILL',
-      env: { LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...E2_GIT_ENV, GIT_NO_REPLACE_OBJECTS: '1', PATH: E2_VERIFIER_PATH } }, (e, out) => resolve(e === null ? out : null));
+      env: { LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...E2_GIT_ENV, GIT_NO_REPLACE_OBJECTS: '1', ...snapshotAltEnv(argv), PATH: E2_VERIFIER_PATH } }, (e, out) => resolve(e === null ? out : null));
   }));
   return runner;
 }
@@ -358,6 +369,8 @@ export interface E2DiffEvidence {
   /** Round 8 R7-4: every `.gitattributes` in the working tree (any case, symlinks not followed). Recorded only: the diff
    *  reads attributes from the empty tree (`--attr-source`), so these cannot change the recorded patch. */
   readonly attributeFiles: readonly string[] | null;
+  /** Round 10: the named reason the snapshot object dir was refused (no git ran); null when none was given or it passed. */
+  readonly objectDirRefusal?: E2ObjdirRefusal | null;
 }
 
 const validArgv = (a: unknown): a is readonly string[] =>
@@ -714,13 +727,31 @@ const GIT_PINS = Object.freeze([
 ]);
 /** M-8: the same settings as explicit flags (a flag beats config). */
 const DIFF_FLAGS = Object.freeze(['-U3', '--inter-hunk-context=0', '-O/dev/null', '--src-prefix=a/', '--dst-prefix=b/', '--diff-algorithm=myers', '--indent-heuristic']);
-/** Round 9: the one alternates file the gate accepts is the line snapshotCommitSafely wrote for a still-live object dir. */
-function snapshotAlternatesOnly(file: string): boolean {
-  try {
-    if (!lstatSync(file).isFile()) return false;
-    const m = /^(\/[^\n]+)\n$/u.exec(readFileSync(file, 'utf8'));
-    return m !== null && isLiveSnapshotObjectDir(m[1] as string);
-  } catch { return false; }
+export const E2_OBJDIR_REFUSALS = Object.freeze(['objdir_not_plain', 'objdir_mode', 'objdir_owner', 'objdir_inside_workspace', 'objdir_info_present', 'objdir_unexpected_entry'] as const);
+export type E2ObjdirRefusal = typeof E2_OBJDIR_REFUSALS[number];
+/**
+ * Round 10: the snapshot object dir the gate will read through GIT_ALTERNATE_OBJECT_DIRECTORIES. It must be an absolute,
+ * canonical (no symlink anywhere), plain directory, mode 0700, owned by the gate's uid, outside the workspace, and hold
+ * only what snapshotCommitSafely writes: two-hex loose-object fan-out dirs (plain dirs, not symlinks) of plain files.
+ * `info` (nested alternates, F9-1), `pack` (.keep/.promisor/packs) and anything else refuse. Checked before any git runs.
+ */
+export function checkSnapshotObjectDir(dir: unknown, workspace: string): E2ObjdirRefusal | null {
+  if (typeof dir !== 'string' || !isAbsolute(dir) || dir.includes('\n') || dir.includes(':')) return 'objdir_not_plain';
+  let st; let real: string;
+  try { st = lstatSync(dir); real = realpathSync(dir); } catch { return 'objdir_not_plain'; }
+  if (st.isSymbolicLink() || !st.isDirectory() || real !== dir) return 'objdir_not_plain';
+  let ws: string; try { ws = realpathSync(workspace); } catch { return 'objdir_inside_workspace'; }
+  if (real === ws || real.startsWith(ws.endsWith('/') ? ws : `${ws}/`)) return 'objdir_inside_workspace';
+  if ((st.mode & 0o777) !== 0o700) return 'objdir_mode';
+  if (typeof process.getuid === 'function' && st.uid !== process.getuid()) return 'objdir_owner';
+  let ents; try { ents = readdirSync(dir, { withFileTypes: true }); } catch { return 'objdir_not_plain'; }
+  if (ents.some((e) => e.name === 'info')) return 'objdir_info_present';
+  for (const e of ents) {
+    if (!/^[0-9a-f]{2}$/u.test(e.name) || !e.isDirectory() || e.isSymbolicLink()) return 'objdir_unexpected_entry';
+    let inner; try { inner = readdirSync(join(dir, e.name), { withFileTypes: true }); } catch { return 'objdir_unexpected_entry'; }
+    if (inner.some((f) => !f.isFile() || !/^[0-9a-f]{38}$/u.test(f.name))) return 'objdir_unexpected_entry';
+  }
+  return null;
 }
 /** Round 8 R7-2 (+ M-8): repository state that changes what history or attributes mean. Paths are under the common dir. */
 function isolationFindings(commonDir: string): readonly string[] {
@@ -731,7 +762,8 @@ function isolationFindings(commonDir: string): readonly string[] {
   if (nonEmpty('info/attributes')) out.push('info/attributes');
   if (present('info/grafts')) out.push('info/grafts');
   if (present('shallow')) out.push('shallow');
-  if (present('objects/info/alternates') && !snapshotAlternatesOnly(join(commonDir, 'objects/info/alternates'))) out.push('objects/info/alternates');
+  /* Round 10: any alternates file means not isolated, with no exception (the snapshot dir comes only through the env). */
+  if (present('objects/info/alternates')) out.push('objects/info/alternates');
   if (present('objects/info/http-alternates')) out.push('objects/info/http-alternates');
   try { if (readdirSync(join(commonDir, 'refs/replace')).length > 0) out.push('refs/replace'); } catch { /* absent */ }
   try { if (/ refs\/replace\//u.test(readFileSync(join(commonDir, 'packed-refs'), 'utf8'))) out.push('packed-refs:refs/replace'); } catch { /* absent */ }
@@ -754,32 +786,44 @@ function worktreeAttributeFiles(cwd: string): readonly string[] | null {
   return walk('') ? Object.freeze(out.sort()) : null;
 }
 /** (C) The config-pinned diff between two full commit SHAs, and whether head descends from base. Bad SHAs are refused (null). */
-export async function recordGitDiff(input: { readonly base: string; readonly head: string; readonly cwd: string; readonly runner: VerifierRunner }): Promise<E2DiffEvidence | null> {
+export async function recordGitDiff(input: { readonly base: string; readonly head: string; readonly cwd: string; readonly runner: VerifierRunner; readonly objectDir?: string }): Promise<E2DiffEvidence | null> {
   if (!SHA.test(input.base) || !SHA.test(input.head)) return null;
   if (typeof input.cwd !== 'string' || !isAbsolute(input.cwd)) return null;
   const range = `${input.base}..${input.head}`;
-  const argv = moduleGit(['git', ...GIT_PINS, ...safeDir(input.cwd), 'diff', '--no-ext-diff', '--no-textconv', '--binary', '--no-renames', '--no-color', '--full-index', ...DIFF_FLAGS, range]);
-  const r = await run(input.runner, argv, input.cwd, E2_GIT_ENV);
-  const anc = await run(input.runner, moduleGit(['git', ...GIT_PINS, ...safeDir(input.cwd), 'merge-base', '--is-ancestor', input.base, input.head]), input.cwd, E2_GIT_ENV);
-  /* Rule (b) needs the changed paths; M-8 needs to know whether info/attributes (which no config can switch off) is empty. */
+  /* Round 10: the object dir is checked before any git reads it; a refusal runs no git and names no object dir. */
+  const objectDirRefusal = input.objectDir === undefined ? null : checkSnapshotObjectDir(input.objectDir, input.cwd);
+  if (objectDirRefusal !== null) {
+    const ev: E2DiffEvidence = Object.freeze({ label: TRUSTED_RUNNERS.has(input.runner) ? E2_JULIUS_LABEL : E2_FAKE_LABEL, base: input.base, head: input.head, cwd: input.cwd,
+      argv: Object.freeze([]), exitCode: 'unknown', sha256: EMPTY_SHA, bytes: 0, ancestry: false, paths: null, isolated: false, isolationFindings: Object.freeze(['objdir_refused']), attributeFiles: null, objectDirRefusal });
+    RECORDED.add(ev);
+    return ev;
+  }
+  const objPin = input.objectDir === undefined ? [] : ['-c', `${OBJDIR_PIN}${input.objectDir}`];
+  /* Round 10 F9-5: the isolation state is read BEFORE the diff, not after it. */
   const capture = CAPTURE.get(input.runner);
-  let paths: readonly string[] | null = null;
   let isolated = false;
   let findings: readonly string[] = Object.freeze(['unchecked']);
-  let attributeFiles: readonly string[] | null = null;
   if (capture !== undefined) {
-    const names = await capture(moduleGit(['git', ...GIT_PINS, ...safeDir(input.cwd), 'diff', '--no-ext-diff', '--no-renames', '--name-only', '-z', range]), input.cwd, E2_GIT_ENV);
-    if (names !== null) paths = Object.freeze(names.toString('utf8').split('\u0000').filter((x) => x !== ''));
     const common = await capture(moduleGit(['git', ...GIT_PINS, ...safeDir(input.cwd), 'rev-parse', '--path-format=absolute', '--git-common-dir']), input.cwd, E2_GIT_ENV);
     if (common !== null) {
       findings = isolationFindings(common.toString('utf8').replace(/\n$/u, ''));
       isolated = findings.length === 0;
     }
+  }
+  const argv = moduleGit(['git', ...GIT_PINS, ...safeDir(input.cwd), ...objPin, 'diff', '--no-ext-diff', '--no-textconv', '--binary', '--no-renames', '--no-color', '--full-index', ...DIFF_FLAGS, range]);
+  const r = await run(input.runner, argv, input.cwd, E2_GIT_ENV);
+  const anc = await run(input.runner, moduleGit(['git', ...GIT_PINS, ...safeDir(input.cwd), ...objPin, 'merge-base', '--is-ancestor', input.base, input.head]), input.cwd, E2_GIT_ENV);
+  /* Rule (b) needs the changed paths; M-8 needs to know whether info/attributes (which no config can switch off) is empty. */
+  let paths: readonly string[] | null = null;
+  let attributeFiles: readonly string[] | null = null;
+  if (capture !== undefined) {
+    const names = await capture(moduleGit(['git', ...GIT_PINS, ...safeDir(input.cwd), ...objPin, 'diff', '--no-ext-diff', '--no-renames', '--name-only', '-z', range]), input.cwd, E2_GIT_ENV);
+    if (names !== null) paths = Object.freeze(names.toString('utf8').split('\u0000').filter((x) => x !== ''));
     attributeFiles = worktreeAttributeFiles(input.cwd);
   }
   const ev: E2DiffEvidence = Object.freeze({
     label: TRUSTED_RUNNERS.has(input.runner) ? E2_JULIUS_LABEL : E2_FAKE_LABEL, base: input.base, head: input.head, cwd: input.cwd, argv,
-    exitCode: r.exitCode, sha256: r.stdoutSha256, bytes: r.stdoutBytes, ancestry: anc.exitCode === 0, paths, isolated, isolationFindings: findings, attributeFiles,
+    exitCode: r.exitCode, sha256: r.stdoutSha256, bytes: r.stdoutBytes, ancestry: anc.exitCode === 0, paths, isolated, isolationFindings: findings, attributeFiles, objectDirRefusal: null,
   });
   RECORDED.add(ev);
   return ev;
@@ -793,7 +837,7 @@ export const E2_GATE_REASONS = Object.freeze([
   'e2_binding_absent', 'e2_binding_run_mismatch', 'e2_binding_diff_mismatch', 'e2_diff_not_descendant', 'e2_binding_cwd_mismatch',
   'e2_model_absent', 'e2_model_router', 'e2_model_claude', 'e2_model_unrecognised',
   'e2_final_record_mismatch', 'e2_no_edit_calls', 'e2_diff_empty', 'e2_stream_mid_run_start', 'e2_model_unbound',
-  'e2_diff_not_isolated', 'e2_edit_path_not_in_diff', 'e2_edit_path_unknown', 'e2_binding_remote_root_invalid',
+  'e2_diff_not_isolated', 'e2_diff_objdir_invalid', 'e2_edit_path_not_in_diff', 'e2_edit_path_unknown', 'e2_binding_remote_root_invalid',
   'e2_anchor_not_external', 'e2_verifier_spec_absent', 'e2_verifier_not_from_spec', 'e2_verifier_pin_changed',
   'e2_tool_unknown', 'e2_edit_path_outside_workspace', 'e2_verifier_binary_untrusted', 'e2_verifier_tests_below_minimum', 'e2_verifier_synthetic_result',
   'e2_verifier_spec_no_base_run',
@@ -1032,6 +1076,7 @@ export function e2Gate(input: {
     if (diff.exitCode !== 0) reasons.push('e2_diff_failed');
     else if (diff.bytes === 0 || diff.base === diff.head) reasons.push('e2_diff_empty');
     if (diff.isolated !== true) reasons.push('e2_diff_not_isolated');
+    if (diff.objectDirRefusal !== undefined && diff.objectDirRefusal !== null) reasons.push('e2_diff_objdir_invalid');
   }
   if (!bound) reasons.push('e2_binding_absent');
   /* Skywalker 44c062b9 L3: a root of `/` would map every absolute path into the workspace; a relative root was ignored. */

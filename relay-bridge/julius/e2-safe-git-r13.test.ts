@@ -7,7 +7,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import * as S from './e2-safe-git';
 import { git } from './e2-test-kit';
 
@@ -34,6 +34,10 @@ function repo(files: Record<string, string> = { 'a.txt': '1\n' }): { dir: string
 const appendConfig = (dir: string, text: string): void => { writeFileSync(join(dir, '.git/config'), readFileSync(join(dir, '.git/config'), 'utf8') + text); };
 const controlStatus = (dir: string): void => { spawnSync('git', ['status'], { cwd: dir, env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null' }, stdio: 'ignore' }); spawnSync('git', ['add', '-A'], { cwd: dir, env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null' }, stdio: 'ignore' }); };
 
+/* Round 10: the snapshot's objects are reachable only with the object dir in GIT_ALTERNATE_OBJECT_DIRECTORIES (nothing is
+   written into the repo's .git), so the test's own git reads get it through the env, reset after each test. */
+const see = (out: unknown): void => { process.env.GIT_ALTERNATE_OBJECT_DIRECTORIES = (out as S.SnapshotResult).objectDir.path; };
+afterEach(() => { delete process.env.GIT_ALTERNATE_OBJECT_DIRECTORIES; });
 describe('R7-1: recordHeadSafely', () => {
   it('a clean repo: head SHA and its config keys', () => {
     const r = repo();
@@ -82,7 +86,7 @@ describe('R7-1 steering: snapshotCommitSafely (plumbing, --no-filters, no add/st
     const r = repo(); W(join(r.dir, '.gitattributes'), '* filter=x diff=x\n'); W(join(r.dir, '.git/info/attributes'), '* filter=x\n'); W(join(r.dir, 'a.txt'), '2\n');
     const out = S.snapshotCommitSafely({ workspace: r.dir, parent: r.head, message: 'snap', author: { name: 'J', email: 'j@x' } });
     expect('head' in out).toBe(true);
-    const c = (out as { head: string }).head;
+    see(out); const c = (out as { head: string }).head;
     expect(git(r.dir, 'show', `${c}:a.txt`)).toBe('2');
     expect(git(r.dir, 'rev-parse', `${c}^`)).toBe(r.head);
     expect(existsSync(r.marker)).toBe(false);
@@ -94,7 +98,7 @@ describe('R7-1 steering: snapshotCommitSafely (plumbing, --no-filters, no add/st
     symlinkSync(secretDir, join(r.dir, 'leakdir'));
     symlinkSync('a.txt', join(r.dir, 'inside.txt'));
     const out = S.snapshotCommitSafely({ workspace: r.dir, parent: r.head, message: 'snap', author: { name: 'J', email: 'j@x' } }) as { head: string; outsideLinks: readonly string[] };
-    expect(out.outsideLinks).toEqual(['leak.txt', 'leakdir']);
+    see(out); expect(out.outsideLinks).toEqual(['leak.txt', 'leakdir']);
     const tree = git(r.dir, 'ls-tree', '-r', out.head);
     expect(tree).toMatch(/^120000 blob [0-9a-f]{40}\tleak\.txt$/mu);
     expect(tree).toMatch(/^120000 blob [0-9a-f]{40}\tleakdir$/mu);
@@ -147,7 +151,7 @@ describe('Round 8 mutation kills (mut/mutants13.py survivors)', () => {
   });
   it('S9: --no-filters: info/attributes `* text` does not normalise CRLF in the snapshot', () => {
     const r = repo(); W(join(r.dir, '.git/info/attributes'), '* text\n'); W(join(r.dir, 'a.txt'), 'x\r\n');
-    const out = snap(r) as { head: string };
+    const out = snap(r) as { head: string }; see(out);
     expect(execFileSync('git', ['cat-file', 'blob', `${out.head}:a.txt`], { cwd: r.dir }).toString('latin1')).toBe('x\r\n');
   });
   it('S12: a parent that is not a commit in the repo is refused', () => {
@@ -157,7 +161,7 @@ describe('Round 8 mutation kills (mut/mutants13.py survivors)', () => {
   });
   it('S13/S14: the exec bit is kept and nothing under .git is snapshotted', () => {
     const r = repo(); W(join(r.dir, 'run.sh'), 'echo\n'); chmodSync(join(r.dir, 'run.sh'), 0o755);
-    const out = snap(r) as { head: string };
+    const out = snap(r) as { head: string }; see(out);
     const tree = git(r.dir, 'ls-tree', '-r', out.head);
     expect(tree).toMatch(/^100755 blob [0-9a-f]{40}\trun\.sh$/mu);
     expect(tree).toMatch(/^100644 blob [0-9a-f]{40}\ta\.txt$/mu);

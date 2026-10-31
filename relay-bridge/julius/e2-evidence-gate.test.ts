@@ -85,7 +85,7 @@ describe('E2 part C: the diff', () => {
       const expected = execFileSync(argv[0] as string, argv.slice(1), { cwd: dir, env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null', GIT_ATTR_NOSYSTEM: '1' } });
       const runner = spawnVerifierRunner();
       const d = await recordGitDiff({ base, head, cwd: dir, runner });
-      expect(d).toEqual({ label: E2_JULIUS_LABEL, base, head, cwd: dir, argv, exitCode: 0, sha256: createHash('sha256').update(expected).digest('hex'), bytes: expected.byteLength, ancestry: true, paths: ['a.txt'], isolated: true, isolationFindings: [], attributeFiles: [] });
+      expect(d).toEqual({ label: E2_JULIUS_LABEL, base, head, cwd: dir, argv, exitCode: 0, sha256: createHash('sha256').update(expected).digest('hex'), bytes: expected.byteLength, ancestry: true, paths: ['a.txt'], isolated: true, isolationFindings: [], attributeFiles: [], objectDirRefusal: null });
       expect(d?.bytes).toBeGreaterThan(0);
       for (const bad of [base.slice(0, 39), base.toUpperCase(), 'HEAD', `${base}\n`, `--output=${base}`]) {
         expect(await recordGitDiff({ base: bad, head, cwd: dir, runner })).toBeNull();
@@ -106,7 +106,7 @@ describe('E2 part C: the diff', () => {
 describe('E2 gate', () => {
   it('publishes every reason once', () => {
     expect(new Set(E2_GATE_REASONS).size).toBe(E2_GATE_REASONS.length);
-    expect(E2_GATE_REASONS.length).toBe(47);
+    expect(E2_GATE_REASONS.length).toBe(48); /* Round 10: + e2_diff_objdir_invalid */
   });
   it('refuses when everything is absent, with every reason, never the diff alone', () => {
     const r = e2Gate({ streamLines: null, anchor: null, reexec: null, verifierSpec: null, diff: null, modelId: null, binding: null });
