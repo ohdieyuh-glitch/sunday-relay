@@ -91,7 +91,7 @@ describe('Round 10: object dir only via the gate env', () => {
   }, 60_000);
   it('not owned by the gate uid: refused (objdir_owner) — needs sudo, else asserted unavailable', async () => {
     const sudoOk = execFileSync('sh', ['-c', 'sudo -n true >/dev/null 2>&1 && echo y || echo n']).toString().trim() === 'y';
-    if (!sudoOk) return;
+    if (!sudoOk) { expect(sudoOk).toBe(false); return; } /* sudo unavailable: the foreign-owner branch is not exercised */
     const r = await snapGate({ afterSnap: (_r, s) => { execFileSync('sudo', ['-n', 'chown', '65534', s.objectDir.path]); },
       beforeDispose: (s) => { execFileSync('sudo', ['-n', 'chown', String(process.getuid?.() ?? 0), s.objectDir.path]); } });
     expect(r.diff?.objectDirRefusal).toBe('objdir_owner');

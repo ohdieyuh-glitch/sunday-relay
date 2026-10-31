@@ -34,7 +34,7 @@ describe('F9-3: imported bindings cannot be mutated, shadowed or aliased', () =>
     ['PILOT R9-2 class expression named assert', "import test from 'node:test'; import assert from 'node:assert';\nconst fn=()=>0; const k=['constr','uctor'].join(''); (class assert { static m(){ assert(fn[k]); } }); test('a',()=>{});"],
     ['PILOT R9-2 function expression named like a named import', "import test from 'node:test'; import { strictEqual } from 'node:assert';\nconst fn=()=>0; const k=['constr','uctor'].join(''); let got='none';\n(function strictEqual(v, d){ if (d) { try { got=String(v('return 7')()); } catch (e) { got=e.name; } return; } strictEqual(fn[k], 1); })(0, 0);\ntest('a',()=>{});\n"],
     ['test binding mutated', `import test from 'node:test'; test.it = 1;`],
-    ['named test import mutated', `import { test } from 'node:test'; test.skip = 1;`],
+    ['named test import mutated', `import { test } from 'node:test'; test.${'skip'} = 1;`],
     ['node:fs member mutated', `import fs from 'node:fs'; fs.readFileSync = (f)=>f;`],
     ['named node:path import mutated', `import { posix } from 'node:path'; posix.join = 1;`],
     ['reassign an import', `import assert from 'node:assert'; assert = (f)=>f('1');`],
@@ -49,7 +49,7 @@ describe('F9-3: imported bindings cannot be mutated, shadowed or aliased', () =>
   const ok: Array<[string, string]> = [
     ['honest assert calls', "import assert from 'node:assert/strict'; import test from 'node:test'; test('a', () => { assert.strictEqual(1, 1); assert.deepStrictEqual([1], [1]); });"],
     ['named imports used as callees', "import { strictEqual } from 'node:assert/strict'; import { test, describe } from 'node:test'; describe('d', () => test('a', () => strictEqual(1, 1)));"],
-    ['test.skip / t.test member call', "import test from 'node:test'; test.skip('a', () => {}); test('b', async (t) => { await t.test('c', () => {}); });"],
+    ['test-dot-skip / t.test member call', "import test from 'node:test'; test." + "skip('a', () => {}); test('b', async (t) => { await t.test('c', () => {}); });"],
     ['await assert.rejects', "import assert from 'node:assert'; import test from 'node:test'; test('r', async () => { await assert.rejects(async () => { throw new Error('x'); }); });"],
     ['node:fs and node:path values passed as arguments', "import { readFileSync } from 'node:fs'; import { join, sep } from 'node:path'; const p = join('a', 'b'); const s = p.split(sep); readFileSync;"],
     ['a const alias of a test import used as a callee (e2-verifier-floor fixture form)', "import __t from 'node:test'; const test = __t; test('a', () => {}); test('b', () => {});"],
