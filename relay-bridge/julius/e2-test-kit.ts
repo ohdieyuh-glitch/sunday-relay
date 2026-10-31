@@ -1,11 +1,16 @@
 /* Shared fixtures for the round-4 E2 tests (no provider calls: the global fetch is replaced, the documented M-5 residual). */
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { deflateSync } from 'node:zlib';
 
 import { vi } from 'vitest';
 
 import { readEvidenceLines } from './cursor-run-stream-evidence';
+import * as KG from './e2-evidence-gate';
+import { buildTrustedSeedStore } from './e2-safe-git';
 import { externalAnchor, type E2ExternalAnchorSource, type ExternalAnchor } from './e2-external-anchor';
 
 export const KEY = 'SENTINEL-KEY-0123456789-never-print';
@@ -69,3 +74,41 @@ export function rechain(lines: readonly string[], edit: (r: Record<string, unkno
 
 /** Round 5 R4-2: tests build anchors through the injected-source constructor. */
 export const anchorOf = (source: E2ExternalAnchorSource, hash: string): ExternalAnchor => externalAnchor(() => ({ source, hash }));
+
+/**
+ * Round 10 (trusted seed store): test helpers for the many fixtures that commit base and head with plain git. storeFor
+ * builds (once per repo+base) the trusted store from the repo; headObjectDir copies the head ^base objects into a fresh
+ * 0700 loose-object dir, so the fixture's head SHA is unchanged and the diff reads only store + that dir. A fixture whose
+ * base or head is unreadable gets no store/dir (the call then behaves as before and the gate refuses).
+ */
+const STORES = new Map<string, string | undefined>();
+export function storeFor(repo: string, base: string): string | undefined {
+  const k = `${repo}\0${base}`;
+  if (!STORES.has(k)) { const s = buildTrustedSeedStore({ seed: repo, base }); STORES.set(k, 'refused' in s ? undefined : s.objects); }
+  return STORES.get(k);
+}
+export function headObjectDir(repo: string, base: string, head: string): string | undefined {
+  try {
+    const ids = execFileSync('git', ['rev-list', '--objects', '--no-object-names', head, `^${base}`], { cwd: repo }).toString().split('\n').filter((x) => x !== '');
+    const dir = realpathSync(mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), 'e2-kit-objdir-'))); chmodSync(dir, 0o700);
+    const out = execFileSync('git', ['cat-file', '--batch'], { cwd: repo, input: ids.join('\n') + '\n', maxBuffer: 1 << 30 });
+    let at = 0;
+    while (at < out.length) {
+      const nl = out.indexOf(10, at); const [oid, type, size] = out.subarray(at, nl).toString().split(' ');
+      const n = Number(size); const data = out.subarray(nl + 1, nl + 1 + n); at = nl + 2 + n;
+      mkdirSync(join(dir, (oid as string).slice(0, 2)), { recursive: true });
+      writeFileSync(join(dir, (oid as string).slice(0, 2), (oid as string).slice(2)), deflateSync(Buffer.concat([Buffer.from(`${type} ${n}\0`), data])));
+    }
+    return dir;
+  } catch { return undefined; }
+}
+/** recordGitDiff through the trusted path (store from the repo at base + head objects in a throwaway dir). */
+export function recordGitDiffT(input: Parameters<typeof KG.recordGitDiff>[0]): ReturnType<typeof KG.recordGitDiff> {
+  const tr = storeFor(input.cwd, input.base); const od = tr === undefined ? undefined : headObjectDir(input.cwd, input.base, input.head);
+  return KG.recordGitDiff({ ...input, ...(tr !== undefined && od !== undefined ? { trustedObjects: tr, objectDir: od } : {}) });
+}
+/** pinVerifierSpecWithBaseRun / pinVerifierSpec with the trusted store of the workspace at base. */
+export function pinT(input: KG.E2MissionVerifierInput, runner: KG.VerifierRunner): ReturnType<typeof KG.pinVerifierSpecWithBaseRun> {
+  const tr = typeof input?.workspace === 'string' && typeof input.base === 'string' && /^[0-9a-f]{40}$/u.test(input.base) ? storeFor(input.workspace, input.base) : undefined;
+  return KG.pinVerifierSpecWithBaseRun({ ...input, ...(tr === undefined ? {} : { trustedObjects: tr }) }, runner);
+}

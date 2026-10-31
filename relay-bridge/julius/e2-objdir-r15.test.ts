@@ -10,6 +10,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import * as G from './e2-evidence-gate';
 import * as S from './e2-safe-git';
 import { MODEL, RUN, START, anchorOf, call, git, liveCapture, makeRepo, tail } from './e2-test-kit';
+import { pinT, storeFor } from './e2-test-kit';
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), 'e2-objdir-r15-')));
 const privTmp = join(root, 'tmp'); mkdirSync(privTmp); process.env.TMPDIR = privTmp;
@@ -30,11 +31,11 @@ async function snapGate(h: Hooks = {}): Promise<{ gate: 'PASS' | readonly string
   try {
     h.afterSnap?.(repo, s);
     const runner = G.spawnVerifierRunner({ timeoutMs: 60_000 });
-    const spec = await G.pinVerifierSpecWithBaseRun({ testCommand: 'node --test t.test.mjs', workspace: repo, base: b }, runner);
+    const spec = await pinT({ testCommand: 'node --test t.test.mjs', workspace: repo, base: b }, runner);
     if ('refused' in spec) throw new Error(`spec refused ${spec.refused}`);
     const reexec = await G.recordVerifierReexec({ spec, cwd: repo, runner });
     if (h.dispose === 'before-diff') s.dispose();
-    const diff = await G.recordGitDiff({ base: b, head: s.head, cwd: repo, runner, objectDir: h.objectDir ? h.objectDir(s) : s.objectDir.path } as Parameters<typeof G.recordGitDiff>[0]);
+    const diff = await G.recordGitDiff({ base: b, head: s.head, cwd: repo, runner, objectDir: h.objectDir ? h.objectDir(s) : s.objectDir.path, trustedObjects: storeFor(repo, b) } as Parameters<typeof G.recordGitDiff>[0]);
     const { lines, evidence } = await liveCapture(root, `s${k}.jsonl`, START + call('c0', 'edit_file', { path: 'a.txt' }) + tail());
     const g = G.e2Gate({ streamLines: lines, anchor: anchorOf('workflow_output', evidence.finalHash), verifierSpec: spec, reexec, diff, binding: { runId: RUN, base: b, head: s.head, workspace: repo }, modelId: MODEL });
     return { gate: g.ok ? 'PASS' : g.reasons, diff, snap: s };

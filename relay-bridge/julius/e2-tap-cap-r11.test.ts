@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import * as G from './e2-evidence-gate';
 import { GOOD, MODEL, RUN, liveCapture, makeRepo, anchorOf } from './e2-test-kit';
+import { pinT, recordGitDiffT } from './e2-test-kit';
 
 let root = '';
 const W = (p: string, c: string): void => { mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, c); };
@@ -19,18 +20,18 @@ describe('TAP size cap and base-run runner', () => {
     const T = "import test from 'node:test'; \ntest('a', () => { console.log('x'.repeat(9 * 1024 * 1024)); }); /* r8: console, process is banned */\ntest('b', () => {});\ntest('c', () => {});\n";
     const { base, head } = makeRepo(repo, { 'a.txt': '1\n', 't.test.mjs': T }, { 'a.txt': '2\n' }, W);
     const runner = G.spawnVerifierRunner({ timeoutMs: 60_000 });
-    const verifierSpec = (await G.pinVerifierSpecWithBaseRun({ testCommand: 'node --test t.test.mjs', workspace: repo, base }, G.spawnVerifierRunner({ timeoutMs: 30_000 }))) as G.E2VerifierSpec;
+    const verifierSpec = (await pinT({ testCommand: 'node --test t.test.mjs', workspace: repo, base }, G.spawnVerifierRunner({ timeoutMs: 30_000 }))) as G.E2VerifierSpec;
     const reexec = await G.recordVerifierReexec({ spec: verifierSpec, cwd: repo, runner });
     expect(reexec?.commands[0]?.exitCode).toBe(0);
     expect(reexec?.commands[0]?.tapComplete).toBe(false);
     const { lines, evidence } = await liveCapture(root, 'cap.jsonl', GOOD());
-    const g = G.e2Gate({ streamLines: lines, anchor: anchorOf('workflow_output', evidence.finalHash), verifierSpec, reexec, diff: await G.recordGitDiff({ base, head, cwd: repo, runner }), binding: { runId: RUN, base, head, workspace: repo }, modelId: MODEL } as Parameters<typeof G.e2Gate>[0]);
+    const g = G.e2Gate({ streamLines: lines, anchor: anchorOf('workflow_output', evidence.finalHash), verifierSpec, reexec, diff: await recordGitDiffT({ base, head, cwd: repo, runner }), binding: { runId: RUN, base, head, workspace: repo }, modelId: MODEL } as Parameters<typeof G.e2Gate>[0]);
     expect(g.ok ? [] : g.reasons).toEqual(['e2_verifier_synthetic_result']);
   }, 60_000);
   it('the base run refuses a runner that is not the trusted spawn runner', async () => {
     const repo = join(root, 'br'); mkdirSync(repo);
     const { base } = makeRepo(repo, { 't.test.mjs': "import t from 'node:test'; t('x', () => {});\n" }, { 'a.txt': '2\n' }, W);
     const fake: G.VerifierRunner = async () => ({ exitCode: 0, stdoutSha256: 'a'.repeat(64), stderrSha256: 'b'.repeat(64), stdoutBytes: 0, stderrBytes: 0 });
-    expect(await G.pinVerifierSpecWithBaseRun({ testCommand: 'node --test t.test.mjs', workspace: repo, base }, fake)).toEqual({ refused: 'spec_base_run_untrusted' });
+    expect(await pinT({ testCommand: 'node --test t.test.mjs', workspace: repo, base }, fake)).toEqual({ refused: 'spec_base_run_untrusted' });
   });
 });

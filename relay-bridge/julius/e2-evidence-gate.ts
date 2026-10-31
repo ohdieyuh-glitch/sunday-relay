@@ -142,10 +142,23 @@ const isModuleGit = (argv: readonly string[]): boolean => MODULE_GIT.has(JSON.st
  * GIT_ALTERNATE_OBJECT_DIRECTORIES. Caller env never reaches module git, and nothing is written into the coder's .git.
  */
 const OBJDIR_PIN = 'e2.snapshotObjectDir=';
+/** Round 10 (Skywalker amendment): the trusted seed store's objects dir, minted the same way. */
+const TRUSTED_PIN = 'e2.trustedObjects=';
+const pinValue = (argv: readonly string[], pin: string): string | undefined => {
+  const i = argv.findIndex((a, j) => j > 0 && argv[j - 1] === '-c' && a.startsWith(pin));
+  return i < 0 ? undefined : (argv[i] as string).slice(pin.length);
+};
+/**
+ * Both pins: GIT_OBJECT_DIRECTORY = the snapshot's throwaway dir, GIT_ALTERNATE_OBJECT_DIRECTORIES = the trusted store
+ * (the coder's .git/objects is then never read). Trusted pin only: the trusted store is the object dir. Object-dir pin
+ * only (legacy, refused by the gate as e2_objects_untrusted): the dir is an alternate.
+ */
 const snapshotAltEnv = (argv: readonly string[]): Record<string, string> => {
   if (!isModuleGit(argv)) return {};
-  const i = argv.findIndex((a, j) => j > 0 && argv[j - 1] === '-c' && a.startsWith(OBJDIR_PIN));
-  return i < 0 ? {} : { GIT_ALTERNATE_OBJECT_DIRECTORIES: (argv[i] as string).slice(OBJDIR_PIN.length) };
+  const o = pinValue(argv, OBJDIR_PIN); const t = pinValue(argv, TRUSTED_PIN);
+  if (o !== undefined && t !== undefined) return { GIT_OBJECT_DIRECTORY: o, GIT_ALTERNATE_OBJECT_DIRECTORIES: t };
+  if (t !== undefined) return { GIT_OBJECT_DIRECTORY: t };
+  return o === undefined ? {} : { GIT_ALTERNATE_OBJECT_DIRECTORIES: o };
 };
 /**
  * PILOT 43b93a4e N-3, 5366ad30 R3-2/R3-4 and Skywalker 5366ad30 M1/M2: the closed verifier allowlist (see verifierShape).
@@ -371,6 +384,9 @@ export interface E2DiffEvidence {
   readonly attributeFiles: readonly string[] | null;
   /** Round 10: the named reason the snapshot object dir was refused (no git ran); null when none was given or it passed. */
   readonly objectDirRefusal?: E2ObjdirRefusal | null;
+  /** Round 10: the throwaway object dir and trusted store the diff read (both required by the gate). */
+  readonly objectDir?: string | null;
+  readonly trustedObjects?: string | null;
   /** Round 10 R9-1: an object the diff reads did not re-hash to its name (or could not be read); null when all verified. */
   readonly objectRefusal?: E2ObjectRefusal | null;
 }
@@ -408,6 +424,8 @@ export interface E2MissionVerifierInput {
   readonly minTests?: number;
   /** Skywalker M3: tool names the mission/wiring verified as read-only (never from the coder); may not name an edit tool. */
   readonly extraKnownNonEditTools?: readonly string[];
+  /** Round 10: the trusted seed store's objects dir (buildTrustedSeedStore, built before any coder code ran). */
+  readonly trustedObjects?: string;
 }
 export interface E2VerifierSpec {
   readonly base: string;
@@ -423,6 +441,8 @@ export interface E2VerifierSpec {
   /** Round 6 R5-1: tests that registered per command in a Julius-observed run of the BASE tree (null: not measured or unusable). */
   readonly baseRegistered: readonly (number | null)[];
   readonly extraKnownNonEditTools: readonly string[];
+  /** Round 10: the trusted store every base read came from (null: the coder's .git was read; the gate refuses). */
+  readonly trustedObjects: string | null;
 }
 export type E2VerifierSpecRefusal =
   | 'spec_invalid' | 'spec_shell_syntax' | 'spec_base_invalid' | 'spec_workspace_invalid'
@@ -430,6 +450,8 @@ export type E2VerifierSpecRefusal =
   | E2PinnedSourceRefusal | 'spec_plain_node_no_floor'
   /** Round 8 (PILOT R7-5): a pinned file is not a regular blob (100644/100755) in the base tree, e.g. a symlink. */
   | 'spec_file_not_regular'
+  /** Round 10: the trusted seed store failed checkTrustedObjects. */
+  | 'spec_trusted_store_invalid'
   /** Round 9 (Skywalker N8-2, 5:57 PM): a pinned test/entry file of a node form is not `.mjs` (ESM goal only). */
   | 'spec_pinned_test_not_mjs';
 /** Round 7 R6-1/R6-3: why a pinned test/entry file's base content was refused by {@link scanPinnedSource}. */
@@ -498,25 +520,26 @@ export function scanPinnedSource(src: string): E2PinnedSourceRefusal | null {
   return scanPinnedSourceAst(src);
 }
 const SHELL_SYNTAX = /[;&|<>$`'"\\(){}[\]*?~!#=%^\r\n\t]/u;
-const gitBlob = (workspace: string, base: string, path: string): Buffer | null => {
+const trustedEnv = (tr: string | null): Record<string, string> => (tr === null ? {} : { GIT_OBJECT_DIRECTORY: tr });
+const gitBlob = (workspace: string, base: string, path: string, tr: string | null): Buffer | null => {
   const bin = resolveProgram('git');
   if (bin === null) return null;
   try {
     return execFileSync(bin, [...GIT_PINS, ...safeDir(workspace), 'cat-file', 'blob', `${base}:${path}`], {
       cwd: workspace, shell: false, stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024,
-      env: { LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...E2_GIT_ENV, GIT_NO_REPLACE_OBJECTS: '1', PATH: E2_VERIFIER_PATH },
+      env: { LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...E2_GIT_ENV, GIT_NO_REPLACE_OBJECTS: '1', ...trustedEnv(tr), PATH: E2_VERIFIER_PATH },
     });
   } catch { return null; }
 };
 /** node --test's default discovery patterns (js only; node_modules excluded), applied to the base tree. */
 const NODE_TEST_FILE = /(?:^|\/)(?:[^/]*[.\-_]test|test-[^/]*|test)\.[cm]?js$|(?:^|\/)test\/(?:.*\/)?[^/]+\.[cm]?js$/u;
-function baseTestFiles(workspace: string, base: string): string[] | null {
+function baseTestFiles(workspace: string, base: string, tr: string | null): string[] | null {
   const bin = resolveProgram('git');
   if (bin === null) return null;
   try {
     const out = execFileSync(bin, [...GIT_PINS, ...safeDir(workspace), 'ls-tree', '-r', '-z', '--name-only', base], {
       cwd: workspace, shell: false, stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024,
-      env: { LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...E2_GIT_ENV, GIT_NO_REPLACE_OBJECTS: '1', PATH: E2_VERIFIER_PATH },
+      env: { LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...E2_GIT_ENV, GIT_NO_REPLACE_OBJECTS: '1', ...trustedEnv(tr), PATH: E2_VERIFIER_PATH },
     }).toString('utf8');
     return out.split('\u0000').filter((f) => f !== '' && !f.toLowerCase().split('/').includes('node_modules') && !f.startsWith('-') && NODE_TEST_FILE.test(f));
   } catch { return null; }
@@ -527,6 +550,9 @@ export function pinVerifierSpec(input: E2MissionVerifierInput): E2VerifierSpec |
   if (typeof input !== 'object' || input === null || typeof input.testCommand !== 'string') return no('spec_invalid');
   if (!SHA.test(input.base)) return no('spec_base_invalid');
   if (!isCanonicalDir(input.workspace)) return no('spec_workspace_invalid');
+  /* Round 10 (Skywalker amendment): with the trusted seed store every base read comes from it, never the coder's .git. */
+  if (input.trustedObjects !== undefined && checkTrustedObjects(input.trustedObjects, input.workspace) !== null) return no('spec_trusted_store_invalid');
+  const tr = input.trustedObjects ?? null;
   const strings = [input.testCommand, ...(input.additionalChecks ?? [])];
   if (!strings.every((x) => typeof x === 'string' && x.trim() !== '')) return no('spec_invalid');
   if (input.minTests !== undefined && !(Number.isSafeInteger(input.minTests) && input.minTests >= 0)) return no('spec_invalid');
@@ -538,7 +564,7 @@ export function pinVerifierSpec(input: E2MissionVerifierInput): E2VerifierSpec |
      AT BASE, so each is pinned and nothing the coder adds is run. */
   for (const a of parsed) {
     if (a.length === 2 && progName(a[0] as string) === 'node' && a[1] === '--test') {
-      const found = baseTestFiles(input.workspace, input.base);
+      const found = baseTestFiles(input.workspace, input.base, tr);
       if (found === null || found.length === 0) return no('spec_file_not_at_base');
       a.push(...found);
     }
@@ -559,9 +585,9 @@ export function pinVerifierSpec(input: E2MissionVerifierInput): E2VerifierSpec |
     if (typeof shape === 'string') return no(shape);
     let atBase = 0;
     for (const f of shape.files) {
-      const blob = gitBlob(input.workspace, input.base, f);
+      const blob = gitBlob(input.workspace, input.base, f, tr);
       if (blob === null) return no('spec_file_not_at_base');
-      listing ??= baseTreeListing(input.workspace, input.base);
+      listing ??= baseTreeListing(input.workspace, input.base, tr);
       if (listing === null || !isRegularAtBase(listing, f)) return no('spec_file_not_regular');
       if (!f.endsWith('.mjs')) return no('spec_pinned_test_not_mjs');
       const scanned = scanPinnedSource(blob.toString('utf8'));
@@ -571,28 +597,28 @@ export function pinVerifierSpec(input: E2MissionVerifierInput): E2VerifierSpec |
     }
     if (argv[1] !== '--test' && !((input.minTests ?? 0) >= 1)) return no('spec_plain_node_no_floor');
     minTests.push(Math.max(1, input.minTests ?? 0, atBase));
-    if (shape.configs) for (const f of TOOL_CONFIGS) { const blob = gitBlob(input.workspace, input.base, f); pins[f] = blob === null ? 'absent' : sha256(blob); }
+    if (shape.configs) for (const f of TOOL_CONFIGS) { const blob = gitBlob(input.workspace, input.base, f, tr); pins[f] = blob === null ? 'absent' : sha256(blob); }
   }
-  const spec: E2VerifierSpec = Object.freeze({ base: input.base, workspace: input.workspace, commands: Object.freeze(commands), pins: Object.freeze(pins), minTests: Object.freeze(minTests), baseRegistered: Object.freeze(commands.map(() => null)), extraKnownNonEditTools: Object.freeze([...(extra ?? [])]) });
+  const spec: E2VerifierSpec = Object.freeze({ base: input.base, workspace: input.workspace, commands: Object.freeze(commands), pins: Object.freeze(pins), minTests: Object.freeze(minTests), baseRegistered: Object.freeze(commands.map(() => null)), extraKnownNonEditTools: Object.freeze([...(extra ?? [])]), trustedObjects: tr });
   SPECS.add(spec);
   return spec;
 }
 /** Round 6 R5-1: writes the base tree's regular files into a fresh directory (symlinks and submodules are skipped). */
-function baseTreeListing(workspace: string, base: string): string | null {
+function baseTreeListing(workspace: string, base: string, tr: string | null): string | null {
   const bin = resolveProgram('git');
   if (bin === null) return null;
   try {
     return execFileSync(bin, [...GIT_PINS, ...safeDir(workspace), 'ls-tree', '-r', '-z', base], {
       cwd: workspace, shell: false, stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024,
-      env: { LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...E2_GIT_ENV, GIT_NO_REPLACE_OBJECTS: '1', PATH: E2_VERIFIER_PATH },
+      env: { LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8', ...E2_GIT_ENV, GIT_NO_REPLACE_OBJECTS: '1', ...trustedEnv(tr), PATH: E2_VERIFIER_PATH },
     }).toString('utf8');
   } catch { return null; }
 }
 /** Round 8 (PILOT R7-5): the base-tree mode of `path` is a regular blob (not 120000 symlink, not a gitlink). */
 const isRegularAtBase = (listing: string, path: string): boolean =>
   listing.split('\u0000').some((e) => /^(100644|100755) blob [0-9a-f]{40}\t/u.test(e) && e.slice(e.indexOf('\t') + 1) === path);
-function materializeBase(workspace: string, base: string): string | null {
-  const listing = baseTreeListing(workspace, base);
+function materializeBase(workspace: string, base: string, tr: string | null): string | null {
+  const listing = baseTreeListing(workspace, base, tr);
   if (listing === null) return null;
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'e2-base-run-')));
   for (const entry of listing.split('\u0000')) {
@@ -600,7 +626,7 @@ function materializeBase(workspace: string, base: string): string | null {
     if (m === null) continue;
     const path = m[2] as string;
     if (path.split('/').some((x) => x === '..' || x === '.' || x === '') || isAbsolute(path)) continue;
-    const blob = gitBlob(workspace, base, path);
+    const blob = gitBlob(workspace, base, path, tr);
     if (blob === null) { rmSync(dir, { recursive: true, force: true }); return null; }
     mkdirSync(dirname(join(dir, path)), { recursive: true });
     writeFileSync(join(dir, path), blob);
@@ -624,7 +650,7 @@ export async function pinVerifierSpecWithBaseRun(input: E2MissionVerifierInput, 
   const spec = pinVerifierSpec(input);
   if ('refused' in spec) return spec;
   if (!TRUSTED_RUNNERS.has(runner)) return Object.freeze({ refused: 'spec_base_run_untrusted' as const });
-  const dir = materializeBase(spec.workspace, spec.base);
+  const dir = materializeBase(spec.workspace, spec.base, spec.trustedObjects);
   if (dir === null) return Object.freeze({ refused: 'spec_base_tree_unreadable' as const });
   const registered: (number | null)[] = [];
   try {
@@ -756,6 +782,25 @@ export function checkSnapshotObjectDir(dir: unknown, workspace: string): E2Objdi
   return null;
 }
 /**
+ * Round 10 (Skywalker amendment to 5a6e3400): the trusted seed store's objects dir (buildTrustedSeedStore). Same
+ * refusals as the snapshot dir: absolute, no newline/':', not a symlink, realpath equal, outside the workspace, mode 0700,
+ * owned by the gate uid; an info/alternates or info/http-alternates file is objdir_info_present (pack/ and an empty info/
+ * are git's own layout and allowed). A store in another repo's or a symlinked objects dir is refused by the same checks.
+ */
+export function checkTrustedObjects(dir: unknown, workspace: string): E2ObjdirRefusal | null {
+  if (typeof dir !== 'string' || !isAbsolute(dir) || dir.includes('\n') || dir.includes(':')) return 'objdir_not_plain';
+  let st; let real: string;
+  try { st = lstatSync(dir); real = realpathSync(dir); } catch { return 'objdir_not_plain'; }
+  if (st.isSymbolicLink() || !st.isDirectory() || real !== dir) return 'objdir_not_plain';
+  let ws: string; try { ws = realpathSync(workspace); } catch { return 'objdir_inside_workspace'; }
+  if (real === ws || real.startsWith(ws.endsWith('/') ? ws : `${ws}/`)) return 'objdir_inside_workspace';
+  if ((st.mode & 0o777) !== 0o700) return 'objdir_mode';
+  if (typeof process.getuid === 'function' && st.uid !== process.getuid()) return 'objdir_owner';
+  for (const f of ['alternates', 'http-alternates']) { try { lstatSync(join(dir, 'info', f)); return 'objdir_info_present'; } catch { /* absent */ } }
+  try { const i = lstatSync(join(dir, 'info')); if (!i.isDirectory()) return 'objdir_unexpected_entry'; } catch { /* absent */ }
+  return null;
+}
+/**
  * Round 10 (PILOT 5a6e3400 R9-1): git never re-hashes a loose object on read, and the coder can write any bytes under any
  * name in its own .git/objects. Before the diff, every object the diff and the ancestry check read is re-hashed: the
  * commits in head ^base, the base commit, and every tree and blob reachable from their trees. A listing step reads only
@@ -829,19 +874,21 @@ function worktreeAttributeFiles(cwd: string): readonly string[] | null {
   return walk('') ? Object.freeze(out.sort()) : null;
 }
 /** (C) The config-pinned diff between two full commit SHAs, and whether head descends from base. Bad SHAs are refused (null). */
-export async function recordGitDiff(input: { readonly base: string; readonly head: string; readonly cwd: string; readonly runner: VerifierRunner; readonly objectDir?: string }): Promise<E2DiffEvidence | null> {
+export async function recordGitDiff(input: { readonly base: string; readonly head: string; readonly cwd: string; readonly runner: VerifierRunner; readonly objectDir?: string; readonly trustedObjects?: string }): Promise<E2DiffEvidence | null> {
   if (!SHA.test(input.base) || !SHA.test(input.head)) return null;
   if (typeof input.cwd !== 'string' || !isAbsolute(input.cwd)) return null;
   const range = `${input.base}..${input.head}`;
   /* Round 10: the object dir is checked before any git reads it; a refusal runs no git and names no object dir. */
-  const objectDirRefusal = input.objectDir === undefined ? null : checkSnapshotObjectDir(input.objectDir, input.cwd);
+  const objectDirRefusal = input.objectDir === undefined ? null
+    : checkSnapshotObjectDir(input.objectDir, input.cwd) ?? (input.trustedObjects === undefined ? null : checkTrustedObjects(input.trustedObjects, input.cwd));
   if (objectDirRefusal !== null) {
     const ev: E2DiffEvidence = Object.freeze({ label: TRUSTED_RUNNERS.has(input.runner) ? E2_JULIUS_LABEL : E2_FAKE_LABEL, base: input.base, head: input.head, cwd: input.cwd,
-      argv: Object.freeze([]), exitCode: 'unknown', sha256: EMPTY_SHA, bytes: 0, ancestry: false, paths: null, isolated: false, isolationFindings: Object.freeze(['objdir_refused']), attributeFiles: null, objectDirRefusal, objectRefusal: null });
+      argv: Object.freeze([]), exitCode: 'unknown', sha256: EMPTY_SHA, bytes: 0, ancestry: false, paths: null, isolated: false, isolationFindings: Object.freeze(['objdir_refused']), attributeFiles: null, objectDirRefusal, objectRefusal: null, objectDir: null, trustedObjects: null });
     RECORDED.add(ev);
     return ev;
   }
-  const objPin = input.objectDir === undefined ? [] : ['-c', `${OBJDIR_PIN}${input.objectDir}`];
+  const trusted = input.objectDir === undefined ? undefined : input.trustedObjects;
+  const objPin = [...(input.objectDir === undefined ? [] : ['-c', `${OBJDIR_PIN}${input.objectDir}`]), ...(trusted === undefined ? [] : ['-c', `${TRUSTED_PIN}${trusted}`])];
   /* Round 10 F9-5: the isolation state is read BEFORE the diff, not after it. */
   const capture = CAPTURE.get(input.runner);
   let isolated = false;
@@ -870,6 +917,7 @@ export async function recordGitDiff(input: { readonly base: string; readonly hea
   const ev: E2DiffEvidence = Object.freeze({
     label: TRUSTED_RUNNERS.has(input.runner) ? E2_JULIUS_LABEL : E2_FAKE_LABEL, base: input.base, head: input.head, cwd: input.cwd, argv,
     exitCode: r.exitCode, sha256: r.stdoutSha256, bytes: r.stdoutBytes, ancestry: anc.exitCode === 0, paths, isolated, isolationFindings: findings, attributeFiles, objectDirRefusal: null, objectRefusal,
+    objectDir: input.objectDir ?? null, trustedObjects: trusted ?? null,
   });
   RECORDED.add(ev);
   return ev;
@@ -886,7 +934,7 @@ export const E2_GATE_REASONS = Object.freeze([
   'e2_diff_not_isolated', 'e2_diff_objdir_invalid', 'e2_object_hash_mismatch', 'e2_object_unverifiable', 'e2_edit_path_not_in_diff', 'e2_edit_path_unknown', 'e2_binding_remote_root_invalid',
   'e2_anchor_not_external', 'e2_verifier_spec_absent', 'e2_verifier_not_from_spec', 'e2_verifier_pin_changed',
   'e2_tool_unknown', 'e2_edit_path_outside_workspace', 'e2_verifier_binary_untrusted', 'e2_verifier_tests_below_minimum', 'e2_verifier_synthetic_result',
-  'e2_verifier_spec_no_base_run',
+  'e2_verifier_spec_no_base_run', 'e2_objects_untrusted',
 ] as const);
 export type E2GateReason = (typeof E2_GATE_REASONS)[number];
 
@@ -1125,6 +1173,10 @@ export function e2Gate(input: {
     if (diff.objectDirRefusal !== undefined && diff.objectDirRefusal !== null) reasons.push('e2_diff_objdir_invalid');
     if (diff.objectRefusal !== undefined && diff.objectRefusal !== null) reasons.push(diff.objectRefusal);
     else if (diff.label === E2_JULIUS_LABEL && diff.objectRefusal === undefined) reasons.push('e2_object_unverifiable');
+    /* Round 10 (Skywalker amendment): the base side and the spec pin come from the trusted seed store, the head side
+       from the snapshot's throwaway dir; anything read from the coder's .git is not evidence. */
+    const tr = isSpec(verifierSpec) ? verifierSpec.trustedObjects : null;
+    if (isSpec(verifierSpec) && BASE_RUN_SPECS.has(verifierSpec) && (tr === null || diff.trustedObjects !== tr || typeof diff.objectDir !== 'string')) reasons.push('e2_objects_untrusted');
   }
   if (!bound) reasons.push('e2_binding_absent');
   /* Skywalker 44c062b9 L3: a root of `/` would map every absolute path into the workspace; a relative root was ignored. */

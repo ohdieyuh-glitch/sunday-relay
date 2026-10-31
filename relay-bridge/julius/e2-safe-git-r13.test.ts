@@ -109,7 +109,7 @@ describe('R7-1 steering: snapshotCommitSafely (plumbing, --no-filters, no add/st
   it('the refusal shape matches the gate ({refused: <named code>}) and every code is listed', () => {
     expect(S.SAFE_GIT_REASONS).toEqual(['safe_git_workspace_invalid', 'safe_git_dir_not_plain', 'safe_git_config_unparsed', 'safe_git_config_include', 'safe_git_config_filter',
       'safe_git_config_core', 'safe_git_config_alias', 'safe_git_config_extensions', 'safe_git_config_other', 'safe_git_head_unreadable', 'safe_git_parent_invalid', 'safe_git_tree_unreadable', 'safe_git_write_failed',
-      'safe_git_head_not_parent', 'safe_git_secret_path', 'safe_git_dropped_path', 'safe_git_tree_mismatch', 'safe_git_alternates_present', 'safe_git_objdir_failed']);
+      'safe_git_head_not_parent', 'safe_git_secret_path', 'safe_git_dropped_path', 'safe_git_tree_mismatch', 'safe_git_alternates_present', 'safe_git_objdir_failed', 'safe_git_special_file']);
     expect(S.recordHeadSafely({ workspace: 'relative' })).toEqual({ refused: 'safe_git_workspace_invalid' });
   });
 });

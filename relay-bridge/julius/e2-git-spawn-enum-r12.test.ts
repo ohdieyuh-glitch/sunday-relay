@@ -114,8 +114,11 @@ describe('every git invocation in the e2 gate/spec/diff path carries the pins', 
     expect(src).toMatch(/env: \{ LANG: 'C\.UTF-8', LC_ALL: 'C\.UTF-8', \.\.\.E2_GIT_ENV, GIT_NO_REPLACE_OBJECTS: '1', \.\.\.snapshotAltEnv\(argv\), PATH: E2_VERIFIER_PATH \} \}, \(e, out\)/u);
     /* Round 10: the only extra module-git env is GIT_ALTERNATE_OBJECT_DIRECTORIES, from the module-minted objPin; the
        only spread after the pins besides safeDir is that objPin, built only after checkSnapshotObjectDir passed. */
-    expect(src.match(/GIT_ALTERNATE_OBJECT_DIRECTORIES:/gu)?.length).toBe(1);
-    expect(src).toMatch(/const objPin = input\.objectDir === undefined \? \[\] : \['-c', `\$\{OBJDIR_PIN\}\$\{input\.objectDir\}`\];/u);
+    /* Round 10 (trusted store): GIT_ALTERNATE_OBJECT_DIRECTORIES / GIT_OBJECT_DIRECTORY appear only in snapshotAltEnv
+       (from the two module-minted pins) and trustedEnv (the spec's checked trusted store). */
+    expect(src.match(/GIT_ALTERNATE_OBJECT_DIRECTORIES:/gu)?.length).toBe(2);
+    expect(src.match(/GIT_OBJECT_DIRECTORY:/gu)?.length).toBe(3);
+    expect(src).toMatch(/const objPin = \[\.\.\.\(input\.objectDir === undefined \? \[\] : \['-c', `\$\{OBJDIR_PIN\}\$\{input\.objectDir\}`\]\), \.\.\.\(trusted === undefined \? \[\] : \['-c', `\$\{TRUSTED_PIN\}\$\{trusted\}`\]\)\];/u);
     expect(src.indexOf('checkSnapshotObjectDir(input.objectDir')).toBeLessThan(src.indexOf('const objPin'));
     for (const st of sites.filter((x) => x.via === 'moduleGit' && x.sub !== '?')) expect(st.argsText.replace(/\.\.\.objPin, /u, '')).not.toMatch(/\.\.\.(?!GIT_PINS|safeDir|DIFF_FLAGS)/u);
     /* Round 10 R9-1: the one `...args` site is verifyObjectClosure's g(); its callers pass only these literal subcommands. */

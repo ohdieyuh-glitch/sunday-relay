@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import * as G from './e2-evidence-gate';
 import { MODEL, RUN, START, anchorOf, call, git, liveCapture, makeRepo, tail } from './e2-test-kit';
+import { pinT, recordGitDiffT } from './e2-test-kit';
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), 'e2-iso13-')));
 afterAll(() => { rmSync(root, { recursive: true, force: true }); });
@@ -20,10 +21,10 @@ async function gate(o: { head2?: (r: string, b: string) => string; hook?: (r: st
   if (o.head2) head = o.head2(repo, base);
   o.hook?.(repo);
   const runner = G.spawnVerifierRunner({ timeoutMs: 60_000 });
-  const spec = await G.pinVerifierSpecWithBaseRun({ testCommand: 'node --test t.test.mjs', workspace: repo, base }, runner);
+  const spec = await pinT({ testCommand: 'node --test t.test.mjs', workspace: repo, base }, runner);
   if ('refused' in spec) return { refused: spec.refused, diff: null };
   const reexec = await G.recordVerifierReexec({ spec, cwd: repo, runner });
-  const diff = await G.recordGitDiff({ base, head, cwd: repo, runner });
+  const diff = await recordGitDiffT({ base, head, cwd: repo, runner });
   const { lines, evidence } = await liveCapture(root, `s${k}.jsonl`, START + call('c0', 'edit_file', { path: 'a.js' }) + tail());
   const g = G.e2Gate({ streamLines: lines, anchor: anchorOf('workflow_output', evidence.finalHash), verifierSpec: spec, reexec, diff, binding: { runId: RUN, base, head, workspace: repo }, modelId: MODEL });
   return { reasons: g.ok ? [] : g.reasons, diff };

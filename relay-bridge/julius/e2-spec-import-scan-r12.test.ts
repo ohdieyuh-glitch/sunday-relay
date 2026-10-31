@@ -10,6 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import * as G from './e2-evidence-gate';
 import { GOOD, MODEL, RUN, liveCapture, makeRepo, anchorOf } from './e2-test-kit';
+import { pinT, recordGitDiffT } from './e2-test-kit';
 
 let root = ''; let n = 0;
 const W = (p: string, c: string): void => { mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, c); };
@@ -21,11 +22,11 @@ async function gate(baseFiles: Record<string, string>, headFiles: Record<string,
   if (seedDir !== undefined) cpSync(seedDir, repo, { recursive: true });
   const { base, head } = makeRepo(repo, { 'a.txt': '1\n', ...baseFiles }, { 'a.txt': '2\n', ...headFiles }, W);
   const runner = G.spawnVerifierRunner({ timeoutMs: 30_000 });
-  const spec = await G.pinVerifierSpecWithBaseRun({ testCommand, workspace: repo, base, ...(minTests === undefined ? {} : { minTests }) }, runner);
+  const spec = await pinT({ testCommand, workspace: repo, base, ...(minTests === undefined ? {} : { minTests }) }, runner);
   if ('refused' in spec) return { refused: spec.refused };
   const reexec = await G.recordVerifierReexec({ spec, cwd: repo, runner });
   const { lines, evidence } = await liveCapture(root, `s${n}.jsonl`, GOOD());
-  const g = G.e2Gate({ streamLines: lines, anchor: anchorOf('workflow_output', evidence.finalHash), verifierSpec: spec, reexec, diff: await G.recordGitDiff({ base, head, cwd: repo, runner }), binding: { runId: RUN, base, head, workspace: repo }, modelId: MODEL });
+  const g = G.e2Gate({ streamLines: lines, anchor: anchorOf('workflow_output', evidence.finalHash), verifierSpec: spec, reexec, diff: await recordGitDiffT({ base, head, cwd: repo, runner }), binding: { runId: RUN, base, head, workspace: repo }, modelId: MODEL });
   return { reasons: g.ok ? [] : g.reasons, summary: reexec?.commands[0]?.testSummary ?? null };
 }
 const UNTRUSTED = { refused: 'spec_pinned_test_imports_untrusted' };

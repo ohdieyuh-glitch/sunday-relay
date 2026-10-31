@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import * as G from './e2-evidence-gate';
 import { GOOD, MODEL, RUN, liveCapture, makeRepo, anchorOf } from './e2-test-kit';
+import { pinT, recordGitDiffT } from './e2-test-kit';
 
 /*
  * PILOT 5366ad30 R3-2 / R3-4 and Skywalker 5366ad30 M1 / M2, failing-first: verifier commands come from a pinned mission
@@ -96,20 +97,20 @@ describe('R3-2: re-exec refuses when pinned content changed since base, and the 
   });
   it('gate: spec present and honoured passes; legacy argv, another spec, a pin change, no spec or a spec for another base are refused', async () => {
     const runner = G.spawnVerifierRunner({ timeoutMs: 60_000 });
-    const spec = (await G.pinVerifierSpecWithBaseRun({ testCommand: 'node --test test/a.test.mjs', additionalChecks: ['node ok.mjs'], minTests: 1, workspace: repo, base }, G.spawnVerifierRunner({ timeoutMs: 30_000 }))) as G.E2VerifierSpec;
+    const spec = (await pinT({ testCommand: 'node --test test/a.test.mjs', additionalChecks: ['node ok.mjs'], minTests: 1, workspace: repo, base }, G.spawnVerifierRunner({ timeoutMs: 30_000 }))) as G.E2VerifierSpec;
     const { lines, evidence } = await liveCapture(root, 'g.jsonl', GOOD());
-    const g = { streamLines: lines, anchor: anchorOf('workflow_output', evidence.finalHash), diff: await G.recordGitDiff({ base, head, cwd: repo, runner }), binding: { runId: RUN, base, head, workspace: repo }, modelId: MODEL };
+    const g = { streamLines: lines, anchor: anchorOf('workflow_output', evidence.finalHash), diff: await recordGitDiffT({ base, head, cwd: repo, runner }), binding: { runId: RUN, base, head, workspace: repo }, modelId: MODEL };
     const reexec = await G.recordVerifierReexec({ spec, cwd: repo, runner });
     expect(reexec?.commands.map((c) => c.exitCode)).toEqual([0, 0]);
     expect(reasons(G.e2Gate({ ...g, reexec, verifierSpec: spec }))).toEqual([]);
     const legacy = await G.recordVerifierReexec({ commands: [['node', 'ok.mjs']], cwd: repo, runner });
     expect(reasons(G.e2Gate({ ...g, reexec: legacy, verifierSpec: spec }))).toEqual(['e2_verifier_not_from_spec']);
-    const other = (await G.pinVerifierSpecWithBaseRun({ testCommand: 'node ok.mjs', minTests: 1, workspace: repo, base }, G.spawnVerifierRunner({ timeoutMs: 30_000 }))) as G.E2VerifierSpec;
+    const other = (await pinT({ testCommand: 'node ok.mjs', minTests: 1, workspace: repo, base }, G.spawnVerifierRunner({ timeoutMs: 30_000 }))) as G.E2VerifierSpec;
     expect(reasons(G.e2Gate({ ...g, reexec: await G.recordVerifierReexec({ spec: other, cwd: repo, runner }), verifierSpec: spec }))).toEqual(['e2_verifier_not_from_spec']);
     expect(reasons(G.e2Gate({ ...g, reexec, verifierSpec: undefined }))).toEqual(['e2_verifier_spec_absent']);
     expect(reasons(G.e2Gate({ ...g, reexec, verifierSpec: { ...spec } }))).toEqual(['e2_verifier_spec_absent']);
-    const atHead = (await G.pinVerifierSpecWithBaseRun({ testCommand: 'node --test test/a.test.mjs', workspace: repo, base: head }, G.spawnVerifierRunner({ timeoutMs: 30_000 }))) as G.E2VerifierSpec;
-    expect(reasons(G.e2Gate({ ...g, reexec: await G.recordVerifierReexec({ spec: atHead, cwd: repo, runner }), verifierSpec: atHead }))).toEqual(['e2_verifier_not_from_spec']);
+    const atHead = (await pinT({ testCommand: 'node --test test/a.test.mjs', workspace: repo, base: head }, G.spawnVerifierRunner({ timeoutMs: 30_000 }))) as G.E2VerifierSpec;
+    expect(reasons(G.e2Gate({ ...g, reexec: await G.recordVerifierReexec({ spec: atHead, cwd: repo, runner }), verifierSpec: atHead }))).toEqual(['e2_objects_untrusted', 'e2_verifier_not_from_spec']); // Round 10: spec store != diff store
     write(join(repo, 'test/a.test.mjs'), 'process.exit(0)\n');
     try {
       expect(reasons(G.e2Gate({ ...g, reexec: await G.recordVerifierReexec({ spec, cwd: repo, runner }), verifierSpec: spec }))).toEqual(['e2_verifier_pin_changed']);

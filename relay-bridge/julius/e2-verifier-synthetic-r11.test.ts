@@ -11,6 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import * as G from './e2-evidence-gate';
 import { GOOD, MODEL, RUN, liveCapture, makeRepo, anchorOf } from './e2-test-kit';
+import { pinT, recordGitDiffT } from './e2-test-kit';
 
 let root = '';
 const W = (p: string, c: string): void => { mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, c); };
@@ -29,17 +30,17 @@ const T3 = "import __fs from 'node:fs'; import t from 'node:test'; import a from
 async function specOf(name: string, files: Record<string, string>, testCommand = 'node --test t.test.mjs'): Promise<unknown> {
   const repo = join(root, name); mkdirSync(repo);
   const { base } = makeRepo(repo, { 'a.txt': '1\n', ...files }, { 'a.txt': '2\n' }, W);
-  return G.pinVerifierSpecWithBaseRun({ testCommand, workspace: repo, base }, G.spawnVerifierRunner({ timeoutMs: 30_000 }));
+  return pinT({ testCommand, workspace: repo, base }, G.spawnVerifierRunner({ timeoutMs: 30_000 }));
 }
 async function gate(name: string, baseFiles: Record<string, string>, headFiles: Record<string, string>, testCommand = 'node --test t.test.mjs'): Promise<{ reasons: readonly string[]; reexec: G.E2ReexecEvidence | null }> {
   const repo = join(root, name); mkdirSync(repo);
   const { base, head } = makeRepo(repo, { 'a.txt': '1\n', ...baseFiles }, { 'a.txt': '2\n', ...headFiles }, W);
   const runner = G.spawnVerifierRunner({ timeoutMs: 30_000 });
-  const spec = (await G.pinVerifierSpecWithBaseRun({ testCommand, workspace: repo, base }, G.spawnVerifierRunner({ timeoutMs: 30_000 }))) as G.E2VerifierSpec;
+  const spec = (await pinT({ testCommand, workspace: repo, base }, G.spawnVerifierRunner({ timeoutMs: 30_000 }))) as G.E2VerifierSpec;
   expect('refused' in spec).toBe(false);
   const reexec = await G.recordVerifierReexec({ spec, cwd: repo, runner });
   const { lines, evidence } = await liveCapture(root, `${name}.jsonl`, GOOD());
-  const g = G.e2Gate({ streamLines: lines, anchor: anchorOf('workflow_output', evidence.finalHash), verifierSpec: spec, reexec, diff: await G.recordGitDiff({ base, head, cwd: repo, runner }), binding: { runId: RUN, base, head, workspace: repo }, modelId: MODEL });
+  const g = G.e2Gate({ streamLines: lines, anchor: anchorOf('workflow_output', evidence.finalHash), verifierSpec: spec, reexec, diff: await recordGitDiffT({ base, head, cwd: repo, runner }), binding: { runId: RUN, base, head, workspace: repo }, modelId: MODEL });
   return { reasons: g.ok ? [] : g.reasons, reexec };
 }
 

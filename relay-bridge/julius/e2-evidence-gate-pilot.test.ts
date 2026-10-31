@@ -8,8 +8,9 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { createCursorCloudAgentsTransport, type CursorFetch } from './cursor-cloud-agents-transport';
 import { captureCursorRunStream, createFileEvidenceSink, readEvidenceLines, verifyEvidenceChain } from './cursor-run-stream-evidence';
-import { E2_FAKE_LABEL, e2Gate, pinVerifierSpecWithBaseRun, type E2VerifierSpec, recordGitDiff, recordVerifierReexec, spawnVerifierRunner, type E2DiffEvidence, type E2ReexecEvidence } from './e2-evidence-gate';
+import { E2_FAKE_LABEL, e2Gate, type E2VerifierSpec, recordVerifierReexec, spawnVerifierRunner, type E2DiffEvidence, type E2ReexecEvidence } from './e2-evidence-gate';
 import { anchorOf } from './e2-test-kit';
+import { pinT, recordGitDiffT } from './e2-test-kit';
 
 /*
  * PILOT review of 0774db05, gate findings (H-3, H-4, M-7, M-8, L-4), written failing-first. The live-labelled capture uses
@@ -104,9 +105,9 @@ function rechain(lines: readonly string[], edit: (r: Record<string, unknown>, i:
 }
 async function parts() {
   const runner = spawnVerifierRunner({ timeoutMs: 30_000 });
-  const verifierSpec = (await pinVerifierSpecWithBaseRun({ testCommand: 'node ok.mjs', minTests: 1, workspace: repo, base }, spawnVerifierRunner({ timeoutMs: 30_000 }))) as E2VerifierSpec;
+  const verifierSpec = (await pinT({ testCommand: 'node ok.mjs', minTests: 1, workspace: repo, base }, spawnVerifierRunner({ timeoutMs: 30_000 }))) as E2VerifierSpec;
   const reexec = await recordVerifierReexec({ spec: verifierSpec, cwd: repo, runner });
-  const diff = await recordGitDiff({ base, head, cwd: repo, runner });
+  const diff = await recordGitDiffT({ base, head, cwd: repo, runner });
   return { runner, verifierSpec, reexec, diff, binding: { runId: REF.runId, base, head, workspace: repo }, modelId: 'grok-code-fast-1' };
 }
 const reasons = (r: ReturnType<typeof e2Gate>): readonly string[] => (r.ok ? [] : r.reasons);
@@ -199,10 +200,10 @@ describe('PILOT 0774db05 H-4: run, base, head and workspace are bound across str
     const g = { streamLines, anchor: anchorOf('workflow_output', evidence.finalHash), reexec: p.reexec, verifierSpec: p.verifierSpec, diff: p.diff, modelId: p.modelId, binding: p.binding };
     expect(reasons(e2Gate({ ...g, binding: undefined } as unknown as Parameters<typeof e2Gate>[0]))).toEqual(['e2_binding_absent']);
     expect(reasons(e2Gate({ ...g, binding: { ...p.binding, runId: 'run-other' } }))).toEqual(['e2_binding_run_mismatch']);
-    const swapped = await recordGitDiff({ base: head, head: base, cwd: repo, runner: p.runner });
+    const swapped = await recordGitDiffT({ base: head, head: base, cwd: repo, runner: p.runner });
     expect(swapped?.ancestry).toBe(false);
-    expect(reasons(e2Gate({ ...g, diff: swapped }))).toEqual(['e2_binding_diff_mismatch', 'e2_diff_not_descendant']);
-    expect(reasons(e2Gate({ ...g, diff: swapped, binding: { ...p.binding, base: head, head: base } }))).toEqual(['e2_diff_not_descendant', 'e2_verifier_not_from_spec']); // R3-2: the spec was pinned at the real base
+    expect(reasons(e2Gate({ ...g, diff: swapped }))).toEqual(['e2_objects_untrusted', 'e2_binding_diff_mismatch', 'e2_diff_not_descendant']); // Round 10: the diff's trusted store is for another base
+    expect(reasons(e2Gate({ ...g, diff: swapped, binding: { ...p.binding, base: head, head: base } }))).toEqual(['e2_objects_untrusted', 'e2_diff_not_descendant', 'e2_verifier_not_from_spec']); // Round 10: store for another base; R3-2: the spec was pinned at the real base
     /* R3-2: a spec re-exec in another cwd runs nothing; the legacy argv form in another cwd is refused twice over. */
     const elsewhere = await recordVerifierReexec({ spec: p.verifierSpec, cwd: root, runner: p.runner });
     expect(elsewhere?.refusal).toBe('cwd_not_spec_workspace');
@@ -254,19 +255,19 @@ describe('PILOT 0774db05 M-7: the verifier runner', () => {
 describe('PILOT 0774db05 M-8: the diff hash does not depend on local git config', () => {
   it('diff.noprefix, diff.renames, core.quotepath and color in the repo config do not change the hash; ancestry is recorded', async () => {
     const runner = spawnVerifierRunner();
-    const plain = await recordGitDiff({ base, head, cwd: repo, runner });
+    const plain = await recordGitDiffT({ base, head, cwd: repo, runner });
     git(repo, 'config', 'diff.noprefix', 'true');
     git(repo, 'config', 'diff.renames', 'true');
     git(repo, 'config', 'core.quotepath', 'true');
     git(repo, 'config', 'diff.mnemonicPrefix', 'true');
     git(repo, 'config', 'color.ui', 'always');
     try {
-      const configured = await recordGitDiff({ base, head, cwd: repo, runner });
+      const configured = await recordGitDiffT({ base, head, cwd: repo, runner });
       expect(configured?.sha256).toBe(plain?.sha256);
       /* Mutation R25: a global config handed to the runner's env is not read either. */
       const gc = join(root, 'global.gitconfig');
       writeFileSync(gc, '[diff]\n\tnoprefix = true\n\trenames = true\n');
-      const viaGlobal = await recordGitDiff({ base, head, cwd: repo, runner: spawnVerifierRunner({ env: { GIT_CONFIG_GLOBAL: gc, GIT_CONFIG_SYSTEM: gc } }) });
+      const viaGlobal = await recordGitDiffT({ base, head, cwd: repo, runner: spawnVerifierRunner({ env: { GIT_CONFIG_GLOBAL: gc, GIT_CONFIG_SYSTEM: gc } }) });
       expect(viaGlobal?.sha256).toBe(plain?.sha256);
       expect(plain).toMatchObject({ exitCode: 0, ancestry: true, cwd: repo });
       expect(plain?.argv).toEqual(expect.arrayContaining(['diff.noprefix=false', 'diff.renames=false', 'core.quotepath=false', '--no-renames']));

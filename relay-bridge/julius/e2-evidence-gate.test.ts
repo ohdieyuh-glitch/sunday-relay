@@ -6,7 +6,8 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { E2_FAKE_LABEL, E2_GATE_REASONS, E2_JULIUS_LABEL, e2Gate, recordGitDiff, recordVerifierReexec, spawnVerifierRunner, type VerifierRunner } from './e2-evidence-gate';
+import { E2_FAKE_LABEL, E2_GATE_REASONS, E2_JULIUS_LABEL, e2Gate, recordVerifierReexec, spawnVerifierRunner, type VerifierRunner } from './e2-evidence-gate';
+import { recordGitDiffT } from './e2-test-kit';
 
 const sha = (s: string): string => createHash('sha256').update(s).digest('hex');
 const NODE = process.execPath;
@@ -84,19 +85,20 @@ describe('E2 part C: the diff', () => {
         '-U3', '--inter-hunk-context=0', '-O/dev/null', '--src-prefix=a/', '--dst-prefix=b/', '--diff-algorithm=myers', '--indent-heuristic', `${base}..${head}`];
       const expected = execFileSync(argv[0] as string, argv.slice(1), { cwd: dir, env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null', GIT_ATTR_NOSYSTEM: '1' } });
       const runner = spawnVerifierRunner();
-      const d = await recordGitDiff({ base, head, cwd: dir, runner });
-      expect(d).toEqual({ label: E2_JULIUS_LABEL, base, head, cwd: dir, argv, exitCode: 0, sha256: createHash('sha256').update(expected).digest('hex'), bytes: expected.byteLength, ancestry: true, paths: ['a.txt'], isolated: true, isolationFindings: [], attributeFiles: [], objectDirRefusal: null, objectRefusal: null });
+      const d = await recordGitDiffT({ base, head, cwd: dir, runner });
+      const pinned = [...argv.slice(0, argv.indexOf('diff')), '-c', `e2.snapshotObjectDir=${d?.objectDir}`, '-c', `e2.trustedObjects=${d?.trustedObjects}`, ...argv.slice(argv.indexOf('diff'))];
+      expect(d).toEqual({ label: E2_JULIUS_LABEL, base, head, cwd: dir, argv: pinned, exitCode: 0, sha256: createHash('sha256').update(expected).digest('hex'), bytes: expected.byteLength, ancestry: true, paths: ['a.txt'], isolated: true, isolationFindings: [], attributeFiles: [], objectDirRefusal: null, objectDir: expect.any(String), trustedObjects: expect.any(String), objectRefusal: null });
       expect(d?.bytes).toBeGreaterThan(0);
       for (const bad of [base.slice(0, 39), base.toUpperCase(), 'HEAD', `${base}\n`, `--output=${base}`]) {
-        expect(await recordGitDiff({ base: bad, head, cwd: dir, runner })).toBeNull();
-        expect(await recordGitDiff({ base, head: bad, cwd: dir, runner })).toBeNull();
+        expect(await recordGitDiffT({ base: bad, head, cwd: dir, runner })).toBeNull();
+        expect(await recordGitDiffT({ base, head: bad, cwd: dir, runner })).toBeNull();
       }
-      const missing = await recordGitDiff({ base, head: 'f'.repeat(40), cwd: dir, runner });
+      const missing = await recordGitDiffT({ base, head: 'f'.repeat(40), cwd: dir, runner });
       expect(missing?.exitCode).not.toBe(0);
       const fake: VerifierRunner = async () => ({ exitCode: 0, stdout: new Uint8Array([1, 2]), stderr: '' });
-      expect(await recordGitDiff({ base, head, cwd: dir, runner: fake })).toMatchObject({ label: E2_FAKE_LABEL, bytes: 2 });
+      expect(await recordGitDiffT({ base, head, cwd: dir, runner: fake })).toMatchObject({ label: E2_FAKE_LABEL, bytes: 2 });
       const thrower: VerifierRunner = async () => { throw new Error('x'); };
-      expect((await recordGitDiff({ base, head, cwd: dir, runner: thrower }))?.exitCode).toBe('unknown');
+      expect((await recordGitDiffT({ base, head, cwd: dir, runner: thrower }))?.exitCode).toBe('unknown');
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 });
@@ -106,7 +108,7 @@ describe('E2 part C: the diff', () => {
 describe('E2 gate', () => {
   it('publishes every reason once', () => {
     expect(new Set(E2_GATE_REASONS).size).toBe(E2_GATE_REASONS.length);
-    expect(E2_GATE_REASONS.length).toBe(50); /* Round 10: + e2_diff_objdir_invalid, e2_object_hash_mismatch, e2_object_unverifiable */
+    expect(E2_GATE_REASONS.length).toBe(51); /* Round 10: + e2_diff_objdir_invalid, e2_object_hash_mismatch, e2_object_unverifiable, e2_objects_untrusted */
   });
   it('refuses when everything is absent, with every reason, never the diff alone', () => {
     const r = e2Gate({ streamLines: null, anchor: null, reexec: null, verifierSpec: null, diff: null, modelId: null, binding: null });

@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import * as G from './e2-evidence-gate';
 import { MODEL, RUN, START, anchorOf, call, liveCapture, makeRepo, tail } from './e2-test-kit';
+import { pinT, recordGitDiffT } from './e2-test-kit';
 
 let root = ''; let repo = ''; let base = ''; let head = '';
 const W = (p: string, c: string): void => { mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, c); };
@@ -20,11 +21,11 @@ afterAll(() => { rmSync(root, { recursive: true, force: true }); });
 
 async function run(names: string[], extra?: readonly string[]) {
   const runner = G.spawnVerifierRunner({ timeoutMs: 30_000 });
-  const spec = (await G.pinVerifierSpecWithBaseRun({ testCommand: 'node ok.mjs', minTests: 1, workspace: repo, base, ...(extra === undefined ? {} : { extraKnownNonEditTools: extra }) }, G.spawnVerifierRunner({ timeoutMs: 30_000 }))) as G.E2VerifierSpec;
+  const spec = (await pinT({ testCommand: 'node ok.mjs', minTests: 1, workspace: repo, base, ...(extra === undefined ? {} : { extraKnownNonEditTools: extra }) }, G.spawnVerifierRunner({ timeoutMs: 30_000 }))) as G.E2VerifierSpec;
   const sse = START + call('c0', 'edit_file') + names.map((n, i) => call(`u${i}`, n, {})).join('') + tail();
   const { lines, evidence } = await liveCapture(root, `u${Math.random()}.jsonl`, sse);
   return G.e2Gate({ streamLines: lines, anchor: anchorOf('workflow_output', evidence.finalHash), verifierSpec: spec, reexec: await G.recordVerifierReexec({ spec, cwd: repo, runner }),
-    diff: await G.recordGitDiff({ base, head, cwd: repo, runner }), binding: { runId: RUN, base, head, workspace: repo }, modelId: MODEL });
+    diff: await recordGitDiffT({ base, head, cwd: repo, runner }), binding: { runId: RUN, base, head, workspace: repo }, modelId: MODEL });
 }
 
 describe('M3: unknown tools', () => {

@@ -30,7 +30,8 @@ import { E2_GIT_ENV, E2_VERIFIER_PATH, e2GitPins } from './e2-evidence-gate';
 
 export const SAFE_GIT_REASONS = Object.freeze(['safe_git_workspace_invalid', 'safe_git_dir_not_plain', 'safe_git_config_unparsed', 'safe_git_config_include', 'safe_git_config_filter',
   'safe_git_config_core', 'safe_git_config_alias', 'safe_git_config_extensions', 'safe_git_config_other', 'safe_git_head_unreadable', 'safe_git_parent_invalid', 'safe_git_tree_unreadable', 'safe_git_write_failed',
-  /* Round 9: */ 'safe_git_head_not_parent', 'safe_git_secret_path', 'safe_git_dropped_path', 'safe_git_tree_mismatch', 'safe_git_alternates_present', 'safe_git_objdir_failed'] as const);
+  /* Round 9: */ 'safe_git_head_not_parent', 'safe_git_secret_path', 'safe_git_dropped_path', 'safe_git_tree_mismatch', 'safe_git_alternates_present', 'safe_git_objdir_failed',
+  /* Round 10 (PILOT R9-6): */ 'safe_git_special_file'] as const);
 export type SafeGitRefusal = typeof SAFE_GIT_REASONS[number];
 type Refused = { readonly refused: SafeGitRefusal; readonly paths?: readonly string[] };
 const no = (refused: SafeGitRefusal, paths?: readonly string[]): Refused => Object.freeze(paths === undefined ? { refused } : { refused, paths: Object.freeze([...paths]) });
@@ -139,11 +140,16 @@ export function isSecretPath(p: string): boolean {
     || (base.endsWith('.asc') && /(priv|secret|secring)/u.test(base));
 }
 /** Round 9 (PILOT R8-3): a path component git refuses or silently drops (.git in any case, with trailing dots/spaces, or the 8.3 alias git~N). */
+/* Round 10 (PILOT R9-6): HFS+ ignores these code points when comparing names (git's is_hfs_dotgit), so `.git\u200c` IS
+   `.git` on macOS. Deliberately treated as `.git` everywhere (refused as dropped), whatever the gate's own OS. */
+const HFS_IGNORABLE = /[\u200c-\u200f\u202a-\u202e\u206a-\u206f\ufeff]/gu;
 export function isDroppedPath(p: string): boolean {
-  return p.split('/').some((c) => { const n = c.toLowerCase().replace(/[. ]+$/u, ''); return n === '.git' || /^git~\d+$/u.test(n); });
+  return p.split('/').some((c) => { const n = c.replace(HFS_IGNORABLE, '').toLowerCase().replace(/[. ]+$/u, ''); return n === '.git' || /^git~\d+$/u.test(n); });
 }
-function walk(ws: string): { entries: Entry[]; outsideLinks: string[]; secret: string[]; dropped: string[] } {
-  const entries: Entry[] = []; const outsideLinks: string[] = []; const secret: string[] = []; const dropped: string[] = [];
+/** Round 10 (PILOT R9-5): git's order is UTF-8 byte order; JS `<` is UTF-16 code-unit order (U+FFFD vs U+1F600 differ). */
+const byteOrder = (x: string, y: string): number => Buffer.compare(Buffer.from(x, 'utf8'), Buffer.from(y, 'utf8'));
+function walk(ws: string): { entries: Entry[]; outsideLinks: string[]; secret: string[]; dropped: string[]; special: string[] } {
+  const entries: Entry[] = []; const outsideLinks: string[] = []; const secret: string[] = []; const dropped: string[] = []; const special: string[] = [];
   const rec = (rel: string): void => {
     for (const d of readdirSync(join(ws, rel), { withFileTypes: true })) {
       if (rel === '' && d.name === '.git') continue;
@@ -159,11 +165,11 @@ function walk(ws: string): { entries: Entry[]; outsideLinks: string[]; secret: s
         if (r === '..' || r.startsWith(`..${sep}`) || isAbsolute(r)) outsideLinks.push(p);
         entries.push({ mode: '120000', data: Buffer.from(target), path: p });
       } else if (st.isFile()) entries.push({ mode: (st.mode & 0o111) !== 0 ? '100755' : '100644', data: readFileSync(abs), path: p });
+      else special.push(p); /* Round 10 R9-6: FIFO, socket, device: refused by name, never silently skipped */
     }
   };
   rec('');
-  const byPath = (a: { path: string } | string, b: { path: string } | string): number => { const x = typeof a === 'string' ? a : a.path; const y = typeof b === 'string' ? b : b.path; return x < y ? -1 : x > y ? 1 : 0; };
-  return { entries: entries.sort(byPath), outsideLinks: outsideLinks.sort(), secret: secret.sort(), dropped: dropped.sort() };
+  return { entries: entries.sort((a, b) => byteOrder(a.path, b.path)), outsideLinks: outsideLinks.sort(byteOrder), secret: secret.sort(byteOrder), dropped: dropped.sort(byteOrder), special: special.sort(byteOrder) };
 }
 /**
  * Round 10 (Skywalker 5a6e3400: the Round 9 registry + alternates-line design is withdrawn): the throwaway object
@@ -186,11 +192,12 @@ export type SnapshotResult = {
  * (safe_git_tree_mismatch). Objects go only to the throwaway object dir. Wiring order: snapshot -> recordGitDiff({ objectDir:
  * objectDir.path }) -> e2Gate -> dispose() in a finally. A refusal carries no object dir (already cleaned).
  */
-export function snapshotCommitSafely(input: { readonly workspace: string; readonly parent: string; readonly message: string; readonly author: { readonly name: string; readonly email: string }; readonly allowHeadNotParent?: true }):
+export function snapshotCommitSafely(input: { readonly workspace: string; readonly parent: string; readonly message: string; readonly author: { readonly name: string; readonly email: string }; readonly allowHeadNotParent?: true; readonly trustedObjects?: string }):
   SnapshotResult | Refused {
   const c = check(input?.workspace);
   if ('refused' in c) return c;
-  if (typeof input.parent !== 'string' || !SHA.test(input.parent) || sg(c, ['rev-parse', '--verify', '-q', `${input.parent}^{commit}`])?.trim() !== input.parent) return no('safe_git_parent_invalid');
+  if (typeof input.parent !== 'string' || !SHA.test(input.parent) || sg(c, ['rev-parse', '--verify', '-q', `${input.parent}^{commit}`], input.trustedObjects === undefined ? {} : { env: { GIT_OBJECT_DIRECTORY: input.trustedObjects } })?.trim() !== input.parent) return no('safe_git_parent_invalid');
+  /* Round 10: with the trusted store, the parent must be the trusted base (read from the store, not the coder's .git). */
   if (input.allowHeadNotParent !== true) {
     const head = sg(c, ['rev-parse', '--verify', '-q', 'HEAD^{commit}'])?.trim() ?? '';
     if (head !== input.parent) return no('safe_git_head_not_parent');
@@ -201,6 +208,7 @@ export function snapshotCommitSafely(input: { readonly workspace: string; readon
   try { w = walk(c.ws); } catch { return no('safe_git_tree_unreadable'); }
   if (w.dropped.length > 0) return no('safe_git_dropped_path', w.dropped);
   if (w.secret.length > 0) return no('safe_git_secret_path', w.secret);
+  if (w.special.length > 0) return no('safe_git_special_file', w.special);
   let objDir: string;
   try {
     objDir = realpathSync(mkdtempSync(join(tmpdir(), 'e2-snap-objects-')));
@@ -232,8 +240,9 @@ export function snapshotCommitSafely(input: { readonly workspace: string; readon
     if (!SHA.test(tree)) return no('safe_git_write_failed');
     const listed = sg(c, ['ls-tree', '-r', '-z', '--full-tree', tree], { env: obj });
     if (listed === null) return no('safe_git_write_failed');
-    const got = listed.split('\u0000').filter((x) => x !== '').map((l) => { const [meta, path] = l.split('\t'); return `${(meta ?? '').split(' ')[0]} ${path}`; });
-    const want = w.entries.map((e) => `${e.mode} ${e.path}`);
+    /* Round 10 R9-5: both lists in byte order (git's own order), so names whose UTF-16 and UTF-8 orders differ compare equal. */
+    const got = listed.split('\u0000').filter((x) => x !== '').map((l) => { const [meta, path] = l.split('\t'); return `${(meta ?? '').split(' ')[0]} ${path}`; }).sort(byteOrder);
+    const want = w.entries.map((e) => `${e.mode} ${e.path}`).sort(byteOrder);
     if (got.length !== want.length || got.some((g, i) => g !== want[i])) return no('safe_git_tree_mismatch');
     /* Round 10 R9-1: the commit object is hashed directly (commit-tree would look the parent up in the coder store). */
     const ident = (x: unknown): string | null => (typeof x === 'string' && x.trim() !== '' && !/[<>\n\r\0]/u.test(x) ? x.trim() : null);
@@ -254,3 +263,44 @@ export function snapshotCommitSafely(input: { readonly workspace: string; readon
   }
 }
 function lstatExists(p: string): boolean { try { lstatSync(p); return true; } catch { return false; } }
+/**
+ * Round 10 (Skywalker amendment to 5a6e3400): the TRUSTED SEED STORE. Build it from the mission seed BEFORE any coder code
+ * runs. `git init --bare` in a fresh 0700 directory outside the seed, then `fetch --no-tags <seed> <base>` over the file
+ * transport (objects arrive as a pack; index-pack re-hashes every object), then `fsck --strict` on the store. Pin the
+ * spec from it (pinVerifierSpecWithBaseRun({ trustedObjects: store.objects })), and pass it to every recordGitDiff
+ * ({ objectDir, trustedObjects }). The coder's .git is never a source after this. dispose() removes it; idempotent.
+ */
+export const TRUSTED_STORE_REASONS = Object.freeze(['store_seed_invalid', 'store_base_missing', 'store_failed'] as const);
+export type TrustedStoreRefusal = typeof TRUSTED_STORE_REASONS[number];
+export type TrustedSeedStore = { readonly storeDir: string; readonly objects: string; readonly base: string; readonly tree: string; readonly dispose: () => void };
+export function buildTrustedSeedStore(input: { readonly seed: string; readonly base: string }): TrustedSeedStore | { readonly refused: TrustedStoreRefusal } {
+  const nope = (refused: TrustedStoreRefusal) => Object.freeze({ refused });
+  const c = check(input?.seed);
+  if ('refused' in c) return nope('store_seed_invalid');
+  if (typeof input.base !== 'string' || !SHA.test(input.base)) return nope('store_base_missing');
+  let storeDir: string;
+  try {
+    storeDir = realpathSync(mkdtempSync(join(tmpdir(), 'e2-trusted-store-')));
+    chmodSync(storeDir, 0o700);
+    const r = relative(c.ws, storeDir);
+    if (!(r === '..' || r.startsWith(`..${sep}`) || isAbsolute(r))) { rmSync(storeDir, { recursive: true, force: true }); return nope('store_failed'); }
+  } catch { return nope('store_failed'); }
+  let ok = false;
+  const dispose = (): void => { rmSync(storeDir, { recursive: true, force: true }); };
+  try {
+    const repo = join(storeDir, 'repo.git');
+    const st = { ...c, gitDir: repo };
+    if (sg(c, ['init', '-q', '--bare', repo]) === null) return nope('store_failed');
+    if (sg(st, ['-c', 'protocol.file.allow=always', 'fetch', '-q', '--no-tags', '--no-write-fetch-head', '--', c.ws, input.base]) === null) {
+      return nope(sg(c, ['cat-file', '-e', `${input.base}^{commit}`]) === null ? 'store_base_missing' : 'store_failed');
+    }
+    if (sg(st, ['rev-parse', '--verify', '-q', `${input.base}^{commit}`])?.trim() !== input.base) return nope('store_base_missing');
+    if (sg(st, ['fsck', '--strict', '--no-dangling', '--no-progress']) === null) return nope('store_failed');
+    const tree = sg(st, ['rev-parse', '--verify', '-q', `${input.base}^{tree}`])?.trim() ?? '';
+    if (!SHA.test(tree)) return nope('store_failed');
+    const objects = join(repo, 'objects');
+    chmodSync(objects, 0o700);
+    ok = true;
+    return Object.freeze({ storeDir, objects, base: input.base, tree, dispose });
+  } finally { if (!ok) dispose(); }
+}

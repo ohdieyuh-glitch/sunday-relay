@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { verifyEvidenceChain } from './cursor-run-stream-evidence';
 import * as G from './e2-evidence-gate';
 import { GOOD, MODEL, RUN, START, call, liveCapture, makeRepo, rechain, tail, anchorOf } from './e2-test-kit';
+import { pinT, recordGitDiffT } from './e2-test-kit';
 
 /* PILOT 5366ad30 R3-1: the independent anchor is enforced in code. Failing-first: on 5366ad30 a self-derived anchor passed. */
 let root = ''; let repo = ''; let base = ''; let head = '';
@@ -19,10 +20,10 @@ afterAll(() => { rmSync(root, { recursive: true, force: true }); });
 const reasons = (r: ReturnType<typeof G.e2Gate>): readonly string[] => (r.ok ? [] : r.reasons);
 async function parts() {
   const runner = G.spawnVerifierRunner({ timeoutMs: 30_000 });
-  const verifierSpec = (await G.pinVerifierSpecWithBaseRun({ testCommand: 'node ok.mjs', minTests: 1, workspace: repo, base }, G.spawnVerifierRunner({ timeoutMs: 30_000 }))) as G.E2VerifierSpec;
+  const verifierSpec = (await pinT({ testCommand: 'node ok.mjs', minTests: 1, workspace: repo, base }, G.spawnVerifierRunner({ timeoutMs: 30_000 }))) as G.E2VerifierSpec;
   return {
     verifierSpec, reexec: await G.recordVerifierReexec({ spec: verifierSpec, cwd: repo, runner }),
-    diff: await G.recordGitDiff({ base, head, cwd: repo, runner }),
+    diff: await recordGitDiffT({ base, head, cwd: repo, runner }),
     binding: { runId: RUN, base, head, workspace: repo },
   };
 }

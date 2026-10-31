@@ -8,15 +8,16 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import * as G from './e2-evidence-gate';
 import { MODEL, RUN, START, call, liveCapture, makeRepo, tail, anchorOf } from './e2-test-kit';
+import { pinT, recordGitDiffT } from './e2-test-kit';
 
 let root = ''; let repo = ''; let base = ''; let head = '';
 let P: Awaited<ReturnType<typeof parts>>;
 async function parts() {
   const runner = G.spawnVerifierRunner({ timeoutMs: 30_000 });
-  const verifierSpec = (await G.pinVerifierSpecWithBaseRun({ testCommand: 'node ok.mjs', minTests: 1, workspace: repo, base }, G.spawnVerifierRunner({ timeoutMs: 30_000 }))) as G.E2VerifierSpec;
+  const verifierSpec = (await pinT({ testCommand: 'node ok.mjs', minTests: 1, workspace: repo, base }, G.spawnVerifierRunner({ timeoutMs: 30_000 }))) as G.E2VerifierSpec;
   return {
     verifierSpec, reexec: await G.recordVerifierReexec({ spec: verifierSpec, cwd: repo, runner }),
-    diff: await G.recordGitDiff({ base, head, cwd: repo, runner }), modelId: MODEL,
+    diff: await recordGitDiffT({ base, head, cwd: repo, runner }), modelId: MODEL,
   };
 }
 beforeAll(async () => {

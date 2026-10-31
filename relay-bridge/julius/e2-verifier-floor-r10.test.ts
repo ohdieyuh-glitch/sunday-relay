@@ -9,6 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import * as G from './e2-evidence-gate';
 import { GOOD, MODEL, RUN, liveCapture, makeRepo, anchorOf } from './e2-test-kit';
+import { pinT, recordGitDiffT } from './e2-test-kit';
 
 let root = '';
 const W = (p: string, c: string): void => { mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, c); };
@@ -27,17 +28,17 @@ const FAKE_SUMMARY = "process.stdout.write('# tests 99\\n# suites 0\\n# pass 99\
 async function specOf(name: string, t: string): Promise<unknown> {
   const repo = join(root, name); mkdirSync(repo);
   const { base } = makeRepo(repo, { 'a.txt': '1\n', 'h.json': '{"v":1}', 't.test.mjs': t }, { 'a.txt': '2\n' }, W);
-  return G.pinVerifierSpecWithBaseRun({ testCommand: 'node --test t.test.mjs', workspace: repo, base }, G.spawnVerifierRunner({ timeoutMs: 30_000 }));
+  return pinT({ testCommand: 'node --test t.test.mjs', workspace: repo, base }, G.spawnVerifierRunner({ timeoutMs: 30_000 }));
 }
 async function gate(name: string, headH: string, opts: { minTests?: number; testCommand?: string } = {}): Promise<{ reasons: readonly string[]; spec: G.E2VerifierSpec; reexec: G.E2ReexecEvidence | null }> {
   const repo = join(root, name); mkdirSync(repo);
   const { base, head } = makeRepo(repo, { 'a.txt': '1\n', 'h.json': '{"v":1}', 't.test.mjs': T2 }, { 'a.txt': '2\n', 'h.json': asData(headH) }, W);
   const runner = G.spawnVerifierRunner({ timeoutMs: 30_000 });
-  const spec = (await G.pinVerifierSpecWithBaseRun({ testCommand: opts.testCommand ?? 'node --test t.test.mjs', workspace: repo, base, ...(opts.minTests === undefined ? {} : { minTests: opts.minTests }) }, G.spawnVerifierRunner({ timeoutMs: 30_000 }))) as G.E2VerifierSpec;
+  const spec = (await pinT({ testCommand: opts.testCommand ?? 'node --test t.test.mjs', workspace: repo, base, ...(opts.minTests === undefined ? {} : { minTests: opts.minTests }) }, G.spawnVerifierRunner({ timeoutMs: 30_000 }))) as G.E2VerifierSpec;
   expect('refused' in spec).toBe(false);
   const reexec = await G.recordVerifierReexec({ spec, cwd: repo, runner });
   const { lines, evidence } = await liveCapture(root, `${name}.jsonl`, GOOD());
-  const g = G.e2Gate({ streamLines: lines, anchor: anchorOf('workflow_output', evidence.finalHash), verifierSpec: spec, reexec, diff: await G.recordGitDiff({ base, head, cwd: repo, runner }), binding: { runId: RUN, base, head, workspace: repo }, modelId: MODEL });
+  const g = G.e2Gate({ streamLines: lines, anchor: anchorOf('workflow_output', evidence.finalHash), verifierSpec: spec, reexec, diff: await recordGitDiffT({ base, head, cwd: repo, runner }), binding: { runId: RUN, base, head, workspace: repo }, modelId: MODEL });
   return { reasons: g.ok ? [] : g.reasons, spec, reexec };
 }
 
@@ -80,11 +81,11 @@ describe('R4-3: node --test vacuous passes', () => {
     const repo = join(root, 'loop'); mkdirSync(repo);
     const { base, head } = makeRepo(repo, { 'a.txt': '1\n', 't.test.mjs': "import __fs from 'node:fs'; import test from 'node:test'; for (const n of [1, 2, 3]) test('t' + n, () => { if (n === 3 && JSON.parse(__fs.readFileSync(new URL(import.meta.url).pathname.replace(/[^/]*$/u, '') + 'f.json', 'utf8'))) throw new Error('x'); });\n", 'f.json': 'false' },
       { 'a.txt': '2\n', 'f.json': 'true' }, W);
-    const spec = (await G.pinVerifierSpecWithBaseRun({ testCommand: 'node --test t.test.mjs', workspace: repo, base }, G.spawnVerifierRunner({ timeoutMs: 30_000 }))) as G.E2VerifierSpec;
+    const spec = (await pinT({ testCommand: 'node --test t.test.mjs', workspace: repo, base }, G.spawnVerifierRunner({ timeoutMs: 30_000 }))) as G.E2VerifierSpec;
     expect(spec.minTests).toEqual([3]); // base run: 3 passing tests at base (round 7 R6-4 brand)
     const { lines, evidence } = await liveCapture(root, 'loop.jsonl', GOOD());
     const g = async (runner: G.VerifierRunner) => G.e2Gate({ streamLines: lines, anchor: anchorOf('workflow_output', evidence.finalHash), verifierSpec: spec, reexec: await G.recordVerifierReexec({ spec, cwd: repo, runner }),
-      diff: await G.recordGitDiff({ base, head, cwd: repo, runner: G.spawnVerifierRunner({ timeoutMs: 30_000 }) }), binding: { runId: RUN, base, head, workspace: repo }, modelId: MODEL });
+      diff: await recordGitDiffT({ base, head, cwd: repo, runner: G.spawnVerifierRunner({ timeoutMs: 30_000 }) }), binding: { runId: RUN, base, head, workspace: repo }, modelId: MODEL });
     const failed = await g(G.spawnVerifierRunner({ timeoutMs: 30_000 }));
     expect(failed.ok ? [] : failed.reasons).toEqual(['e2_reexec_failed', 'e2_verifier_tests_below_minimum']);
     const cut = await g(G.spawnVerifierRunner({ timeoutMs: 30_000, maxOutputBytes: 40 }));

@@ -13,6 +13,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import * as G from './e2-evidence-gate';
 import * as S from './e2-safe-git';
 import { MODEL, RUN, START, anchorOf, call, git, liveCapture, makeRepo, tail } from './e2-test-kit';
+import { pinT, recordGitDiffT, storeFor } from './e2-test-kit';
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), 'e2-objverify-r15-')));
 const privTmp = join(root, 'tmp'); mkdirSync(privTmp); process.env.TMPDIR = privTmp;
@@ -31,10 +32,11 @@ function plant(repo: string, oid: string, bytes: string): void {
 let k = 0;
 async function gate(repo: string, b: string, h: string, objectDir?: string): Promise<{ gate: 'PASS' | readonly string[]; diff: G.E2DiffEvidence | null }> {
   const runner = G.spawnVerifierRunner({ timeoutMs: 60_000 });
-  const spec = await G.pinVerifierSpecWithBaseRun({ testCommand: 'node --test t.test.mjs', workspace: repo, base: b }, runner);
+  const spec = await pinT({ testCommand: 'node --test t.test.mjs', workspace: repo, base: b }, runner);
   if ('refused' in spec) throw new Error(`spec refused ${spec.refused}`);
   const reexec = await G.recordVerifierReexec({ spec, cwd: repo, runner });
-  const diff = await G.recordGitDiff({ base: b, head: h, cwd: repo, runner, ...(objectDir === undefined ? {} : { objectDir }) });
+  const diff = objectDir === undefined ? await recordGitDiffT({ base: b, head: h, cwd: repo, runner })
+    : await G.recordGitDiff({ base: b, head: h, cwd: repo, runner, objectDir, trustedObjects: storeFor(repo, b) as string });
   const { lines, evidence } = await liveCapture(root, `s${k++}.jsonl`, START + call('c0', 'edit_file', { path: 'a.txt' }) + tail());
   const g = G.e2Gate({ streamLines: lines, anchor: anchorOf('workflow_output', evidence.finalHash), verifierSpec: spec, reexec, diff, binding: { runId: RUN, base: b, head: h, workspace: repo }, modelId: MODEL });
   return { gate: g.ok ? 'PASS' : g.reasons, diff };
@@ -59,7 +61,7 @@ describe('R9-1: planted corrupt loose objects never reach a PASS', () => {
     const g = await gate(r, base, head);
     expect(g.gate).toContain('e2_object_hash_mismatch');
   }, 60_000);
-  it('snapshot path (PILOT repro): corrupt object planted BEFORE the snapshot; the snapshot still writes the real object to its own dir, and the gate refuses', async () => {
+  it('snapshot path (PILOT repro): corrupt object planted BEFORE the snapshot; the snapshot still writes the real object to its own dir; with the trusted store the coder object is never read (PASS on the real bytes)', async () => {
     const r = newRepo(); const base = makeRepo(r, { 't.test.mjs': TB(3), 'a.txt': 'a\n' }, {}, W).base; git(r, 'reset', '-q', '--hard', base);
     const oid = hashOf(r, 'GOOD\n'); plant(r, oid, EVIL); W(join(r, 'a.txt'), 'GOOD\n');
     const s = S.snapshotCommitSafely({ workspace: r, parent: base, message: 'c', author: AU });
@@ -67,7 +69,7 @@ describe('R9-1: planted corrupt loose objects never reach a PASS', () => {
     try {
       expect(existsSync(join(s.objectDir.path, oid.slice(0, 2), oid.slice(2)))).toBe(true); /* (a) no skipped write */
       const g = await gate(r, base, s.head, s.objectDir.path);
-      expect(g.gate).not.toBe('PASS'); expect(g.gate).toContain('e2_object_hash_mismatch');
+      expect(g.gate).toBe('PASS'); /* Round 10 trusted store: honest-diff equality is pinned in e2-trusted-store-r15 (a) */
     } finally { s.dispose(); }
   }, 60_000);
   it('snapshot path control: no planted object -> PASS', async () => {

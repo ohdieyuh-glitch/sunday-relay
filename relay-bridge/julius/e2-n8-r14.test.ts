@@ -5,21 +5,45 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import * as G from './e2-evidence-gate';
+import * as S from './e2-safe-git';
 import { FORGE_F3 } from './e2-forge-f3-r14.fixture';
-import { MODEL, RUN, START, anchorOf, call, liveCapture, makeRepo, tail } from './e2-test-kit';
+import { MODEL, RUN, START, anchorOf, call, git, liveCapture, makeRepo, tail } from './e2-test-kit';
+import { pinT, recordGitDiffT } from './e2-test-kit';
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), 'e2-n8-r14-')));
 afterAll(() => { rmSync(root, { recursive: true, force: true }); });
 const W = (p: string, c: string): void => { mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, c); };
 let k = 0;
+/** Round 10: the wiring contract end to end: store before the coder -> pin from it -> coder edits the worktree -> snapshot -> diff (throwaway dir + store) -> gate -> dispose. */
+export async function trustedGate(base: Record<string, string>, head: Record<string, string>, cmd: string): Promise<{ refused?: string; gate?: 'PASS' | readonly string[]; summary?: unknown }> {
+  const repo = join(root, `r${k++}`); mkdirSync(repo);
+  const { base: b } = makeRepo(repo, base, {}, W); git(repo, 'reset', '-q', '--hard', b);
+  const store = S.buildTrustedSeedStore({ seed: repo, base: b });
+  if ('refused' in store) return { refused: store.refused };
+  try {
+    const runner = G.spawnVerifierRunner({ timeoutMs: 60_000 });
+    const spec = await G.pinVerifierSpecWithBaseRun({ testCommand: cmd, workspace: repo, base: b, trustedObjects: store.objects }, runner);
+    if ('refused' in spec) return { refused: spec.refused };
+    for (const [p, c] of Object.entries(head)) W(join(repo, p), c);
+    const snap = S.snapshotCommitSafely({ workspace: repo, parent: b, message: 'snapshot', author: { name: 'j', email: 'j@x' }, trustedObjects: store.objects });
+    if ('refused' in snap) return { refused: snap.refused };
+    try {
+      const reexec = await G.recordVerifierReexec({ spec, cwd: repo, runner });
+      const diff = await G.recordGitDiff({ base: b, head: snap.head, cwd: repo, runner, objectDir: snap.objectDir.path, trustedObjects: store.objects });
+      const { lines, evidence } = await liveCapture(root, `s${k}.jsonl`, START + Object.keys(head).map((p, i) => call(`c${i}`, 'edit_file', { path: p })).join('') + tail());
+      const g = G.e2Gate({ streamLines: lines, anchor: anchorOf('workflow_output', evidence.finalHash), verifierSpec: spec, reexec, diff, binding: { runId: RUN, base: b, head: snap.head, workspace: repo }, modelId: MODEL });
+      return { gate: g.ok ? 'PASS' : g.reasons, summary: reexec?.commands.map((c) => c.testSummary) };
+    } finally { snap.dispose(); }
+  } finally { store.dispose(); }
+}
 export async function fullGate(base: Record<string, string>, head: Record<string, string>, cmd: string): Promise<{ refused?: string; gate?: 'PASS' | readonly string[]; summary?: unknown }> {
   const repo = join(root, `r${k++}`); mkdirSync(repo);
   const { base: b, head: h } = makeRepo(repo, base, head, W);
   const runner = G.spawnVerifierRunner({ timeoutMs: 60_000 });
-  const spec = await G.pinVerifierSpecWithBaseRun({ testCommand: cmd, workspace: repo, base: b }, runner);
+  const spec = await pinT({ testCommand: cmd, workspace: repo, base: b }, runner);
   if ('refused' in spec) return { refused: spec.refused };
   const reexec = await G.recordVerifierReexec({ spec, cwd: repo, runner });
-  const diff = await G.recordGitDiff({ base: b, head: h, cwd: repo, runner });
+  const diff = await recordGitDiffT({ base: b, head: h, cwd: repo, runner });
   const { lines, evidence } = await liveCapture(root, `s${k}.jsonl`, START + Object.keys(head).map((p, i) => call(`c${i}`, 'edit_file', { path: p })).join('') + tail());
   const g = G.e2Gate({ streamLines: lines, anchor: anchorOf('workflow_output', evidence.finalHash), verifierSpec: spec, reexec, diff, binding: { runId: RUN, base: b, head: h, workspace: repo }, modelId: MODEL });
   return { gate: g.ok ? 'PASS' : g.reasons, summary: reexec?.commands.map((c) => c.testSummary) };
@@ -96,6 +120,9 @@ describe('N8-1 (a): the real missions still pass with the flag on (full gate)', 
     const r = await fullGate(seed, { 'out/normalized.json': norm }, 'node --test format.test.mjs');
     expect(r.gate).toBe('PASS');
     expect(JSON.stringify(r.summary)).toMatch(/"pass":4[,}]/u);
+    const t = await trustedGate(seed, { 'out/normalized.json': norm }, 'node --test format.test.mjs'); /* Round 10: the wiring contract path */
+    expect(t.refused ?? t.gate).toBe('PASS');
+    expect(JSON.stringify(t.summary)).toMatch(/"pass":4[,}]/u);
   }, 60_000);
   it('julius-unreal-mission-1: reference solution PASS 5/5', async () => {
     const { readdirSync, readFileSync } = await import('node:fs');
@@ -109,6 +136,9 @@ describe('N8-1 (a): the real missions still pass with the flag on (full gate)', 
     const r = await fullGate(seed, head, 'node --test .julius/hub-scroll-static.test.mjs');
     expect(r.gate).toBe('PASS');
     expect(JSON.stringify(r.summary)).toMatch(/"pass":5[,}]/u);
+    const t = await trustedGate(seed, head, 'node --test .julius/hub-scroll-static.test.mjs'); /* Round 10: the wiring contract path */
+    expect(t.refused ?? t.gate).toBe('PASS');
+    expect(JSON.stringify(t.summary)).toMatch(/"pass":5[,}]/u);
   }, 120_000);
 });
 
