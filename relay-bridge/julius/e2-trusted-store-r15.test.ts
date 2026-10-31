@@ -193,3 +193,25 @@ describe("R9-3: another repo's objects dir, a symlinked store, or objects/info c
     try { expect(G.checkTrustedObjects(store.objects, repo)).toBeNull(); expect('refused' in pinWith(repo, base, store.objects)).toBe(false); } finally { store.dispose(); }
   });
 });
+
+describe('mutation kill tests (Round 10)', () => {
+  it('T11: a seed whose base tree is malformed (duplicate entries; fetch accepts it) is refused by the store fsck (store_failed)', () => {
+    const repo = join(root, `m${k++}`); mkdirSync(repo); git(repo, 'init', '-q');
+    const b = execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: repo, input: 'a\n' }).toString().trim();
+    const e = Buffer.concat([Buffer.from('100644 a\0'), Buffer.from(b, 'hex')]);
+    const t = execFileSync('git', ['hash-object', '--literally', '-t', 'tree', '-w', '--stdin'], { cwd: repo, input: Buffer.concat([e, e]) }).toString().trim();
+    const c = git(repo, 'commit-tree', t, '-m', 'm'); git(repo, 'update-ref', 'refs/heads/main', c);
+    expect(S.buildTrustedSeedStore({ seed: repo, base: c })).toEqual({ refused: 'store_failed' });
+  });
+  it('T14: with the trusted store, a parent that exists only in the coder store (a coder-made commit) is safe_git_parent_invalid', () => {
+    const repo = join(root, `m${k++}`); mkdirSync(repo); const base = makeRepo(repo, BASEF, {}, W).base; git(repo, 'reset', '-q', '--hard', base);
+    const store = S.buildTrustedSeedStore({ seed: repo, base }); if ('refused' in store) throw new Error(store.refused);
+    try {
+      W(join(repo, 'out.txt'), 'GOOD\n'); git(repo, 'add', '-A'); git(repo, '-c', 'commit.gpgsign=false', 'commit', '-qm', 'coder');
+      const coder = git(repo, 'rev-parse', 'HEAD');
+      expect(S.snapshotCommitSafely({ workspace: repo, parent: coder, message: 'c', author: AU, trustedObjects: store.objects })).toEqual({ refused: 'safe_git_parent_invalid' });
+      const ok = S.snapshotCommitSafely({ workspace: repo, parent: coder, message: 'c', author: AU }); /* control: without the store the coder store is read */
+      expect('refused' in ok).toBe(false); if (!('refused' in ok)) ok.dispose();
+    } finally { store.dispose(); }
+  });
+});
