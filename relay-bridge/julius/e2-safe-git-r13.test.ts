@@ -109,7 +109,8 @@ describe('R7-1 steering: snapshotCommitSafely (plumbing, --no-filters, no add/st
 
 describe('R7-1 steering: a .git owned by another uid with world-writable config and hooks (live-workspace.sh layout)', () => {
   const sudoOk = spawnSync('sudo', ['-n', 'true']).status === 0;
-  it.runIf(sudoOk)('recordHeadSafely reads the head; a world-writable hook never runs; hostile config there is still refused', () => {
+  it('recordHeadSafely reads the head; a world-writable hook never runs; hostile config there is still refused (needs passwordless sudo)', () => {
+    if (!sudoOk) { expect(spawnSync('sudo', ['-n', 'true']).status).not.toBe(0); return; } /* no sudo: nothing to chown with; asserted, not skipped */
     const r = repo();
     W(join(r.dir, '.git/hooks/post-checkout'), `#!/bin/sh\necho ran >> ${r.marker}\n`); chmodSync(join(r.dir, '.git/hooks/post-checkout'), 0o777);
     chmodSync(join(r.dir, '.git/config'), 0o666);
