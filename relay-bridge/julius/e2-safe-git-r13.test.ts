@@ -12,6 +12,8 @@ import * as S from './e2-safe-git';
 import { git } from './e2-test-kit';
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), 'e2-safegit13-')));
+/* Round 9: snapshots made here are not disposed one by one; their object dirs go under root and are removed with it. */
+mkdirSync(join(root, 'tmp')); process.env.TMPDIR = join(root, 'tmp');
 const sudoRoots: string[] = [];
 afterAll(() => {
   for (const d of sudoRoots) spawnSync('sudo', ['-n', 'rm', '-rf', d]);
